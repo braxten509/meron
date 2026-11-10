@@ -27,6 +27,52 @@ pub(crate) async fn dispatch(
     req: &Request,
     out: &Writer,
 ) -> anyhow::Result<Value> {
+    // A bulk Delete or Move: `items` holds the params of one `messages.delete`
+    // (or `.move`) per picked conversation. Each runs as that single action,
+    // all together as one bulk run, so their server steps are done once for
+    // all of them (see `meron_core::engine::bulk`). `results` answers each
+    // item in order: the single action's result, or `{ "error": … }`.
+    let single = match req.method.as_str() {
+        "messages.deleteMany" => "messages.delete",
+        "messages.moveMany" => "messages.move",
+        _ => return dispatch_one(engine, req, out).await,
+    };
+    let items: Vec<Request> = req
+        .params
+        .get("items")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow::anyhow!("missing items"))?
+        .iter()
+        .map(|params| Request {
+            id: req.id,
+            method: single.to_string(),
+            params: params.clone(),
+        })
+        .collect();
+    let actions = items
+        .iter()
+        .map(|item| dispatch_one(engine, item, out))
+        .collect();
+    let results: Vec<Value> = meron_core::engine::bulk::run_together(engine, actions)
+        .await
+        .into_iter()
+        .zip(&items)
+        .map(|(result, item)| {
+            result.unwrap_or_else(|err| {
+                eprintln!("meron-core: {} (in a bulk run) failed: {err:#}", item.method);
+                serde_json::json!({ "error": format!("{err:#}") })
+            })
+        })
+        .collect();
+    Ok(serde_json::json!({ "results": results }))
+}
+
+/// Route one request to its domain handler.
+async fn dispatch_one(
+    engine: &Arc<Engine>,
+    req: &Request,
+    out: &Writer,
+) -> anyhow::Result<Value> {
     let p = &req.params;
     if crate::sidecar::local::handles(req) {
         return crate::sidecar::local::dispatch(engine, req, out).await;

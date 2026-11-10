@@ -39,6 +39,9 @@ pub async fn move_between_accounts(
     if uids.is_empty() {
         return Ok(json!({"ok": true, "moved": 0}));
     }
+    // In a bulk run only a few members download and upload at a time. The
+    // turn is given back before the shared removal step below.
+    let turn = super::bulk::own_read_turn().await;
     let messages = engine
         .with_read_session(account, |session| {
             let folder = folder.to_owned();
@@ -62,6 +65,7 @@ pub async fn move_between_accounts(
         .await?;
     // Before the source goes: a failure here must not lose the tags.
     store::apply_carried_tags(&engine.db.lock().unwrap(), target_account, tags, true)?;
+    drop(turn);
 
     let removed = delete_to_trash(engine, account, folder, uids)
         .await

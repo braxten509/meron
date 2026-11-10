@@ -13,6 +13,7 @@ use crate::{imap, secrets, store};
 pub mod ai_sort;
 mod append;
 mod background_sync;
+pub mod bulk;
 mod folders;
 mod prefetch;
 #[cfg(test)]

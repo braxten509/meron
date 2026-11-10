@@ -87,6 +87,18 @@ fun parseThreadActionLocationResponse(responseJson: String): ThreadActionLocatio
     )
 }
 
+/**
+ * The answers of a bulk command such as `mail.deleteMany`: one per item, in
+ * order. A success holds what the single command would have answered; a
+ * failure holds the core's message for that item. Null when the command
+ * answered no items at all.
+ */
+fun parseBulkActionResults(responseJson: String): List<Result<String>>? =
+    responseJson.findJsonArrayProperty("results")?.jsonArrayElements()?.map { item ->
+        val failure = item.findJsonStringProperty("error", topLevelOnly = true)
+        if (failure != null) Result.failure(RuntimeException(failure)) else Result.success(item)
+    }
+
 fun parseAllocatedMessageId(responseJson: String): String = responseJson.findJsonStringProperty("message_id").orEmpty()
 
 data class FolderUnreadChange(

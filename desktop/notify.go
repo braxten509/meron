@@ -479,6 +479,7 @@ func forgetNotification(handle string) {
 var notifyReconcileCommands = map[string]bool{
 	"mail.sync": true, "mail.markRead": true, "mail.markAllRead": true, "mail.archive": true,
 	"mail.delete": true, "mail.move": true, "mail.emptyFolder": true, "mail.folderDelete": true,
+	"mail.deleteMany": true, "mail.moveMany": true,
 	"mail.runRule": true, "account.remove": true, "rss.removeFeed": true,
 	"mail.markMeronFolderRead": true,
 }

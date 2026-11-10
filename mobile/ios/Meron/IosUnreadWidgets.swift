@@ -14,7 +14,7 @@ enum IosUnreadWidgets {
             return !["account.list", "account.autodiscover", "account.probeCert"].contains(command)
         }
         return [
-            "mail.sync", "mail.markRead", "mail.markAllRead", "mail.archive", "mail.delete",
+            "mail.sync", "mail.markRead", "mail.markAllRead", "mail.archive", "mail.delete", "mail.deleteMany",
             "mail.move", "mail.copy", "mail.emptyFolder", "mail.folderDelete", "mail.folderRename",
             "rss.sync", "rss.markRead", "feed.add", "feed.remove", "feed.move",
             "rss.importOpml", "backup.import", "storage.clearCache",

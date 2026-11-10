@@ -442,6 +442,10 @@ func sidecarCallTimeout(method string) time.Duration {
 	// wait showed "Delete failed" while the delete went on to finish.
 	case "messages.saveRawBatch", "messages.copy", "messages.move", "messages.delete":
 		return 2 * time.Minute
+	// Up to a group of bulk-picked conversations, each a delete or a move
+	// like the ones above, done together.
+	case "messages.moveMany", "messages.deleteMany":
+		return 5 * time.Minute
 	// A snapshot or a restore copies every archived message.
 	case "account.localBackup", "account.localRestore":
 		return 10 * time.Minute

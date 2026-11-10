@@ -158,6 +158,7 @@ pub fn spawn_tag_push(engine: &Arc<Engine>, account: &str) {
 
 /// Where [`delete_to_trash`] moved messages, and the Trash folder's UIDNEXT
 /// from just before the move (see [`refresh_moved_copies`]).
+#[derive(Clone)]
 pub struct Trashed {
     pub folder: String,
     pub uid_next_before: Option<u32>,
@@ -165,7 +166,32 @@ pub struct Trashed {
 
 /// Delete messages on the server. Returns `None` for a permanent expunge
 /// (Drafts, or items already in Trash), or `Some` when moved to Trash.
+///
+/// Inside a bulk run this is the move step every member shares (see
+/// [`super::bulk`]): one command moves the mail of all of them.
 pub async fn delete_to_trash(
+    engine: &Engine,
+    account: &str,
+    folder: &str,
+    uids: &[u32],
+) -> anyhow::Result<Option<Trashed>> {
+    let Some(seat) = bulk::seat() else {
+        return delete_to_trash_alone(engine, account, folder, uids).await;
+    };
+    let ask = bulk::MoveAsk {
+        account: account.to_string(),
+        folder: folder.to_string(),
+        to: bulk::MoveTo::Trash,
+        uids: uids.to_vec(),
+    };
+    match seat.moved(ask).await? {
+        bulk::Moved::Trashed(trashed) => Ok(trashed),
+        bulk::Moved::Folder(_) => anyhow::bail!("a delete was answered as a move"),
+    }
+}
+
+/// [`delete_to_trash`] in one command of its own.
+pub(crate) async fn delete_to_trash_alone(
     engine: &Engine,
     account: &str,
     folder: &str,
@@ -266,14 +292,7 @@ pub async fn move_within_account_with(
 ) -> anyhow::Result<MovedCopies> {
     let cached_ids = store::cached_message_ids(&engine.db.lock().unwrap(), account, folder, uids)?;
     let moved_ids = moved_message_ids(engine, account, folder, uids, cached_ids).await;
-    let uid_next_before = engine
-        .with_write_session(account, |session| {
-            let folder = folder.to_string();
-            let target = target.to_string();
-            let uids = uids.to_vec();
-            Box::pin(async move { imap::move_to_folder(session, &folder, &target, &uids).await })
-        })
-        .await?;
+    let uid_next_before = move_on_server(engine, account, folder, target, uids).await?;
     let copies = refresh_moved_copies_with(
         engine,
         account,
@@ -289,6 +308,52 @@ pub async fn move_within_account_with(
     store::delete_messages_by_uid(&db, account, folder, uids)?;
     drop(db);
     Ok(copies)
+}
+
+/// Move `uids` from `folder` to `target` on the server. Gives the target's
+/// UIDNEXT from just before the move (see [`imap::move_to_folder`]). Mutating,
+/// so it never auto-retries.
+///
+/// Inside a bulk run this is the move step every member shares (see
+/// [`super::bulk`]): one command moves the mail of all of them.
+pub async fn move_on_server(
+    engine: &Engine,
+    account: &str,
+    folder: &str,
+    target: &str,
+    uids: &[u32],
+) -> anyhow::Result<Option<u32>> {
+    let Some(seat) = bulk::seat() else {
+        return move_on_server_alone(engine, account, folder, target, uids).await;
+    };
+    let ask = bulk::MoveAsk {
+        account: account.to_string(),
+        folder: folder.to_string(),
+        to: bulk::MoveTo::Folder(target.to_string()),
+        uids: uids.to_vec(),
+    };
+    match seat.moved(ask).await? {
+        bulk::Moved::Folder(uid_next_before) => Ok(uid_next_before),
+        bulk::Moved::Trashed(_) => anyhow::bail!("a move was answered as a delete"),
+    }
+}
+
+/// [`move_on_server`] in one command of its own.
+pub(crate) async fn move_on_server_alone(
+    engine: &Engine,
+    account: &str,
+    folder: &str,
+    target: &str,
+    uids: &[u32],
+) -> anyhow::Result<Option<u32>> {
+    engine
+        .with_write_session(account, |session| {
+            let folder = folder.to_string();
+            let target = target.to_string();
+            let uids = uids.to_vec();
+            Box::pin(async move { imap::move_to_folder(session, &folder, &target, &uids).await })
+        })
+        .await
 }
 
 /// The lowercased Message-ID of each message about to be moved, `""` for one
@@ -315,6 +380,8 @@ pub async fn moved_message_ids(
     let fetched: HashMap<u32, String> = if missing.is_empty() {
         HashMap::new()
     } else {
+        // In a bulk run only a few members read on their own at a time.
+        let _turn = bulk::own_read_turn().await;
         match fetch_headers_isolating_unparseable(engine, account, folder, missing).await {
             Ok((headers, _)) => headers
                 .into_iter()
@@ -361,6 +428,8 @@ pub async fn sender_delete_uids(
     if addr.is_empty() || store::is_local_account(account) {
         return Ok(cached);
     }
+    // In a bulk run only a few members read on their own at a time.
+    let _turn = bulk::own_read_turn().await;
     let found = engine
         .with_read_session(account, |session| {
             let folder = folder.to_string();
@@ -508,13 +577,25 @@ fn owe_reread(account: &str, target: &str, count: u32) {
     *entry = entry.saturating_add(count).min(MAX_OWED_REREAD);
 }
 
+/// One action's part of a re-read of the folder it moved mail into (see
+/// [`refresh_moved_copies_with`], whose arguments these are).
+pub(crate) struct CopiesAsk {
+    pub account: String,
+    pub target: String,
+    pub count: usize,
+    pub uid_next_before: Option<u32>,
+    pub moved: Option<Vec<String>>,
+    pub reread_window: bool,
+}
+
 /// [`refresh_moved_copies`], optionally without re-reading `target`'s recent
-/// window. A bulk delete or move handles one conversation per call; re-reading
-/// the same folder after each of them is the heaviest step and only the last
-/// one's result matters. With `reread_window` false the window is left alone
-/// and the moved count is remembered, so the next re-read of that folder (the
-/// run's last call, or any later move into it) reaches back far enough to
-/// cover everything that was skipped. Locating the moved copies is unchanged.
+/// window. With `reread_window` false the window is left alone and the moved
+/// count is remembered, so the next re-read of that folder (any later move
+/// into it) reaches back far enough to cover everything that was skipped.
+/// Locating the moved copies is unchanged.
+///
+/// Inside a bulk run this is the copies step every member shares (see
+/// [`super::bulk`]): the target is read once for all of them.
 pub async fn refresh_moved_copies_with(
     engine: &Arc<Engine>,
     account: &str,
@@ -524,23 +605,64 @@ pub async fn refresh_moved_copies_with(
     moved: Option<&[String]>,
     reread_window: bool,
 ) -> MovedCopies {
-    let guard = match MessageSyncGuard::begin(engine) {
-        Ok(guard) => guard,
+    let ask = || CopiesAsk {
+        account: account.to_string(),
+        target: target.to_string(),
+        count,
+        uid_next_before,
+        moved: moved.map(<[String]>::to_vec),
+        reread_window,
+    };
+    if let Some(seat) = bulk::seat() {
+        // The run stopped doing its steps: as when the re-read fails.
+        return seat.copies(ask()).await.unwrap_or(MovedCopies {
+            batch: None,
+            uids: Vec::new(),
+            _snapshot_guard: None,
+        });
+    }
+    refresh_moved_copies_shared(engine, &[ask()])
+        .await
+        .pop()
+        .expect("one answer per ask")
+}
+
+/// [`refresh_moved_copies_with`] for several actions that moved mail into the
+/// same folder of the same account: the folder is read once, and each action
+/// gets the window and its own copies, in the order of `asks`.
+pub(crate) async fn refresh_moved_copies_shared(
+    engine: &Arc<Engine>,
+    asks: &[CopiesAsk],
+) -> Vec<MovedCopies> {
+    let Some(first) = asks.first() else {
+        return Vec::new();
+    };
+    let (account, target) = (first.account.as_str(), first.target.as_str());
+    // One guard each: every action keeps its own through its cache writes.
+    let guards: anyhow::Result<Vec<MessageSyncGuard>> =
+        asks.iter().map(|_| MessageSyncGuard::begin(engine)).collect();
+    let guards = match guards {
+        Ok(guards) => guards,
         Err(err) => {
             crate::mlog!(
                 crate::log::Level::Warn,
                 "mail.sync",
                 "cannot guard moved-copy refresh: {err:#}"
             );
-            return MovedCopies {
-                batch: None,
-                uids: Vec::new(),
-                _snapshot_guard: None,
-            };
+            return asks
+                .iter()
+                .map(|_| MovedCopies {
+                    batch: None,
+                    uids: Vec::new(),
+                    _snapshot_guard: None,
+                })
+                .collect();
         }
     };
-    let count = count as u32;
-    let batch = if reread_window {
+    let count = asks
+        .iter()
+        .fold(0u32, |sum, ask| sum.saturating_add(ask.count as u32));
+    let batch = if asks.iter().any(|ask| ask.reread_window) {
         let owed = take_owed_reread(account, target);
         match fetch_recent_resilient(engine, account, target, 50.max(count.saturating_add(owed)))
             .await
@@ -561,25 +683,67 @@ pub async fn refresh_moved_copies_with(
         owe_reread(account, target, count);
         None
     };
-    let uids = match (uid_next_before.filter(|uid_next| *uid_next > 0), moved) {
-        (Some(floor), Some(moved)) => match moved_arrivals(engine, account, target, floor).await {
-            Ok(arrivals) => moved_copy_uids(&arrivals, moved),
+    // Everything that arrived since the earliest of the moves began; each
+    // action picks its own copies out by Message-ID.
+    let floor = asks
+        .iter()
+        .filter(|ask| ask.moved.is_some())
+        .filter_map(|ask| ask.uid_next_before.filter(|uid_next| *uid_next > 0))
+        .min();
+    let arrivals = match floor {
+        Some(floor) => match moved_arrivals(engine, account, target, floor).await {
+            Ok(arrivals) => Some(arrivals),
             Err(err) => {
                 crate::mlog!(
                     crate::log::Level::Warn,
                     "mail.sync",
                     "account={account} folder={target}: locating moved copies failed: {err:#}"
                 );
-                Vec::new()
+                None
             }
         },
-        _ => Vec::new(),
+        None => None,
     };
-    MovedCopies {
-        batch,
-        uids,
-        _snapshot_guard: Some(guard),
+    // How many of the actions carried each Message-ID. Copies of one that two
+    // actions carried cannot be told apart, so neither is given any.
+    let mut carriers: HashMap<&str, usize> = HashMap::new();
+    for ask in asks {
+        let ids: HashSet<&str> = ask.moved.iter().flatten().map(String::as_str).collect();
+        for id in ids {
+            *carriers.entry(id).or_default() += 1;
+        }
     }
+    asks.iter()
+        .zip(guards)
+        .map(|(ask, guard)| {
+            let uids = match (
+                ask.uid_next_before.filter(|uid_next| *uid_next > 0),
+                &ask.moved,
+                &arrivals,
+            ) {
+                (Some(_), Some(moved), Some(_))
+                    if moved.iter().any(|id| carriers[id.as_str()] > 1) =>
+                {
+                    Vec::new()
+                }
+                // Only what arrived since this action's own move began.
+                (Some(own_floor), Some(moved), Some(arrivals)) => {
+                    let since: Vec<imap::MessageHeader> = arrivals
+                        .iter()
+                        .filter(|arrival| arrival.uid >= own_floor)
+                        .cloned()
+                        .collect();
+                    moved_copy_uids(&since, moved)
+                }
+                _ => Vec::new(),
+            };
+            MovedCopies {
+                batch: batch.clone(),
+                uids,
+                _snapshot_guard: Some(guard),
+            }
+        })
+        .collect()
 }
 
 /// Every message in `target` at or above `floor`. Fails rather than return a

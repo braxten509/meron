@@ -22,6 +22,7 @@ private val mailChangingCommands =
         MobileCommand.MarkAllRead,
         MobileCommand.Archive,
         MobileCommand.Delete,
+        MobileCommand.DeleteMany,
         MobileCommand.Move,
         MobileCommand.EmptyFolder,
         MobileCommand.FolderDelete,

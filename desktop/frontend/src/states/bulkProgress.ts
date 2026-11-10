@@ -4,8 +4,14 @@ import { clearBulkSelection, ui$ } from './ui'
 
 // One running bulk Delete / Archive / Move: what the strip under the folder
 // name shows, which rows wait greyed out, and the Stop request. Conversations
-// are handled one at a time, so a large selection takes a while; this is what
-// tells the reader it is working and lets them stop it.
+// are handled a group at a time (Archive: one at a time), so a large
+// selection takes a while; this is what tells the reader it is working and
+// lets them stop it.
+
+/** How many conversations a bulk Delete or Move sends to the mail server in
+ *  one go. The whole group costs about what one conversation does alone; the
+ *  strip's count and Stop act between groups. */
+export const BULK_GROUP_SIZE = 25
 
 export type BulkJobKind = 'delete' | 'archive' | 'move'
 
@@ -63,15 +69,18 @@ function moveSelectionOff(targetIds: Set<string>) {
 }
 
 /**
- * Run `step` for each target in order, publishing progress for the strip.
- * Stops before the next target when the reader presses Stop or a step throws;
- * whatever was not reached is left exactly as it was. Never throws: the caller
- * words the outcome from the result.
+ * Run `step` for each group of `groupSize` targets in order, publishing
+ * progress for the strip. `step` calls `done` for each conversation of its
+ * group that went through, and throws when one did not. Stops before the next
+ * group when the reader presses Stop or a step throws; whatever was not done
+ * is left exactly as it was. Never throws: the caller words the outcome from
+ * the result.
  */
 export async function runBulkJob<T extends { threadId: string }>(
   kind: BulkJobKind,
   targets: T[],
-  step: (item: T) => Promise<void>,
+  step: (group: T[], done: (item: T) => void) => Promise<void>,
+  groupSize = 1,
 ): Promise<BulkJobResult> {
   const total = targets.length
   moveSelectionOff(new Set(targets.map((item) => item.threadId)))
@@ -86,17 +95,18 @@ export async function runBulkJob<T extends { threadId: string }>(
   // Back to the folder name: the strip under it carries the count from here.
   clearBulkSelection()
   let completed = 0
+  const done = (item: T) => {
+    completed++
+    const job = bulkProgress$.job.peek()
+    if (!job) return
+    const pending = { ...job.pending }
+    delete pending[item.threadId]
+    bulkProgress$.job.set({ ...job, done: completed, pending })
+  }
   try {
-    for (const item of targets) {
+    for (let start = 0; start < total; start += groupSize) {
       if (bulkProgress$.job.stopRequested.peek()) return { completed, total, stopped: true }
-      await step(item)
-      completed++
-      const job = bulkProgress$.job.peek()
-      if (job) {
-        const pending = { ...job.pending }
-        delete pending[item.threadId]
-        bulkProgress$.job.set({ ...job, done: completed, pending })
-      }
+      await step(targets.slice(start, start + groupSize), done)
     }
     return { completed, total, stopped: false }
   } catch (error) {

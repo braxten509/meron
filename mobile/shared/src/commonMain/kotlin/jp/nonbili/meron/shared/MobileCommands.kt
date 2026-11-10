@@ -79,6 +79,7 @@ object MobileCommand {
     const val DiscardDraft = "mail.discardDraft"
     const val Archive = "mail.archive"
     const val Delete = "mail.delete"
+    const val DeleteMany = "mail.deleteMany"
     const val Move = "mail.move"
     const val Copy = "mail.copy"
     const val MarkRead = "mail.markRead"
@@ -1607,6 +1608,14 @@ class MobileMailCommandClient(
     suspend fun archive(params: ThreadActionParams): String = core.invoke(MobileCommand.Archive, params.archiveJson())
 
     suspend fun delete(params: ThreadActionParams): String = core.invoke(MobileCommand.Delete, params.deleteJson())
+
+    /** Deletes several threads in one go: the core does the server's work once
+     *  for all of them. Read the answer with [parseBulkActionResults]. */
+    suspend fun deleteMany(params: List<ThreadActionParams>): String =
+        core.invoke(
+            MobileCommand.DeleteMany,
+            jsonObject("items" to params.joinToString(separator = ",", prefix = "[", postfix = "]") { it.deleteJson() }),
+        )
 
     suspend fun move(params: MoveThreadParams): String = core.invoke(MobileCommand.Move, params.toJson())
 

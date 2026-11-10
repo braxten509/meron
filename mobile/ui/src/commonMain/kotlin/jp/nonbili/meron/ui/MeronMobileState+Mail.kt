@@ -62,6 +62,8 @@ import jp.nonbili.meron.shared.parseRulesResponse
 import jp.nonbili.meron.shared.parseSetTagsResponse
 import jp.nonbili.meron.shared.parseTagCountsResponse
 import jp.nonbili.meron.shared.parseTagListResponse
+import jp.nonbili.meron.shared.isOAuthLoginFailure
+import jp.nonbili.meron.shared.parseBulkActionResults
 import jp.nonbili.meron.shared.parseThreadActionLocationResponse
 import jp.nonbili.meron.shared.requireCoreAllOk
 import jp.nonbili.meron.shared.requireCoreOk
@@ -211,12 +213,20 @@ private fun MeronMobileState.reinsertBulkRows(
         }
 }
 
+/** How many rows a bulk Delete sends to the mail server in one go. The whole
+ *  group costs about what one row does alone. */
+private const val BULK_GROUP_SIZE = 25
+
 /**
  * Archives or deletes several mail rows as one action: all leave the list at
  * once and, once the server has answered, one snackbar counts the rows that
  * actually moved, its Undo bringing every one of those back. Each row is still
- * its own move on the server; one that fails comes back on its own, and is
- * neither counted nor undone.
+ * answered on its own; one that fails comes back on its own, and is neither
+ * counted nor undone.
+ *
+ * With [groupAction] the rows go to the core a group at a time (one account's
+ * rows, [BULK_GROUP_SIZE] at most), and it answers every row of the group
+ * (see [parseBulkActionResults]). Without it each row is its own [action].
  */
 private fun MeronMobileState.runBulkThreadRemoval(
     threads: List<ThreadSummary>,
@@ -226,6 +236,7 @@ private fun MeronMobileState.runBulkThreadRemoval(
     /** The snackbar's text for the rows that moved. */
     undoMessage: (List<ThreadSummary>) -> String,
     action: suspend MobileMailCommandClient.(ThreadSummary) -> String,
+    groupAction: (suspend MobileMailCommandClient.(List<ThreadSummary>) -> String)? = null,
 ) {
     if (!coreLoaded) {
         status = coreUnavailableMessage
@@ -241,25 +252,68 @@ private fun MeronMobileState.runBulkThreadRemoval(
     scope.launch {
         val moved = mutableListOf<Pair<ThreadSummary, String>>()
         val failed = mutableListOf<Pair<ThreadSummary, Throwable>>()
-        // One after another: the moves share the account's write session.
-        for (thread in threads) {
+        val settle = { thread: ThreadSummary, answer: Result<String> ->
             val removal = removals.getValue(thread.id)
-            runCatching {
-                requireCoreOk(
-                    withContext(ioDispatcher) {
-                        val client = MobileMailCommandClient(core)
-                        withManagedGoogleAuth(client, thread.accountId) { client.action(thread) }
-                    },
-                )
-            }.onSuccess { response ->
-                removal.complete()
-                releaseMovedThread(response)
-                applyCoreFolderUnreadChanges(response)
-                moved += thread to response
-            }.onFailure {
-                removal.rollback()
-                Log.w("Mail", "$label failed", it)
-                failed += thread to it
+            answer
+                .onSuccess { response ->
+                    removal.complete()
+                    releaseMovedThread(response)
+                    applyCoreFolderUnreadChanges(response)
+                    moved += thread to response
+                }.onFailure {
+                    removal.rollback()
+                    Log.w("Mail", "$label failed", it)
+                    failed += thread to it
+                }
+        }
+        if (groupAction == null) {
+            // One after another: the moves share the account's write session.
+            for (thread in threads) {
+                val answer =
+                    runCatching {
+                        requireCoreOk(
+                            withContext(ioDispatcher) {
+                                val client = MobileMailCommandClient(core)
+                                withManagedGoogleAuth(client, thread.accountId) { client.action(thread) }
+                            },
+                        )
+                    }
+                settle(thread, answer)
+            }
+        } else {
+            // One account's rows at a time: a sign-in is renewed per account.
+            val groups = threads.groupBy { it.accountId }.values.flatMap { it.chunked(BULK_GROUP_SIZE) }
+            suspend fun ask(rows: List<ThreadSummary>): List<Result<String>> {
+                val response =
+                    requireCoreOk(
+                        withContext(ioDispatcher) {
+                            val client = MobileMailCommandClient(core)
+                            withManagedGoogleAuth(client, rows.first().accountId) { client.groupAction(rows) }
+                        },
+                    )
+                return parseBulkActionResults(response)?.takeIf { it.size == rows.size }
+                    ?: throw RuntimeException("The mail engine gave no answer")
+            }
+            for (group in groups) {
+                val answers =
+                    runCatching {
+                        val first = ask(group)
+                        // A sign-in that ran out fails each row on its own
+                        // answer: renew it and try just those rows once more,
+                        // as a single delete does.
+                        val signedOut = group.indices.filter { isOAuthLoginFailure(first[it].exceptionOrNull()?.message) }
+                        val renewed =
+                            signedOut.isNotEmpty() &&
+                                withContext(ioDispatcher) {
+                                    ensureManagedGoogleToken(MobileMailCommandClient(core), group.first().accountId, force = true)
+                                }
+                        if (!renewed) return@runCatching first
+                        val again = ask(signedOut.map { group[it] })
+                        first.toMutableList().also { all -> signedOut.forEachIndexed { n, index -> all[index] = again[n] } }
+                    }
+                group.forEachIndexed { index, thread ->
+                    settle(thread, answers.fold({ it[index] }, { Result.failure(it) }))
+                }
             }
         }
         if (failed.isNotEmpty()) {
@@ -1955,6 +2009,9 @@ internal fun MeronMobileState.deleteThreads(threads: List<ThreadSummary>) {
         failedStatus = trs("mail.toast.deleteFailed"),
         undoMessage = { moved -> trs(threadsDeletedStatusKey(moved), mapOf("count" to moved.size)) },
         action = { thread -> delete(ThreadActionParams(threadId = thread.id, folderId = thread.folder)) },
+        groupAction = { group ->
+            deleteMany(group.map { thread -> ThreadActionParams(threadId = thread.id, folderId = thread.folder) })
+        },
     )
 }
 

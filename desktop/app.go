@@ -526,6 +526,10 @@ func (a *App) invoke(command string, payload map[string]any) (any, error) {
 		return a.mailArchive(payload)
 	case "mail.delete":
 		return a.mailDelete(payload)
+	case "mail.deleteMany":
+		return a.mailDeleteMany(payload)
+	case "mail.moveMany":
+		return a.mailMoveMany(payload)
 	default:
 		return nil, fmt.Errorf("unknown command: %s", command)
 	}

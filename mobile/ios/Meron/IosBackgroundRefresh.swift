@@ -267,7 +267,7 @@ func iosStaleNotificationIds(_ tracked: [IosTrackedNotification], stillUnread: S
 /// move and delete writes. Matches the Android client's list.
 func iosCommandMayStaleNotifications(_ command: String) -> Bool {
     [
-        "mail.sync", "mail.markRead", "mail.markAllRead", "mail.archive", "mail.delete",
+        "mail.sync", "mail.markRead", "mail.markAllRead", "mail.archive", "mail.delete", "mail.deleteMany",
         "mail.move", "mail.emptyFolder", "mail.folderDelete", "account.remove", "rss.sync", "rss.markRead",
         "feed.remove",
     ].contains(command)

@@ -352,7 +352,21 @@ pub async fn write(engine: &Arc<Engine>, job: MarkJob) {
 
 /// [`write`] for several jobs at once (one per mailbox, say): all are queued,
 /// then waited for together, a few seconds at most.
+///
+/// Inside a bulk run this is the marks step every member shares (see
+/// [`crate::engine::bulk`]): the marks of all of them are written together.
 pub async fn write_all(engine: &Arc<Engine>, jobs: Vec<MarkJob>) {
+    if jobs.is_empty() {
+        return;
+    }
+    match crate::engine::bulk::seat() {
+        Some(seat) => seat.marks(jobs).await,
+        None => write_all_alone(engine, jobs).await,
+    }
+}
+
+/// [`write_all`] as one round of writes of its own.
+pub(crate) async fn write_all_alone(engine: &Arc<Engine>, jobs: Vec<MarkJob>) {
     let waits: Vec<(String, String, Vec<u32>)> = jobs
         .iter()
         .map(|job| (job.account.clone(), job.folder.clone(), job.uids.clone()))

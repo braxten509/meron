@@ -222,7 +222,8 @@ where
     F: std::future::Future<Output = anyhow::Result<T>>,
 {
     let rt = engine_runtime().ok_or_else(|| anyhow::anyhow!("engine runtime unavailable"))?;
-    rt.block_on(future)
+    // Inside a bulk run the future runs as this thread's member of it.
+    rt.block_on(crate::engine::bulk::with_thread_seat(future))
 }
 
 /// IDLE watches the foreground session (`engine.foreground`) wants, as opposed

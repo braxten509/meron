@@ -4,7 +4,7 @@ import './accounts'
 import { kanban$ } from './kanban'
 import { mail$, releaseRemovedThread } from './mail'
 import { markUnreadWithUndo } from './mailFlags'
-import { bulkProgress$, requestBulkStop } from './bulkProgress'
+import { BULK_GROUP_SIZE, bulkProgress$, requestBulkStop } from './bulkProgress'
 import {
   archiveThread,
   bulkDeleteSelected,
@@ -17,6 +17,9 @@ import { ui$ } from './ui'
 import { recentThreadTransfers$ } from './recentThreadTransfers'
 
 const THREAD = 'acc#INBOX#t.dG9waWM'
+// One full group of a bulk action, and two conversations of the next group.
+const FIRST_GROUP = Array.from({ length: BULK_GROUP_SIZE }, (_, n) => `g${n}`)
+const NEXT_GROUP = ['late1', 'late2']
 
 const thread = (overrides: Partial<Message> = {}): Message => ({
   id: `${THREAD}#7`,
@@ -76,7 +79,7 @@ describe('undo after moving a thread', () => {
 
   afterEach(() => {
     recentThreadTransfers$.set([])
-    for (const id of [THREAD, 'a', 'b', 'missing']) releaseRemovedThread(id)
+    for (const id of [THREAD, 'a', 'b', 'missing', ...FIRST_GROUP, ...NEXT_GROUP]) releaseRemovedThread(id)
     ;(window as any).go = previousGo
     kanban$.activeBoardId.set('')
     kanban$.paneThreadId.set('')
@@ -164,7 +167,7 @@ describe('undo after moving a thread', () => {
   })
 
   it('bulk moves same-named folders across accounts and skips copies already at the destination', async () => {
-    responses['mail.move'] = { moved: 1 }
+    responses['mail.moveMany'] = { results: [{ moved: 1 }] }
     await bulkMoveSelectedToFolder(
       [
         {
@@ -197,8 +200,9 @@ describe('undo after moving a thread', () => {
       'INBOX',
       'other',
     )
-    expect(calls.filter((call) => call.command === 'mail.move').map((call) => call.payload)).toEqual([
-      { thread_id: THREAD, target_folder_id: 'INBOX', target_account_id: 'other' },
+    // One call for the whole group, with one item per conversation.
+    expect(calls.filter((call) => call.command === 'mail.moveMany').map((call) => call.payload)).toEqual([
+      { items: [{ thread_id: THREAD, target_folder_id: 'INBOX', target_account_id: 'other' }] },
     ])
   })
 
@@ -271,9 +275,14 @@ describe('undo after moving a thread', () => {
 
   it('keeps completed bulk moves removed and reports partial success', async () => {
     mail$.threads.set([thread({ thread_id: 'a' }), thread({ thread_id: 'b' })])
-    ;(window as any).go.main.App.Invoke = (command: string, payload: { thread_id?: string }) => {
-      if (command === 'mail.move') {
-        return payload.thread_id === 'a' ? Promise.resolve({ moved: 1 }) : Promise.reject('[NOPERM] permission denied')
+    // The group is one call; each conversation gets its own answer.
+    ;(window as any).go.main.App.Invoke = (command: string, payload: { items?: { thread_id?: string }[] }) => {
+      if (command === 'mail.moveMany') {
+        return Promise.resolve({
+          results: (payload.items ?? []).map((item) =>
+            item.thread_id === 'a' ? { moved: 1 } : { error: '[NOPERM] permission denied' },
+          ),
+        })
       }
       return Promise.resolve({ threads: mail$.threads.get() })
     }
@@ -299,8 +308,9 @@ describe('undo after moving a thread', () => {
   })
 
   // The strip's Stop and a failure part-way share one rule: conversations the
-  // job did not reach stay exactly where they were, and the reader is told
-  // how far it got.
+  // job did not get done stay exactly where they were, and the reader is told
+  // how far it got. A bulk delete goes to the core a group at a time, so Stop
+  // acts between groups; inside a group each conversation has its own answer.
   it('bulk delete leaves the unreached threads alone after Stop and after a failure', async () => {
     const items = (ids: string[]) =>
       ids.map((threadId) => ({
@@ -316,36 +326,46 @@ describe('undo after moving a thread', () => {
         draft: false,
         trash: false,
       }))
+    const groups: string[][] = []
     const deleted: string[] = []
     let failOn = ''
     let stopAfter = ''
     const seen: { whileRunning?: { done: number; pending: string[] } } = {}
-    ;(window as any).go.main.App.Invoke = (command: string, payload: { thread_id?: string }) => {
-      if (command !== 'mail.delete') return Promise.resolve({ threads: mail$.threads.get() })
-      const id = payload.thread_id ?? ''
-      if (id === failOn) return Promise.reject(new Error('server said no'))
+    ;(window as any).go.main.App.Invoke = (command: string, payload: { items?: { thread_id?: string }[] }) => {
+      if (command !== 'mail.deleteMany') return Promise.resolve({ threads: mail$.threads.get() })
+      const ids = (payload.items ?? []).map((item) => item.thread_id ?? '')
+      groups.push(ids)
       const job = bulkProgress$.job.get()
-      if (id === 'b' && job) seen.whileRunning = { done: job.done, pending: Object.keys(job.pending) }
-      deleted.push(id)
-      if (id === stopAfter) requestBulkStop()
-      return Promise.resolve({ deleted: 1 })
+      if (ids.includes('b') && job) seen.whileRunning = { done: job.done, pending: Object.keys(job.pending) }
+      if (ids.includes(stopAfter)) requestBulkStop()
+      return Promise.resolve({
+        results: ids.map((id) => {
+          if (id === failOn) return { error: 'server said no' }
+          deleted.push(id)
+          return { deleted: 1 }
+        }),
+      })
     }
 
-    mail$.threads.set(['a', 'b', 'missing'].map((id) => thread({ id, thread_id: id })))
-    stopAfter = 'a'
-    await bulkDeleteSelected(items(['a', 'b', 'missing']))
-    expect(deleted).toEqual(['a'])
-    expect(mail$.threads.get().map((item) => item.thread_id)).toEqual(['b', 'missing'])
-    expect(ui$.toast.get()).toBe('Deleted 1 of 3. Stopped.')
+    const many = [...FIRST_GROUP, ...NEXT_GROUP]
+    mail$.threads.set(many.map((id) => thread({ id, thread_id: id })))
+    stopAfter = FIRST_GROUP[0]
+    await bulkDeleteSelected(items(many))
+    expect(groups).toEqual([FIRST_GROUP])
+    expect(deleted).toEqual(FIRST_GROUP)
+    expect(mail$.threads.get().map((item) => item.thread_id)).toEqual(NEXT_GROUP)
+    expect(ui$.toast.get()).toBe(`Deleted ${FIRST_GROUP.length} of ${many.length}. Stopped.`)
     expect(bulkProgress$.job.get()).toBeNull()
 
+    groups.length = 0
     deleted.length = 0
     stopAfter = ''
     failOn = 'missing'
     mail$.threads.set(['a', 'b', 'missing'].map((id) => thread({ id, thread_id: id })))
     await bulkDeleteSelected(items(['a', 'b', 'missing']))
+    expect(groups).toEqual([['a', 'b', 'missing']])
     expect(deleted).toEqual(['a', 'b'])
-    expect(seen.whileRunning).toEqual({ done: 1, pending: ['b', 'missing'] })
+    expect(seen.whileRunning).toEqual({ done: 0, pending: ['a', 'b', 'missing'] })
     expect(mail$.threads.get().map((item) => item.thread_id)).toEqual(['missing'])
     expect(ui$.toast.get()).toContain('server said no')
     expect(ui$.toast.get()).toContain('Completed 2 of 3 selected threads')

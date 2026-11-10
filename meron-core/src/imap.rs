@@ -433,6 +433,7 @@ pub struct MessageHeader {
 
 /// A batch of recent messages plus the folder's UID sync markers, so the caller
 /// can detect UIDVALIDITY resets and persist `uid_next`.
+#[derive(Clone)]
 pub struct RecentBatch {
     pub uidvalidity: u32,
     pub uid_next: u32,

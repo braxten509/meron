@@ -6,7 +6,7 @@ import { contextualErrorMessage } from '../lib/errors'
 import { t } from '../lib/i18n'
 import { mailTransferError } from '../lib/mailTransferErrors'
 import { clearBulkSelection, confirmAction, ui$, showToast, showUndoToast, type BulkSelectionItem } from './ui'
-import { bulkJobRunning, runBulkJob, type BulkJobResult } from './bulkProgress'
+import { BULK_GROUP_SIZE, bulkJobRunning, runBulkJob, type BulkJobResult } from './bulkProgress'
 import { kanban$ } from './kanban'
 import { MERON_ARCHIVE_ID, scheduleMeronFoldersRefresh } from './meronFolders'
 import { isLocalSendId, discardPendingSend, cancelUnsentRescue } from './pendingSends'
@@ -408,13 +408,35 @@ function bulkJobBusy(): boolean {
   return true
 }
 
-/** Which of a bulk run's calls say "more coming": every one but the last for
- *  its account. The core then re-reads the destination folder once, on that
- *  last call, instead of after every conversation. */
-function moreComingFlags(targets: BulkSelectionItem[]): (item: BulkSelectionItem) => { more_coming?: true } {
-  const lastOfAccount = new Map<string, string>()
-  for (const item of targets) lastOfAccount.set(item.accountId, item.threadId)
-  return (item) => (lastOfAccount.get(item.accountId) === item.threadId ? {} : { more_coming: true })
+/**
+ * One group of a bulk Delete or Move: ask the core for all of it in one call
+ * (it does the server's work once for the whole group), then settle each
+ * conversation by its own answer. `settle` throws for an answer that did
+ * nothing. Once every answer is settled, throws the first failure, if any.
+ */
+async function invokeGroup<T extends BulkSelectionItem>(
+  command: 'mail.deleteMany' | 'mail.moveMany',
+  group: T[],
+  payload: (item: T) => Record<string, unknown>,
+  settle: (item: T, res: unknown) => void,
+  done: (item: T) => void,
+) {
+  const res = await invoke<{ results?: unknown[] }>(command, { items: group.map(payload) })
+  const results = Array.isArray(res?.results) ? res.results : []
+  let failure: unknown
+  group.forEach((item, index) => {
+    try {
+      const answer = results[index]
+      if (answer === undefined) throw new Error('The mail engine gave no answer')
+      const failed = answer && typeof answer === 'object' ? (answer as { error?: unknown; ok?: unknown }) : null
+      if (failed && failed.error != null && failed.ok === undefined) throw new Error(String(failed.error))
+      settle(item, answer)
+      done(item)
+    } catch (error) {
+      failure ??= error
+    }
+  })
+  if (failure !== undefined) throw failure
 }
 
 /** After a bulk job: the toast for what happened. Finished, stopped by the
@@ -451,13 +473,14 @@ export async function bulkArchiveSelected(items: BulkSelectionItem[]) {
   if (targets.length === 0 || bulkJobBusy()) return
   // Each row leaves once the server has archived it; the ones still waiting
   // stay in the list (greyed), so a stop or a failure has nothing to put back.
-  const result = await runBulkJob('archive', targets, async (item) => {
+  const result = await runBulkJob('archive', targets, async ([item], done) => {
     const sourceThread = findLocalThread(item.threadId)
     const res = await invoke('mail.archive', { thread_id: item.threadId })
     assertMoveAffected(res, 'Archive')
     removeThreadLocally(item.threadId).complete()
     applyMutationFolderUnreads(res as MutationResult)
     if (sourceThread?.account_id) void refreshAccountFoldersCache(sourceThread.account_id, false)
+    done(item)
   })
   if (result.completed) {
     await refreshThreadLocation(undefined, false)
@@ -480,24 +503,34 @@ export async function bulkMoveSelectedToFolder(
     (item) => (targetAccountId && item.accountId !== targetAccountId) || item.folderId !== targetFolderId,
   )
   if (targets.length === 0 || bulkJobBusy()) return
-  const moreComing = moreComingFlags(targets)
-  const result = await runBulkJob('move', targets, async (item) => {
-    const res = await invoke('mail.move', {
-      thread_id: item.threadId,
-      target_folder_id: targetFolderId,
-      ...(targetAccountId ? { target_account_id: targetAccountId } : {}),
-      ...moreComing(item),
-    })
-    assertMoveAffected(res)
-    removeThreadLocally(item.threadId).complete()
-    rememberThreadTransfer({
-      action: 'move',
-      sourceAccountId: item.accountId,
-      targetAccountId: targetAccountId || item.accountId,
-      targetFolderId,
-    })
-    applyMutationFolderUnreads(res as MutationResult)
-  })
+  // A group at a time: each row leaves once the server has moved its group.
+  const result = await runBulkJob(
+    'move',
+    targets,
+    (group, done) =>
+      invokeGroup(
+        'mail.moveMany',
+        group,
+        (item) => ({
+          thread_id: item.threadId,
+          target_folder_id: targetFolderId,
+          ...(targetAccountId ? { target_account_id: targetAccountId } : {}),
+        }),
+        (item, res) => {
+          assertMoveAffected(res)
+          removeThreadLocally(item.threadId).complete()
+          rememberThreadTransfer({
+            action: 'move',
+            sourceAccountId: item.accountId,
+            targetAccountId: targetAccountId || item.accountId,
+            targetFolderId,
+          })
+          applyMutationFolderUnreads(res as MutationResult)
+        },
+        done,
+      ),
+    BULK_GROUP_SIZE,
+  )
   if (result.completed) {
     await refreshThreadLocation(result.error === undefined ? targets[0]?.accountId : undefined, false)
     if (targetAccountId) void loadFolders(targetAccountId, false)
@@ -561,17 +594,24 @@ export async function bulkDeleteSelected(items: BulkSelectionItem[]) {
     if (!confirmed) return
   }
 
-  const moreComing = moreComingFlags(targets)
-  const result = await runBulkJob('delete', targets, async (item) => {
-    const res = await invoke('mail.delete', {
-      thread_id: item.threadId,
-      ...(item.folderId ? { folder: item.folderId } : {}),
-      ...moreComing(item),
-    })
-    assertDeleteAffected(res)
-    removeThreadLocally(item.threadId).complete()
-    applyMutationFolderUnreads(res as MutationResult)
-  })
+  // A group at a time: each row leaves once the server has deleted its group.
+  const result = await runBulkJob(
+    'delete',
+    targets,
+    (group, done) =>
+      invokeGroup(
+        'mail.deleteMany',
+        group,
+        (item) => ({ thread_id: item.threadId, ...(item.folderId ? { folder: item.folderId } : {}) }),
+        (item, res) => {
+          assertDeleteAffected(res)
+          removeThreadLocally(item.threadId).complete()
+          applyMutationFolderUnreads(res as MutationResult)
+        },
+        done,
+      ),
+    BULK_GROUP_SIZE,
+  )
   if (result.completed) await refreshThreadLocation(undefined, false)
   reportBulkJob(result, {
     finished: t('mail.toast.deletedCount', { count: targets.length }),
