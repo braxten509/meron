@@ -91,27 +91,28 @@ private fun formatIcu(
     args: Map<String, Any?>,
     locale: String,
 ): String {
-    val plural = parsePlural(template)
-    val selected =
-        if (plural == null) {
-            template
-        } else {
-            val count =
-                (args[plural.argument] as? Number)?.toLong()
-                    ?: args[plural.argument]?.toString()?.toLongOrNull()
-                    ?: 0L
-            val category =
-                if (locale.substringBefore('-').substringBefore('_').lowercase() == "ru") {
-                    russianPluralCategory(count)
-                } else {
-                    if (count == 1L) "one" else "other"
-                }
-            plural.variants[category]
-                ?: plural.variants["other"]
-                ?: template
-        }
-    return replacePlaceholders(selected, args)
+    // A plural can sit anywhere in the text ("Moved {count, plural, …} to
+    // {name}"), and there can be more than one: resolve each in turn.
+    var text = template
+    repeat(MAX_PLURALS_PER_STRING) {
+        val plural = parsePlural(text) ?: return replacePlaceholders(text, args)
+        val count =
+            (args[plural.argument] as? Number)?.toLong()
+                ?: args[plural.argument]?.toString()?.toLongOrNull()
+                ?: 0L
+        val category =
+            when (locale.substringBefore('-').substringBefore('_').lowercase()) {
+                "ru" -> russianPluralCategory(count)
+                "pl" -> polishPluralCategory(count)
+                else -> if (count == 1L) "one" else "other"
+            }
+        val chosen = plural.variants[category] ?: plural.variants["other"] ?: return replacePlaceholders(text, args)
+        text = text.substring(0, plural.start) + chosen + text.substring(plural.end)
+    }
+    return replacePlaceholders(text, args)
 }
+
+private const val MAX_PLURALS_PER_STRING = 4
 
 private fun russianPluralCategory(count: Long): String {
     val lastTwo = kotlin.math.abs(count % 100)
@@ -123,16 +124,31 @@ private fun russianPluralCategory(count: Long): String {
     }
 }
 
+// Polish: 1 → one; 2-4 (not 12-14) → few; everything else → many. Texts that
+// only list one/other fall back to "other".
+private fun polishPluralCategory(count: Long): String {
+    val lastTwo = kotlin.math.abs(count % 100)
+    val last = lastTwo % 10
+    return when {
+        count == 1L -> "one"
+        last in 2L..4L && lastTwo !in 12L..14L -> "few"
+        else -> "many"
+    }
+}
+
 private data class IcuPlural(
     val argument: String,
     val variants: Map<String, String>,
+    /** Where the `{arg, plural, …}` block starts and ends (exclusive) in the text. */
+    val start: Int,
+    val end: Int,
 )
 
 private fun parsePlural(template: String): IcuPlural? {
-    val prefix = Regex("""^\{([A-Za-z][A-Za-z0-9_]*)\s*,\s*plural\s*,""").find(template) ?: return null
+    val prefix = Regex("""\{([A-Za-z][A-Za-z0-9_]*)\s*,\s*plural\s*,""").find(template) ?: return null
     var index = prefix.range.last + 1
     val variants = linkedMapOf<String, String>()
-    while (index < template.lastIndex) {
+    while (index < template.length) {
         while (index < template.length && template[index].isWhitespace()) index += 1
         val categoryStart = index
         while (index < template.length && template[index].isLetter()) index += 1
@@ -144,7 +160,11 @@ private fun parsePlural(template: String): IcuPlural? {
         variants[category] = branch.first
         index = branch.second
     }
-    return IcuPlural(prefix.groupValues[1], variants)
+    while (index < template.length && template[index].isWhitespace()) index += 1
+    // The block's own closing brace; without one the text is malformed, so
+    // treat everything to the end as the block, as before.
+    val end = if (index < template.length && template[index] == '}') index + 1 else template.length
+    return IcuPlural(prefix.groupValues[1], variants, prefix.range.first, end)
 }
 
 private fun readBraceBranch(

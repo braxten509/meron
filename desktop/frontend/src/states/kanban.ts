@@ -45,6 +45,9 @@ export const kanban$ = observable({
   // unified column needs (one inbox per account). "" / empty = no more pages.
   cursors: {} as Record<string, string>,
   accountCursors: {} as Record<string, Record<string, string>>,
+  // Cards a reload read below the oldest card that was on screen, per column
+  // key: the next "load more" shows them before reading on from the cursor.
+  heldThreads: {} as Record<string, Message[]>,
   loadingMore: {} as Record<string, boolean>,
   // Per-column thread filter (keyed by kanbanColumnKey). When set, overrides the
   // board-wide globalFilter for that column; unset columns follow globalFilter.

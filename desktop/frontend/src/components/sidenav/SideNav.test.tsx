@@ -35,6 +35,11 @@ describe('board unread badge', () => {
     })
   })
 
+  // The wide sidebar shows the board's name next to its count, so read the
+  // count as the row's text without the name.
+  const countOf = (view: ReturnType<typeof render>) =>
+    (view.getByTitle('Work', { exact: false }).textContent ?? '').replace('Work', '')
+
   afterEach(() => {
     settings$.kanbanBoards.set([])
     mail$.foldersByAccount.set({})
@@ -43,26 +48,25 @@ describe('board unread badge', () => {
   it("shows the unread count of the board's folder columns on its tile when switched on", () => {
     settings$.kanbanBoards.set([{ id: 'b1', name: 'Work', columns, showUnreadBadge: true }])
     const view = render(<SideNav />)
-    const tile = view.getByTitle('Work', { exact: false })
-    expect(tile.textContent).toBe('7')
+    expect(countOf(view)).toBe('7')
   })
 
   it('updates the count when the folder counts or the switch change', () => {
     settings$.kanbanBoards.set([{ id: 'b1', name: 'Work', columns }])
     const view = render(<SideNav />)
     act(() => settings$.kanbanBoards.set([{ id: 'b1', name: 'Work', columns, showUnreadBadge: true }]))
-    expect(view.getByTitle('Work', { exact: false }).textContent).toBe('7')
+    expect(countOf(view)).toBe('7')
     act(() =>
       mail$.foldersByAccount['acc-1'].set([
         { id: 'INBOX', account_id: 'acc-1', name: 'INBOX', role: 'inbox', unread: 1 },
       ]),
     )
-    expect(view.getByTitle('Work', { exact: false }).textContent).toBe('1')
+    expect(countOf(view)).toBe('1')
   })
 
   it('shows no count on a board whose switch is off', () => {
     settings$.kanbanBoards.set([{ id: 'b1', name: 'Work', columns }])
     const view = render(<SideNav />)
-    expect(view.getByTitle('Work', { exact: false }).textContent).toBe('')
+    expect(countOf(view)).toBe('')
   })
 })

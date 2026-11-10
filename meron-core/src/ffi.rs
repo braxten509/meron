@@ -123,6 +123,65 @@ where
     engine_block_on_anyhow(future).map_err(|err| format!("{err:#}"))
 }
 
+/// Folder resyncs running, by [`watch_key`]. `true` when another request came
+/// in meanwhile, so that folder syncs once more after the current run.
+static FOLDER_RESYNCS: Mutex<Option<HashMap<String, bool>>> = Mutex::new(None);
+
+/// Sync `folders` in the background: after a server move or delete whose
+/// local cache could not follow, the sync prunes the rows the server no longer
+/// has and caches the moved copies. The same one-folder sync the notify poller
+/// runs, telling listeners with the same event when it is done, so lists and
+/// counts refresh. Per account and folder at most one runs and one waits;
+/// further requests fold into the waiting one.
+pub(crate) fn spawn_folder_resync(data_dir: &str, account: &str, folders: &[&str]) {
+    for folder in folders {
+        let key = watch_key(account, folder);
+        {
+            let mut resyncs = FOLDER_RESYNCS.lock().unwrap();
+            let resyncs = resyncs.get_or_insert_with(HashMap::new);
+            if let Some(pending) = resyncs.get_mut(&key) {
+                *pending = true;
+                continue;
+            }
+            resyncs.insert(key.clone(), false);
+        }
+        let data_dir = data_dir.to_string();
+        let account = account.to_string();
+        let folder = folder.to_string();
+        let thread_key = key.clone();
+        let spawned = std::thread::Builder::new()
+            .name("meron-resync".to_string())
+            .spawn(move || {
+                loop {
+                    match sync_mobile_folder(&data_dir, &account, &folder) {
+                        Ok(sync) => emit_mobile_sync_result(&account, &folder, &sync),
+                        Err(err) => crate::mlog!(
+                            crate::log::Level::Warn,
+                            "mail.sync",
+                            "account={account} folder={folder}: resync after a failed cache update failed: {err}"
+                        ),
+                    }
+                    let mut resyncs = FOLDER_RESYNCS.lock().unwrap();
+                    let Some(resyncs) = resyncs.as_mut() else {
+                        return;
+                    };
+                    match resyncs.get_mut(&thread_key) {
+                        Some(pending) if *pending => *pending = false,
+                        _ => {
+                            resyncs.remove(&thread_key);
+                            return;
+                        }
+                    }
+                }
+            });
+        if spawned.is_err()
+            && let Some(resyncs) = FOLDER_RESYNCS.lock().unwrap().as_mut()
+        {
+            resyncs.remove(&key);
+        }
+    }
+}
+
 /// Push pending tag changes in the background, on the engine runtime.
 pub(crate) fn spawn_tag_push(data_dir: &str, account: &str) {
     let (Ok(engine), Some(runtime)) = (engine_for(data_dir), engine_runtime()) else {
@@ -138,6 +197,22 @@ pub(crate) fn spawn_tag_push(data_dir: &str, account: &str) {
             );
         }
     });
+}
+
+/// Run `future` in the background on the engine runtime (phone commands are
+/// called outside any runtime). Dropped, answering `false`, when the runtime
+/// can't be built.
+pub(crate) fn spawn_engine_task<F>(future: F) -> bool
+where
+    F: std::future::Future<Output = ()> + Send + 'static,
+{
+    match engine_runtime() {
+        Some(runtime) => {
+            runtime.spawn(future);
+            true
+        }
+        None => false,
+    }
 }
 
 /// Variant that preserves the concrete error for callers which must reconcile
@@ -459,6 +534,16 @@ fn sync_mobile_folder(data_dir: &str, account: &str, folder: &str) -> Result<Val
 
 /// Tell listeners what a sync found: the arrivals, or just that it ran.
 fn emit_mobile_sync_result(account: &str, folder: &str, sync: &Value) {
+    // New mail AI sorting filed into Meron folders with notifications on.
+    for detail in sync
+        .get("meron_new_messages")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter(|value| value.is_object())
+    {
+        emit_event("mail.newMessages", detail.clone());
+    }
     if let Some(detail) = sync.get("new_messages").filter(|value| value.is_object()) {
         emit_event("mail.newMessages", detail.clone());
     } else {
@@ -895,6 +980,7 @@ fn prepare_mobile_store(data_dir: &str) {
     if let Err(err) = crate::proxy::load_global(&conn) {
         crate::mlog!(crate::log::Level::Warn, "store", "proxy: {err:#}");
     }
+    crate::store::tidy_at_start(&conn);
     drop(conn);
     *prepared = Some(data_dir.to_string());
     drop(prepared);
@@ -1209,6 +1295,19 @@ pub(crate) fn mobile_new_messages_detail(
     let muted = mobile_account_muted(data_dir, account);
     let conn = mobile_db(data_dir).ok()?;
     crate::mail_model::new_messages_detail(&conn, account, &account_name, folder, muted, headers)
+}
+
+/// `mail.newMessages` detail for new mail AI sorting filed into a Meron folder
+/// with notifications on (see [`crate::mail_model::meron_new_messages_detail`]).
+pub(crate) fn mobile_meron_new_messages_detail(
+    data_dir: &str,
+    account: &str,
+    arrivals: &crate::engine::ai_sort::MeronArrivals,
+) -> Option<Value> {
+    let account_name = mobile_account_label(data_dir, account);
+    let muted = mobile_account_muted(data_dir, account);
+    let conn = mobile_db(data_dir).ok()?;
+    crate::mail_model::meron_new_messages_detail(&conn, account, &account_name, muted, arrivals)
 }
 
 /// Inbox messages that arrived between the two `uid_next` snapshots and are

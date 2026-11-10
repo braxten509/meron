@@ -9,6 +9,7 @@ import { IconButton } from '../button/IconButton'
 import { UpdateSection } from './UpdateSection'
 import logo from '../../assets/logo.png'
 import wailsConfig from '../../../../wails.json'
+import { SharpImg } from '../../lib/sharpImage'
 
 const DONATE_LINKS = [
   { label: 'GitHub', url: 'https://github.com/sponsors/rnons' },
@@ -44,7 +45,7 @@ export function AboutDialog() {
       </div>
 
       <div className="flex flex-col items-center px-6 py-7 text-center">
-        <img src={logo} alt="" className="h-20 w-20 object-contain" />
+        <SharpImg src={logo} box={80} fit="contain" alt="" className="h-20 w-20 object-contain" />
         <h3 className="mt-4 text-xl font-bold tracking-tight">{productName}</h3>
         <p className="mt-1 text-xs font-semibold text-secondary">{t('about.version', { version })}</p>
         <p className="mt-4 max-w-[18rem] text-sm leading-6 text-secondary">{comments}</p>

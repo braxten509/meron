@@ -142,6 +142,9 @@ internal class MeronMobileState(
 
     /** Keep only threads with attachments; combines with [mailFilter]. */
     var mailAttachmentsOnly by mutableStateOf(false)
+
+    /** Group the plain mail list by sender instead of by thread; saved per device. */
+    var mailGroupBySender by mutableStateOf(loadAppBoolean(prefs, GROUP_BY_SENDER_PREF, false))
     var coreThreads by mutableStateOf(emptyList<ThreadSummary>())
     var mailboxCache by mutableStateOf(emptyMap<MailboxCacheKey, MailboxLoadResult>())
 
@@ -179,6 +182,22 @@ internal class MeronMobileState(
     var pendingDeleteFolder by mutableStateOf<DeleteFolderTarget?>(null)
     var selectedMailCopyThread by mutableStateOf<ThreadSummary?>(null)
 
+    /** The Meron folders on this device, A to Z (see MeronMobileState+MeronFolders). */
+    var meronFolders by mutableStateOf(emptyList<jp.nonbili.meron.shared.MeronFolderSummary>())
+
+    /** The conversations the "Move to Meron folder" picker is open for. */
+    var meronMoveThreads by mutableStateOf<List<ThreadSummary>?>(null)
+
+    /** The new / rename name dialog, or the delete confirmation, when open. */
+    var meronFolderDialog by mutableStateOf<MeronFolderDialog?>(null)
+    var meronFolderNameInput by mutableStateOf("")
+    var meronFolderNameError by mutableStateOf("")
+    var meronFolderBusy by mutableStateOf(false)
+    var meronFoldersRefreshJob: Job? = null
+
+    /** Bumped by every Meron folder change, so a folder list read before it is dropped. */
+    var meronFoldersGeneration = 0L
+
     // False until the first inbox load (cache or server) settles, so the list can
     // show a loading indicator instead of an empty state on cold start.
     var initialThreadsLoaded by mutableStateOf(false)
@@ -193,6 +212,10 @@ internal class MeronMobileState(
     // pages further. Reloads re-request it so a background sync event can't shrink
     // the list under a scrolled reader.
     var mailboxPageDepth by mutableStateOf(MAILBOX_PAGE_SIZE)
+
+    // Cards the last reload read below the oldest card on screen (see
+    // `readMailboxToOldestShown`): the next "load more" shows them first.
+    var mailboxHeldThreads by mutableStateOf(emptyList<ThreadSummary>())
 
     // In-flight debounce for event-driven mailbox reloads.
     var mailboxReloadJob: Job? = null
@@ -216,6 +239,14 @@ internal class MeronMobileState(
     // a later refresh that fails writes nothing.
     var threadRefreshGeneration = 0L
     var threadRefreshApplied = 0L
+
+    // Refreshes of the open conversation asked for by events and by a sent
+    // reply run one at a time: while one runs, every further request (each
+    // background body download, sync tail, push and send announces itself)
+    // joins a single re-read after it. Each waiter is completed by the first
+    // refresh that started after it asked. See refreshOpenThreadCoalesced.
+    var openThreadRefreshRunning = false
+    val openThreadRefreshWaiters = mutableListOf<CompletableDeferred<Unit>>()
     var conversationHtmlOverrides by mutableStateOf(emptyMap<String, Boolean>())
     var previousTopScreen by mutableStateOf(Screen.Mail)
     var composeReturnScreen by mutableStateOf(Screen.Mail)
@@ -355,6 +386,17 @@ internal class MeronMobileState(
     // UI state, so a plain set rather than mutableStateOf.
     val quickReplyConsumedDraftIds = mutableSetOf<String>()
 
+    // Consumed drafts whose discard succeeded. A read that set off before the
+    // discard can still come back with the server's old row; the draft is gone
+    // for good, so it stays hidden for the session. Normalized draft ids.
+    val quickReplyDiscardedDraftIds = mutableSetOf<String>()
+
+    // Conversations whose quick reply saved or sent a draft this session. In
+    // these, a Drafts row synced from its envelope alone (no body, so no
+    // Message-ID to recognise it by) is taken for the bar's own draft and not
+    // shown until its body says which draft it is (see visibleThreadMessages).
+    val quickReplyDraftThreadIds = mutableSetOf<String>()
+
     /** Gaps between further attempts at discarding a sent message's draft after
      * the one following the send failed. */
     internal var sentDraftDiscardRetryDelaysMs = listOf(5_000L, 30_000L, 120_000L, 600_000L)
@@ -383,6 +425,9 @@ internal class MeronMobileState(
     }
 
     var syncing by mutableStateOf(false)
+    // Only a pull the user started shows the refresh spinner; the many
+    // background reloads (sync events, AI moves) keep it out of sight.
+    var pullRefreshing by mutableStateOf(false)
     var showUnreadBadges by mutableStateOf(loadAppBoolean(prefs, SHOW_UNREAD_BADGES_PREF, true))
     var showUnifiedInboxNav by mutableStateOf(loadAppBoolean(prefs, SHOW_UNIFIED_INBOX_PREF, true))
     var tasksEnabled by mutableStateOf(loadAppBoolean(prefs, TASKS_ENABLED_PREF, false))
@@ -407,6 +452,7 @@ internal class MeronMobileState(
     var autoFitMessages by mutableStateOf(loadAppBoolean(prefs, AUTO_FIT_MESSAGES_PREF, false))
     var chatFullMessages by mutableStateOf(loadAppBoolean(prefs, CHAT_FULL_MESSAGES_PREF, false))
     var readerBottomActions by mutableStateOf(loadAppBoolean(prefs, READER_BOTTOM_ACTIONS_PREF, false))
+    var blurredBars by mutableStateOf(loadAppBoolean(prefs, BLURRED_BARS_PREF, false))
     var quoteReplies by mutableStateOf(loadAppBoolean(prefs, QUOTE_REPLIES_PREF, false))
     var liveMailPushEnabled by mutableStateOf(loadAppBoolean(prefs, LIVE_MAIL_PUSH_PREF, false))
     var backgroundSyncEnabled by mutableStateOf(loadAppBoolean(prefs, BACKGROUND_SYNC_ENABLED_PREF, true))

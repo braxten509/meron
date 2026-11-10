@@ -94,6 +94,27 @@ object MobileCommand {
     const val RunRule = "mail.runRule"
     const val RuleStatus = "mail.ruleStatus"
     const val StopRule = "mail.stopRule"
+    const val AiSortConfig = "mail.aiSortConfig"
+    const val SetAiSortConfig = "mail.setAiSortConfig"
+    const val SetAiSortKey = "mail.setAiSortKey"
+    const val CheckAiSortKey = "mail.checkAiSortKey"
+    const val AiSortModels = "mail.aiSortModels"
+    const val AiSortEstimate = "mail.aiSortEstimate"
+    const val RunAiSort = "mail.runAiSort"
+    const val StopAiSort = "mail.stopAiSort"
+    const val AiSortStatus = "mail.aiSortStatus"
+    const val AiSortMoveBack = "mail.aiSortMoveBack"
+
+    // Meron folders: kept on this device only, never on a mail server.
+    const val MeronFolders = "mail.meronFolders"
+    const val CreateMeronFolder = "mail.createMeronFolder"
+    const val RenameMeronFolder = "mail.renameMeronFolder"
+    const val SetMeronFolderNotify = "mail.setMeronFolderNotify"
+    const val DeleteMeronFolder = "mail.deleteMeronFolder"
+    const val MoveToMeronFolder = "mail.moveToMeronFolder"
+    const val MoveOutOfMeronFolder = "mail.moveOutOfMeronFolder"
+    const val MeronFolderThreads = "mail.meronFolderThreads"
+    const val MarkMeronFolderRead = "mail.markMeronFolderRead"
     const val RssSync = "rss.sync"
     const val RssThread = "rss.thread"
     const val RssMarkRead = "rss.markRead"
@@ -756,6 +777,9 @@ data class ThreadListParams(
     // mailbox drop out of the merge. Omitted for a single account, whose
     // folderId already names a real mailbox.
     val folderRole: String? = null,
+    // "sender" groups the plain list one row per correspondent; null (omitted)
+    // keeps thread rows. The core ignores it for search, Starred and Drafts.
+    val groupBy: String? = null,
 ) {
     fun toJson(): String =
         jsonObject(
@@ -768,6 +792,7 @@ data class ThreadListParams(
             "refresh" to refresh.toString(),
             "limit" to limit?.toString(),
             "folder_role" to folderRole?.jsonString(),
+            "group_by" to groupBy?.jsonString(),
         )
 }
 
@@ -1093,12 +1118,26 @@ data class MoveThreadParams(
     val threadId: String,
     val targetFolderId: String,
     val targetAccountId: String? = null,
+    /** Move only these messages (ids ending in `#uid`); empty moves the whole thread. */
+    val messageIds: List<String> = emptyList(),
+    /** An Undo: the core refuses it without [messageIds] rather than guess. */
+    val undo: Boolean = false,
+    /** Undo of mail that was shown in the Inbox from its own folder: show it there again. */
+    val showInInbox: Boolean = false,
+    /** Undo of an action that took the card out of this Meron folder: put it back. */
+    val meronFolderId: String? = null,
+    val meronSource: String? = null,
 ) {
     fun toJson(): String =
         jsonObject(
             "thread_id" to threadId.jsonString(),
             "target_folder_id" to targetFolderId.jsonString(),
             "target_account_id" to targetAccountId?.jsonString(),
+            "message_ids" to messageIds.takeUnless { it.isEmpty() }?.jsonStringArray(),
+            "undo" to if (undo) "true" else null,
+            "show_in_inbox" to if (showInInbox) "true" else null,
+            "meron_folder_id" to meronFolderId?.takeIf { it.isNotBlank() }?.jsonString(),
+            "meron_source" to meronSource?.takeIf { it.isNotBlank() }?.jsonString(),
         )
 }
 
@@ -1231,6 +1270,127 @@ data class RuleLogEntry(
 data class RuleStatus(
     val log: List<RuleLogEntry> = emptyList(),
     val running: Map<String, Int> = emptyMap(),
+)
+
+/** One folder the AI may sort into, with a short note of what belongs there. */
+data class AiSortFolder(
+    val account: String,
+    val folder: String,
+    val note: String = "",
+    /** Set for a Meron folder (then [account] and [folder] are empty). */
+    val meronFolderId: String = "",
+) {
+    val isMeron: Boolean get() = meronFolderId.isNotEmpty()
+
+    fun toJson(): String =
+        jsonObject(
+            "account" to account.jsonString(),
+            "folder" to folder.jsonString(),
+            "note" to note.jsonString(),
+            "meron_folder_id" to meronFolderId.takeIf { it.isNotEmpty() }?.jsonString(),
+        )
+}
+
+/** The AI sorting setup. The API key is never part of it. */
+data class AiSortConfig(
+    val enabled: Boolean = false,
+    /** `openrouter` or `tinfoil`. */
+    val provider: String = "openrouter",
+    /** Empty until the owner picks one: there is no default model. */
+    val model: String = "",
+    /** `headers` (sender and subject) or `start` (plus the start of the email). */
+    val reads: String = "headers",
+    val folders: List<AiSortFolder> = emptyList(),
+    /** The core's last few models per service, newest first. Read only: the core keeps it. */
+    val recentModels: Map<String, List<String>> = emptyMap(),
+) {
+    fun toJson(): String =
+        jsonObject(
+            "enabled" to enabled.toString(),
+            "provider" to provider.jsonString(),
+            "model" to model.jsonString(),
+            "reads" to reads.jsonString(),
+            "folders" to folders.joinToString(separator = ",", prefix = "[", postfix = "]") { it.toJson() },
+        )
+}
+
+/** Whether a provider has a saved key; [hint] is its last few characters. */
+data class AiSortKeyState(
+    val hasKey: Boolean = false,
+    val hint: String = "",
+)
+
+/** Why the last AI request failed. [kind] is `key`, `credit`, `verify` or `other`. */
+data class AiSortError(
+    val at: Long = 0,
+    val message: String = "",
+    val kind: String = "other",
+)
+
+/** The answer to `mail.aiSortConfig`. */
+data class AiSortSetup(
+    val config: AiSortConfig = AiSortConfig(),
+    val keys: Map<String, AiSortKeyState> = emptyMap(),
+    val lastError: AiSortError? = null,
+)
+
+/** The answer to `mail.checkAiSortKey`. */
+data class AiSortKeyCheck(
+    val ok: Boolean,
+    val kind: String = "",
+    val message: String = "",
+)
+
+/** One model a provider offers; prices are US dollars per million tokens, null when unknown. */
+data class AiModel(
+    val id: String,
+    val name: String = id,
+    val priceInPerM: Double? = null,
+    val priceOutPerM: Double? = null,
+    val structured: Boolean = false,
+    val reasoning: Boolean = false,
+    /** An OpenRouter decision model: one email per request, input billed only. */
+    val decision: Boolean = false,
+)
+
+/** The answer to `mail.aiSortModels`; [default] is null (the owner always picks). */
+data class AiModelList(
+    val models: List<AiModel> = emptyList(),
+    val default: String? = null,
+)
+
+/** What sorting the mail already in the Inbox would cost; [costUsd] is null when the price is unknown. */
+data class AiSortEstimate(
+    val total: Int = 0,
+    val requests: Int = 0,
+    val reads: String = "headers",
+    val provider: String = "",
+    val model: String = "",
+    val costUsd: Double? = null,
+    val accounts: Map<String, Int> = emptyMap(),
+)
+
+/** One line of what the AI did. [state] is `moving`, `moved`, `left`, `slow`, `failed` or `moved_back`. */
+data class AiSortLogEntry(
+    val id: Long,
+    val at: Long = 0,
+    val account: String = "",
+    val subject: String = "",
+    val sender: String = "",
+    val toFolder: String = "",
+    val reason: String = "",
+    val state: String = "",
+    val detail: String = "",
+    /** Set when the AI filed the email into a Meron folder ([toFolder] is its name). */
+    val meronFolderId: String = "",
+)
+
+/** The AI's log, the running "sort Inbox" job if any, and the last error. */
+data class AiSortStatus(
+    val log: List<AiSortLogEntry> = emptyList(),
+    /** `total` to `done`, or null when no job runs. */
+    val running: Pair<Int, Int>? = null,
+    val lastError: AiSortError? = null,
 )
 
 data class RssMarkReadParams(
@@ -1490,6 +1650,86 @@ class MobileMailCommandClient(
     suspend fun ruleStatus(): String = core.invoke(MobileCommand.RuleStatus, "{}")
 
     suspend fun stopRule(id: String): String = core.invoke(MobileCommand.StopRule, jsonObject("id" to id.jsonString()))
+
+    suspend fun aiSortConfig(): String = core.invoke(MobileCommand.AiSortConfig, "{}")
+
+    suspend fun setAiSortConfig(config: AiSortConfig): String = core.invoke(MobileCommand.SetAiSortConfig, jsonObject("config" to config.toJson()))
+
+    /** Saves [key] for [provider]; an empty key removes it. The answer never carries the key. */
+    suspend fun setAiSortKey(
+        provider: String,
+        key: String,
+    ): String = core.invoke(MobileCommand.SetAiSortKey, jsonObject("provider" to provider.jsonString(), "key" to key.jsonString()))
+
+    suspend fun checkAiSortKey(provider: String): String = core.invoke(MobileCommand.CheckAiSortKey, jsonObject("provider" to provider.jsonString()))
+
+    suspend fun aiSortModels(provider: String): String = core.invoke(MobileCommand.AiSortModels, jsonObject("provider" to provider.jsonString()))
+
+    suspend fun aiSortEstimate(): String = core.invoke(MobileCommand.AiSortEstimate, "{}")
+
+    suspend fun runAiSort(): String = core.invoke(MobileCommand.RunAiSort, "{}")
+
+    suspend fun stopAiSort(): String = core.invoke(MobileCommand.StopAiSort, "{}")
+
+    suspend fun aiSortStatus(): String = core.invoke(MobileCommand.AiSortStatus, "{}")
+
+    suspend fun aiSortMoveBack(id: Long): String = core.invoke(MobileCommand.AiSortMoveBack, jsonObject("id" to id.toString()))
+
+    suspend fun meronFolders(): String = core.invoke(MobileCommand.MeronFolders, "{}")
+
+    suspend fun createMeronFolder(name: String): String = core.invoke(MobileCommand.CreateMeronFolder, jsonObject("name" to name.jsonString()))
+
+    suspend fun renameMeronFolder(
+        id: String,
+        name: String,
+    ): String = core.invoke(MobileCommand.RenameMeronFolder, jsonObject("id" to id.jsonString(), "name" to name.jsonString()))
+
+    suspend fun setMeronFolderNotify(
+        id: String,
+        enabled: Boolean,
+    ): String =
+        core.invoke(
+            MobileCommand.SetMeronFolderNotify,
+            jsonObject("id" to id.jsonString(), "enabled" to enabled.toString()),
+        )
+
+    suspend fun deleteMeronFolder(id: String): String = core.invoke(MobileCommand.DeleteMeronFolder, jsonObject("id" to id.jsonString()))
+
+    suspend fun moveToMeronFolder(
+        folderId: String,
+        threadIds: List<String>,
+    ): String =
+        core.invoke(
+            MobileCommand.MoveToMeronFolder,
+            jsonObject("folder_id" to folderId.jsonString(), "thread_ids" to threadIds.jsonStringArray()),
+        )
+
+    suspend fun moveOutOfMeronFolder(threadIds: List<String>): String =
+        core.invoke(MobileCommand.MoveOutOfMeronFolder, jsonObject("thread_ids" to threadIds.jsonStringArray()))
+
+    suspend fun meronFolderThreads(params: MeronFolderThreadsParams): String = core.invoke(MobileCommand.MeronFolderThreads, params.toJson())
+
+    suspend fun markMeronFolderRead(folderId: String): String = core.invoke(MobileCommand.MarkMeronFolderRead, jsonObject("folder_id" to folderId.jsonString()))
+}
+
+data class MeronFolderThreadsParams(
+    val folderId: String,
+    val query: String = "",
+    /** `all`, `unread` or `starred`. */
+    val filter: String = "all",
+    val attachments: Boolean = false,
+    val limit: Int = 50,
+    val beforeCursor: String? = null,
+) {
+    fun toJson(): String =
+        jsonObject(
+            "folder_id" to folderId.jsonString(),
+            "query" to query.jsonString(),
+            "filter" to filter.jsonString(),
+            "attachments" to attachments.toString(),
+            "limit" to limit.toString(),
+            "before_cursor" to beforeCursor?.jsonString(),
+        )
 }
 
 fun accountListRequest(id: Long = 1): CoreRequest = CoreRequest(id, MobileCommand.AccountList)

@@ -25,6 +25,15 @@ data class PickedFile(
     }
 }
 
+/** What scanning a QR code gave: its text, or why there is none. */
+data class QrScanResult(
+    val text: String? = null,
+    /** The camera permission was refused. */
+    val cameraDenied: Boolean = false,
+    /** This platform can't scan here; type instead. */
+    val unsupported: Boolean = false,
+)
+
 enum class AttachmentOpenResult {
     Opened,
     Unsupported,
@@ -97,6 +106,14 @@ interface PlatformServices {
     )
 
     fun pickImage(onPicked: (PickedFile?) -> Unit)
+
+    /** Scan one QR code with the camera (asking for the permission first). */
+    fun scanQrCode(
+        prompt: String,
+        onResult: (QrScanResult) -> Unit,
+    ) {
+        onResult(QrScanResult(unsupported = true))
+    }
 }
 
 /**

@@ -59,6 +59,8 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.UnfoldLess
 import androidx.compose.material.icons.filled.UnfoldMore
+import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.material.icons.outlined.FolderOff
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -91,7 +93,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -169,6 +173,10 @@ internal fun ThreadScreen(
     onMoveToFolder: (FolderSummary) -> Unit,
     onCreateFolderAndMove: (String) -> Unit,
     onCopyToFolder: (FolderSummary) -> Unit,
+    /** Null where the conversation can't go in a Meron folder (sender chat, feed, local). */
+    onMoveToMeronFolder: (() -> Unit)? = null,
+    /** Null unless the conversation is in a Meron folder. */
+    onMoveOutOfMeronFolder: (() -> Unit)? = null,
     recentTransfers: List<RecentThreadTransferItem> = emptyList(),
     loadRecentTransferFolders: suspend () -> Unit = {},
     quickReplyBody: String,
@@ -207,6 +215,9 @@ internal fun ThreadScreen(
     onToggleMessageRead: (MessageBody) -> Unit,
     onToggleMessageStarred: (MessageBody) -> Unit,
     onDeleteMessage: (MessageBody) -> Unit,
+    // One email moved to a folder or archived from its own menu.
+    onMoveMessageToFolder: (MessageBody, FolderSummary) -> Unit = { _, _ -> },
+    onArchiveMessage: ((MessageBody) -> Unit)? = null,
     onOpenAttachment: (MessageAttachment) -> Unit,
     onSaveAttachment: (MessageAttachment) -> Unit,
     onShareImageAttachment: (MessageAttachment) -> Unit,
@@ -241,7 +252,34 @@ internal fun ThreadScreen(
     modifier: Modifier = Modifier,
 ) {
     val isRss = thread?.let { threadIdIsRss(it.id) } ?: false
-    val deleteLabel = tr(thread?.let { threadDeleteActionKey(it.folder, it.folderRole) } ?: "threads.actions.moveToTrash")
+    // A sender chat: every email with one person in this folder, plus your
+    // replies to them. Star and tags stay on the single emails inside it.
+    val senderChat = thread?.isSenderGroup == true
+    val deleteLabel =
+        if (senderChat) {
+            tr("buttons.delete")
+        } else {
+            tr(thread?.let { threadDeleteActionKey(it.folder, it.folderRole) } ?: "threads.actions.moveToTrash")
+        }
+    // A subject line once shown stays for the visit. The oldest loaded bubble
+    // always names its topic, having nothing before it; a page of older mail
+    // landing above it on the same topic would otherwise take the line away,
+    // and the bubble would shrink by a line under the reader's finger.
+    val shownSubjectLines = remember(thread?.id) { mutableMapOf<String, String>() }
+    val senderSubjectLines =
+        remember(messages, senderChat) {
+            if (!senderChat) {
+                emptyMap()
+            } else {
+                val lines = senderChatSubjectLines(messages)
+                val ids = messages.mapTo(HashSet()) { it.id }
+                val kept = shownSubjectLines.filterKeys { it in ids && it !in lines }
+                (lines + kept).also {
+                    shownSubjectLines.clear()
+                    shownSubjectLines.putAll(it)
+                }
+            }
+        }
     val chat = LocalChatColors.current
     val services = LocalPlatformServices.current
     var searchOpen by remember(thread?.id) { mutableStateOf(false) }
@@ -256,6 +294,8 @@ internal fun ThreadScreen(
     var galleryIndex by remember(thread?.id) { mutableStateOf<Int?>(null) }
     var htmlGalleryImage by remember(thread?.id) { mutableStateOf<jp.nonbili.meron.shared.ThreadGalleryImage?>(null) }
     var moveDialogOpen by remember(thread?.id) { mutableStateOf(false) }
+    // The single email whose "Move to..." picker is open, if any.
+    var moveMessageTarget by remember(thread?.id) { mutableStateOf<MessageBody?>(null) }
     var copyDialogOpen by remember(thread?.id) { mutableStateOf(false) }
     val printThread = rememberPrintThread(preferHtml)
     val printError = tr("chat.couldNotPrintThread")
@@ -363,7 +403,8 @@ internal fun ThreadScreen(
     var pinnedHeaderHeightPx by remember { mutableIntStateOf(0) }
     // The conversation, captured for the frosted bands at either end of it.
     val hazeState = rememberHazeState()
-    val showReplyBar = thread != null && !isRss && messages.isNotEmpty()
+    // A no-reply style sender has nobody to answer, so no quick reply.
+    val showReplyBar = thread != null && !isRss && messages.isNotEmpty() && !(senderChat && thread.automated)
     val replyOverlayPx by rememberUpdatedState(if (showReplyBar) replyBarHeightPx else 0)
     var endFollowRequest by remember(thread?.id) { mutableStateOf(0) }
     var followNextLocalSend by remember(thread?.id) { mutableStateOf(false) }
@@ -545,25 +586,50 @@ internal fun ThreadScreen(
         enabled = active && searchOpen && !detailsOpen && readerMessage == null && galleryIndex == null,
         onBack = closeSearch,
     )
-    // One-shot positioning when the thread's messages first arrive, mirroring
-    // desktop: jump to the first unread message, or the newest when all read.
+    // One-shot positioning when the thread's messages first arrive: open at
+    // the bottom, like a chat, with the newest message's end on screen (the
+    // owner's choice over desktop's first-unread jump). The end hold keeps it
+    // there while the bodies measure, unless the reader drags.
     var openScrollPositioned by remember(thread?.id) { mutableStateOf(false) }
     var autoLoadOlderArmed by remember(thread?.id) { mutableStateOf(false) }
     LaunchedEffect(thread?.id, messages.isEmpty()) {
         if (openScrollPositioned || messages.isEmpty()) return@LaunchedEffect
         openScrollPositioned = true
-        val target = threadOpenScrollIndex(messages, hasLoadOlderRow = canLoadOlder || loadingOlder)
-        val targetId = target?.let { messages.getOrNull(it - threadHeaderItemCount(canLoadOlder || loadingOlder))?.id }
-        if (targetId == null) {
-            autoLoadOlderArmed = true
-            return@LaunchedEffect
-        }
-        anchorItem = ThreadListAnchor(targetId, animated = false)
+        endHoldRequest += 1
         // Scrolling near the top is what asks for the older page, so hold that
-        // off until the anchoring has finished moving the list — including when
-        // an expanded message took the anchor over in the meantime.
-        snapshotFlow { anchorItem }.first { it == null }
+        // off until the list has been carried to the end.
+        kotlinx.coroutines.delay(THREAD_OPEN_ANCHOR_WINDOW_MS)
         autoLoadOlderArmed = true
+    }
+    // A page of older messages lands between the header rows and the messages.
+    // The list holds its place by the first item on screen, and while paging
+    // back that is a header row (reaching it is what asks for the page), so on
+    // its own the page would push every message on screen down by its height.
+    // Hold the topmost message the reader could see where it was instead: its
+    // place is read from the layout as it stood before this change, and asked
+    // for in the same remeasure that lays the new page out.
+    val olderPageAnchor = remember(thread?.id) { OlderPageAnchor() }
+    val oldestMessageId = messages.firstOrNull()?.id
+    if (oldestMessageId != olderPageAnchor.oldestId) {
+        val previousOldest = olderPageAnchor.oldestId
+        olderPageAnchor.oldestId = oldestMessageId
+        val ids = messages.mapTo(HashSet()) { it.id }
+        // Older messages were put in front of the ones already shown.
+        if (previousOldest != null && previousOldest in ids && previousOldest != oldestMessageId) {
+            val visible = Snapshot.withoutReadObservation { listState.layoutInfo.visibleItemsInfo }
+            val firstIsMessage = (visible.firstOrNull()?.key as? String)?.let { it in ids } == true
+            val anchor = visible.firstOrNull { (it.key as? String)?.let { key -> key in ids } == true }
+            // With a message first on screen the list keeps it by its key
+            // already; asking again would only cancel a fling.
+            if (!firstIsMessage && anchor != null) olderPageAnchor.pending = (anchor.key as String) to anchor.offset
+        }
+    }
+    val anchorHeaderItemCount = threadHeaderItemCount(canLoadOlder || loadingOlder)
+    SideEffect {
+        val (key, offset) = olderPageAnchor.pending ?: return@SideEffect
+        olderPageAnchor.pending = null
+        val index = messages.indexOfFirst { it.id == key }
+        if (index >= 0) listState.requestScrollToItem(index + anchorHeaderItemCount, -offset)
     }
     val currentOnLoadOlder by rememberUpdatedState(onLoadOlder)
     // Keyed on [active] too: a page positioned while beside the open one starts
@@ -775,7 +841,7 @@ internal fun ThreadScreen(
                             if (printing) CircularProgressIndicator(Modifier.padding(start = 12.dp).size(20.dp))
                             // On the bar, like the desktop header's, and not the
                             // Tasks screen's checklist icon: this files the thread.
-                            if (onTags != null) {
+                            if (onTags != null && !senderChat) {
                                 IconButton(onClick = onTags) {
                                     Icon(Icons.Filled.Sell, contentDescription = tr("tags.title"))
                                 }
@@ -785,26 +851,32 @@ internal fun ThreadScreen(
                                     Icon(Icons.AutoMirrored.Filled.PlaylistAdd, contentDescription = tr("tasks.addFromMessage"))
                                 }
                             }
-                            IconButton(onClick = onToggleStar) {
-                                Icon(
-                                    if (thread?.starred == true) Icons.Filled.Star else Icons.Filled.StarBorder,
-                                    contentDescription = tr("chat.star"),
-                                    tint = if (thread?.starred == true) chat.star else MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
+                            if (!senderChat) {
+                                IconButton(onClick = onToggleStar) {
+                                    Icon(
+                                        if (thread?.starred == true) Icons.Filled.Star else Icons.Filled.StarBorder,
+                                        contentDescription = tr("chat.star"),
+                                        tint = if (thread?.starred == true) chat.star else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
                             }
                             Box {
                                 IconButton(onClick = { overflowOpen = true }) {
                                     Icon(Icons.Filled.MoreVert, contentDescription = tr("chat.moreActions"))
                                 }
                                 DropdownMenu(expanded = overflowOpen, onDismissRequest = { overflowOpen = false }) {
-                                    DropdownMenuItem(
-                                        text = { Text(if (isRss) tr("feeds.actions.deleteFeed") else tr("threads.actions.archiveThread")) },
-                                        leadingIcon = { Icon(if (isRss) Icons.Filled.Delete else Icons.Filled.Archive, contentDescription = null) },
-                                        onClick = {
-                                            overflowOpen = false
-                                            onArchive()
-                                        },
-                                    )
+                                    // A conversation in the built-in Archive is archived
+                                    // already: no Archive action.
+                                    if (isRss || thread?.meronFolderId != MERON_ARCHIVE_FOLDER_ID) {
+                                        DropdownMenuItem(
+                                            text = { Text(if (isRss) tr("feeds.actions.deleteFeed") else tr("threads.actions.archiveThread")) },
+                                            leadingIcon = { Icon(if (isRss) Icons.Filled.Delete else Icons.Filled.Archive, contentDescription = null) },
+                                            onClick = {
+                                                overflowOpen = false
+                                                onArchive()
+                                            },
+                                        )
+                                    }
                                     DropdownMenuItem(
                                         text = { Text(tr("chat.searchThread")) },
                                         leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
@@ -905,6 +977,37 @@ internal fun ThreadScreen(
                                                 copyDialogOpen = true
                                             },
                                         )
+                                        onMoveToMeronFolder?.let { moveToMeron ->
+                                            DropdownMenuItem(
+                                                text = { Text(tr("meronFolders.moveTo")) },
+                                                leadingIcon = { Icon(Icons.Outlined.Folder, contentDescription = null) },
+                                                onClick = {
+                                                    overflowOpen = false
+                                                    moveToMeron()
+                                                },
+                                            )
+                                        }
+                                        onMoveOutOfMeronFolder?.let { moveOut ->
+                                            DropdownMenuItem(
+                                                // Out of the built-in Archive is back to the Inbox.
+                                                text = {
+                                                    Text(
+                                                        tr(
+                                                            if (thread?.meronFolderId == MERON_ARCHIVE_FOLDER_ID) {
+                                                                "meronFolders.moveToInbox"
+                                                            } else {
+                                                                "meronFolders.moveOut"
+                                                            },
+                                                        ),
+                                                    )
+                                                },
+                                                leadingIcon = { Icon(Icons.Outlined.FolderOff, contentDescription = null) },
+                                                onClick = {
+                                                    overflowOpen = false
+                                                    moveOut()
+                                                },
+                                            )
+                                        }
                                         DropdownMenuItem(
                                             text = { Text(deleteLabel, color = MaterialTheme.colorScheme.error) },
                                             leadingIcon = { Icon(Icons.Filled.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
@@ -956,6 +1059,26 @@ internal fun ThreadScreen(
                     },
                     onDismiss = { moveDialogOpen = false },
                 )
+            }
+            moveMessageTarget?.let { message ->
+                if (thread != null) {
+                    // The email's own folder is left out of the list; a sender
+                    // chat's Sent reply lives in Sent, not the chat's folder.
+                    val messageFolder = message.folderId.ifBlank { thread.folder }
+                    MoveThreadDialog(
+                        thread = thread.copy(folder = messageFolder, subject = message.subject),
+                        folders = moveFolders,
+                        accounts = transferAccounts,
+                        recentTransfers = recentTransfers,
+                        onMove = { folder ->
+                            moveMessageTarget = null
+                            onMoveMessageToFolder(message, folder)
+                        },
+                        onCreateAndMove = {},
+                        onDismiss = { moveMessageTarget = null },
+                        titleKey = "threads.actions.moveTo",
+                    )
+                }
             }
             if (copyDialogOpen && thread != null) {
                 CopyThreadDialog(
@@ -1051,17 +1174,27 @@ internal fun ThreadScreen(
                         ) {
                             // The subject, in full, at the top of the list. It
                             // scrolls away with the messages.
-                            item {
-                                Text(
-                                    (thread?.subject ?: "").ifBlank { tr("threads.noSubject") },
-                                    modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
-                                    fontWeight = FontWeight.Medium,
-                                    style = MaterialTheme.typography.titleLarge.copy(fontSize = 18.sp, lineHeight = 24.sp),
-                                )
+                            // Keyed, as the messages are, so a page landing below
+                            // these rows is told apart from them.
+                            item(key = "thread-header") {
+                                if (senderChat && thread != null) {
+                                    // A sender chat is about a person, not one subject:
+                                    // the header names them, each bubble its topic.
+                                    SenderChatHeader(thread)
+                                } else {
+                                    Text(
+                                        (thread?.subject ?: "").ifBlank { tr("threads.noSubject") },
+                                        modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
+                                        fontWeight = FontWeight.Medium,
+                                        style = MaterialTheme.typography.titleLarge.copy(fontSize = 18.sp, lineHeight = 24.sp),
+                                    )
+                                }
                             }
                             if (canLoadOlder || loadingOlder) {
-                                item {
-                                    Box(Modifier.fillMaxWidth().padding(bottom = 4.dp), contentAlignment = Alignment.Center) {
+                                item(key = "thread-load-older") {
+                                    // One height for the button and the spinner that
+                                    // replaces it, so starting a load moves nothing.
+                                    Box(Modifier.fillMaxWidth().padding(bottom = 4.dp).height(48.dp), contentAlignment = Alignment.Center) {
                                         if (loadingOlder) {
                                             CircularProgressIndicator(Modifier.size(24.dp))
                                         } else {
@@ -1094,6 +1227,7 @@ internal fun ThreadScreen(
                                         isRss = isRss,
                                         remoteContent = remoteContentFor(message),
                                         onForward = onForward,
+                                        subjectLine = senderSubjectLines[message.id].orEmpty(),
                                         onReplyAllToMessage = onReplyAllToMessage,
                                         canReplyAllToMessage = canReplyAllToMessage,
                                         onEditAsNew = onEditAsNew,
@@ -1101,6 +1235,11 @@ internal fun ThreadScreen(
                                         onToggleRead = onToggleMessageRead,
                                         onToggleStarred = onToggleMessageStarred,
                                         onDelete = onDeleteMessage,
+                                        onMove = { message ->
+                                            loadTransferFolders()
+                                            moveMessageTarget = message
+                                        },
+                                        onArchive = onArchiveMessage,
                                         onOpenAttachment = onOpenAttachment,
                                         onSaveAttachment = onSaveAttachment,
                                         loadImageAttachment = loadImageAttachment,
@@ -1115,7 +1254,28 @@ internal fun ThreadScreen(
                                         onAddInviteToCalendar = onAddInviteToCalendar,
                                     )
                                 } else {
+                                    // Long mail (a web page or pictures) starts folded,
+                                    // except the newest and a search hit; a tap opens
+                                    // or folds it and the choice holds for the visit.
+                                    val foldable = bubbleFoldable(message, preferHtml, normalizedSearch)
+                                    val folded =
+                                        foldable &&
+                                            !(
+                                                expandOverrides[message.id]
+                                                    ?: (message.id == lastMessageId || message.id == activeSearchId)
+                                            )
                                     MessageBubble(
+                                        folded = folded,
+                                        onToggleFold =
+                                            if (foldable) {
+                                                {
+                                                    releaseFocusBeforeToggle()
+                                                    expandOverrides = expandOverrides + (message.id to folded)
+                                                    if (folded) scrollToExpandedId = message.id
+                                                }
+                                            } else {
+                                                null
+                                            },
                                         message = message,
                                         outgoing = outgoing,
                                         chat = chat,
@@ -1128,6 +1288,7 @@ internal fun ThreadScreen(
                                         isRss = isRss,
                                         remoteContent = remoteContentFor(message),
                                         onForward = onForward,
+                                        subjectLine = senderSubjectLines[message.id].orEmpty(),
                                         onReplyAllToMessage = onReplyAllToMessage,
                                         canReplyAllToMessage = canReplyAllToMessage,
                                         onEditAsNew = onEditAsNew,
@@ -1135,6 +1296,11 @@ internal fun ThreadScreen(
                                         onToggleRead = onToggleMessageRead,
                                         onToggleStarred = onToggleMessageStarred,
                                         onDelete = onDeleteMessage,
+                                        onMove = { message ->
+                                            loadTransferFolders()
+                                            moveMessageTarget = message
+                                        },
+                                        onArchive = onArchiveMessage,
                                         onOpenAttachment = onOpenAttachment,
                                         onSaveAttachment = onSaveAttachment,
                                         loadImageAttachment = loadImageAttachment,
@@ -1261,6 +1427,11 @@ internal fun ThreadScreen(
                                             onToggleRead = onToggleMessageRead,
                                             onToggleStarred = onToggleMessageStarred,
                                             onDelete = onDeleteMessage,
+                                            onMove = { message ->
+                                                loadTransferFolders()
+                                                moveMessageTarget = message
+                                            },
+                                            onArchive = onArchiveMessage,
                                             onCopyMessageText = onCopyMessageText,
                                             onOpenUrl = services::openUrl,
                                             onComposeTo = onComposeTo,
@@ -1832,6 +2003,9 @@ internal fun FloatingBarChip(
  * 3a on Skia GL renders HTML bodies into it fine; fall back to a plain veil if
  * reports say otherwise.
  */
+/** The "Blurred bars" setting (off by default, see BLURRED_BARS_PREF). */
+internal val LocalBlurredBars = androidx.compose.runtime.compositionLocalOf { false }
+
 @Composable
 internal fun FrostedBand(
     hazeState: HazeState,
@@ -1845,6 +2019,11 @@ internal fun FrostedBand(
 ) {
     if (heightPx <= 0) return
     val background = MaterialTheme.colorScheme.background
+    if (!LocalBlurredBars.current) {
+        // The plain veil: same band, no blur, so mail pages are drawn once.
+        Box(modifier.fillMaxWidth().height(with(LocalDensity.current) { heightPx.toDp() }).background(background.copy(alpha = 0.85f)))
+        return
+    }
     val style =
         remember(background, heightPx, fadeAtTopPx, fadeAtBottomPx, tintAlpha) {
             val height = heightPx.toFloat()
@@ -2175,6 +2354,32 @@ private fun ReplyFromRow(
                     },
                 )
             }
+        }
+    }
+}
+
+/** The top of a sender chat: the person, drawn where a thread shows its
+ *  subject, with their address under the name when the two differ. */
+@Composable
+private fun SenderChatHeader(thread: ThreadSummary) {
+    val address = thread.senderAddress.trim()
+    val name = thread.sender.ifBlank { address }
+    Column(Modifier.fillMaxWidth().padding(bottom = 4.dp)) {
+        Text(
+            name,
+            fontWeight = FontWeight.Medium,
+            style = MaterialTheme.typography.titleLarge.copy(fontSize = 18.sp, lineHeight = 24.sp),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        if (address.isNotBlank() && !address.equals(name, ignoreCase = true)) {
+            Text(
+                address,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }

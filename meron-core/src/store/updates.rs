@@ -44,7 +44,8 @@ pub fn starred_mutation_targets(
                     .as_deref()
                     .is_none_or(|subject| thread_grouping_subject(&header.subject) == subject)
         };
-        if starred {
+        // A sender row's messages are this folder's alone, either way.
+        if starred || root.starts_with(SENDER_KEY_PREFIX) {
             // Star the source mailbox's messages and their physical duplicates,
             // not other replies (e.g. Sent) merely sharing the conversation root.
             let ids = get_thread_headers(conn, account, folder, &root)?
@@ -167,6 +168,15 @@ pub fn update_thread_seen(
     thread_key: &str,
     seen: bool,
 ) -> Result<()> {
+    if let Some(addr) = sender_key_addr(thread_key) {
+        for uid in sender_folder_uids(conn, account, folder, &addr)? {
+            conn.execute(
+                "UPDATE messages SET seen = ?4 WHERE account = ?1 AND folder = ?2 AND uid = ?3",
+                params![account, folder, uid, seen as i64],
+            )?;
+        }
+        return Ok(());
+    }
     conn.execute(
         "UPDATE messages SET seen = ?4
          WHERE account = ?1 AND folder = ?2
@@ -183,6 +193,15 @@ pub fn update_thread_starred(
     thread_key: &str,
     starred: bool,
 ) -> Result<()> {
+    if let Some(addr) = sender_key_addr(thread_key) {
+        for uid in sender_folder_uids(conn, account, folder, &addr)? {
+            conn.execute(
+                "UPDATE messages SET starred = ?4 WHERE account = ?1 AND folder = ?2 AND uid = ?3",
+                params![account, folder, uid, starred as i64],
+            )?;
+        }
+        return Ok(());
+    }
     conn.execute(
         "UPDATE messages SET starred = ?4
          WHERE account = ?1 AND folder = ?2
@@ -367,6 +386,12 @@ pub fn delete_messages_by_uid(
             "DELETE FROM messages WHERE account = ?1 AND folder = ?2 AND uid = ?3",
             params![account, folder, *uid],
         )?;
+        // The folder's unread count also counts unseen mail the cache never
+        // held; a UID that left the folder must stop counting there too.
+        conn.execute(
+            "DELETE FROM uncached_unseen WHERE account = ?1 AND folder = ?2 AND uid = ?3",
+            params![account, folder, *uid],
+        )?;
     }
     // Even when the row was already gone: a sync that fetched it first can
     // still be holding the header and would insert it again.
@@ -435,6 +460,82 @@ pub fn get_unseen_uids(conn: &Connection, account: &str, folder: &str) -> Result
     )?;
     let rows = stmt.query_map(params![account, folder], |row| row.get::<_, u32>(0))?;
     Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+}
+
+/// [`get_unseen_uids`] less the mail in Meron folders, when the folder hides
+/// it: what the folder's "Mark all read" covers.
+pub fn get_visible_unseen_uids(conn: &Connection, account: &str, folder: &str) -> Result<Vec<u32>> {
+    let mut uids = visible_unseen_uids(conn, account, folder)?;
+    // Mail the AI shows in the Inbox from here is the Inbox's to mark read.
+    let shown = super::ai_sort_inbox_uids(conn, account, folder)?;
+    if !shown.is_empty() {
+        uids.retain(|uid| !shown.contains(uid));
+    }
+    Ok(uids)
+}
+
+fn visible_unseen_uids(conn: &Connection, account: &str, folder: &str) -> Result<Vec<u32>> {
+    if !meron_hides_folder(conn, account, folder)? {
+        return get_unseen_uids(conn, account, folder);
+    }
+    let mut stmt = conn.prepare(&format!(
+        "SELECT uid FROM messages
+          WHERE account = ?1 AND folder = ?2 AND seen = 0 AND uid <> 0 AND NOT {hidden}
+         UNION
+         SELECT uid FROM uncached_unseen u
+          WHERE u.account = ?1 AND u.folder = ?2
+            AND NOT EXISTS (SELECT 1 FROM meron_folder_uids x
+                 WHERE x.account = u.account AND x.folder = u.folder AND x.uid = u.uid)",
+        hidden = meron_hidden_sql("messages"),
+    ))?;
+    let rows = stmt.query_map(params![account, folder], |row| row.get::<_, u32>(0))?;
+    Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+}
+
+/// "Mark all read" in the store: [`mark_folder_seen`], leaving the mail in
+/// Meron folders unread when the folder hides it.
+pub fn mark_visible_folder_seen(conn: &Connection, account: &str, folder: &str) -> Result<()> {
+    // Mail the AI shows in the Inbox from here keeps its read state: the
+    // server wasn't asked to mark it (see `get_visible_unseen_uids`).
+    let shown = if super::ai_sort_inbox_uids(conn, account, folder)?.is_empty() {
+        String::new()
+    } else {
+        format!(" AND NOT {}", super::ai_sort_inbox_sql("messages"))
+    };
+    if !meron_hides_folder(conn, account, folder)? {
+        if shown.is_empty() {
+            return mark_folder_seen(conn, account, folder, true);
+        }
+        conn.execute(
+            &format!(
+                "UPDATE messages SET seen = 1
+                  WHERE account = ?1 AND folder = ?2 AND seen = 0{shown}"
+            ),
+            params![account, folder],
+        )?;
+        conn.execute(
+            "DELETE FROM uncached_unseen WHERE account = ?1 AND folder = ?2",
+            params![account, folder],
+        )?;
+        return Ok(());
+    }
+    conn.execute(
+        &format!(
+            "UPDATE messages SET seen = 1
+              WHERE account = ?1 AND folder = ?2 AND seen = 0 AND NOT {hidden}{shown}",
+            hidden = meron_hidden_sql("messages"),
+        ),
+        params![account, folder],
+    )?;
+    conn.execute(
+        "DELETE FROM uncached_unseen
+          WHERE account = ?1 AND folder = ?2
+            AND NOT EXISTS (SELECT 1 FROM meron_folder_uids x
+                 WHERE x.account = uncached_unseen.account
+                   AND x.folder = uncached_unseen.folder AND x.uid = uncached_unseen.uid)",
+        params![account, folder],
+    )?;
+    Ok(())
 }
 
 /// Flip `seen` for every message in a folder (mark all read / unread).

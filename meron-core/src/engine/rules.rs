@@ -609,6 +609,8 @@ async fn move_rule_chunk(
         // The queue too: a retry of the rest must not look for these here.
         let db = engine.db.lock().unwrap();
         store::delete_messages_by_uid(&db, account, folder, &outcome.moved)?;
+        // Before the queue forgets them: its entries say which AI log rows these were.
+        store::ai_sort_mark_moved(&db, account, folder, &outcome.moved, run)?;
         store::finish_rule_actions(&db, account, folder, &outcome.moved, run)?;
     }
     silenced.extend(outcome.moved);

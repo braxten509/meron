@@ -59,6 +59,7 @@ export function ThreadListItem({
   return (
     <div
       ref={rootRef}
+      data-row-key={thread.id}
       draggable={draggable}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}

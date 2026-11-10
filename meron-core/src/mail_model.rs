@@ -22,8 +22,8 @@ pub const NEW_MESSAGES_DETAIL_MAX: usize = 8;
 
 /// The `mail.newMessages` payload for a batch of arrivals, newest first.
 ///
-/// `from`/`subject`/`threadKey` describe the newest message and are what a
-/// single-notification client (desktop) reads; `messages` carries the same
+/// `from`/`from_addr`/`subject`/`threadKey` describe the newest message and are
+/// what a single-notification client (desktop) reads; `messages` carries the same
 /// fields per arrival plus a body snippet, for clients that post one
 /// notification per mail. Snippets come from cached bodies, so a message whose
 /// body hasn't been fetched yet contributes an empty `preview` rather than
@@ -45,6 +45,9 @@ pub fn new_messages_detail(
             json!({
                 "uid": header.uid,
                 "from": display_from(header),
+                // The sender's exact address, lowercased: what a notification
+                // tap opens in group-by-sender mode (`sender:<from_addr>`).
+                "from_addr": header.from_addr.trim().to_lowercase(),
                 "subject": header.subject,
                 "preview": store::cached_body_preview(conn, account_id, folder, header.uid)
                     .unwrap_or_default(),
@@ -64,6 +67,7 @@ pub fn new_messages_detail(
         "count": headers.len(),
         "muted": muted,
         "from": display_from(latest),
+        "from_addr": latest.from_addr.trim().to_lowercase(),
         "subject": latest.subject,
         "preview": messages
             .first()
@@ -75,6 +79,30 @@ pub fn new_messages_detail(
         "threadKey": store::card_thread_key(latest),
         "messages": messages,
     }))
+}
+
+/// The `mail.newMessages` payload for new mail AI sorting filed into a Meron
+/// folder with notifications on: [`new_messages_detail`] for the mailbox the
+/// mail is in (so a tap and the still-unread check find it there), named after
+/// the Meron folder (`folderName`), with its id in `meronFolderId`.
+pub fn meron_new_messages_detail(
+    conn: &Connection,
+    account_id: &str,
+    account_name: &str,
+    muted: bool,
+    arrivals: &crate::engine::ai_sort::MeronArrivals,
+) -> Option<Value> {
+    let mut detail = new_messages_detail(
+        conn,
+        account_id,
+        account_name,
+        &arrivals.folder,
+        muted,
+        &arrivals.headers,
+    )?;
+    detail["folderName"] = json!(arrivals.meron_name);
+    detail["meronFolderId"] = json!(arrivals.meron_id);
+    Some(detail)
 }
 
 /// Sender name for notifications, falling back to the address when the envelope
@@ -156,6 +184,60 @@ pub fn format_thread_id(account_id: &str, folder: &str, thread_key: &str) -> Str
     format!("{account_id}#{}#t.{encoded}", canon_folder(folder))
 }
 
+/// Cards for a sender-grouped page (see [`store::get_sender_page`]): one per
+/// correspondent, keyed `sender:<address>`, in the ordinary card shape plus
+/// `group: "sender"` and `automated` (a no-reply style address). Star and tag
+/// state stay with the single messages inside the chat, so the card carries
+/// none of either beyond `starred` (any of their messages starred).
+pub fn sender_cards_json(
+    conn: &Connection,
+    account_id: &str,
+    folder_id: &str,
+    groups: Vec<store::SenderGroup>,
+) -> anyhow::Result<Vec<Value>> {
+    let folder_role = store::folder_role(conn, account_id, folder_id)?;
+    let whos: Vec<String> = groups.iter().map(|group| group.who.clone()).collect();
+    let drafts = store::sender_draft_addrs(conn, account_id, &whos)?;
+    let mut newest: Vec<MessageHeader> = groups.iter().map(|group| group.newest.clone()).collect();
+    store::apply_card_identity(conn, account_id, folder_id, &mut newest);
+    Ok(groups
+        .into_iter()
+        .zip(newest)
+        .map(|(group, header)| {
+            let thread_id =
+                format_thread_id(account_id, folder_id, &store::sender_thread_key(&group.who));
+            json!({
+                "id": thread_id,
+                "account_id": account_id,
+                "folder_id": canon_folder(folder_id),
+                "folder_role": folder_role,
+                "thread_id": thread_id,
+                "original_thread_id": Value::Null,
+                "from_name": header.from_name,
+                "from_addr": if header.from_addr.trim().is_empty() { group.who.clone() } else { header.from_addr.clone() },
+                "to": "",
+                "subject": header.subject,
+                "preview": "",
+                "body": "",
+                "date": group.newest.date,
+                "unread": group.unread_count > 0,
+                "unread_count": group.unread_count,
+                "message_count": group.message_count,
+                "starred": group.starred,
+                "tags": [],
+                "has_draft": drafts.contains(&group.who),
+                "has_attachments": group.has_attachments,
+                "files": [],
+                "recipient_overflow": 0,
+                "senders": [],
+                "senders_truncated": false,
+                "group": "sender",
+                "automated": store::is_automated_address(&group.who),
+            })
+        })
+        .collect())
+}
+
 pub fn thread_cards_json(
     conn: &Connection,
     account_id: &str,
@@ -189,15 +271,18 @@ fn thread_cards_json_keyed(
     // page is a slice, though: the mailbox's own copy of an old thread can sit
     // below it, leaving the card on the folder its newest hit came from. The
     // cache has the whole mailbox, so it settles those.
+    // Cards of mail shown in the Inbox from another folder stay in that
+    // folder: they are kept apart from the Inbox's own card on purpose.
     let strays: Vec<String> = cards
         .iter()
+        .filter(|card| !card.header.ai_shown)
         .filter(|card| !card.header.folder.eq_ignore_ascii_case(folder_id))
         .map(|card| card.thread_key.clone())
         .collect();
     if !strays.is_empty() {
         let here = store::card_keys_in_folder(conn, account_id, folder_id, &strays)?;
         for card in &mut cards {
-            if here.contains(&card.thread_key) {
+            if !card.header.ai_shown && here.contains(&card.thread_key) {
                 card.header.folder = folder_id.to_string();
             }
         }
@@ -261,10 +346,25 @@ fn thread_cards_json_keyed(
         );
     }
 
+    // Which Meron folder each card's conversation is in (search shows them
+    // with an "In ‹folder›" label; the Meron view knows its own).
+    let card_location = |header: &MessageHeader| {
+        let folder = if header.folder.is_empty() {
+            folder_id
+        } else {
+            header.folder.as_str()
+        };
+        (folder.to_string(), header.uid)
+    };
+    let meron_rows: Vec<(String, u32)> =
+        cards.iter().map(|card| card_location(&card.header)).collect();
+    let meron_of = store::meron_folder_of_rows(conn, account_id, &meron_rows)?;
+
     cards
         .into_iter()
         .map(|card| {
             let folder = card.header.folder.as_str();
+            let meron_folder_id = meron_of.get(&card_location(&card.header)).cloned();
             let message_count = counts
                 .get(&(folder.to_string(), card.thread_key.clone()))
                 .copied()
@@ -350,6 +450,8 @@ fn thread_cards_json_keyed(
                 "recipient_overflow": card.header.recipient_overflow,
                 "senders": senders,
                 "senders_truncated": senders_truncated,
+                "meron_folder_id": meron_folder_id,
+                "shown_in_inbox": card.header.ai_shown,
                 }),
             ))
         })
@@ -500,17 +602,16 @@ pub fn allocate_message_id(account_id: &str, draft: bool) -> String {
     format!("{prefix}{}@{domain}", uuid::Uuid::new_v4().simple())
 }
 
-pub fn starred_page(
-    mut items: Vec<Value>,
-    query: &str,
-    filter: &str,
-    attachments_only: bool,
-    limit: usize,
-    before_cursor: Option<&str>,
-) -> Value {
+/// Narrow cards the way the starred view does: `filter` "unread" (or, for the
+/// Meron view, "starred"), the attachments toggle, and a plain text `query`
+/// over the card's visible fields.
+fn narrow_cards(items: &mut Vec<Value>, query: &str, filter: &str, attachments_only: bool) {
     let flag = |item: &Value, key: &str| item.get(key).and_then(Value::as_bool).unwrap_or(false);
     if filter.eq_ignore_ascii_case("unread") {
         items.retain(|item| flag(item, "unread"));
+    }
+    if filter.eq_ignore_ascii_case("starred") {
+        items.retain(|item| flag(item, "starred"));
     }
     if attachments_only {
         items.retain(|item| flag(item, "has_attachments"));
@@ -531,6 +632,19 @@ pub fn starred_page(
             .any(|value| value.to_lowercase().contains(&query))
         });
     }
+}
+
+pub fn starred_page(
+    mut items: Vec<Value>,
+    query: &str,
+    filter: &str,
+    attachments_only: bool,
+    limit: usize,
+    before_cursor: Option<&str>,
+) -> Value {
+    // Starred cards are all starred already; only "unread" narrows them.
+    let filter = if filter.eq_ignore_ascii_case("unread") { "unread" } else { "" };
+    narrow_cards(&mut items, query, filter, attachments_only);
     items.sort_by(|a, b| {
         b.get("date")
             .and_then(Value::as_i64)
@@ -632,6 +746,137 @@ pub fn add_folder_unreads(
         }
     }
     Ok(())
+}
+
+/// How many Meron-folder conversations one page reads at a time while a
+/// filter or search may drop some of them.
+const MERON_PAGE_STEP: usize = 50;
+
+/// `meron:<date>:<entry id>` keyset cursor of the Meron folder view.
+fn encode_meron_cursor(date: i64, entry: &str) -> String {
+    format!("meron:{date}:{entry}")
+}
+
+fn decode_meron_cursor(cursor: &str) -> Option<(i64, String)> {
+    let (date, entry) = cursor.strip_prefix("meron:")?.split_once(':')?;
+    Some((date.parse().ok()?, entry.to_string()))
+}
+
+/// One page of a Meron folder: thread cards of its conversations, newest
+/// conversation first, keyset paged by (newest message date, entry). Each
+/// conversation's card sits in its best-ranked copy (Inbox, a folder, Sent,
+/// Archive), so its thread id is a real `account#FOLDER#t.…` id; Drafts, Trash
+/// and Junk copies stay out (the draft badge still comes from the drafts).
+/// `filter` is "all", "unread" or "starred"; `query` a plain text search.
+pub fn meron_folder_page(
+    conn: &Connection,
+    folder_id: &str,
+    query: &str,
+    filter: &str,
+    attachments_only: bool,
+    limit: usize,
+    before_cursor: Option<&str>,
+) -> anyhow::Result<Value> {
+    let limit = limit.max(1);
+    let entries = store::meron_folder_entries(conn, folder_id)?;
+    let start = match before_cursor.and_then(decode_meron_cursor) {
+        Some((date, entry)) => entries
+            .iter()
+            .position(|it| (it.newest, it.entry_id.as_str()) < (date, entry.as_str()))
+            .unwrap_or(entries.len()),
+        None => 0,
+    };
+    let mut draft_keys_by_account: HashMap<String, HashSet<String>> = HashMap::new();
+    let mut cards: Vec<Value> = Vec::new();
+    let mut next = start;
+    while next < entries.len() && cards.len() < limit {
+        let step = if query.trim().is_empty() && filter.is_empty() && !attachments_only {
+            limit - cards.len()
+        } else {
+            MERON_PAGE_STEP
+        };
+        let chunk = &entries[next..(next + step).min(entries.len())];
+        next += chunk.len();
+        let mut chunk_cards = Vec::new();
+        for entry in chunk {
+            chunk_cards.extend(meron_entry_cards(
+                conn,
+                folder_id,
+                entry,
+                &mut draft_keys_by_account,
+            )?);
+        }
+        let filter = if filter.eq_ignore_ascii_case("all") { "" } else { filter };
+        narrow_cards(&mut chunk_cards, query, filter, attachments_only);
+        cards.extend(chunk_cards);
+    }
+    let mut out = json!({
+        "threads": cards,
+        "folder_unread": store::meron_unread_by_folder(conn)?
+            .get(folder_id)
+            .copied()
+            .unwrap_or(0),
+    });
+    if next < entries.len()
+        && let Some(last) = entries.get(next - 1)
+    {
+        out["next_cursor"] = Value::String(encode_meron_cursor(last.newest, &last.entry_id));
+    }
+    Ok(out)
+}
+
+/// The cards of one Meron-folder conversation: grouped per mailbox like the
+/// starred view, then one card per thread (or subject branch) in its
+/// best-ranked mailbox, newest first.
+fn meron_entry_cards(
+    conn: &Connection,
+    folder_id: &str,
+    entry: &store::MeronEntryRows,
+    draft_keys_by_account: &mut HashMap<String, HashSet<String>>,
+) -> anyhow::Result<Vec<Value>> {
+    let account = entry.account.as_str();
+    let mut by_folder: BTreeMap<String, Vec<MessageHeader>> = BTreeMap::new();
+    for (folder, uid) in &entry.rows {
+        if let Some(header) = store::meron_row_header(conn, account, folder, *uid)? {
+            by_folder.entry(folder.clone()).or_default().push(header);
+        }
+    }
+    let draft_thread_keys = match draft_keys_by_account.get(account) {
+        Some(keys) => keys,
+        None => {
+            let keys = store::draft_thread_keys(conn, account)?;
+            draft_keys_by_account.entry(account.to_string()).or_insert(keys)
+        }
+    };
+    let mut cards: Vec<Value> = Vec::new();
+    let mut slots: HashMap<String, usize> = HashMap::new();
+    for (folder, mut headers) in by_folder {
+        headers.sort_by(|a, b| b.date.cmp(&a.date).then_with(|| b.uid.cmp(&a.uid)));
+        for (thread_key, mut card) in
+            thread_cards_json_keyed(conn, account, &folder, headers, draft_thread_keys)?
+        {
+            card["meron_folder_id"] = json!(folder_id);
+            let identity = store::starred_thread_identity(&folder, &thread_key);
+            match slots.entry(identity) {
+                Entry::Occupied(slot) => {
+                    let kept = &mut cards[*slot.get()];
+                    if card_rank(&card) < card_rank(kept) {
+                        *kept = card;
+                    }
+                }
+                Entry::Vacant(slot) => {
+                    slot.insert(cards.len());
+                    cards.push(card);
+                }
+            }
+        }
+    }
+    cards.sort_by(|a, b| {
+        b.get("date")
+            .and_then(Value::as_i64)
+            .cmp(&a.get("date").and_then(Value::as_i64))
+    });
+    Ok(cards)
 }
 
 fn encode_starred_cursor(date: i64, id: &str) -> String {
@@ -1208,9 +1453,10 @@ mod tests {
         store::ensure_folder(&conn, "me@example.com", "Archive").unwrap();
         conn.execute(
             "INSERT INTO messages(account, folder, msg_id, uid, subject, date, seen)
-             VALUES('me@example.com', 'INBOX', 'one', 1, 'One', 2, 0),
-                   ('me@example.com', 'Archive', 'two', 2, 'Two', 1, 0)",
-            [],
+             VALUES('me@example.com', 'INBOX', 'one', 1, 'One', ?1 + 1, 0),
+                   ('me@example.com', 'Archive', 'two', 2, 'Two', ?1, 0)",
+            // Recent: the Inbox leaves out mail past its age limit.
+            [store::now_unix() - 3600],
         )
         .unwrap();
 

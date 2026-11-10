@@ -169,6 +169,15 @@ fn fts_updates_follow_changed_text_and_null_transitions() {
     }
 }
 
+/// A send date for test mail that a real Inbox still lists. The Inbox leaves
+/// out mail past its age limit (see [`inbox_listed_sql`]), so a fixed date
+/// ages out of every Inbox test. One value per test run: rows stamped with it
+/// tie on date.
+fn fresh_date() -> i64 {
+    static DATE: std::sync::OnceLock<i64> = std::sync::OnceLock::new();
+    *DATE.get_or_init(|| now_unix() - 3600)
+}
+
 fn insert_message(
     conn: &Connection,
     uid: u32,
@@ -177,10 +186,23 @@ fn insert_message(
     from_addr: &str,
     body: Option<&str>,
 ) {
+    insert_message_in(conn, "INBOX", uid, subject, from_name, from_addr, body);
+}
+
+/// [`insert_message`] into `folder`.
+fn insert_message_in(
+    conn: &Connection,
+    folder: &str,
+    uid: u32,
+    subject: &str,
+    from_name: &str,
+    from_addr: &str,
+    body: Option<&str>,
+) {
     conn.execute(
             "INSERT INTO messages(account, folder, msg_id, uid, subject, from_name, from_addr, date, seen, body)
-             VALUES('acct', 'INBOX', ?1, ?2, ?3, ?4, ?5, 1779580800, 0, ?6)",
-            params![uid.to_string(), uid, subject, from_name, from_addr, body],
+             VALUES('acct', ?7, ?1, ?2, ?3, ?4, ?5, ?8, 0, ?6)",
+            params![uid.to_string(), uid, subject, from_name, from_addr, body, folder, fresh_date()],
         )
         .unwrap();
 }
@@ -235,51 +257,55 @@ fn folder_unread_counts_messages_without_requiring_a_folder_row() {
 #[test]
 fn folder_unread_includes_unseen_server_mail_outside_the_cache() {
     let conn = test_conn();
-    insert_message(&conn, 10, "Cached", "Ada", "ada@example.com", None);
+    // On an ordinary folder: a real Inbox counts only the mail it lists, and
+    // an unseen UID the cache doesn't hold was never listed.
+    insert_message_in(&conn, "Work", 10, "Cached", "Ada", "ada@example.com", None);
     // The server reports 10 (cached) and 3..=5 (older, not cached) unseen.
-    set_uncached_unseen(&conn, "acct", "INBOX", &[3, 4, 5, 10].into_iter().collect()).unwrap();
-    assert_eq!(get_folder_unread(&conn, "acct", "INBOX").unwrap(), 4);
-    ensure_folder(&conn, "acct", "INBOX").unwrap();
+    set_uncached_unseen(&conn, "acct", "Work", &[3, 4, 5, 10].into_iter().collect()).unwrap();
+    assert_eq!(get_folder_unread(&conn, "acct", "Work").unwrap(), 4);
+    ensure_folder(&conn, "acct", "Work").unwrap();
     let folders = get_folders(&conn, "acct").unwrap();
     assert_eq!(
-        folders.iter().find(|f| f.name == "INBOX").unwrap().unread,
+        folders.iter().find(|f| f.name == "Work").unwrap().unread,
         4
     );
 
     // Paging an older message into the cache doesn't count it twice, and
     // reading it there is reflected.
-    insert_message(&conn, 4, "Paged in", "Bea", "bea@example.com", None);
-    assert_eq!(get_folder_unread(&conn, "acct", "INBOX").unwrap(), 4);
-    update_message_seen(&conn, "acct", "INBOX", 4, true).unwrap();
-    assert_eq!(get_folder_unread(&conn, "acct", "INBOX").unwrap(), 3);
+    insert_message_in(&conn, "Work", 4, "Paged in", "Bea", "bea@example.com", None);
+    assert_eq!(get_folder_unread(&conn, "acct", "Work").unwrap(), 4);
+    update_message_seen(&conn, "acct", "Work", 4, true).unwrap();
+    assert_eq!(get_folder_unread(&conn, "acct", "Work").unwrap(), 3);
 
-    let mut unseen = get_unseen_uids(&conn, "acct", "INBOX").unwrap();
+    let mut unseen = get_unseen_uids(&conn, "acct", "Work").unwrap();
     unseen.sort_unstable();
     assert_eq!(unseen, vec![3, 5, 10]);
-    mark_folder_seen(&conn, "acct", "INBOX", true).unwrap();
-    assert_eq!(get_folder_unread(&conn, "acct", "INBOX").unwrap(), 0);
+    mark_folder_seen(&conn, "acct", "Work", true).unwrap();
+    assert_eq!(get_folder_unread(&conn, "acct", "Work").unwrap(), 0);
 }
 
 #[test]
 fn a_stale_unseen_snapshot_cannot_restore_an_archived_uid_to_unread_counts() {
     let conn = test_conn();
-    insert_message(&conn, 7, "Archive me", "Ada", "ada@example.com", None);
+    // On an ordinary folder: a real Inbox does not count unseen mail the cache
+    // doesn't hold.
+    insert_message_in(&conn, "Work", 7, "Archive me", "Ada", "ada@example.com", None);
     let (sync, fetched_at) = begin_message_sync(&conn).unwrap();
     let stale_unseen = [3, 7].into_iter().collect();
-    delete_messages_by_uid(&conn, "acct", "INBOX", &[7]).unwrap();
-    release_removed_messages(&conn, "acct", "INBOX", &[7], fetched_at).unwrap();
-    set_uncached_unseen(&conn, "acct", "INBOX", &stale_unseen).unwrap();
-    assert_eq!(get_folder_unread(&conn, "acct", "INBOX").unwrap(), 1);
-    assert_eq!(get_unseen_uids(&conn, "acct", "INBOX").unwrap(), vec![3]);
+    delete_messages_by_uid(&conn, "acct", "Work", &[7]).unwrap();
+    release_removed_messages(&conn, "acct", "Work", &[7], fetched_at).unwrap();
+    set_uncached_unseen(&conn, "acct", "Work", &stale_unseen).unwrap();
+    assert_eq!(get_folder_unread(&conn, "acct", "Work").unwrap(), 1);
+    assert_eq!(get_unseen_uids(&conn, "acct", "Work").unwrap(), vec![3]);
     // Removal markers are scoped to their source mailbox and account.
     set_uncached_unseen(&conn, "acct", "Archive", &stale_unseen).unwrap();
     assert_eq!(get_folder_unread(&conn, "acct", "Archive").unwrap(), 2);
-    set_uncached_unseen(&conn, "other", "INBOX", &stale_unseen).unwrap();
-    assert_eq!(get_folder_unread(&conn, "other", "INBOX").unwrap(), 2);
+    set_uncached_unseen(&conn, "other", "Work", &stale_unseen).unwrap();
+    assert_eq!(get_folder_unread(&conn, "other", "Work").unwrap(), 2);
     end_message_sync(&conn, sync).unwrap();
     // A later valid unseen read still counts ordinary uncached mail.
-    set_uncached_unseen(&conn, "acct", "INBOX", &[3, 8].into_iter().collect()).unwrap();
-    assert_eq!(get_folder_unread(&conn, "acct", "INBOX").unwrap(), 2);
+    set_uncached_unseen(&conn, "acct", "Work", &[3, 8].into_iter().collect()).unwrap();
+    assert_eq!(get_folder_unread(&conn, "acct", "Work").unwrap(), 2);
 }
 
 #[test]
@@ -1207,9 +1233,9 @@ fn card_message_counts_span_the_folder_not_the_page() {
         conn.execute(
             "INSERT INTO messages(account, folder, msg_id, uid, subject, from_name, from_addr,
                                   date, seen, thread_key)
-             VALUES('acct', 'INBOX', ?1, ?2, ?3, 'Aki', 'aki@example.com', 1779580800, ?4,
+             VALUES('acct', 'INBOX', ?1, ?2, ?3, 'Aki', 'aki@example.com', ?5, ?4,
                     'root@example.com')",
-            params![uid.to_string(), uid, subject, seen],
+            params![uid.to_string(), uid, subject, seen, fresh_date()],
         )
         .unwrap();
     };
@@ -1353,22 +1379,22 @@ fn get_recent_page_can_return_only_unread_messages() {
 
     // insert_message stamps every row with the same date, so the date-ordered
     // list ties break on uid DESC and the cursor carries that shared date.
-    const D: i64 = 1779580800;
+    let date = fresh_date();
     let (all, all_cursor) =
         get_recent_page(&conn, "acct", "INBOX", 2, None, RecentFilter::default()).unwrap();
     assert_eq!(all.iter().map(|m| m.uid).collect::<Vec<_>>(), vec![5, 4]);
-    assert_eq!(all_cursor.as_deref(), Some(format!("date:{D}:4").as_str()));
+    assert_eq!(all_cursor.as_deref(), Some(format!("date:{date}:4").as_str()));
 
     let (unread, unread_cursor) = get_recent_page(&conn, "acct", "INBOX", 2, None, UNREAD).unwrap();
     assert_eq!(unread.iter().map(|m| m.uid).collect::<Vec<_>>(), vec![5, 3]);
     assert_eq!(
         unread_cursor.as_deref(),
-        Some(format!("date:{D}:3").as_str())
+        Some(format!("date:{date}:3").as_str())
     );
     assert!(unread.iter().all(|m| !m.seen));
 
     let (next_unread, next_cursor) =
-        get_recent_page(&conn, "acct", "INBOX", 2, Some((D, 3)), UNREAD).unwrap();
+        get_recent_page(&conn, "acct", "INBOX", 2, Some((date, 3)), UNREAD).unwrap();
     assert_eq!(
         next_unread.iter().map(|m| m.uid).collect::<Vec<_>>(),
         vec![2]
@@ -3136,7 +3162,7 @@ fn run_migrations_creates_schema_and_bumps_version() {
     let version: i64 = conn
         .query_row("PRAGMA user_version", [], |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 24);
+    assert_eq!(version, db::SCHEMA_VERSION);
 
     for table in [
         "accounts",
@@ -3174,7 +3200,7 @@ fn run_migrations_creates_schema_and_bumps_version() {
     let version: i64 = conn
         .query_row("PRAGMA user_version", [], |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 24);
+    assert_eq!(version, db::SCHEMA_VERSION);
 }
 
 #[test]
@@ -3202,7 +3228,7 @@ fn concurrent_first_open_runs_migrations_once() {
     let version: i64 = conn
         .query_row("PRAGMA user_version", [], |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 24);
+    assert_eq!(version, db::SCHEMA_VERSION);
 
     let _ = std::fs::remove_dir_all(dir);
 }
@@ -4930,7 +4956,7 @@ fn tasks_tables_arrive_on_an_existing_install() {
     let version: i64 = conn
         .query_row("PRAGMA user_version", [], |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 24);
+    assert_eq!(version, db::SCHEMA_VERSION);
 
     // Cached mail is untouched, and the new tables are writable.
     let messages: i64 = conn
@@ -5133,7 +5159,7 @@ fn attachments_filter_spans_the_thread_not_the_row() {
         conn.execute(
             "INSERT INTO messages(account, folder, msg_id, uid, subject, from_name, from_addr, date, seen, thread_key)
              VALUES('acct', 'INBOX', ?1, ?2, 'Hi', 'Aki', 'aki@example.com', ?3, ?4, 'root@example.com')",
-            params![uid.to_string(), uid, 1779580800 + uid as i64, seen],
+            params![uid.to_string(), uid, fresh_date() + uid as i64, seen],
         )
         .unwrap();
     }
@@ -5809,4 +5835,150 @@ fn encrypting_a_plaintext_store_is_announced_once_before_it_starts() {
     let conn = db::open_at_notifying(&path, Some(&key), || panic!("nothing to upgrade")).unwrap();
     drop(conn);
     std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// A mailbox for the sender-grouping tests: Inbox, Sent, Drafts and Archive,
+/// with the account's own address set so outgoing mail is recognised.
+fn sender_test_conn() -> Connection {
+    let conn = test_conn();
+    conn.execute(
+        "INSERT INTO accounts(id, engine, email) VALUES('acct', 'mail', 'me@example.com')",
+        [],
+    )
+    .unwrap();
+    let folder = |name: &str, special_use: Option<&str>| Folder {
+        name: name.to_string(),
+        special_use: special_use.map(str::to_string),
+        ..Default::default()
+    };
+    upsert_folders(
+        &conn,
+        "acct",
+        &[
+            folder("INBOX", None),
+            folder("Sent", Some("sent")),
+            folder("Drafts", Some("drafts")),
+            folder("Archive", Some("archive")),
+        ],
+    )
+    .unwrap();
+    conn
+}
+
+#[allow(clippy::too_many_arguments)]
+fn insert_sender_row(
+    conn: &Connection,
+    folder: &str,
+    uid: u32,
+    from: &str,
+    to: &str,
+    date: i64,
+    seen: bool,
+    message_id: &str,
+) {
+    let json = json!({
+        "to": [{ "name": "", "addr": to }],
+        "message_id": message_id,
+    })
+    .to_string();
+    conn.execute(
+        "INSERT INTO messages(account, folder, msg_id, uid, subject, from_name, from_addr, date, seen, thread_key, json)
+         VALUES('acct', ?1, ?2, ?3, 'Hello', '', ?4, ?5, ?6, ?7, ?8)",
+        params![folder, uid.to_string(), uid, from, date, seen as i64, format!("t{uid}"), json],
+    )
+    .unwrap();
+}
+
+#[test]
+fn sender_pages_never_repeat_a_person() {
+    let conn = sender_test_conn();
+    // Five people, three messages each, interleaved in time; two share a
+    // newest date so the address tiebreak is exercised at a page edge.
+    let people = ["a@x.com", "b@x.com", "c@x.com", "d@x.com", "e@x.com"];
+    let mut uid = 0;
+    for round in 0..3 {
+        for (idx, person) in people.iter().enumerate() {
+            uid += 1;
+            let date = if round == 2 && idx >= 3 { 1000 } else { (round * 10 + idx) as i64 };
+            // Recent enough for the Inbox to list: only the order matters.
+            let date = fresh_date() - 2000 + date;
+            insert_sender_row(&conn, "INBOX", uid, person, "me@example.com", date, true, "");
+        }
+    }
+    let mut seen = Vec::new();
+    let mut cursor = None;
+    loop {
+        let (groups, next) =
+            get_sender_page(&conn, "acct", "INBOX", 2, cursor, RecentFilter::default()).unwrap();
+        for group in &groups {
+            assert_eq!(group.message_count, 3, "{}", group.who);
+            seen.push(group.who.clone());
+        }
+        match next {
+            Some(next) => cursor = Some(parse_sender_cursor(&next).unwrap()),
+            None => break,
+        }
+    }
+    assert_eq!(seen, ["d@x.com", "e@x.com", "c@x.com", "b@x.com", "a@x.com"]);
+}
+
+#[test]
+fn sender_delete_resolves_this_folders_mail_and_keeps_sent_copies() {
+    let conn = sender_test_conn();
+    insert_sender_row(&conn, "INBOX", 1, "Bob@X.com", "me@example.com", 10, true, "b1@h");
+    insert_sender_row(&conn, "INBOX", 2, "bob@x.com", "me@example.com", 30, false, "b2@h");
+    insert_sender_row(&conn, "INBOX", 3, "carol@x.com", "me@example.com", 20, true, "c1@h");
+    insert_sender_row(&conn, "Sent", 4, "me@example.com", "bob@x.com", 20, true, "s1@h");
+    insert_sender_row(&conn, "Archive", 5, "bob@x.com", "me@example.com", 5, true, "a1@h");
+    let key = sender_thread_key("bob@x.com");
+    let uids = resolve_message_uids(&conn, "acct", "INBOX", &key, None, None, &[]).unwrap();
+    assert_eq!(uids, vec![1, 2]);
+    // Mark read on open reaches the same messages, not the Sent copy.
+    let by_folder = thread_uids_by_folder(&conn, "acct", "INBOX", &key, None, false).unwrap();
+    assert_eq!(by_folder, BTreeMap::from([("INBOX".to_string(), vec![1, 2])]));
+    // In Sent, the row is the recipient's, and only Sent mail is acted on.
+    let sent = resolve_message_uids(&conn, "acct", "Sent", &key, None, None, &[]).unwrap();
+    assert_eq!(sent, vec![4]);
+}
+
+#[test]
+fn sender_unread_filter_keeps_people_with_unread_mail() {
+    let conn = sender_test_conn();
+    // Recent enough for the Inbox to list.
+    let day = fresh_date();
+    insert_sender_row(&conn, "INBOX", 1, "read@x.com", "me@example.com", day + 10, true, "");
+    insert_sender_row(&conn, "INBOX", 2, "mixed@x.com", "me@example.com", day + 20, false, "");
+    insert_sender_row(&conn, "INBOX", 3, "mixed@x.com", "me@example.com", day + 30, true, "");
+    let unread = RecentFilter {
+        unread_only: true,
+        attachments_only: false,
+    };
+    let (groups, next) = get_sender_page(&conn, "acct", "INBOX", 50, None, unread).unwrap();
+    assert!(next.is_none());
+    assert_eq!(groups.len(), 1);
+    assert_eq!(groups[0].who, "mixed@x.com");
+    assert_eq!(groups[0].unread_count, 1);
+    assert_eq!(groups[0].message_count, 2);
+    assert_eq!(groups[0].newest.uid, 3, "the row shows their newest message");
+}
+
+#[test]
+fn sender_chat_lists_this_folder_sent_and_drafts_oldest_first() {
+    let conn = sender_test_conn();
+    insert_sender_row(&conn, "INBOX", 1, "bob@x.com", "me@example.com", 10, true, "b1@h");
+    // Mail to Bob that copied me: an Inbox copy and a Sent copy, one message.
+    insert_sender_row(&conn, "INBOX", 2, "me@example.com", "bob@x.com", 20, true, "self@h");
+    insert_sender_row(&conn, "Sent", 7, "me@example.com", "bob@x.com", 20, true, "self@h");
+    insert_sender_row(&conn, "Sent", 8, "me@example.com", "bob@x.com", 30, true, "s2@h");
+    insert_sender_row(&conn, "Drafts", 9, "me@example.com", "bob@x.com", 40, true, "d1@h");
+    // Not in the chat: another folder, and other people.
+    insert_sender_row(&conn, "Archive", 3, "bob@x.com", "me@example.com", 15, true, "a1@h");
+    insert_sender_row(&conn, "INBOX", 4, "carol@x.com", "me@example.com", 25, true, "c1@h");
+    insert_sender_row(&conn, "Sent", 5, "me@example.com", "carol@x.com", 26, true, "s3@h");
+    let chat = sender_chat_headers(&conn, "acct", "INBOX", "bob@x.com").unwrap();
+    let got: Vec<(&str, u32)> = chat.iter().map(|h| (h.folder.as_str(), h.uid)).collect();
+    assert_eq!(
+        got,
+        [("INBOX", 1), ("INBOX", 2), ("Sent", 8), ("Drafts", 9)]
+    );
 }

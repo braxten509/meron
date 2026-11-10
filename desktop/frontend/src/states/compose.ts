@@ -4,9 +4,11 @@ import { isNarrowWindow } from '../lib/useNarrowWindow'
 import type { Account, Attachment, ComposeDraft, ComposerAttachment, Message, MessageTab } from '../types'
 import { invoke } from '../lib/bridge'
 import { CONVERSATION_PAGE_SIZE } from '../lib/pagination'
+import { senderThreadIdLike } from '../lib/senderThread'
 import { ui$, showToast } from './ui'
+import { unifiedFolderRole } from '../lib/unifiedFolders'
 import { accounts$, isSendableAccount, accountIdentities } from './accounts'
-import { getActiveThread, normalizeMessageId } from './mail'
+import { getActiveThread, loadThreads, normalizeMessageId } from './mail'
 // From the leaf module: this one subscribes to it while loading, which can be
 // inside an import cycle through mail.ts.
 import { mail$ } from './mailState'
@@ -34,12 +36,14 @@ import {
   forgetComposeSession,
   getComposeSession,
   pruneComposeSessions,
+  closeComposeSessionKeepingDraft,
 } from './composeSessions'
 import {
   buildReplyRecipients,
   buildReplyThreading,
   detectAliasFrom,
   pickReplyTarget,
+  replySubject,
   resolveQuickReplyFrom,
 } from './composeReply'
 import {
@@ -550,6 +554,24 @@ export async function openThreadTabById(
 }
 
 /**
+ * Open what a new-mail notification points at. With group by sender on, that
+ * is the sender's chat in the same folder rather than the thread, built from
+ * the notified message's own sender address (`fromAddr`). Falls back to the
+ * thread when the address is missing.
+ */
+export async function openNotificationThread(threadId: string, fromAddr?: string) {
+  if (!threadId) return
+  if (ui$.groupBySender.peek() && fromAddr && !threadId.includes('#rss#')) {
+    const senderId = senderThreadIdLike(threadId, fromAddr)
+    if (senderId) {
+      await openThreadTabById(senderId)
+      return
+    }
+  }
+  await openThreadTabById(threadId)
+}
+
+/**
  * The signature an account sends, in both body forms. Both are resolved even for
  * a rich draft: the composer can be toggled to plaintext at any time, and a
  * half-tracked signature could then be neither found nor replaced.
@@ -681,8 +703,8 @@ export function openComposeTab(seed?: ComposeSeed): string | undefined {
 export function openReplyInFullEditor(options?: { replyAll?: boolean }) {
   const t = getActiveThread()
   if (!t) return
-  const subject = t.subject.startsWith('Re:') ? t.subject : `Re: ${t.subject}`
   const target = pickReplyTarget(t)
+  const subject = replySubject(t, target)
   const accounts = accounts$.get()
   const { to, cc } = buildReplyRecipients(target, options?.replyAll)
   const { in_reply_to, references } = buildReplyThreading(target)
@@ -1164,6 +1186,24 @@ export async function closeMessageTab(id: string) {
   })
 }
 
+/** The tab strip's ×, Ctrl+W and the palette's Close tab: a compose tab goes
+ *  to Drafts (with an "Open draft" toast), like Esc. Throwing a message away
+ *  is the composer's own Discard button; a × that did it silently lost work.
+ *  A compose tab that isn't on screen has no mounted composer to do the last
+ *  save, so it is brought forward first. */
+export async function closeMessageTabKeepingDraft(id: string) {
+  const tab = compose$.tabs.peek().find((candidate) => candidate.id === id)
+  if (tab?.kind !== 'compose') return closeMessageTab(id)
+  if (closeComposeSessionKeepingDraft(id)) return
+  compose$.activeTab.set(id)
+  for (let attempt = 0; attempt < 10; attempt++) {
+    await new Promise((resolve) => setTimeout(resolve, 30))
+    if (closeComposeSessionKeepingDraft(id)) return
+  }
+  // No composer came up to save it: leave the tab open rather than lose it.
+  console.error('Close tab: no composer to save the draft of', id)
+}
+
 // Close several tabs at once (the tab strip's close others/left/right/all).
 // Compose tabs are skipped: closing one discards its draft, which a bulk close
 // must never do behind the user's back.
@@ -1389,6 +1429,12 @@ export async function saveComposedDraft(args: {
     throw Object.assign(error instanceof Error ? error : new Error(String(error)), {
       draftMessageId,
     })
+  }
+  // The Drafts list on screen shows the new copy now, not after a folder switch.
+  const account = ui$.selectedAccount.peek()
+  const folder = ui$.selectedFolder.peek()
+  if (account === 'unified' ? unifiedFolderRole(folder) === 'drafts' : isDraftFolder(folder, account)) {
+    void loadThreads(false)
   }
   return draftMessageId
 }

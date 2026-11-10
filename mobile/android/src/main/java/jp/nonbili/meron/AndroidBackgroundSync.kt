@@ -124,9 +124,7 @@ class AndroidBackgroundSyncWorker(
                 }
             } else {
                 refreshed += 1
-                syncResponse.optJSONObject("result")?.optJSONObject("new_messages")?.let { detail ->
-                    AndroidNotificationService.notifyNewMail(applicationContext, detail)
-                }
+                syncResponse.optJSONObject("result")?.let { notifySyncedMail(it) }
                 if (syncRequest.method == "mail.sync") {
                     hasTransientNetworkError =
                         syncNotifyFolders(account, id = index + 2L) || hasTransientNetworkError
@@ -185,12 +183,27 @@ class AndroidBackgroundSyncWorker(
                 )
                 transient = transient || isTransientNetworkError(errorMessage)
             } else {
-                response.optJSONObject("result")?.optJSONObject("new_messages")?.let { detail ->
-                    AndroidNotificationService.notifyNewMail(applicationContext, detail)
-                }
+                response.optJSONObject("result")?.let { notifySyncedMail(it) }
             }
         }
         return transient
+    }
+
+    /**
+     * Notify for what one `mail.sync` result reports: the folder's own arrivals
+     * (`new_messages`) and new mail AI sorting filed into Meron folders with
+     * notifications on (`meron_new_messages`, one detail per Meron folder).
+     */
+    private fun notifySyncedMail(result: JSONObject) {
+        result.optJSONObject("new_messages")?.let { detail ->
+            AndroidNotificationService.notifyNewMail(applicationContext, detail)
+        }
+        val meron = result.optJSONArray("meron_new_messages") ?: return
+        for (index in 0 until meron.length()) {
+            meron.optJSONObject(index)?.let { detail ->
+                AndroidNotificationService.notifyNewMail(applicationContext, detail)
+            }
+        }
     }
 }
 

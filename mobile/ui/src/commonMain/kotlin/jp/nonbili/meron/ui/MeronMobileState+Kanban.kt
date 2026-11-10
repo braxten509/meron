@@ -257,6 +257,7 @@ internal fun MeronMobileState.loadKanbanColumn(
                     accountCursors = result.accountCursors,
                     cursorView = view,
                     readDepth = readDepth,
+                    heldThreads = withLocalDraftFlags(withoutLocallyDiscardedThreads(read.filter(result.heldThreads))),
                 )
             }
         }.onFailure {
@@ -271,9 +272,24 @@ internal fun MeronMobileState.loadMoreKanbanColumn(column: KanbanColumnSpec) {
     if (!coreLoaded) return
     val key = kanbanColumnKey(column)
     val state = kanbanColumns[key] ?: return
+    if (state.loading || state.loadingMore) return
+    // Cards the last reload held back: show them, read nothing. The cursor is
+    // already past them.
+    if (state.heldThreads.isNotEmpty()) {
+        updateKanbanColumn(key) { current ->
+            val existingIds = current.threads.map { it.id }.toSet()
+            val appended = threadRemovalGuard.filter(current.heldThreads).filterNot { it.id in existingIds }
+            current.copy(
+                threads = threadRemovalGuard.filter(current.threads + appended).sortedByDescending { it.dateEpochSeconds },
+                heldThreads = emptyList(),
+                readDepth = (current.readDepth + appended.size).coerceAtMost(MAILBOX_MAX_RELOAD_DEPTH),
+            )
+        }
+        return
+    }
     val hasCursor = state.nextCursor.isNotBlank()
     // A reload in flight is about to replace the list and the cursor with it.
-    if (state.loading || state.loadingMore || !hasCursor) return
+    if (!hasCursor) return
     // A reload started since (new query, filter or sync) owns the list instead.
     val token = kanbanColumnLoadTokens[key] ?: 0L
     updateKanbanColumn(key) { it.copy(loadingMore = true, error = null) }

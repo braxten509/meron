@@ -15,7 +15,10 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.browser.customtabs.CustomTabsIntent
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import com.journeyapps.barcodescanner.ScanContract
+import com.journeyapps.barcodescanner.ScanOptions
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import jp.nonbili.meron.ui.AttachmentOpenResult
@@ -25,6 +28,7 @@ import jp.nonbili.meron.ui.ManagedTokenRefresh
 import jp.nonbili.meron.ui.MobileHost
 import jp.nonbili.meron.ui.PickedFile
 import jp.nonbili.meron.ui.PlatformServices
+import jp.nonbili.meron.ui.QrScanResult
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -60,6 +64,60 @@ class AndroidPlatformServices(
             android.os.Bundle().apply {
                 pendingSaveFile?.absolutePath?.let { putString(PENDING_SAVE_PATH_KEY, it) }
             }
+        }
+    }
+
+    // "Copy setup to another device": ZXing's own camera screen (no Google
+    // services), after asking for the camera.
+    private var pendingScan: ((QrScanResult) -> Unit)? = null
+    private var pendingScanPrompt = ""
+
+    private val scanQr =
+        activity.registerForActivityResult(ScanContract()) { result ->
+            val callback = pendingScan
+            pendingScan = null
+            callback?.invoke(QrScanResult(text = result.contents))
+        }
+
+    private val cameraPermission =
+        activity.registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            if (granted) {
+                launchQrScan()
+            } else {
+                val callback = pendingScan
+                pendingScan = null
+                callback?.invoke(QrScanResult(cameraDenied = true))
+            }
+        }
+
+    private fun launchQrScan() {
+        val launched =
+            runCatching {
+                scanQr.launch(
+                    ScanOptions()
+                        .setDesiredBarcodeFormats(ScanOptions.QR_CODE)
+                        .setPrompt(pendingScanPrompt)
+                        .setBeepEnabled(false)
+                        .setOrientationLocked(false),
+                )
+            }.isSuccess
+        if (!launched) {
+            val callback = pendingScan
+            pendingScan = null
+            callback?.invoke(QrScanResult(unsupported = true))
+        }
+    }
+
+    override fun scanQrCode(
+        prompt: String,
+        onResult: (QrScanResult) -> Unit,
+    ) {
+        pendingScan = onResult
+        pendingScanPrompt = prompt
+        if (ContextCompat.checkSelfPermission(activity, Manifest.permission.CAMERA) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            launchQrScan()
+        } else {
+            cameraPermission.launch(Manifest.permission.CAMERA)
         }
     }
 

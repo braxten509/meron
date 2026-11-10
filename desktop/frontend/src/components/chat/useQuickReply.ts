@@ -23,6 +23,7 @@ import {
 } from '../../lib/attachFiles'
 import { settings$, isSendKey } from '../../states/settings'
 import type { ComposerAttachment } from '../../types'
+import { invoke } from '../../lib/bridge'
 import { pickFiles } from '../../lib/nativeFilePicker'
 import {
   extractClipboardImages,
@@ -113,10 +114,16 @@ export function useQuickReply() {
     setSendingReply(true)
     try {
       await sendReply()
+    } catch (error) {
+      // Anything thrown before the reply showed in the chat would otherwise
+      // leave the click looking ignored.
+      const detail = error instanceof Error ? error.message : String(error)
+      showToast(`${t('compose.toast.sendFailed')}: ${detail}`, 'error')
+      invoke('log.note', { text: `reply send threw: ${detail}` }).catch(() => {})
     } finally {
       setSendingReply(false)
     }
-  }, [sendingReply])
+  }, [sendingReply, t])
 
   useEffect(() => {
     const textarea = textareaRef.current
@@ -240,6 +247,12 @@ export function useQuickReply() {
     if (isSendKey(e, sendShortcut)) {
       e.preventDefault()
       void handleSendReply()
+      return
+    }
+    // Esc leaves the box, so single-key shortcuts (j/k, e, #) work again
+    // instead of typing into the reply. The text stays as it was.
+    if (e.key === 'Escape' && !e.nativeEvent.isComposing && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      e.currentTarget.blur()
       return
     }
     const isPaste = (e.ctrlKey || e.metaKey) && (e.key === 'v' || e.key === 'V')

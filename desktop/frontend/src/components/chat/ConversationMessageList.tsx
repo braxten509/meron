@@ -4,6 +4,7 @@ import { Loader2 } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'
 import { scrollbarHitWidth } from '../../lib/nativeScrollbars'
+import { isSenderThreadId, subjectTopic } from '../../lib/senderThread'
 import { loadMoreMessages } from '../../states/mail'
 import { settings$ } from '../../states/settings'
 import { thread$ } from '../../states/thread'
@@ -69,6 +70,7 @@ export function ConversationMessageList({
 }) {
   const { t } = useTranslation()
   const traditional = useValue(settings$.conversationLayout) === 'traditional'
+  const senderChat = isSenderThreadId(activeThreadId)
   const {
     scrollRef,
     messagesWrapperRef,
@@ -300,6 +302,14 @@ export function ConversationMessageList({
             messages.map((message, index) => {
               const label = formatDateDivider(message.date)
               const previousLabel = index > 0 ? formatDateDivider(messages[index - 1].date) : ''
+              // A sender chat runs many conversations together; a new topic
+              // (Re:/Fwd: aside) is named on the message that starts it.
+              const subjectLine =
+                senderChat &&
+                subjectTopic(message.subject) !== '' &&
+                (index === 0 || subjectTopic(message.subject) !== subjectTopic(messages[index - 1].subject))
+                  ? message.subject
+                  : undefined
               const isSearchMatch = searchMatches.includes(message.id)
               const expanded = isExpanded(message)
               return (
@@ -357,6 +367,11 @@ export function ConversationMessageList({
                       {label}
                     </div>
                   )}
+                  {traditional && subjectLine && (
+                    <p className="truncate px-1 text-[0.6875rem] font-semibold text-secondary select-none">
+                      {subjectLine}
+                    </p>
+                  )}
                   {traditional ? (
                     <MessageRow
                       message={message}
@@ -365,7 +380,11 @@ export function ConversationMessageList({
                       onToggleExpanded={() => setExpanded(message.id, !expanded)}
                     />
                   ) : (
-                    <MessageBubble message={message} galleryOffset={galleryOffsets.get(message.id) ?? 0} />
+                    <MessageBubble
+                      message={message}
+                      galleryOffset={galleryOffsets.get(message.id) ?? 0}
+                      subjectLine={subjectLine}
+                    />
                   )}
                 </div>
               )

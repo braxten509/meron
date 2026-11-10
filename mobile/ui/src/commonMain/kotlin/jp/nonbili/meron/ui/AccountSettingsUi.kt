@@ -49,6 +49,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -589,11 +590,12 @@ internal fun AccountAvatarEditor(
     modifier: Modifier = Modifier,
     fallbackIcon: ImageVector? = null,
 ) {
-    var image by remember(url) { mutableStateOf<ImageBitmap?>(null) }
-    LaunchedEffect(url) {
+    val side = with(LocalDensity.current) { 64.dp.roundToPx() }
+    var image by remember(url, side) { mutableStateOf<ImageBitmap?>(null) }
+    LaunchedEffect(url, side) {
         image = null
         if (url.isNotBlank()) {
-            image = withContext(ioDispatcher) { loadImageBitmapRef(url) }
+            image = withContext(ioDispatcher) { loadThumbnailBitmapRef(url, side) }
         }
     }
     Box(

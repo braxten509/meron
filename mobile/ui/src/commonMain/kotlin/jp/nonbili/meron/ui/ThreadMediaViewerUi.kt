@@ -151,10 +151,14 @@ internal fun AsyncAttachmentImage(
     modifier: Modifier,
     contentScale: ContentScale,
     retryKey: Int = 0,
+    // The full-screen viewer: show the mail's smaller copy at once, then swap in
+    // the full-size picture so zooming stays sharp.
+    fullSize: Boolean = false,
 ) {
     var bitmap by remember(attachment.key, attachment.url, ref) { mutableStateOf<ImageBitmap?>(null) }
     LaunchedEffect(attachment.key, attachment.url, ref, retryKey) {
-        if (bitmap == null) bitmap = loadImageAttachment(attachment) ?: loadImageBitmapRef(ref)
+        if (bitmap == null) bitmap = loadImageAttachment(attachment) ?: loadImageBitmapRef(ref, INLINE_IMAGE_MAX_SIDE)
+        if (fullSize && ref.isNotBlank()) loadFullImageBitmapRef(ref)?.let { bitmap = it }
     }
     val image = bitmap
     if (image != null) {
@@ -379,6 +383,7 @@ internal fun ThreadImageGallery(
                 attachment = current.attachment,
                 ref = current.ref,
                 loadImageAttachment = loadImageAttachment,
+                fullSize = true,
                 contentDescription = current.filename,
                 modifier =
                     Modifier

@@ -30,7 +30,12 @@ import {
   bulkStarSelected,
 } from '../../states/mailFlags'
 import { archiveThread, deleteThread, bulkArchiveSelected, bulkDeleteSelected } from '../../states/mailMoves'
-import { openComposeTab, openReplyInFullEditor, closeMessageTab, toggleConversationMode } from '../../states/compose'
+import {
+  openComposeTab,
+  openReplyInFullEditor,
+  closeMessageTabKeepingDraft,
+  toggleConversationMode,
+} from '../../states/compose'
 import { compose$ } from '../../states/composeState'
 import { closeComposeSessionKeepingDraft } from '../../states/composeSessions'
 import { calendar$ } from '../../states/calendar'
@@ -409,7 +414,7 @@ export function AppHotkeys() {
           const tab = compose$.activeTab.peek()
           if (!tab) return
           event.preventDefault()
-          void closeMessageTab(tab)
+          void closeMessageTabKeepingDraft(tab)
           break
         }
         case 'shortcuts.help':

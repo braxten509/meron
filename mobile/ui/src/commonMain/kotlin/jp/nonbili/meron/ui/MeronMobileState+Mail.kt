@@ -9,6 +9,13 @@ import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.ui.input.key.key
 import jp.nonbili.meron.shared.AccountSummary
+import jp.nonbili.meron.shared.AiModelList
+import jp.nonbili.meron.shared.AiSortConfig
+import jp.nonbili.meron.shared.AiSortEstimate
+import jp.nonbili.meron.shared.AiSortKeyCheck
+import jp.nonbili.meron.shared.AiSortKeyState
+import jp.nonbili.meron.shared.AiSortSetup
+import jp.nonbili.meron.shared.AiSortStatus
 import jp.nonbili.meron.shared.EmptyFolderParams
 import jp.nonbili.meron.shared.FolderCreateParams
 import jp.nonbili.meron.shared.FolderDeleteParams
@@ -34,6 +41,15 @@ import jp.nonbili.meron.shared.ThreadSummary
 import jp.nonbili.meron.shared.accountSummaryIsRss
 import jp.nonbili.meron.shared.folderIsDrafts
 import jp.nonbili.meron.shared.mailThreadIdFolder
+import jp.nonbili.meron.shared.parseAiModelsResponse
+import jp.nonbili.meron.shared.parseAiSortConfigResponse
+import jp.nonbili.meron.shared.parseAiSortEstimateResponse
+import jp.nonbili.meron.shared.parseAiSortKeyCheckResponse
+import jp.nonbili.meron.shared.parseAiSortKeyResponse
+import jp.nonbili.meron.shared.parseAiSortOkResponse
+import jp.nonbili.meron.shared.parseAiSortRunResponse
+import jp.nonbili.meron.shared.parseAiSortSetupResponse
+import jp.nonbili.meron.shared.parseAiSortStatusResponse
 import jp.nonbili.meron.shared.parseFolderDeleteResponse
 import jp.nonbili.meron.shared.parseFolderListResponse
 import jp.nonbili.meron.shared.parseFolderRenameResponse
@@ -67,6 +83,8 @@ internal fun MeronMobileState.runCoreThreadAction(
     update: (List<ThreadSummary>) -> List<ThreadSummary>,
     undoMessage: String? = null,
     onUndo: ((String) -> Unit)? = null,
+    /** Runs the moment Undo is tapped, before the server answers. */
+    onUndoTap: (() -> Unit)? = null,
     afterSuccess: (() -> Unit)? = null,
     removesThread: Boolean = false,
 ) {
@@ -79,17 +97,7 @@ internal fun MeronMobileState.runCoreThreadAction(
     val threadsBefore = coreThreads
     val kanbanBefore = kanbanColumns
     val removal = if (removesThread) suppressRemovedThread(thread.id) else null
-    coreThreads = update(coreThreads).forStarredView(selectedCoreAccountId, selectedCoreFolder)
-    kanbanColumns =
-        kanbanColumns.mapValues { (key, state) ->
-            val (accountId, folderId) = kanbanKeyAccountFolder(key)
-            val nextThreads = update(state.threads).forStarredView(accountId, folderId)
-            val unreadDelta = loadedUnreadCount(nextThreads) - loadedUnreadCount(state.threads)
-            state.copy(
-                threads = nextThreads,
-                unreadCount = state.unreadCount?.let { (it + unreadDelta).coerceAtLeast(0) },
-            )
-        }
+    applyOptimisticThreadUpdate(update)
     // The action commits immediately; Undo issues a compensating action (onUndo).
     // Track the commit so an Undo tap waits for it to finish, and is skipped if
     // the commit itself failed (the UI has already rolled back in that case).
@@ -131,7 +139,154 @@ internal fun MeronMobileState.runCoreThreadAction(
                 )
             if (result == SnackbarResult.ActionPerformed) {
                 snackbarHost.currentSnackbarData?.dismiss()
+                onUndoTap?.invoke()
                 committed.await()?.let { response -> onUndo(response) }
+            }
+        }
+    }
+}
+
+// The list and every Kanban column take [update] at once, the columns' unread
+// counts following the rows they lose or gain.
+private fun MeronMobileState.applyOptimisticThreadUpdate(update: (List<ThreadSummary>) -> List<ThreadSummary>) {
+    coreThreads = update(coreThreads).forStarredView(selectedCoreAccountId, selectedCoreFolder)
+    kanbanColumns =
+        kanbanColumns.mapValues { (key, state) ->
+            val (accountId, folderId) = kanbanKeyAccountFolder(key)
+            val nextThreads = update(state.threads).forStarredView(accountId, folderId)
+            val unreadDelta = loadedUnreadCount(nextThreads) - loadedUnreadCount(state.threads)
+            state.copy(
+                threads = nextThreads,
+                unreadCount = state.unreadCount?.let { (it + unreadDelta).coerceAtLeast(0) },
+            )
+        }
+}
+
+/**
+ * Puts the rows [ids] back where [snapshot] had them, around whatever [current]
+ * holds now: the rows of a bulk action that failed, while the rows it did move
+ * stay gone and the rest of the list keeps any change since.
+ */
+private fun reinsertThreads(
+    current: List<ThreadSummary>,
+    snapshot: List<ThreadSummary>,
+    ids: Set<String>,
+): List<ThreadSummary> {
+    val back = snapshot.filter { it.id in ids && current.none { row -> row.id == it.id } }
+    if (back.isEmpty()) return current
+    val position = snapshot.withIndex().associate { (index, row) -> row.id to index }
+    val result = current.toMutableList()
+    back.forEach { row ->
+        val at = position.getValue(row.id)
+        val before = result.indexOfFirst { other -> (position[other.id] ?: -1) > at }
+        if (before < 0) result.add(row) else result.add(before, row)
+    }
+    return result
+}
+
+/**
+ * Puts the rows [ids] of a bulk action back into what is on screen now, where
+ * the snapshots taken at the action had them: the list only while it still
+ * shows the mailbox it was taken from ([mailboxKey]), each Kanban column from
+ * its own snapshot. Nothing else in the current list or columns changes, so a
+ * folder switched to or a row removed since stays as it is.
+ */
+private fun MeronMobileState.reinsertBulkRows(
+    ids: Set<String>,
+    mailboxKey: MailboxCacheKey?,
+    threadsBefore: List<ThreadSummary>,
+    kanbanBefore: Map<String, KanbanColumnState>,
+) {
+    if (ids.isEmpty()) return
+    if (visibleMailboxKey == mailboxKey) coreThreads = reinsertThreads(coreThreads, threadsBefore, ids)
+    kanbanColumns =
+        kanbanColumns.mapValues { (key, state) ->
+            val nextThreads = reinsertThreads(state.threads, kanbanBefore[key]?.threads.orEmpty(), ids)
+            if (nextThreads === state.threads) return@mapValues state
+            val unreadDelta = loadedUnreadCount(nextThreads) - loadedUnreadCount(state.threads)
+            state.copy(
+                threads = nextThreads,
+                unreadCount = state.unreadCount?.let { (it + unreadDelta).coerceAtLeast(0) },
+            )
+        }
+}
+
+/**
+ * Archives or deletes several mail rows as one action: all leave the list at
+ * once and, once the server has answered, one snackbar counts the rows that
+ * actually moved, its Undo bringing every one of those back. Each row is still
+ * its own move on the server; one that fails comes back on its own, and is
+ * neither counted nor undone.
+ */
+private fun MeronMobileState.runBulkThreadRemoval(
+    threads: List<ThreadSummary>,
+    /** For the log only. */
+    label: String,
+    failedStatus: String,
+    /** The snackbar's text for the rows that moved. */
+    undoMessage: (List<ThreadSummary>) -> String,
+    action: suspend MobileMailCommandClient.(ThreadSummary) -> String,
+) {
+    if (!coreLoaded) {
+        status = coreUnavailableMessage
+        return
+    }
+    val ids = threads.map { it.id }.toSet()
+    val threadsBefore = coreThreads
+    val kanbanBefore = kanbanColumns
+    val mailboxKey = visibleMailboxKey
+    val shownInInbox = threads.filter(::isShownInInbox).map { it.id }.toSet()
+    val removals = threads.associate { it.id to suppressRemovedThread(it.id) }
+    applyOptimisticThreadUpdate { rows -> rows.filterNot { it.id in ids } }
+    scope.launch {
+        val moved = mutableListOf<Pair<ThreadSummary, String>>()
+        val failed = mutableListOf<Pair<ThreadSummary, Throwable>>()
+        // One after another: the moves share the account's write session.
+        for (thread in threads) {
+            val removal = removals.getValue(thread.id)
+            runCatching {
+                requireCoreOk(
+                    withContext(ioDispatcher) {
+                        val client = MobileMailCommandClient(core)
+                        withManagedGoogleAuth(client, thread.accountId) { client.action(thread) }
+                    },
+                )
+            }.onSuccess { response ->
+                removal.complete()
+                releaseMovedThread(response)
+                applyCoreFolderUnreadChanges(response)
+                moved += thread to response
+            }.onFailure {
+                removal.rollback()
+                Log.w("Mail", "$label failed", it)
+                failed += thread to it
+            }
+        }
+        if (failed.isNotEmpty()) {
+            // Only the rows that failed come back, minus any another action
+            // still has out of the list.
+            val failedIds = threadRemovalGuard.filter(failed.map { it.first }).map { it.id }.toSet()
+            reinsertBulkRows(failedIds, mailboxKey, threadsBefore, kanbanBefore)
+            status = withReason(failedStatus, failed.first().second.message) { key, args -> trs(key, args) }
+        }
+        // Nothing moved: nothing to count or undo.
+        if (moved.isEmpty()) return@launch
+        val result =
+            snackbarHost.showSnackbar(
+                message = undoMessage(moved.map { it.first }),
+                actionLabel = trs("buttons.undo"),
+                duration = SnackbarDuration.Long,
+            )
+        if (result == SnackbarResult.ActionPerformed) {
+            snackbarHost.currentSnackbarData?.dismiss()
+            // Back on screen the moment Undo is tapped; the moves back follow.
+            reinsertBulkRows(moved.map { it.first.id }.toSet(), mailboxKey, threadsBefore, kanbanBefore)
+            status = trs("mobile.status.restored")
+            // The list snapshot only backs restoreThread's check for a row a
+            // refresh dropped again, which is moot once another mailbox is shown.
+            val listSnapshot = if (visibleMailboxKey == mailboxKey) threadsBefore else emptyList()
+            moved.forEach { (thread, response) ->
+                restoreThread(thread, listSnapshot, kanbanBefore, response, thread.id in shownInInbox)
             }
         }
     }
@@ -215,36 +370,124 @@ private fun MeronMobileState.plannedFolderUnread(
     return next.mapValues { (_, value) -> value.coerceAtLeast(0) } to before
 }
 
-// Moves a thread back to the folder it was in before an archive/delete and
-// restores the pre-action list snapshots, backing the "Undo" snackbar action.
+// Puts the undone rows [ids] back the moment Undo is tapped, where the
+// snapshots taken at the action had them; restoreThread then moves the mail
+// back on the server, which can take seconds (the archive/delete itself has to
+// finish first). Only those rows: putting the whole snapshot back would also
+// bring back rows archived or moved since, and drop rows that arrived. A row
+// still on screen (a Meron-folder move only relabels it) takes its snapshot
+// version back.
+internal fun MeronMobileState.showRestoredThread(
+    ids: Set<String>,
+    mailboxKey: MailboxCacheKey?,
+    threadsSnapshot: List<ThreadSummary>,
+    kanbanSnapshot: Map<String, KanbanColumnState>,
+) {
+    val revert = { rows: List<ThreadSummary>, snapshot: List<ThreadSummary> ->
+        val before = snapshot.filter { it.id in ids }.associateBy { it.id }
+        if (before.isEmpty() || rows.none { it.id in before }) rows else rows.map { before[it.id] ?: it }
+    }
+    if (visibleMailboxKey == mailboxKey) coreThreads = revert(coreThreads, threadsSnapshot)
+    kanbanColumns =
+        kanbanColumns.mapValues { (key, state) ->
+            val next = revert(state.threads, kanbanSnapshot[key]?.threads.orEmpty())
+            if (next === state.threads) state else state.copy(threads = next)
+        }
+    reinsertBulkRows(ids, mailboxKey, threadsSnapshot, kanbanSnapshot)
+    status = trs("mobile.status.restored")
+}
+
+/** A row the Inbox (an account's or the unified one) lists from another
+ *  folder: mail AI sorting left there and shows in the Inbox. Its Undo shows
+ *  it in the Inbox again. */
+internal fun MeronMobileState.isShownInInbox(thread: ThreadSummary): Boolean =
+    selectedCoreFolder.equals(INBOX_FOLDER, ignoreCase = true) &&
+        selectedCoreAccountId != MERON_FOLDERS_ACCOUNT_ID &&
+        thread.folder.isNotBlank() &&
+        !thread.folder.equals(INBOX_FOLDER, ignoreCase = true)
+
+// Takes the row out again when the server move back is not possible.
+private fun MeronMobileState.hideRestoredThread(thread: ThreadSummary) {
+    coreThreads = coreThreads.filterNot { it.id == thread.id }
+    kanbanColumns = kanbanColumns.mapValues { (_, state) -> state.copy(threads = state.threads.filterNot { it.id == thread.id }) }
+}
+
+// Moves a thread back to the folder it was in before an archive/delete, backing
+// the "Undo" snackbar action. The row is already back (showRestoredThread).
 internal fun MeronMobileState.restoreThread(
     thread: ThreadSummary,
     threadsSnapshot: List<ThreadSummary>,
     kanbanSnapshot: Map<String, KanbanColumnState>,
     actionResponse: String,
+    /** The row was shown in the Inbox from its own folder ([isShownInInbox]). */
+    shownInInbox: Boolean = false,
 ) {
     if (!coreLoaded) return
+    val location = parseThreadActionLocationResponse(actionResponse)
+    // Archived Meron-only (no archive mailbox): nothing moved on the server,
+    // so Undo only takes it out of Archive again, back into its earlier
+    // Meron folder when it had one.
+    if (location.meronOnly) {
+        val ids = listOf(location.threadId.ifBlank { thread.id })
+        scope.launch {
+            runCatching {
+                withContext(ioDispatcher) {
+                    val client = MobileMailCommandClient(core)
+                    requireCoreOk(
+                        location.meronFolderId.ifBlank { null }?.let { client.moveToMeronFolder(it, ids) }
+                            ?: client.moveOutOfMeronFolder(ids),
+                    )
+                }
+            }.onSuccess {
+                threadRemovalGuard.release(thread.id)
+                mailboxCache = mailboxCache.filterKeys { it.accountId != MERON_FOLDERS_ACCOUNT_ID }
+                refreshMeronFolders()
+                syncCoreThreads(syncFirst = false)
+            }.onFailure {
+                hideRestoredThread(thread)
+                status = trsError("mobile.status.undoFailed", it)
+            }
+        }
+        return
+    }
+    // Move back only the messages this action moved, so other messages of the
+    // same conversation already in Archive/Trash stay there. When the core
+    // could not tell which copies those are, there is no safe way back: any
+    // other would move mail the action never touched.
     val undoThreadId =
-        undoSourceThreadId(thread, actionResponse)
+        undoSourceThreadId(thread, actionResponse)?.takeIf { location.targetUids.isNotEmpty() }
             ?: run {
+                hideRestoredThread(thread)
                 status = trs("mobile.status.undoUnavailable")
                 return
             }
+    val undoMessageIds = location.targetUids.map { "$undoThreadId#$it" }
     scope.launch {
         runCatching {
             withContext(ioDispatcher) {
                 requireCoreOk(
                     MobileMailCommandClient(core).move(
-                        MoveThreadParams(threadId = undoThreadId, targetFolderId = thread.folder),
+                        MoveThreadParams(
+                            threadId = undoThreadId,
+                            targetFolderId = thread.folder,
+                            messageIds = undoMessageIds,
+                            undo = true,
+                            showInInbox = shownInInbox,
+                            meronFolderId = location.meronFolderId.ifBlank { null },
+                            meronSource = location.meronSource.ifBlank { null },
+                        ),
                     ),
                 )
             }
         }.onSuccess {
             threadRemovalGuard.release(thread.id)
-            coreThreads = threadsSnapshot
-            kanbanColumns = kanbanSnapshot
-            status = trs("mobile.status.restored")
+            // A list refresh that landed before the move back finished would
+            // have dropped the row again; read the list once more if so.
+            if (coreThreads.none { it.id == thread.id } && threadsSnapshot.any { it.id == thread.id }) {
+                syncCoreThreads(syncFirst = false)
+            }
         }.onFailure {
+            hideRestoredThread(thread)
             status = trsError("mobile.status.undoFailed", it)
         }
     }
@@ -439,6 +682,62 @@ internal suspend fun MeronMobileState.loadRuleStatus(): RuleStatus? =
     }.getOrNull()
 
 internal suspend fun MeronMobileState.stopRule(id: String): Boolean = runCatching { requireCoreOk(withContext(ioDispatcher) { MobileMailCommandClient(core).stopRule(id) }) }.isSuccess
+
+// AI sorting. None of these log anything: the key and the provider's answers
+// must never reach a log.
+
+internal suspend fun MeronMobileState.loadAiSortSetup(): AiSortSetup? =
+    runCatching {
+        parseAiSortSetupResponse(requireCoreOk(withContext(ioDispatcher) { MobileMailCommandClient(core).aiSortConfig() }))
+    }.getOrNull()
+
+/** The setup as the core kept it, or why it refused it. */
+internal suspend fun MeronMobileState.saveAiSortConfig(config: AiSortConfig): Result<AiSortConfig> =
+    runCatching {
+        parseAiSortConfigResponse(requireCoreOk(withContext(ioDispatcher) { MobileMailCommandClient(core).setAiSortConfig(config) }))
+    }
+
+/** Saves [key] for [provider] (empty removes it), or says why the core refused. */
+internal suspend fun MeronMobileState.saveAiSortKey(
+    provider: String,
+    key: String,
+): Result<AiSortKeyState> =
+    runCatching {
+        parseAiSortKeyResponse(requireCoreOk(withContext(ioDispatcher) { MobileMailCommandClient(core).setAiSortKey(provider, key) }))
+    }
+
+internal suspend fun MeronMobileState.checkAiSortKey(provider: String): AiSortKeyCheck =
+    runCatching {
+        parseAiSortKeyCheckResponse(requireCoreOk(withContext(ioDispatcher) { MobileMailCommandClient(core).checkAiSortKey(provider) }))
+    }.getOrElse { AiSortKeyCheck(ok = false, kind = "other", message = it.message.orEmpty()) }
+
+internal suspend fun MeronMobileState.loadAiModels(provider: String): AiModelList? =
+    runCatching {
+        parseAiModelsResponse(requireCoreOk(withContext(ioDispatcher) { MobileMailCommandClient(core).aiSortModels(provider) }))
+    }.getOrNull()
+
+internal suspend fun MeronMobileState.loadAiSortEstimate(): AiSortEstimate? =
+    runCatching {
+        parseAiSortEstimateResponse(requireCoreOk(withContext(ioDispatcher) { MobileMailCommandClient(core).aiSortEstimate() }))
+    }.getOrNull()
+
+/** How many emails the "sort Inbox" job took on, or null if it didn't start. */
+internal suspend fun MeronMobileState.runAiSort(): Int? =
+    runCatching {
+        parseAiSortRunResponse(requireCoreOk(withContext(ioDispatcher) { MobileMailCommandClient(core).runAiSort() }))
+    }.getOrNull()
+
+internal suspend fun MeronMobileState.stopAiSort(): Boolean = runCatching { requireCoreOk(withContext(ioDispatcher) { MobileMailCommandClient(core).stopAiSort() }) }.isSuccess
+
+internal suspend fun MeronMobileState.loadAiSortStatus(): AiSortStatus? =
+    runCatching {
+        parseAiSortStatusResponse(requireCoreOk(withContext(ioDispatcher) { MobileMailCommandClient(core).aiSortStatus() }))
+    }.getOrNull()
+
+internal suspend fun MeronMobileState.aiSortMoveBack(id: Long): Boolean =
+    runCatching {
+        parseAiSortOkResponse(requireCoreOk(withContext(ioDispatcher) { MobileMailCommandClient(core).aiSortMoveBack(id) }))
+    }.getOrDefault(false)
 
 internal suspend fun MeronMobileState.loadKnownTags(): List<String> =
     runCatching {
@@ -782,6 +1081,63 @@ internal fun MeronMobileState.deleteMessage(message: MessageBody) {
             messages = messagesBefore
             clearedDraftThreadId?.let { threadId -> markThreadDraftEverywhere(threadId) }
             status = trsError("mail.toast.deleteFailed", it)
+        }
+    }
+}
+
+// Moves one email (not the whole chat) to [folder], or archives it when
+// [folder] is null. The message id names its own folder and uid, so a sender
+// chat's Sent reply moves out of Sent and an inbox email out of the inbox.
+internal fun MeronMobileState.moveMessage(
+    message: MessageBody,
+    folder: FolderSummary?,
+) {
+    val thread = selectedCoreThread ?: return
+    if (!coreLoaded) {
+        status = coreUnavailableMessage
+        return
+    }
+    val messageFolder = message.folderId.ifBlank { thread.folder }
+    val targetAccountId = folder?.accountId?.ifBlank { thread.accountId } ?: thread.accountId
+    if (folder != null && targetAccountId == thread.accountId && folder.name.equals(messageFolder, ignoreCase = true)) return
+    val messagesBefore = messages
+    messages = messages.filterNot { it.id == message.id }
+    status = trs("mobile.status.moving")
+    scope.launch {
+        runCatching {
+            withContext(ioDispatcher) {
+                val client = MobileMailCommandClient(core)
+                withManagedGoogleAuth(client, thread.accountId) {
+                    if (folder == null) {
+                        client.archive(ThreadActionParams(threadId = message.id))
+                    } else {
+                        client.move(
+                            MoveThreadParams(
+                                threadId = message.id,
+                                targetFolderId = folder.name,
+                                targetAccountId = targetAccountId,
+                            ),
+                        )
+                    }
+                }
+            }.let { response -> requireTransferAffected(requireCoreOk(response), "moved") }
+        }.onSuccess {
+            status = trs(if (folder == null) "mail.toast.messageArchived" else "mail.toast.messageMoved")
+            if (folder != null) {
+                rememberThreadTransfer(RecentThreadTransfer("move", thread.accountId, targetAccountId, folder.name))
+            }
+            syncCoreThreads(syncFirst = false)
+        }.onFailure {
+            Log.w("Mail", "move message failed", it)
+            messages = messagesBefore
+            status =
+                when {
+                    // One email on an account with no archive mailbox: the plain
+                    // message, not the core's raw error text.
+                    folder == null && it.message.orEmpty().contains("archive folder not found", ignoreCase = true) ->
+                        trs("mail.toast.archiveFailed")
+                    else -> trsError(if (folder == null) "mail.toast.archiveFailed" else "mail.toast.moveFailed", it)
+                }
         }
     }
 }
@@ -1550,6 +1906,8 @@ internal fun MeronMobileState.archiveOrRemove(thread: ThreadSummary) {
     } else {
         val threadsSnapshot = coreThreads
         val kanbanSnapshot = kanbanColumns
+        val mailboxKey = visibleMailboxKey
+        val shownInInbox = isShownInInbox(thread)
         runCoreThreadAction(
             thread = thread,
             label = "Archive",
@@ -1559,9 +1917,55 @@ internal fun MeronMobileState.archiveOrRemove(thread: ThreadSummary) {
             action = { archive(ThreadActionParams(threadId = thread.id)) },
             update = { threads -> threads.filterNot { it.id == thread.id } },
             undoMessage = trs("mail.toast.archivedCount", mapOf("count" to 1)),
-            onUndo = { response -> restoreThread(thread, threadsSnapshot, kanbanSnapshot, response) },
+            onUndo = { response -> restoreThread(thread, threadsSnapshot, kanbanSnapshot, response, shownInInbox) },
+            onUndoTap = { showRestoredThread(setOf(thread.id), mailboxKey, threadsSnapshot, kanbanSnapshot) },
         )
     }
+}
+
+/** The selection's Archive: feed rows each as [archiveOrRemove] treats them,
+ *  the mail rows as one action with one counted, undoable snackbar. */
+internal fun MeronMobileState.archiveThreads(threads: List<ThreadSummary>) {
+    val (feeds, mail) = threads.partition { threadIdIsRss(it.id) }
+    feeds.forEach(::archiveOrRemove)
+    if (mail.size <= 1) {
+        mail.forEach(::archiveOrRemove)
+        return
+    }
+    runBulkThreadRemoval(
+        threads = mail,
+        label = "Archive",
+        failedStatus = trs("mail.toast.archiveFailed"),
+        undoMessage = { moved -> trs("mail.toast.archivedCount", mapOf("count" to moved.size)) },
+        action = { thread -> archive(ThreadActionParams(threadId = thread.id)) },
+    )
+}
+
+/** The selection's Delete, as [archiveThreads] is its Archive. */
+internal fun MeronMobileState.deleteThreads(threads: List<ThreadSummary>) {
+    val (feeds, mail) = threads.partition { threadIdIsRss(it.backendThreadId()) }
+    feeds.forEach(::deleteThread)
+    if (mail.size <= 1) {
+        mail.forEach(::deleteThread)
+        return
+    }
+    runBulkThreadRemoval(
+        threads = mail,
+        label = "Delete",
+        failedStatus = trs("mail.toast.deleteFailed"),
+        undoMessage = { moved -> trs(threadsDeletedStatusKey(moved), mapOf("count" to moved.size)) },
+        action = { thread -> delete(ThreadActionParams(threadId = thread.id, folderId = thread.folder)) },
+    )
+}
+
+/** What deleting several rows says: the rows' own key when they agree on one
+ *  that counts. "Thread moved to Trash" has no plural form in the catalog, so
+ *  a move of several to Trash, or a mix, says how many were deleted. */
+private fun threadsDeletedStatusKey(threads: List<ThreadSummary>): String {
+    // One left after the others failed: what deleting that one row says.
+    threads.singleOrNull()?.let { return threadDeletedStatusKey(it.folder, it.folderRole) }
+    val keys = threads.map { threadDeletedStatusKey(it.folder, it.folderRole) }.toSet()
+    return keys.singleOrNull()?.takeIf { it != "mail.toast.threadMovedToTrash" } ?: "mail.toast.deletedCount"
 }
 
 internal fun MeronMobileState.deleteThread(thread: ThreadSummary) {
@@ -1571,6 +1975,8 @@ internal fun MeronMobileState.deleteThread(thread: ThreadSummary) {
     }
     val threadsSnapshot = coreThreads
     val kanbanSnapshot = kanbanColumns
+    val mailboxKey = visibleMailboxKey
+    val shownInInbox = isShownInInbox(thread)
     runCoreThreadAction(
         thread = thread,
         label = "Delete",
@@ -1580,6 +1986,7 @@ internal fun MeronMobileState.deleteThread(thread: ThreadSummary) {
         action = { delete(ThreadActionParams(threadId = thread.id, folderId = thread.folder)) },
         update = { threads -> threads.filterNot { it.id == thread.id } },
         undoMessage = trs(threadDeletedStatusKey(thread.folder, thread.folderRole), mapOf("count" to 1)),
-        onUndo = { response -> restoreThread(thread, threadsSnapshot, kanbanSnapshot, response) },
+        onUndo = { response -> restoreThread(thread, threadsSnapshot, kanbanSnapshot, response, shownInInbox) },
+        onUndoTap = { showRestoredThread(setOf(thread.id), mailboxKey, threadsSnapshot, kanbanSnapshot) },
     )
 }

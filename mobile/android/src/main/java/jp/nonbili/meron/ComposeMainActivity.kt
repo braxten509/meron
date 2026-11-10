@@ -22,6 +22,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ComposeFoundationFlags
+import androidx.compose.ui.preferredFrameRate
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -324,6 +325,10 @@ class ComposeMainActivity : ComponentActivity() {
         val mobileHost = AndroidMobileHost(this)
         setContent {
             val appCore = remember { JniMeronCore { AndroidNotificationService.requestReconcile(applicationContext) } }
+            // Ask for the screen's full rate (120 Hz on the Pixel) while anything
+            // moves; with no vote the system treats the app as "normal" and runs it
+            // at 60. The vote only applies while the content is being redrawn.
+            Box(Modifier.fillMaxSize().preferredFrameRate(120f)) {
             jp.nonbili.meron.ui.MeronApp(
                 core = appCore,
                 coreLoaded = MeronCoreNative.isLoaded(),
@@ -341,7 +346,9 @@ class ComposeMainActivity : ComponentActivity() {
                 // Storing and pushing to the OS both happen in MeronApp; the
                 // Activity only has to reload its resources for the new language.
                 onLanguageApplied = { recreate() },
+                demoAccount = if (BuildConfig.MERON_DEMO) demoTestAccount() else null,
             )
+            }
         }
     }
 
@@ -533,8 +540,28 @@ private fun Intent.toNotificationThreadTarget(): jp.nonbili.meron.ui.Notificatio
     val account = getStringExtra(AndroidNotificationService.EXTRA_ACCOUNT_ID).orEmpty()
     val folder = getStringExtra(AndroidNotificationService.EXTRA_FOLDER).orEmpty()
     val threadKey = getStringExtra(AndroidNotificationService.EXTRA_THREAD_KEY).orEmpty()
+    val fromAddr = getStringExtra(AndroidNotificationService.EXTRA_FROM_ADDR).orEmpty()
     // The group summary carries no thread key: it opens the folder, not a thread.
     if (account.isBlank() || folder.isBlank()) return null
     return jp.nonbili.meron.ui
-        .NotificationThreadTarget(accountId = account, folder = folder, threadKey = threadKey)
+        .NotificationThreadTarget(accountId = account, folder = folder, threadKey = threadKey, fromAddr = fromAddr)
 }
+
+/** The PC's private test mail server, which `adb reverse` brings to this phone's
+ *  localhost. Only the demo build uses it; the login is the test server's own. */
+private fun demoTestAccount() =
+    jp.nonbili.meron.shared.AddPasswordAccountParams(
+        email = "alice@mail.test",
+        displayName = "Alice",
+        senderName = "Alice",
+        imapHost = "127.0.0.1",
+        imapPort = 35143,
+        smtpHost = "127.0.0.1",
+        smtpPort = 35587,
+        username = "alice@mail.test",
+        password = "testpass",
+        tls = false,
+        starttls = false,
+        smtpTls = false,
+        smtpStarttls = false,
+    )

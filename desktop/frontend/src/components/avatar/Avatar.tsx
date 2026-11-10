@@ -2,6 +2,7 @@ import { useState, useEffect, type ReactNode } from 'react'
 import { useValue } from '@legendapp/state/react'
 import { invoke } from '../../lib/bridge'
 import { settings$ } from '../../states/settings'
+import { useSharpSrc } from '../../lib/sharpImage'
 
 const COLORS = [
   'from-indigo-400 to-indigo-500 shadow-indigo-500/10',
@@ -153,6 +154,13 @@ export function Avatar({ name, email, src, size = 40, className = '', fallback }
     }
   }, [src, email, showRealAvatars, size, nearView])
 
+  const faviconSide = Math.round(size * 0.58)
+  const sharpSrc = useSharpSrc(
+    resolvedSrc && sourceKind !== 'none' ? resolvedSrc : undefined,
+    sourceKind === 'favicon' ? faviconSide : size,
+    sourceKind === 'favicon' ? 'contain' : 'cover',
+  )
+
   const handleImageError = () => {
     if (email && !src) avatarCache.delete(avatarKey(email, size))
     setResolvedSrc(undefined)
@@ -167,13 +175,13 @@ export function Avatar({ name, email, src, size = 40, className = '', fallback }
         className={`flex shrink-0 items-center justify-center rounded-full bg-white ring-1 ring-black/5 dark:ring-white/10 ${className}`}
       >
         <img
-          src={resolvedSrc}
+          src={sharpSrc}
           alt={name}
           onError={handleImageError}
           referrerPolicy="no-referrer"
           loading="lazy"
           decoding="async"
-          style={{ width: Math.round(size * 0.58), height: Math.round(size * 0.58) }}
+          style={{ width: faviconSide, height: faviconSide }}
           className="object-contain"
         />
       </span>
@@ -184,7 +192,7 @@ export function Avatar({ name, email, src, size = 40, className = '', fallback }
     return (
       <img
         ref={setNode}
-        src={resolvedSrc}
+        src={sharpSrc}
         alt={name}
         onError={handleImageError}
         referrerPolicy="no-referrer"

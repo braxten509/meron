@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { Columns3, Pause, BellOff, KeyRound, Rss } from 'lucide-react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
@@ -12,7 +13,6 @@ import { inboxUnread } from '../../states/mailFolders'
 import { boardUnreadCount } from '../../lib/boardUnread'
 import { Avatar } from '../avatar/Avatar'
 import { AccountAvatar } from '../avatar/AccountAvatar'
-import { UnreadCountBadge } from './UnreadCountBadge'
 
 function accountLabel(account: { display_name: string; email: string }) {
   return account.display_name || account.email
@@ -32,18 +32,81 @@ function sortableStyle(
   }
 }
 
-/** The pill at the rail's edge: a stub on hover, full height when active. */
+/** The pill at the side navigation's edge: a stub on hover, full height when
+ *  active. Its wrapper must be the full-width, `relative group` row holder. */
 export const railIndicator = (active: boolean) => (
   <div
     className={`absolute left-0 top-1/2 -translate-y-1/2 w-1 rounded-r bg-accent transition-[height] duration-200 ease-out ${
-      active ? 'h-8' : 'h-0 group-hover:h-5'
+      active ? 'h-6' : 'h-0 group-hover:h-4'
     }`}
   />
 )
 
-/** Rail tiles are round at rest and square up when hovered or active. */
-export const railTileShape = (active: boolean) =>
-  `transition-all duration-200 ease-out ${active ? 'rounded-2xl' : 'rounded-[20px] group-hover:rounded-2xl'}`
+/**
+ * The geometry every side navigation row shares: one fixed height, a 20px
+ * icon slot and a 20px text line, so icons and names sit on the same centre
+ * line and no row is taller than another. The text never changes weight with
+ * state, so selecting a row moves nothing; only colours change.
+ */
+export const NAV_ROW_HEIGHT = 'h-8'
+
+/** A count at a row's end, in the badge colours the rail always used. */
+export function NavCount({ count }: { count: number }) {
+  if (count <= 0) return null
+  return (
+    <span className="flex h-[1.125rem] min-w-[1.125rem] shrink-0 items-center justify-center rounded-full bg-accent-badge px-1.5 text-[0.625rem] font-semibold leading-none tabular-nums text-white">
+      {count > 9999 ? '9999+' : count}
+    </span>
+  )
+}
+
+/** One row's look: icon, name, optional trailing marks, count. */
+export function NavRow({
+  active,
+  icon,
+  label,
+  count = 0,
+  trailing,
+  quiet = false,
+}: {
+  active: boolean
+  icon: ReactNode
+  label: ReactNode
+  count?: number
+  trailing?: ReactNode
+  /** A secondary action row ("+ New …"), drawn in the muted ink. */
+  quiet?: boolean
+}) {
+  return (
+    <div
+      className={`flex ${NAV_ROW_HEIGHT} w-full items-center gap-2.5 rounded-lg px-2 text-[0.8125rem] leading-5 transition-colors duration-150 ${
+        active
+          ? 'bg-accent/15 text-sidenav-ink'
+          : quiet
+            ? 'text-sidenav-ink/55 group-hover:bg-sidenav-ink/[0.07] group-hover:text-sidenav-ink'
+            : 'text-sidenav-ink/80 group-hover:bg-sidenav-ink/[0.07] group-hover:text-sidenav-ink'
+      }`}
+    >
+      <span className="flex h-5 w-5 shrink-0 items-center justify-center">{icon}</span>
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      {trailing}
+      <NavCount count={count} />
+    </div>
+  )
+}
+
+/** A section heading ("MERON FOLDERS"), its text on the rows' icon edge. */
+export function NavSectionHeading({ children, first = false }: { children: ReactNode; first?: boolean }) {
+  return (
+    <div
+      className={`flex h-6 shrink-0 items-center px-4 text-[0.6875rem] font-semibold uppercase leading-4 tracking-[0.06em] text-sidenav-ink/50 ${
+        first ? '' : 'mt-3'
+      }`}
+    >
+      <span className="truncate">{children}</span>
+    </div>
+  )
+}
 
 interface SortableBoardProps {
   shortcut?: string
@@ -55,7 +118,7 @@ interface SortableBoardProps {
 
 // The board's unread count when its badge is switched on, else 0. Counts come
 // from the folder caches, which useAppEffects keeps filled and synced while the
-// badge is on, so a board that isn't open has a current number too. A tile with
+// badge is on, so a board that isn't open has a current number too. A row with
 // its badge off subscribes to nothing, and one with it on re-renders only when
 // the number changes.
 function useBoardUnread(board: SortableBoardProps['board']): number {
@@ -82,34 +145,22 @@ export function SortableBoard({ board, active, onSelect, onContextMenu, shortcut
       {...listeners}
       onClick={onSelect}
       onContextMenu={onContextMenu}
-      className="relative w-full flex justify-center group cursor-pointer"
+      className="relative w-full px-2 group cursor-pointer"
       title={board.name + (shortcut ? ` (${shortcut})` : '')}
     >
       {railIndicator(active)}
-      {/* The badge sits on this wrapper, as on account tiles, so it stays
-          full-opacity while an inactive board's image is dimmed. */}
-      <div className="relative">
-        {board.avatarUrl ? (
-          <div
-            className={`flex h-10 w-10 items-center justify-center overflow-hidden ${railTileShape(active)} ${
-              active ? '' : 'opacity-75 group-hover:opacity-100'
-            }`}
-          >
-            <Avatar name={board.name} src={board.avatarUrl} size={40} className="!rounded-none pointer-events-none" />
-          </div>
-        ) : (
-          <div
-            className={`flex h-10 w-10 items-center justify-center ${railTileShape(active)} ${
-              active
-                ? 'bg-accent text-accent-label'
-                : 'bg-sidenav-ink/10 text-sidenav-ink/60 group-hover:bg-sidenav-ink/20 group-hover:text-sidenav-ink'
-            }`}
-          >
-            <Columns3 size={19} />
-          </div>
-        )}
-        <UnreadCountBadge count={unreadCount} />
-      </div>
+      <NavRow
+        active={active}
+        icon={
+          board.avatarUrl ? (
+            <Avatar name={board.name} src={board.avatarUrl} size={18} className="pointer-events-none" />
+          ) : (
+            <Columns3 size={16} />
+          )
+        }
+        label={board.name}
+        count={unreadCount}
+      />
     </div>
   )
 }
@@ -144,10 +195,15 @@ export function SortableAccount({
   const showUnreadBadge = useValue(settings$.showUnreadAccountBadge)
   const accountFolders = useValue(mail$.foldersByAccount[account.id])
   const unreadCount = showUnreadBadge ? inboxUnread(accountFolders) : 0
-  const baseTooltip = isRSS
+  const name = isRSS
     ? account.display_name || 'RSS Feeds'
     : isLocal
-      ? `${account.display_name || t('accounts.local.name')} (${t('accounts.local.subtitle')})`
+      ? account.display_name || t('accounts.local.name')
+      : accountLabel(account)
+  const baseTooltip = isRSS
+    ? name
+    : isLocal
+      ? `${name} (${t('accounts.local.subtitle')})`
       : account.display_name
         ? `${account.display_name} (${account.email})`
         : account.email
@@ -163,48 +219,43 @@ export function SortableAccount({
       onContextMenu={onContextMenu}
       onDragOver={(event) => onFeedDragOver?.(event, account)}
       onDrop={(event) => onFeedDrop?.(event, account)}
-      className="relative w-full flex justify-center group cursor-pointer"
+      className="relative w-full px-2 group cursor-pointer"
       title={baseTooltip + stateSuffix + (shortcut ? ` (${shortcut})` : '')}
     >
       {railIndicator(active)}
-      {/* Badges live on this wrapper, not the dimmed avatar div, so the unread
-          count stays full-opacity for inactive accounts (matching the rail's
-          other badges). */}
-      <div className="relative">
-        <div
-          className={`relative flex h-10 w-10 items-center justify-center overflow-hidden ${railTileShape(active)} ${
-            active || isPaused || needsReconnect ? '' : 'opacity-75 group-hover:opacity-100'
-          }`}
-        >
+      <NavRow
+        active={active}
+        icon={
           <AccountAvatar
             accountId={account.id}
             name={accountLabel(account)}
             src={account.avatar_url}
-            size={40}
-            fallback={isRSS ? <Rss size={20} /> : undefined}
-            className={`!rounded-none pointer-events-none transition-all ${
-              isPaused || needsReconnect ? 'grayscale opacity-40' : ''
-            }`}
+            size={18}
+            fallback={isRSS ? <Rss size={11} /> : undefined}
+            className={`pointer-events-none transition-all ${isPaused || needsReconnect ? 'grayscale opacity-40' : ''}`}
           />
-        </div>
-        {(needsReconnect || isPaused || isMuted) && (
-          <span
-            className={`absolute -bottom-1 -right-1 flex h-[18px] w-[18px] items-center justify-center rounded-full text-white/90 ring-2 ring-sidenav ${
-              needsReconnect ? 'bg-amber-600' : 'bg-black/60 text-white/80'
-            }`}
-            title={needsReconnect ? 'Needs reconnect' : isPaused ? 'Paused' : 'Muted'}
-          >
-            {needsReconnect ? (
-              <KeyRound size={10} />
-            ) : isPaused ? (
-              <Pause size={9} className="fill-current" />
-            ) : (
-              <BellOff size={9} />
-            )}
-          </span>
-        )}
-        <UnreadCountBadge count={unreadCount} />
-      </div>
+        }
+        label={<span className={isPaused || needsReconnect ? 'opacity-60' : undefined}>{name}</span>}
+        count={unreadCount}
+        trailing={
+          (needsReconnect || isPaused || isMuted) && (
+            <span
+              className={`flex h-4 w-4 shrink-0 items-center justify-center ${
+                needsReconnect ? 'text-amber-600' : 'text-sidenav-ink/50'
+              }`}
+              title={needsReconnect ? 'Needs reconnect' : isPaused ? 'Paused' : 'Muted'}
+            >
+              {needsReconnect ? (
+                <KeyRound size={12} />
+              ) : isPaused ? (
+                <Pause size={11} className="fill-current" />
+              ) : (
+                <BellOff size={11} />
+              )}
+            </span>
+          )
+        }
+      />
     </div>
   )
 }

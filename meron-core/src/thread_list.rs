@@ -37,8 +37,23 @@ pub struct ThreadListQuery {
     /// combines with unread and starred.
     pub attachments: bool,
     pub before_cursor: Option<(i64, u32)>,
+    /// The folder tie-breaker of `before_cursor`, when its page mixed folders.
+    pub before_folder: Option<String>,
     pub search_before_cursor: Option<SearchCursor>,
+    /// `sender:<last>:<base64 address>` position of a sender-grouped page.
+    pub sender_before_cursor: Option<(i64, String)>,
     pub limit: u32,
+    /// `"group_by": "sender"` lists one row per correspondent instead of one
+    /// per thread (only for the plain Recent view; see [`Self::sender_grouping`]).
+    pub group_by: GroupBy,
+}
+
+/// How a mailbox page groups its messages into rows.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum GroupBy {
+    #[default]
+    Thread,
+    Sender,
 }
 
 /// A globally ordered search position. UIDs are only unique within a folder, so
@@ -86,10 +101,22 @@ impl ThreadListQuery {
                 .get("before_cursor")
                 .and_then(Value::as_str)
                 .and_then(parse_mail_cursor),
+            before_folder: params
+                .get("before_cursor")
+                .and_then(Value::as_str)
+                .and_then(parse_mail_cursor_folder),
             search_before_cursor: params
                 .get("before_cursor")
                 .and_then(Value::as_str)
                 .and_then(parse_search_cursor),
+            sender_before_cursor: params
+                .get("before_cursor")
+                .and_then(Value::as_str)
+                .and_then(store::parse_sender_cursor),
+            group_by: match params.get("group_by").and_then(Value::as_str) {
+                Some("sender") => GroupBy::Sender,
+                _ => GroupBy::Thread,
+            },
             limit: params
                 .get("limit")
                 .and_then(Value::as_u64)
@@ -156,8 +183,52 @@ impl ThreadListQuery {
     /// page of an unfiltered, unsearched view — the other sources are answered
     /// by their own live call or are cheap local reads.
     pub fn wants_background_sync(&self) -> bool {
-        self.before_cursor.is_none() && matches!(self.source(), MailSource::Recent { .. })
+        self.before_cursor.is_none()
+            && self.sender_before_cursor.is_none()
+            && matches!(self.source(), MailSource::Recent { .. })
     }
+
+    /// Whether this page lists sender rows: asked for, and the plain Recent
+    /// view. Search and Starred stay threaded whatever the setting.
+    pub fn sender_grouping(&self) -> bool {
+        self.group_by == GroupBy::Sender && matches!(self.source(), MailSource::Recent { .. })
+    }
+
+    /// [`Self::sender_grouping`] for this account's folder: the Drafts folder
+    /// stays threaded too.
+    pub fn sender_grouping_in(&self, conn: &Connection, account: &str) -> Result<bool> {
+        Ok(self.sender_grouping() && store::folder_role(conn, account, &self.folder)? != "drafts")
+    }
+}
+
+/// Mail accounts in sender mode: one card per correspondent of the folder,
+/// newest first, keyset paged so nobody shows on two pages. Same response
+/// shape as [`mail_page`] with `group: true`.
+pub fn sender_page(conn: &Connection, account: &str, query: &ThreadListQuery) -> Result<Value> {
+    let filter = match query.source() {
+        MailSource::Recent { filter } => filter,
+        _ => store::RecentFilter::default(),
+    };
+    let (groups, next_cursor) = store::get_sender_page(
+        conn,
+        account,
+        &query.folder,
+        query.limit,
+        query.sender_before_cursor.clone(),
+        filter,
+    )?;
+    let threads = mail_model::sender_cards_json(conn, account, &query.folder, groups)?;
+    let folder_unread = store::get_folder_unread(conn, account, &query.folder)?;
+    let folder_synced = store::get_folder_state(conn, account, &query.folder)?.is_some();
+    let mut out = json!({
+        "threads": threads,
+        "folder_unread": folder_unread,
+        "folder_synced": folder_synced,
+    });
+    if let Some(cursor) = next_cursor {
+        out["next_cursor"] = Value::String(cursor);
+    }
+    Ok(out)
 }
 
 /// Where a mail page comes from. Both frontends map filters to the same source;
@@ -174,10 +245,27 @@ pub enum MailSource {
 }
 
 /// `date:<date>:<uid>` keyset cursor, as minted by [`store::get_recent_page`].
+/// A page that mixes folders (the Inbox with mail the AI shows there from
+/// other folders, Starred) adds `:<base64url(folder)>`, its last row's folder,
+/// as the tie-breaker of equal (date, uid); see [`parse_mail_cursor_folder`].
 pub fn parse_mail_cursor(cursor: &str) -> Option<(i64, u32)> {
     let rest = cursor.strip_prefix("date:")?;
-    let (date, uid) = rest.split_once(':')?;
-    Some((date.parse().ok()?, uid.parse().ok()?))
+    let mut parts = rest.splitn(3, ':');
+    let date = parts.next()?.parse().ok()?;
+    let uid = parts.next()?.parse().ok()?;
+    Some((date, uid))
+}
+
+/// The folder part of a `date:<date>:<uid>:<base64url(folder)>` cursor; `None`
+/// for the plain `date:<date>:<uid>` form (older cursors still work: equal
+/// (date, uid) rows are then cut as before).
+pub fn parse_mail_cursor_folder(cursor: &str) -> Option<String> {
+    let rest = cursor.strip_prefix("date:")?;
+    let mut parts = rest.splitn(3, ':');
+    parts.next()?;
+    parts.next()?;
+    let folder = parts.next()?;
+    String::from_utf8(URL_SAFE_NO_PAD.decode(folder).ok()?).ok()
 }
 
 /// `search:<date>:<uid>:<scanned>:<base64-folder>` cursor for a merged page.

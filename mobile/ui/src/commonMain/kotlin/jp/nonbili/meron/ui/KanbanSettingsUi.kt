@@ -97,7 +97,7 @@ internal fun SettingsKanbanBoardDetailPage(
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
-                        trf("settings.kanban.boardColumns", board.columns.size),
+                        tr("settings.kanban.boardColumns", mapOf("count" to board.columns.size)),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

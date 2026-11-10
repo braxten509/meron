@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { CSSProperties, DragEvent, PointerEventHandler } from 'react'
 import { Plus, SquarePen, MoreHorizontal, Loader2 } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
@@ -44,7 +44,8 @@ import {
 import { exportFolderAsEml } from '../../states/emlExport'
 import { isRssAccount } from '../../lib/threadActions'
 import { folderLabel } from '../../lib/kanbanData'
-import { isUnifiedStarred } from '../../lib/unifiedFolders'
+import { isMeronView, isUnifiedStarred } from '../../lib/unifiedFolders'
+import { isMeronArchive, meronFolderName, meronFolders$ } from '../../states/meronFolders'
 import { EmptyState } from '../empty-state/EmptyState'
 import { IconButton } from '../button/IconButton'
 import { QuickSettingsMenu } from '../sidenav/QuickSettingsMenu'
@@ -55,6 +56,8 @@ import { ThreadContextMenu, useThreadContextMenu } from './ThreadContextMenu'
 import { ThreadListItem } from './ThreadListItem'
 import { ThreadSearchInput } from './ThreadSearchInput'
 import { BulkActionBar } from './BulkActionBar'
+import { BulkProgressStrip } from './BulkProgressStrip'
+import { bulkProgress$ } from '../../states/bulkProgress'
 
 type ThreadListProps = {
   width?: number
@@ -81,12 +84,15 @@ export function ThreadList({ width, onResizeStart }: ThreadListProps = {}) {
   const selectedFolder = useValue(ui$.selectedFolder)
   const selectedThread = useValue(ui$.selectedThread)
   const bulkSelection = useValue(ui$.bulkSelection)
+  // Rows a running bulk Delete / Archive / Move has not reached yet.
+  const bulkPending = useValue(() => bulkProgress$.job.get()?.pending)
   const accounts = useValue(accounts$)
   const folders = useValue(mail$.folders)
   const system = useValue(ui$.system)
   const filteredThreads = useValue(getFilteredThreads)
   const filterMode = useValue(ui$.filterMode)
   const attachmentsOnly = useValue(ui$.attachmentsOnly)
+  const groupBySender = useValue(ui$.groupBySender)
   const threadsCursor = useValue(mail$.threadsCursor)
   const threadsLoadingMore = useValue(mail$.threadsLoadingMore)
   // The rows on hand belong to the view they were loaded for. Until that is the
@@ -98,12 +104,24 @@ export function ThreadList({ width, onResizeStart }: ThreadListProps = {}) {
   const threadsLoading =
     coreMigrating ||
     threadsLoadedKey !==
-      threadListViewKey(selectedAccount, selectedFolder, query, listFilterKey(filterMode, attachmentsOnly))
+      threadListViewKey(
+        selectedAccount,
+        selectedFolder,
+        query,
+        listFilterKey(filterMode, attachmentsOnly, groupBySender),
+      )
   const threadMenu = useThreadContextMenu(accounts)
   // Starred is a folder of the unified view whose rows span every account. It
   // lists ordinary threads, so it shares this list's selection, context menu and
   // bulk selection; only the cross-account chrome below differs.
   const isStarredView = isUnifiedStarred(selectedAccount, selectedFolder)
+  // A Meron folder (this device only) also lists threads from every account.
+  // Its folder list is the side navigation, so the header shows its name only.
+  const isMeronFolderView = isMeronView(selectedAccount)
+  const meronFolders = useValue(meronFolders$.list)
+  const meronFolder = isMeronFolderView ? meronFolders.find((folder) => folder.id === selectedFolder) : undefined
+  const meronFolderNames = new Map(meronFolders.map((folder) => [folder.id, meronFolderName(folder.id) || folder.name]))
+  const meronFolderTitle = meronFolder ? (meronFolderNames.get(meronFolder.id) ?? meronFolder.name) : ''
   // Quick-settings (view + theme) anchor for the narrow-window header button.
   // The side navigation that normally hosts these controls is hidden at this width.
   const [quickMenu, setQuickMenu] = useState<{ x: number; y: number } | null>(null)
@@ -119,6 +137,11 @@ export function ThreadList({ width, onResizeStart }: ThreadListProps = {}) {
   // navigation can walk past the fold. `block: "nearest"` leaves already-visible
   // rows (e.g. mouse clicks) untouched.
   const selectedItemRef = useRef<HTMLDivElement | null>(null)
+  // The row at the top of a scrolled list, and how far below the list's top
+  // edge it sits. New mail lands above it; without this every row slid down
+  // one place under the pointer, so a click opened the wrong conversation.
+  const listRef = useRef<HTMLDivElement | null>(null)
+  const scrollAnchorRef = useRef<{ key: string; offset: number } | null>(null)
   const restoreFocusAfterDeleteRef = useRef(false)
   useEffect(() => {
     const selectedItem = selectedItemRef.current
@@ -171,12 +194,21 @@ export function ThreadList({ width, onResizeStart }: ThreadListProps = {}) {
     folders.find((folder) => folderMatches(folder, selectedAccount, selectedFolder))?.name ?? selectedFolder
   const hasUnread = isRSSAccount
     ? filteredThreads.some((thread) => thread.unread)
-    : folderUnread(folders, selectedFolder) > 0 || filteredThreads.some((thread) => thread.unread)
+    : isMeronFolderView
+      ? (meronFolder?.unread ?? 0) > 0 || filteredThreads.some((thread) => thread.unread)
+      : folderUnread(folders, selectedFolder) > 0 || filteredThreads.some((thread) => thread.unread)
   // A search pages on the cursor the core mints for it, whatever the filter chip
   // says — a query is answered by a search, not by a filtered listing. Without a
   // cursor (feeds, starred) there is nothing more to load. The attachments
   // toggle narrows the same cursor-paged listing, so it does not stop paging.
-  const canLoadMore = !!threadsCursor && (!!query.trim() || filterMode === 'all')
+  // A single folder's starred filter and a Meron folder page on their cursor
+  // too.
+  const canLoadMore =
+    !!threadsCursor &&
+    (!!query.trim() ||
+      filterMode === 'all' ||
+      isMeronFolderView ||
+      (filterMode === 'starred' && selectedAccount !== 'unified'))
   const feedRowsDraggable = !isStarredView && isRSSAccount
   // The folder switcher needs a folder list to offer. That is an account's real
   // folders, or — in the unified view — the synthetic per-role list, where each
@@ -191,24 +223,40 @@ export function ThreadList({ width, onResizeStart }: ThreadListProps = {}) {
   const inLocalFolders = isLocalAccountId(selectedAccount)
   const inInbox = !inLocalFolders && selectedFolder === (inboxFolder?.id ?? 'inbox')
   const narrowed = !!query.trim() || filterMode !== 'all' || attachmentsOnly
+  // The core groups by sender only in a plain mail listing: search, Starred,
+  // Drafts, feeds and on-disk folders stay threaded, so the switch is offered
+  // only where it changes the list.
+  const canGroupBySender =
+    !isStarredView &&
+    !isMeronFolderView &&
+    !isRSSAccount &&
+    !inLocalFolders &&
+    !query.trim() &&
+    !isDraftFolder(selectedFolder, selectedAccount === 'unified' ? undefined : selectedAccount)
   const emptyStateTitle = narrowed
     ? t('empty.noMatchingMail')
-    : isRSSAccount
-      ? t('empty.noFeeds')
-      : inInbox
-        ? t('empty.noChats')
-        : t('empty.nothingHereYet')
+    : isMeronFolderView
+      ? t('meronFolders.empty')
+      : isRSSAccount
+        ? t('empty.noFeeds')
+        : inInbox
+          ? t('empty.noChats')
+          : t('empty.nothingHereYet')
   const emptyStateText = narrowed
     ? t('empty.adjustSearchFilter')
-    : isRSSAccount
-      ? t('empty.addFeedToStart')
-      : inArchive
-        ? t('empty.noArchivedThreads')
-        : inInbox
-          ? t('empty.inboxEmpty')
-          : inLocalFolders
-            ? t('settings.sections.noLocalFolders')
-            : t('empty.pullLatestMessages')
+    : isMeronFolderView
+      ? isMeronArchive(meronFolder)
+        ? t('meronFolders.archiveEmptyHint')
+        : t('meronFolders.emptyHint')
+      : isRSSAccount
+        ? t('empty.addFeedToStart')
+        : inArchive
+          ? t('empty.noArchivedThreads')
+          : inInbox
+            ? t('empty.inboxEmpty')
+            : inLocalFolders
+              ? t('settings.sections.noLocalFolders')
+              : t('empty.pullLatestMessages')
   const loadMoreButton = (
     <button
       className="mx-3 my-3 flex h-9 shrink-0 items-center justify-center rounded-lg border border-border text-xs font-semibold text-secondary hover:bg-hover disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer transition-colors"
@@ -243,6 +291,7 @@ export function ThreadList({ width, onResizeStart }: ThreadListProps = {}) {
       kind: rowIsFeed ? 'feed' : 'mail',
       unread: thread.unread,
       starred: thread.starred,
+      sender: thread.group === 'sender',
       draft: isDraftFolder(thread.folder_id, thread.account_id),
       trash: folders.some((folder) => folder.id === thread.folder_id && folder.role === 'trash'),
     }
@@ -288,10 +337,41 @@ export function ThreadList({ width, onResizeStart }: ThreadListProps = {}) {
     event.dataTransfer.setData('text/plain', thread.subject || thread.from_name || t('feeds.fallbackName'))
   }
 
+  const captureScrollAnchor = () => {
+    const list = listRef.current
+    // At the very top, new mail showing up above is what the reader expects.
+    if (!list || list.scrollTop <= 0) {
+      scrollAnchorRef.current = null
+      return
+    }
+    const top = list.getBoundingClientRect().top
+    for (const row of list.querySelectorAll<HTMLElement>('[data-row-key]')) {
+      const rect = row.getBoundingClientRect()
+      if (rect.bottom > top) {
+        scrollAnchorRef.current = { key: row.dataset.rowKey ?? '', offset: rect.top - top }
+        return
+      }
+    }
+    scrollAnchorRef.current = null
+  }
+
+  // After the rows change, put the anchored row back where it was.
+  useLayoutEffect(() => {
+    const list = listRef.current
+    const anchor = scrollAnchorRef.current
+    if (list && anchor) {
+      const row = list.querySelector<HTMLElement>(`[data-row-key="${CSS.escape(anchor.key)}"]`)
+      if (row) {
+        const drift = row.getBoundingClientRect().top - list.getBoundingClientRect().top - anchor.offset
+        if (Math.abs(drift) >= 1) list.scrollTop += drift
+      }
+    }
+    captureScrollAnchor()
+  }, [filteredThreads])
   return (
     <section
       data-thread-list
-      className={`relative flex w-full shrink-0 flex-col bg-chats min-[769px]:w-[var(--thread-list-width)] min-[769px]:border-r min-[769px]:border-border/60 ${
+      className={`relative flex w-full shrink-0 flex-col bg-chats min-[769px]:w-[min(var(--thread-list-width),max(16rem,calc(100vw-38rem)))] min-[769px]:border-r min-[769px]:border-border/60 ${
         mobilePane === 'threads' ? 'max-[768px]:flex' : 'max-[768px]:hidden'
       }`}
       onKeyDownCapture={(event) => {
@@ -330,6 +410,17 @@ export function ThreadList({ width, onResizeStart }: ThreadListProps = {}) {
                 onSelect={(nextFolderId) => ui$.selectedFolder.set(nextFolderId)}
               />
             )}
+            {isMeronFolderView && !searchExpanded && (
+              <span
+                // The switcher's text lands on the row's left padding (its
+                // button's own padding is pulled back by -ml-2), so plain text
+                // starts there too and lines up with every other folder name.
+                className={`min-w-0 truncate text-xs font-bold leading-8 text-primary ${titleBar ? '' : 'max-w-[40%] shrink-0'}`}
+                title={meronFolder ? `${meronFolderTitle} · ${t('meronFolders.thisDeviceOnly')}` : undefined}
+              >
+                {meronFolderTitle}
+              </span>
+            )}
             {titleBar ? <div className="flex-1" /> : <ThreadSearchInput onFocusChange={setSearchFocused} />}
 
             {!searchExpanded && (
@@ -364,6 +455,8 @@ export function ThreadList({ width, onResizeStart }: ThreadListProps = {}) {
                     onFilterChange={(mode) => ui$.filterMode.set(mode)}
                     attachmentsOnly={attachmentsOnly}
                     onAttachmentsOnlyChange={(on) => ui$.attachmentsOnly.set(on)}
+                    groupBySender={groupBySender}
+                    onGroupBySenderChange={canGroupBySender ? (on) => ui$.groupBySender.set(on) : undefined}
                     hasUnread={hasUnread}
                     onMarkAllRead={() => markAllRead()}
                     onEmptyFolder={
@@ -452,6 +545,8 @@ export function ThreadList({ width, onResizeStart }: ThreadListProps = {}) {
         </div>
       )}
 
+      <BulkProgressStrip accountId={selectedAccount} folderId={selectedFolder} />
+
       {quickMenu && (
         <QuickSettingsMenu
           anchor={{ x: quickMenu.x, y: quickMenu.y, placement: 'down' }}
@@ -461,8 +556,10 @@ export function ThreadList({ width, onResizeStart }: ThreadListProps = {}) {
 
       {/* Thread List Items */}
       <div
+        ref={listRef}
         className="flex-1 overflow-y-auto flex flex-col gap-0.5 p-1.5"
         onScroll={(event) => {
+          captureScrollAnchor()
           if (!canLoadMore || threadsLoadingMore) return
           const el = event.currentTarget
           if (el.scrollHeight - el.scrollTop - el.clientHeight < 240) {
@@ -501,10 +598,21 @@ export function ThreadList({ width, onResizeStart }: ThreadListProps = {}) {
                 <ThreadListItem
                   key={thread.id}
                   thread={thread}
+                  // Waiting its turn in a bulk action: greyed and not clickable.
+                  className={bulkPending?.[thread.thread_id] ? 'pointer-events-none opacity-40' : undefined}
                   active={thread.thread_id === selectedThread}
                   badgeAccount={
-                    isStarredView || selectedAccount === 'unified'
+                    isStarredView || isMeronFolderView || selectedAccount === 'unified'
                       ? accounts.find((acc) => acc.id === thread.account_id)
+                      : undefined
+                  }
+                  // Search finds conversations that sit in a Meron folder too;
+                  // say which one, since they show nowhere else.
+                  folderLabel={
+                    query.trim() && !isMeronFolderView && thread.meron_folder_id
+                      ? t('meronFolders.inFolder', {
+                          name: meronFolderNames.get(thread.meron_folder_id) ?? t('meronFolders.title'),
+                        })
                       : undefined
                   }
                   contextMenuOpen={threadMenu.isOpen(thread)}

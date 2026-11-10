@@ -40,6 +40,9 @@ import {
   PanelBottom,
   SquarePen,
   Contrast,
+  Sparkles,
+  ArrowLeftRight,
+  History,
 } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
 import { importOpml, exportOpml } from '../../states/feeds'
@@ -67,6 +70,7 @@ import { update$ } from '../../states/update'
 import type { Account } from '../../types'
 import { AccountAvatar } from '../avatar/AccountAvatar'
 import { IconButton } from '../button/IconButton'
+import { Button } from '../button/Button'
 import { NumberRow, SegmentedRow, SettingRow, SettingsGroup, ToggleRow, SelectRow } from './AccountSettingsRows'
 import { supportedI18nLanguages, languageNativeNames, type SupportedI18nLanguage } from '../../lib/i18n'
 import { ThemeSettingsSection } from './ThemeSettingsSection'
@@ -90,19 +94,24 @@ import { offersMonochromeTrayIcon } from '../../lib/monochromeTrayIcon'
 import { ALERT_MINUTES, ALL_DAY_ALERT_DAYS, NO_ALERT, alertLabel } from '../../lib/eventAlerts'
 import { McpSettingsPanel } from './McpSettingsPanel'
 import { RulesPanel } from './RulesPanel'
+import { AiSortPanel } from './AiSortPanel'
+import { SetupCopyDialog } from './SetupCopyDialog'
+import { restoreSafetyCopy, safetyCopyInfo, type SafetyInfo } from '../../states/setupCopy'
 import { setIntegratedTitlebar, windowChrome$ } from '../../lib/windowChrome'
+import { SharpImg } from '../../lib/sharpImage'
 
-// General uses the empty selection; Messages, Composer, Rules and MCP have ids of
+// General uses the empty selection; Messages, Composer, Rules, AI sorting and MCP have ids of
 // their own. Account and board IDs share the selection state with these
 // settings sections.
-type SectionId = 'general' | 'messages' | 'composer' | 'rules'
+type SectionId = 'general' | 'messages' | 'composer' | 'rules' | 'aiSort'
 const SECTIONS: { id: SectionId; labelKey: string; icon: LucideIcon }[] = [
   { id: 'general', labelKey: 'settings.sections.general', icon: SlidersHorizontal },
   { id: 'messages', labelKey: 'settings.sections.messages', icon: MessagesSquare },
   { id: 'composer', labelKey: 'settings.sections.composer', icon: SquarePen },
   { id: 'rules', labelKey: 'rules.title', icon: ListFilter },
+  { id: 'aiSort', labelKey: 'aiSort.title', icon: Sparkles },
 ]
-const PAGE_IDS = new Set<string>(['messages', 'composer', 'rules', 'mcp'])
+const PAGE_IDS = new Set<string>(['messages', 'composer', 'rules', 'aiSort', 'mcp'])
 
 const SEND_SHORTCUT_OPTIONS: { value: SendShortcut; label: string }[] = [
   { value: 'enter', label: sendShortcutLabel('enter') },
@@ -258,6 +267,8 @@ export function SettingsDialog() {
             <ComposerSection />
           ) : selected === 'rules' ? (
             <RulesPanel />
+          ) : selected === 'aiSort' ? (
+            <AiSortPanel />
           ) : (
             <GeneralSection />
           )}
@@ -396,7 +407,7 @@ function BoardGroup({
         boards.map((board) => (
           <NavItem key={board.id} active={activeKey === board.id} onClick={() => onSelect(board.id)}>
             {board.avatarUrl ? (
-              <img src={board.avatarUrl} alt="" className="h-5 w-5 shrink-0 rounded-md object-cover" />
+              <SharpImg src={board.avatarUrl} box={20} alt="" className="h-5 w-5 shrink-0 rounded-md object-cover" />
             ) : (
               <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-accent/10 text-accent">
                 <Columns3 size={12} />
@@ -567,6 +578,7 @@ function GeneralSection() {
       </SettingsGroup>
 
       <SettingsGroup title={t('settings.sections.data')}>
+        <SetupCopyRows />
         <BackupRow />
         <StorageRows />
         <LogsRow />
@@ -696,6 +708,103 @@ function ComposerSection() {
 
       <SignatureSettingsSection />
     </div>
+  )
+}
+
+// "Copy setup to another device" (this computer shows a QR code for the phone)
+// and the safety copy the last copy kept of what it replaced.
+function SetupCopyRows() {
+  const { t } = useTranslation()
+  const [open, setOpen] = useState(false)
+  const [safety, setSafety] = useState<SafetyInfo | null>(null)
+  const [confirmRestore, setConfirmRestore] = useState(false)
+  const [busy, setBusy] = useState(false)
+
+  const refreshSafety = () => {
+    safetyCopyInfo()
+      .then(setSafety)
+      .catch(() => setSafety(null))
+  }
+  useEffect(refreshSafety, [])
+
+  const safetyDate = safety?.created_at ? new Date(safety.created_at * 1000).toLocaleString() : ''
+
+  const restore = async () => {
+    setBusy(true)
+    try {
+      await restoreSafetyCopy()
+      showToast(t('setupCopy.restored'), 'success')
+      refreshSafety()
+    } catch (err) {
+      showToast(backupErrorMessage(err, t('setupCopy.restoreFailed')), 'error')
+    } finally {
+      setBusy(false)
+      setConfirmRestore(false)
+    }
+  }
+
+  const buttonClass =
+    'flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-hover hover:bg-active text-primary font-bold text-[0.625rem] cursor-pointer transition-colors disabled:cursor-not-allowed disabled:opacity-50'
+
+  return (
+    <>
+      <SettingRow
+        title={t('setupCopy.title')}
+        hint={t('setupCopy.rowHint')}
+        control={
+          <button onClick={() => setOpen(true)} className={buttonClass}>
+            <ArrowLeftRight size={12} />
+            {t('setupCopy.start')}
+          </button>
+        }
+      />
+      {safety?.exists && (
+        <SettingRow
+          title={t('setupCopy.safetyTitle')}
+          hint={t('setupCopy.safetyHint', { date: safetyDate })}
+          control={
+            <button onClick={() => setConfirmRestore(true)} disabled={busy} className={buttonClass}>
+              <History size={12} />
+              {t('setupCopy.restoreSafety')}
+            </button>
+          }
+        />
+      )}
+      {open &&
+        createPortal(
+          <SetupCopyDialog
+            onClose={() => {
+              setOpen(false)
+              refreshSafety()
+            }}
+          />,
+          document.body,
+        )}
+      {confirmRestore &&
+        createPortal(
+          <Dialog
+            onClose={() => !busy && setConfirmRestore(false)}
+            dismissible={!busy}
+            aria-label={t('setupCopy.restoreSafety')}
+            className="max-w-sm p-6 flex flex-col gap-4"
+          >
+            <h2 className="text-[0.9375rem] font-bold tracking-tight">{t('setupCopy.restoreSafety')}</h2>
+            <p className="text-[0.75rem] text-secondary leading-relaxed font-medium">
+              {t('setupCopy.restoreConfirm', { date: safetyDate })}
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" onClick={() => setConfirmRestore(false)} disabled={busy}>
+                {t('buttons.cancel')}
+              </Button>
+              <Button variant="danger" onClick={() => void restore()} disabled={busy}>
+                {busy && <RefreshCw size={11} className="animate-spin" />}
+                <span>{t('setupCopy.restoreAction')}</span>
+              </Button>
+            </div>
+          </Dialog>,
+          document.body,
+        )}
+    </>
   )
 }
 

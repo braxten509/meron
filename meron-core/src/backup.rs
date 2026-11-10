@@ -195,6 +195,11 @@ pub struct BackupData {
     /// in files written before the calendar existed.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub events: Vec<store::CalendarEvent>,
+    /// Meron folders (this device's own folders) with their conversations'
+    /// entries and every alias that finds their mail; absent in files written
+    /// before Meron folders existed.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub meron_folders: Vec<store::MeronBackupFolder>,
 }
 
 /// What [`import`] changed, for the "restored N accounts" confirmation.
@@ -208,6 +213,8 @@ pub struct ImportSummary {
     pub tasks: u32,
     #[serde(default)]
     pub events: u32,
+    #[serde(default)]
+    pub meron_folders: u32,
 }
 
 impl ImportSummary {
@@ -220,6 +227,7 @@ impl ImportSummary {
             "secrets": self.secrets,
             "tasks": self.tasks,
             "events": self.events,
+            "meron_folders": self.meron_folders,
         })
     }
 }
@@ -297,6 +305,7 @@ pub fn collect(
         tags,
         task_lists: collect_task_lists(conn)?,
         events: store::all_events(conn)?,
+        meron_folders: store::meron_backup_collect(conn)?,
     })
 }
 
@@ -598,8 +607,19 @@ pub fn apply(
     data: &BackupData,
     store_secrets: &dyn Fn(&Connection, &str, &Secrets) -> Result<()>,
 ) -> Result<ImportSummary> {
-    let mut summary = ImportSummary::default();
     let tx = conn.unchecked_transaction()?;
+    let summary = apply_in(&tx, data, store_secrets)?;
+    tx.commit()?;
+    Ok(summary)
+}
+
+/// [`apply`] inside a transaction the caller holds.
+pub fn apply_in(
+    tx: &Connection,
+    data: &BackupData,
+    store_secrets: &dyn Fn(&Connection, &str, &Secrets) -> Result<()>,
+) -> Result<ImportSummary> {
+    let mut summary = ImportSummary::default();
     let now = store::now_unix();
 
     for account in &data.accounts {
@@ -658,10 +678,17 @@ pub fn apply(
         }
     }
 
+    // After the accounts, whose conversations they hold. A folder named like
+    // one already here is kept under the existing id.
+    let (meron_added, meron_ids) = store::meron_backup_restore(&tx, &data.meron_folders)?;
+    summary.meron_folders = meron_added;
+
     for (key, value) in &data.settings {
         store::setting_set(&tx, key, value)?;
         summary.settings += 1;
     }
+    // AI sorting's Meron entries follow the folders to the ids kept.
+    store::ai_sort_remap_meron_ids(&tx, &meron_ids)?;
 
     for (index, list) in data.task_lists.iter().enumerate() {
         summary.tasks += restore_task_list(&tx, list, index, now)?;
@@ -683,11 +710,9 @@ pub fn apply(
             |row| row.get(0),
         )?;
         if known {
-            store::restore_tag(&tx, &entry.account, &entry.key, &entry.tag)?;
+            store::restore_tag(tx, &entry.account, &entry.key, &entry.tag)?;
         }
     }
-
-    tx.commit()?;
     Ok(summary)
 }
 

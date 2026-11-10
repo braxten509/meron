@@ -28,9 +28,11 @@ interface MessageBubbleProps {
   message: Message
   // Index of this bubble's first image within the thread-wide gallery list.
   galleryOffset: number
+  /** A sender chat names the topic on the first bubble of each new subject. */
+  subjectLine?: string
 }
 
-export function MessageBubble({ message, galleryOffset }: MessageBubbleProps) {
+export function MessageBubble({ message, galleryOffset, subjectLine }: MessageBubbleProps) {
   const { t } = useTranslation()
   const [metaOpen, setMetaOpen] = useState(false)
   // The overlay below is stacked with the list, so it lies under the composer
@@ -125,6 +127,11 @@ export function MessageBubble({ message, galleryOffset }: MessageBubbleProps) {
           </button>
         </div>
 
+        {subjectLine && (
+          <p className="mb-1 truncate text-[0.6875rem] font-semibold text-secondary select-none" title={subjectLine}>
+            {subjectLine}
+          </p>
+        )}
         {/* Header: sender + optional meta toggle on the left, timestamp on the right */}
         <div className="relative flex items-center justify-between gap-2 mb-1.5">
           <div className="relative flex items-center gap-1 min-w-0">

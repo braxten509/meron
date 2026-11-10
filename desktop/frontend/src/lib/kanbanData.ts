@@ -719,6 +719,7 @@ export async function loadKanbanColumn(column: KanbanColumn, refresh = false, qu
     const { folderUnread, folderUnreadByAccount, folderSynced } = page
     let { threads, nextSingle, nextUnified } = page
     let readDepth = limit
+    let extraPages = 0
     // The depth is only a first guess at how far the reader had scrolled: the
     // core may read past it (an attachments-filtered page skips empty stretches),
     // and the reload cap stops short of a very deep column. Read on until the
@@ -738,7 +739,19 @@ export async function loadKanbanColumn(column: KanbanColumn, refresh = false, qu
       if (column.accountId === 'unified') threads.sort((a, b) => b.date - a.date)
       nextSingle = more.nextSingle
       nextUnified = more.nextUnified
-      readDepth += COLUMN_LIMIT
+      extraPages++
+    }
+    // A further page usually reads past the oldest card shown (new mail on top
+    // pushed the column down). Cards older than it were not on screen, so they
+    // wait for "load more" instead of showing now, and the depth becomes the
+    // cards kept rather than a page more per reload: otherwise every refresh
+    // after new mail added a page of older mail. Only further pages reach below
+    // that card; the first page stopped above it or the loop would not run.
+    let held: Message[] = []
+    if (extraPages > 0 && oldestShown !== undefined) {
+      held = threads.filter((thread) => thread.date < oldestShown)
+      threads = threads.filter((thread) => thread.date >= oldestShown)
+      readDepth = Math.min(Math.max(limit, threads.length), COLUMN_MAX_RELOAD_DEPTH)
     }
     // Only Inbox totals back the side-nav badges. A unified column on another
     // role reports that role's per-account unreads, which must not be written
@@ -757,6 +770,7 @@ export async function loadKanbanColumn(column: KanbanColumn, refresh = false, qu
     kanban$.accountCursors[key].set(nextUnified)
     columnCursorViews.set(key, view)
     columnReadDepths.set(key, readDepth)
+    kanban$.heldThreads[key].set(held)
 
     // A folder nobody has opened yet has nothing cached, so this read served an
     // empty page and only kicked off the background sync. Stay in the loading
@@ -778,6 +792,7 @@ export async function loadKanbanColumn(column: KanbanColumn, refresh = false, qu
       if (synced.folderUnread !== undefined) kanban$.unreadCounts[key].set(synced.folderUnread)
       kanban$.cursors[key].set(synced.nextSingle)
       kanban$.accountCursors[key].set(synced.nextUnified)
+      kanban$.heldThreads[key].set([])
     }
   } finally {
     read.dispose()
@@ -861,7 +876,7 @@ export async function syncKanbanColumn(column: KanbanColumn) {
 }
 
 function columnHasMore(key: string, _unified: boolean): boolean {
-  return !!(kanban$.cursors[key].get() ?? '')
+  return !!(kanban$.cursors[key].get() ?? '') || (kanban$.heldThreads[key].peek()?.length ?? 0) > 0
 }
 
 // Append the next page of older threads to a column, de-duping by thread id. The
@@ -874,6 +889,28 @@ export async function loadMoreKanbanColumn(column: KanbanColumn) {
   if (kanban$.loadingMore[key].get() || kanban$.loading[key].peek() || !columnHasMore(key, unified)) return
   const version = columnLoadVersions.get(key) ?? 0
   const view = columnCursorViews.get(key) ?? currentColumnView(column, activeKanbanColumnQuery(column))
+  const held = kanban$.heldThreads[key].peek() ?? []
+  if (held.length > 0) {
+    // What the last reload held back: show it, read nothing. The cursor is
+    // already past it.
+    kanban$.heldThreads[key].set([])
+    const read = beginThreadListRead()
+    try {
+      const existing = kanban$.threads[key].get() ?? []
+      const seen = new Set(existing.map((thread) => thread.thread_id))
+      const appended = held.filter((thread) => !seen.has(thread.thread_id))
+      const merged = read.filter([...existing, ...appended]).sort((a, b) => b.date - a.date)
+      followOpenKanbanCard(column, existing, merged, false)
+      kanban$.threads[key].set(merged)
+      columnReadDepths.set(
+        key,
+        Math.min((columnReadDepths.get(key) ?? COLUMN_LIMIT) + appended.length, COLUMN_MAX_RELOAD_DEPTH),
+      )
+    } finally {
+      read.dispose()
+    }
+    return
+  }
   const read = beginThreadListRead()
   kanban$.loadingMore[key].set(true)
   try {

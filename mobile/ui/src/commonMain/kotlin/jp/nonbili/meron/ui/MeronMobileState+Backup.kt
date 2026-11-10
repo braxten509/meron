@@ -214,6 +214,19 @@ private suspend fun MeronMobileState.awaitBackupReloads(restoreGeneration: Int) 
     }
 }
 
+/**
+ * This phone's setup was just replaced by "Copy setup to another device" (or
+ * its safety copy put back): accounts, proxy, signature, alert defaults and
+ * Meron folders are new in the store, so reload them as a restore does.
+ * Phone-only preferences were left alone, so nothing needs re-hydrating.
+ */
+internal suspend fun MeronMobileState.reloadAfterSetupReplaced() {
+    invalidateBackupReloads()
+    val generation = ++backupRestoreGeneration
+    awaitBackupReloads(generation)
+    refreshMeronFolders()
+}
+
 /** Restore using the passphrase just typed into the sheet. */
 internal fun MeronMobileState.retryBackupRestore(passphrase: String) {
     importBackup(pendingBackupRestore, passphrase)
@@ -320,6 +333,10 @@ internal fun MeronMobileState.applyHydratedSettings(changed: Map<String, Any>) {
 
             settingKeyFor(READER_BOTTOM_ACTIONS_PREF) -> {
                 readerBottomActions = loadAppBoolean(prefs, READER_BOTTOM_ACTIONS_PREF, false)
+            }
+
+            settingKeyFor(BLURRED_BARS_PREF) -> {
+                blurredBars = loadAppBoolean(prefs, BLURRED_BARS_PREF, false)
             }
 
             settingKeyFor(QUOTE_REPLIES_PREF) -> {

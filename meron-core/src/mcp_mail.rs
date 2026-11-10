@@ -249,7 +249,7 @@ pub async fn organize(engine: &Arc<Engine>, value: Value) -> Result<Value> {
     let warning = match refresh.as_ref() {
         Some(refresh) => {
             let batch = &refresh.batch;
-            store::upsert_messages(&db, &account, refresh_folder, &batch.messages)?;
+            store::upsert_window_messages(&db, &account, refresh_folder, batch)?;
             store::set_folder_state(
                 &db,
                 &account,

@@ -4,8 +4,10 @@ import './accounts'
 import { kanban$ } from './kanban'
 import { mail$, releaseRemovedThread } from './mail'
 import { markUnreadWithUndo } from './mailFlags'
+import { bulkProgress$, requestBulkStop } from './bulkProgress'
 import {
   archiveThread,
+  bulkDeleteSelected,
   bulkMoveSelectedToFolder,
   copyThreadToFolder,
   deleteThread,
@@ -208,6 +210,8 @@ describe('undo after moving a thread', () => {
       thread_id: 'acc#Trash#t.dG9waWM',
       target_folder_id: 'INBOX',
       message_ids: ['42', '43'],
+      // An Undo says so: the core then moves back exactly these copies.
+      undo: true,
     })
   })
 
@@ -238,6 +242,8 @@ describe('undo after moving a thread', () => {
       thread_id: 'acc#Archive#t.dG9waWM',
       target_folder_id: 'INBOX',
       message_ids: ['9'],
+      // An Undo says so: the core then moves back exactly these copies.
+      undo: true,
     })
   })
 
@@ -249,6 +255,8 @@ describe('undo after moving a thread', () => {
       thread_id: 'acc#Work#t.dG9waWM',
       target_folder_id: 'INBOX',
       message_ids: ['5'],
+      // An Undo says so: the core then moves back exactly these copies.
+      undo: true,
     })
   })
 
@@ -288,6 +296,60 @@ describe('undo after moving a thread', () => {
     expect(mail$.threads.get().map((item) => item.thread_id)).toEqual(['b'])
     expect(ui$.toast.get()).toContain('denied access')
     expect(ui$.toast.get()).toContain('Completed 1 of 2 selected threads')
+  })
+
+  // The strip's Stop and a failure part-way share one rule: conversations the
+  // job did not reach stay exactly where they were, and the reader is told
+  // how far it got.
+  it('bulk delete leaves the unreached threads alone after Stop and after a failure', async () => {
+    const items = (ids: string[]) =>
+      ids.map((threadId) => ({
+        key: threadId,
+        groupKey: '',
+        threadId,
+        accountId: 'acc',
+        folderId: 'INBOX',
+        surface: 'thread-list' as const,
+        kind: 'mail' as const,
+        unread: false,
+        starred: false,
+        draft: false,
+        trash: false,
+      }))
+    const deleted: string[] = []
+    let failOn = ''
+    let stopAfter = ''
+    const seen: { whileRunning?: { done: number; pending: string[] } } = {}
+    ;(window as any).go.main.App.Invoke = (command: string, payload: { thread_id?: string }) => {
+      if (command !== 'mail.delete') return Promise.resolve({ threads: mail$.threads.get() })
+      const id = payload.thread_id ?? ''
+      if (id === failOn) return Promise.reject(new Error('server said no'))
+      const job = bulkProgress$.job.get()
+      if (id === 'b' && job) seen.whileRunning = { done: job.done, pending: Object.keys(job.pending) }
+      deleted.push(id)
+      if (id === stopAfter) requestBulkStop()
+      return Promise.resolve({ deleted: 1 })
+    }
+
+    mail$.threads.set(['a', 'b', 'missing'].map((id) => thread({ id, thread_id: id })))
+    stopAfter = 'a'
+    await bulkDeleteSelected(items(['a', 'b', 'missing']))
+    expect(deleted).toEqual(['a'])
+    expect(mail$.threads.get().map((item) => item.thread_id)).toEqual(['b', 'missing'])
+    expect(ui$.toast.get()).toBe('Deleted 1 of 3. Stopped.')
+    expect(bulkProgress$.job.get()).toBeNull()
+
+    deleted.length = 0
+    stopAfter = ''
+    failOn = 'missing'
+    mail$.threads.set(['a', 'b', 'missing'].map((id) => thread({ id, thread_id: id })))
+    await bulkDeleteSelected(items(['a', 'b', 'missing']))
+    expect(deleted).toEqual(['a', 'b'])
+    expect(seen.whileRunning).toEqual({ done: 1, pending: ['b', 'missing'] })
+    expect(mail$.threads.get().map((item) => item.thread_id)).toEqual(['missing'])
+    expect(ui$.toast.get()).toContain('server said no')
+    expect(ui$.toast.get()).toContain('Completed 2 of 3 selected threads')
+    expect(bulkProgress$.job.get()).toBeNull()
   })
 
   it('keeps later archives when an earlier one fails', async () => {

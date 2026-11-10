@@ -4,8 +4,8 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -82,6 +82,7 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.onFocusChanged
@@ -250,6 +251,9 @@ fun MeronApp(
      * write-through store and never reach the `settings` table.
      */
     onLanguageApplied: (String) -> Unit = {},
+    /** The demo build's test account: added, with sender grouping on, when the
+     *  app starts with no account at all. Null everywhere else. */
+    demoAccount: AddPasswordAccountParams? = null,
 ) {
     val scope = rememberCoroutineScope()
     val drawerState = rememberDrawerState(DrawerValue.Closed)
@@ -366,6 +370,7 @@ fun MeronApp(
                 state = state,
                 drawerState = drawerState,
                 coreInitJson = coreInitJson,
+                demoAccount = demoAccount,
                 incomingMailtoDraft = incomingMailtoDraft,
                 onMailtoDraftConsumed = onMailtoDraftConsumed,
                 incomingOAuthCallbackUrl = incomingOAuthCallbackUrl,
@@ -422,6 +427,7 @@ private fun MeronMobileScreenContent(
     state: MeronMobileState,
     drawerState: androidx.compose.material3.DrawerState,
     coreInitJson: String,
+    demoAccount: AddPasswordAccountParams?,
     incomingMailtoDraft: ComposeDraft?,
     onMailtoDraftConsumed: () -> Unit,
     incomingOAuthCallbackUrl: String?,
@@ -444,6 +450,7 @@ private fun MeronMobileScreenContent(
         var contactToOpen by remember { mutableStateOf<ContactSuggestion?>(null) }
         val contactsState = rememberContactsScreenState(core)
         androidx.compose.runtime.CompositionLocalProvider(
+            LocalBlurredBars provides blurredBars,
             LocalOpenContact provides { contact: ContactSuggestion ->
                 contactToOpen = contact
                 flushQuickReplyAutosave()
@@ -704,6 +711,7 @@ private fun MeronMobileScreenContent(
                                                     query = mailSearch.trim(),
                                                     filter = mailFilter.protocolValue(),
                                                     attachments = mailAttachmentsOnly,
+                                                    groupBy = threadListGroupBy(mailGroupBySender),
                                                 ),
                                             )
                                         Triple(importJson, foldersJson, threadsJson)
@@ -714,8 +722,9 @@ private fun MeronMobileScreenContent(
                                     coreThreads = withLocalDraftFlags(read.filter(parseThreadListResponse(threadsJson)))
                                     selectedCoreFolder = INBOX_FOLDER
                                     visibleMailboxKey =
-                                        mailboxCacheKey(accountId, INBOX_FOLDER, mailSearch, mailFilter, mailAttachmentsOnly)
+                                        mailboxCacheKey(accountId, INBOX_FOLDER, mailSearch, mailFilter, mailAttachmentsOnly, mailGroupBySender)
                                     mailboxPageDepth = MAILBOX_PAGE_SIZE
+                                    mailboxHeldThreads = emptyList()
                                     status = if (imported == 0) trs("feeds.toast.noNewFeedsToImport") else trs("feeds.toast.importedFeeds", mapOf("count" to imported))
                                 }.onFailure {
                                     status = trsError("mobile.status.opmlImportFailed", it)
@@ -932,6 +941,14 @@ private fun MeronMobileScreenContent(
                 loadAppSignature()
                 loadRemoteImageSenders()
                 loadAlertDefaults()
+            }
+
+            LaunchedEffect(initialAccountsLoaded) {
+                if (demoAccount != null && coreLoaded && initialAccountsLoaded && coreAccounts.isEmpty()) {
+                    mailGroupBySender = true
+                    saveAppBoolean(this@with.prefs, GROUP_BY_SENDER_PREF, true)
+                    addPasswordAccount(demoAccount)
+                }
             }
 
             // Once accounts are known, surface whatever the local store already holds so
@@ -1180,6 +1197,9 @@ private fun MeronMobileScreenContent(
                         LaunchedEffect(Unit) { loadStorageUsage() }
                         SettingsScreen(
                             rulesPage = { modifier -> RulesPage(modifier) },
+                            aiSortPage = { modifier, onOpenLog -> AiSortPage(modifier, onOpenLog) },
+                            aiSortLogPage = { modifier -> AiSortLogPage(modifier) },
+                            setupCopyPage = { modifier -> SetupCopyPage(modifier) },
                             onOpenTags = { showTagsDialog = true },
                             onBack = popAppBack,
                             initialGeneral = settingsGeneralTarget,
@@ -1299,6 +1319,11 @@ private fun MeronMobileScreenContent(
                             onToggleReaderBottomActions = {
                                 readerBottomActions = !readerBottomActions
                                 saveAppBoolean(prefs, READER_BOTTOM_ACTIONS_PREF, readerBottomActions)
+                            },
+                            blurredBars = blurredBars,
+                            onToggleBlurredBars = {
+                                blurredBars = !blurredBars
+                                saveAppBoolean(prefs, BLURRED_BARS_PREF, blurredBars)
                             },
                             showUnreadBadges = showUnreadBadges,
                             onToggleUnreadBadges = {
@@ -1500,10 +1525,12 @@ private fun MeronMobileScreenContent(
                 // The open conversation, over the route it was opened from.
                 AnimatedVisibility(
                     visibleState = threadVisibility,
-                    enter = fadeIn(tween(700)),
+                    // Slides in from the right edge over the list it was opened from,
+                    // so the two never blend (owner's pick, 2026-11-04).
+                    enter = slideInHorizontally(tween(THREAD_SLIDE_MS)) { width -> width },
                     // Pulled away, it is off screen already, and must not keep the
-                    // screen it uncovered from its touches while it fades.
-                    exit = if (pulledAway) ExitTransition.None else fadeOut(tween(700)),
+                    // screen it uncovered from its touches while it slides out.
+                    exit = if (pulledAway) ExitTransition.None else slideOutHorizontally(tween(THREAD_SLIDE_MS)) { width -> width },
                 ) {
                     // Kept while the editor is open over it, so a reply written in
                     // full comes back to the conversation as it was left.
@@ -1539,6 +1566,10 @@ private fun MeronMobileScreenContent(
                         Box(
                             Modifier
                                 .fillMaxSize()
+                                // The pages beside the open one sit a screen to either
+                                // side; while the whole strip slides in or out they must
+                                // not show over the list it uncovers.
+                                .clipToBounds()
                                 // Covers the screen underneath to its touches too.
                                 .pointerInput(Unit) { detectTapGestures { } }
                                 .pullToDismissLayer(pull)
@@ -1639,6 +1670,19 @@ private fun MeronMobileScreenContent(
                                                 copyThreadToFolder(thread, folder)
                                             }
                                         },
+                                        onMoveToMeronFolder =
+                                            selectedCoreThread
+                                                ?.takeIf { canUseMeronFolders(it) && !it.isSenderGroup }
+                                                ?.let { thread -> { meronMoveThreads = listOf(thread) } },
+                                        onMoveOutOfMeronFolder =
+                                            selectedCoreThread
+                                                ?.takeIf { canUseMeronFolders(it) && !it.isSenderGroup && it.meronFolderId != null }
+                                                ?.let { thread ->
+                                                    {
+                                                        moveOutOfMeronFolder(listOf(thread))
+                                                        popAppBack()
+                                                    }
+                                                },
                                         quickReplyBody = if (active) quickReplyBody else pageThread?.let(::seededQuickReplyBody).orEmpty(),
                                         canLoadOlder = pageCursor.isNotBlank(),
                                         loadingOlder = active && loadingMoreMessages,
@@ -1698,6 +1742,8 @@ private fun MeronMobileScreenContent(
                                         onToggleMessageRead = ::toggleMessageRead,
                                         onToggleMessageStarred = ::toggleMessageStarred,
                                         onDeleteMessage = ::deleteMessage,
+                                        onMoveMessageToFolder = { message, folder -> moveMessage(message, folder) },
+                                        onArchiveMessage = { message -> moveMessage(message, null) },
                                         onOpenAttachment = ::openMessageAttachment,
                                         onSaveAttachment = ::saveMessageAttachment,
                                         onShareImageAttachment = ::shareImageAttachment,
@@ -1706,9 +1752,9 @@ private fun MeronMobileScreenContent(
                                             val cacheKey = attachment.key.ifBlank { attachment.url }
                                             loadCachedImageBitmap(cacheKey) {
                                                 if (attachment.key.isNotBlank()) {
-                                                    withContext(ioDispatcher) { decodeImageBitmap(readAttachmentBytes(attachment)) }
+                                                    withContext(ioDispatcher) { decodeImageBitmap(readAttachmentBytes(attachment), INLINE_IMAGE_MAX_SIDE) }
                                                 } else {
-                                                    loadImageBitmapRef(attachment.url)
+                                                    loadImageBitmapRef(attachment.url, INLINE_IMAGE_MAX_SIDE)
                                                 }
                                             }
                                         },
@@ -1815,6 +1861,56 @@ private fun MeronMobileScreenContent(
                     },
                     onDismiss = { selectedMailCopyThread = null },
                 )
+            }
+
+            meronMoveThreads?.let { threads ->
+                MeronFolderPickerDialog(
+                    threads = threads,
+                    // The built-in Archive is filled by archiving, never by hand.
+                    folders = meronFolders.filterNot(::isMeronArchiveFolder),
+                    onPick = { folder ->
+                        meronMoveThreads = null
+                        // Like Move to: a conversation moved from its own screen closes it.
+                        val fromOpenThread = screen == Screen.Thread && threads.any { it.id == selectedCoreThread?.id }
+                        moveToMeronFolder(threads, folder)
+                        selectedMailThreadIds = emptySet()
+                        if (fromOpenThread) popAppBack()
+                    },
+                    onNewFolder = {
+                        meronMoveThreads = null
+                        promptNewMeronFolder(threads)
+                    },
+                    onDismiss = { meronMoveThreads = null },
+                )
+            }
+
+            when (val dialog = meronFolderDialog) {
+                is MeronFolderDialog.Delete -> {
+                    DeleteMeronFolderDialog(
+                        folderName = dialog.folder.name,
+                        onConfirm = { deleteMeronFolder(dialog.folder) },
+                        onDismiss = { meronFolderDialog = null },
+                    )
+                }
+
+                is MeronFolderDialog.New, is MeronFolderDialog.Rename -> {
+                    val rename = dialog is MeronFolderDialog.Rename
+                    MeronFolderNameDialog(
+                        title = tr(if (rename) "meronFolders.renameTitle" else "meronFolders.new"),
+                        confirmLabel = tr(if (rename) "buttons.save" else "meronFolders.create"),
+                        name = meronFolderNameInput,
+                        error = meronFolderNameError,
+                        busy = meronFolderBusy,
+                        onNameChange = {
+                            meronFolderNameInput = it
+                            meronFolderNameError = ""
+                        },
+                        onConfirm = ::submitMeronFolderName,
+                        onDismiss = { if (!meronFolderBusy) meronFolderDialog = null },
+                    )
+                }
+
+                null -> {}
             }
 
             pendingEmptyFolder?.let { target ->
@@ -1995,3 +2091,6 @@ private fun MeronMobileScreenContent(
         }
     }
 }
+
+/** How long the open conversation takes to slide in or out. */
+private const val THREAD_SLIDE_MS = 250

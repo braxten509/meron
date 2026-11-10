@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -61,6 +62,13 @@ type App struct {
 	oauthProvider    string
 	oauthRedirectURI string
 	oauthProfile     *ExchangedProfile
+	// The running sign-in attempt: its callback listener, the page it opened
+	// (for "Open the page again") and why it failed, if it did. oauthAttempt
+	// counts attempts so a stale timeout never ends a newer one.
+	oauthListener net.Listener
+	oauthAuthURL  string
+	oauthFailure  string
+	oauthAttempt  int
 
 	mailtoMu      sync.Mutex
 	pendingMailto []string
@@ -189,7 +197,7 @@ func (a *App) Shutdown(ctx context.Context) {
 
 // quietCommands succeed without a log line: they arrive at frame rate and
 // would drown out everything else in the log.
-var quietCommands = map[string]bool{"window.resized": true}
+var quietCommands = map[string]bool{"window.resized": true, "setupCopy.status": true}
 
 func (a *App) Invoke(command string, payload map[string]any) (result any, err error) {
 	start := time.Now()
@@ -201,7 +209,11 @@ func (a *App) Invoke(command string, payload map[string]any) (result any, err er
 	if err == nil && quietCommands[command] {
 		return result, nil
 	}
-	if err != nil {
+	if err != nil && aiSortMethods[command] != "" {
+		// An AI service's error can echo the request or the key; only the
+		// screen gets the core's message.
+		a.logf("invoke %s failed after %s (message not logged)", command, time.Since(start).Round(time.Millisecond))
+	} else if err != nil {
 		a.logf("invoke %s failed after %s: %v", command, time.Since(start).Round(time.Millisecond), err)
 	} else {
 		a.logf("invoke %s ok after %s", command, time.Since(start).Round(time.Millisecond))
@@ -285,6 +297,14 @@ func (a *App) invoke(command string, payload map[string]any) (any, error) {
 		return a.updateInstall()
 	case "log.read":
 		return a.logRead()
+	// A screen-side problem worth finding later in the log (no reply sent, ...).
+	case "log.note":
+		text, _ := payload["text"].(string)
+		if len(text) > 2000 {
+			text = text[:2000]
+		}
+		a.logf("ui: %s", text)
+		return map[string]any{"ok": true}, nil
 	case "log.export":
 		return a.logExport()
 	case "storage.usage":
@@ -376,6 +396,11 @@ func (a *App) invoke(command string, payload map[string]any) (any, error) {
 		return a.outlookBegin()
 	case "oauth.gmailPollProfile", "oauth.outlookPollProfile":
 		return a.oauthPollProfile(), nil
+	case "oauth.cancel":
+		a.cancelOAuth()
+		return map[string]any{"ok": true}, nil
+	case "oauth.reopen":
+		return map[string]any{"ok": a.reopenOAuth()}, nil
 	case "mail.sync":
 		return a.mailSync(payload)
 	case "watch.start", "watch.stop":
@@ -434,6 +459,17 @@ func (a *App) invoke(command string, payload map[string]any) (any, error) {
 		return a.ruleStatus()
 	case "mail.stopRule":
 		return a.stopRule(payload)
+	case "mail.aiSortConfig", "mail.setAiSortConfig", "mail.setAiSortKey", "mail.checkAiSortKey",
+		"mail.aiSortModels", "mail.aiSortEstimate", "mail.runAiSort", "mail.stopAiSort",
+		"mail.aiSortStatus", "mail.aiSortMoveBack":
+		return a.aiSort(command, payload)
+	case "mail.meronFolders", "mail.createMeronFolder", "mail.renameMeronFolder", "mail.setMeronFolderNotify", "mail.deleteMeronFolder",
+		"mail.moveToMeronFolder", "mail.moveOutOfMeronFolder", "mail.meronFolderThreads",
+		"mail.markMeronFolderRead":
+		return a.meronFolders(command, payload)
+	case "setupCopy.host", "setupCopy.join", "setupCopy.status", "setupCopy.setKeep",
+		"setupCopy.copy", "setupCopy.cancel", "setupCopy.safetyInfo", "setupCopy.restoreSafety":
+		return a.setupCopy(command, payload)
 	case "mail.markAllRead":
 		return a.markAllRead(payload)
 	case "mail.emptyFolder":

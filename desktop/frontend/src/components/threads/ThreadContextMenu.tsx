@@ -29,6 +29,7 @@ import type { Account, Message } from '../../types'
 import { targetWithin, useDismissOnOutside } from '../menu/useDismissOnOutside'
 import { MessageContextMenu } from '../chat/MessageContextMenu'
 import { ThreadMoveCopyItems } from './ThreadMoveCopyItems'
+import { MeronFolderItems } from './MeronFolderItems'
 import { ThreadTagItem } from './ThreadTagItem'
 
 export type ThreadMenuState =
@@ -57,6 +58,12 @@ export type ThreadMenuState =
       folderId: string
       unread: boolean
       starred: boolean
+      /** Set on a sender row (one person in the folder): the person's name.
+       * Such a row has no star or tag actions, and delete takes all their
+       * mail in this folder. */
+      senderName?: string
+      /** The Meron folder (this device only) the conversation sits in. */
+      meronFolderId?: string | null
       ownerKey?: string
     }
 
@@ -140,6 +147,8 @@ export function useThreadContextMenu(accounts: Account[]): ThreadContextMenuCont
         folderId: thread.folder_id,
         unread: thread.unread,
         starred: thread.starred,
+        senderName: thread.group === 'sender' ? thread.from_name || thread.from_addr : undefined,
+        meronFolderId: thread.meron_folder_id ?? null,
         ownerKey,
       })
     },
@@ -270,7 +279,7 @@ export function ThreadContextMenu({
               label={t('threads.actions.moveTo')}
               submenuOpen={moveOpen}
               trailing={<ChevronRight size={13} className="text-secondary" />}
-              onClick={() => setMoveOpen((open) => !open)}
+              onClick={() => setMoveOpen(true)}
             />
             {moveOpen && moveFlyoutPosition && (
               <FloatingContextMenu
@@ -304,6 +313,11 @@ export function ThreadContextMenu({
 
   const inTrash = deletesForever(menu.accountId, menu.folderId)
   const inDrafts = isDraftFolder(menu.folderId, menu.accountId)
+  const senderRow = menu.senderName !== undefined
+  // Meron folders take whole conversations of server accounts (never sender
+  // rows, feeds or local folders), and never from Drafts, Trash or Junk,
+  // which always show their mail.
+  const canUseMeron = !senderRow && !inTrash && !inDrafts && !isLocalAccountId(menu.accountId)
 
   return (
     <FloatingContextMenu
@@ -331,18 +345,24 @@ export function ThreadContextMenu({
           void work.then(() => after(action, threadId))
         }}
       />
-      <MenuItem
-        icon={<Star size={13} className={menu.starred ? 'fill-amber-500 text-amber-500' : 'text-secondary'} />}
-        label={menu.starred ? t('threads.actions.unstarThread') : t('threads.actions.starThread')}
-        onClick={() => {
-          const action = menu.starred ? 'unstar' : 'star'
-          const starred = !menu.starred
-          const threadId = menu.threadId
-          close()
-          void starThread(threadId, starred).then(() => after(action, threadId))
-        }}
-      />
-      <ThreadTagItem key={menu.threadId} threadId={menu.threadId} close={close} />
+      {/* A sender row is a person, not a conversation: stars and tags belong
+          to single emails, set inside the chat. */}
+      {!senderRow && (
+        <>
+          <MenuItem
+            icon={<Star size={13} className={menu.starred ? 'fill-amber-500 text-amber-500' : 'text-secondary'} />}
+            label={menu.starred ? t('threads.actions.unstarThread') : t('threads.actions.starThread')}
+            onClick={() => {
+              const action = menu.starred ? 'unstar' : 'star'
+              const starred = !menu.starred
+              const threadId = menu.threadId
+              close()
+              void starThread(threadId, starred).then(() => after(action, threadId))
+            }}
+          />
+          <ThreadTagItem key={menu.threadId} threadId={menu.threadId} close={close} />
+        </>
+      )}
       <MenuItem
         icon={<MessageSquare size={13} className="text-secondary" />}
         label={t('threads.actions.openInNewTab')}
@@ -405,16 +425,21 @@ export function ThreadContextMenu({
           after('copy', menu.threadId, { targetAccountId, targetFolderId })
         }
       />
+      {canUseMeron && (
+        <MeronFolderItems threadIds={[menu.threadId]} currentFolderId={menu.meronFolderId} close={close} />
+      )}
       <div className="my-1 border-t border-border" />
       <MenuItem
         danger
         icon={<Trash2 size={13} />}
         label={
-          inTrash
-            ? t('threads.actions.deleteForever')
-            : inDrafts
-              ? t('threads.actions.discardDraft')
-              : t('threads.actions.moveToTrash')
+          senderRow
+            ? t('buttons.delete')
+            : inTrash
+              ? t('threads.actions.deleteForever')
+              : inDrafts
+                ? t('threads.actions.discardDraft')
+                : t('threads.actions.moveToTrash')
         }
         onClick={() => {
           const threadId = menu.threadId

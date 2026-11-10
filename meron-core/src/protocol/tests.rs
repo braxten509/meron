@@ -1626,7 +1626,7 @@ fn mobile_protocol_lists_threads_from_store() {
                 subject: "Newest".to_string(),
                 from_name: "Ada".to_string(),
                 from_addr: "ada@example.com".to_string(),
-                date: 200,
+                date: fresh_date() + 200,
                 seen: false,
                 starred: true,
                 thread_key: "topic".to_string(),
@@ -1637,7 +1637,7 @@ fn mobile_protocol_lists_threads_from_store() {
                 subject: "Older".to_string(),
                 from_name: "Bea".to_string(),
                 from_addr: "bea@example.com".to_string(),
-                date: 100,
+                date: fresh_date() + 100,
                 seen: true,
                 starred: false,
                 thread_key: "older-topic".to_string(),
@@ -1716,7 +1716,7 @@ fn mobile_protocol_contact_threads_pages_exact_matches_across_accounts() {
                 subject: format!("Topic {uid}"),
                 from_name: "Alice".to_string(),
                 from_addr: addr.to_string(),
-                date,
+                date: fresh_date() + date,
                 thread_key: format!("mid:{uid}"),
                 starred: true,
                 ..Default::default()
@@ -1812,7 +1812,7 @@ fn mobile_protocol_lists_unified_threads_and_excludes_opted_out_accounts() {
                 uid,
                 subject: format!("Message from {account}"),
                 from_addr: "sender@example.com".to_string(),
-                date,
+                date: fresh_date() + date,
                 seen: !unread,
                 thread_key: format!("topic-{uid}"),
                 ..Default::default()
@@ -2002,7 +2002,7 @@ fn mobile_protocol_keeps_gmail_thread_id_atomic_across_subject_drift() {
                 uid: 10,
                 subject: "[nonbili/Nora] Profiles bug (Issue #295)".to_string(),
                 from_name: "NightStars".to_string(),
-                date: 100,
+                date: fresh_date() + 100,
                 seen: true,
                 thread_key: "gmthrid:123".to_string(),
                 ..Default::default()
@@ -2011,7 +2011,7 @@ fn mobile_protocol_keeps_gmail_thread_id_atomic_across_subject_drift() {
                 uid: 11,
                 subject: "[nonbili/Nora] Profiles bug [Linux Flatpak] (Issue #295)".to_string(),
                 from_name: "NightStars".to_string(),
-                date: 200,
+                date: fresh_date() + 200,
                 seen: false,
                 thread_key: "gmthrid:123".to_string(),
                 ..Default::default()
@@ -3017,21 +3017,21 @@ fn mobile_protocol_delete_requires_server_credentials() {
             MessageHeader {
                 uid: 20,
                 subject: "Delete me".to_string(),
-                date: 300,
+                date: fresh_date() + 300,
                 thread_key: "topic".to_string(),
                 ..Default::default()
             },
             MessageHeader {
                 uid: 21,
                 subject: "Delete me too".to_string(),
-                date: 200,
+                date: fresh_date() + 200,
                 thread_key: "topic".to_string(),
                 ..Default::default()
             },
             MessageHeader {
                 uid: 22,
                 subject: "Keep me".to_string(),
-                date: 100,
+                date: fresh_date() + 100,
                 thread_key: "other".to_string(),
                 ..Default::default()
             },
@@ -3137,21 +3137,21 @@ fn mobile_protocol_archive_requires_server_credentials() {
             MessageHeader {
                 uid: 31,
                 subject: "Archive me".to_string(),
-                date: 300,
+                date: fresh_date() + 300,
                 thread_key: "topic".to_string(),
                 ..Default::default()
             },
             MessageHeader {
                 uid: 32,
                 subject: "Archive me too".to_string(),
-                date: 200,
+                date: fresh_date() + 200,
                 thread_key: "topic".to_string(),
                 ..Default::default()
             },
             MessageHeader {
                 uid: 33,
                 subject: "Keep me".to_string(),
-                date: 100,
+                date: fresh_date() + 100,
                 thread_key: "other".to_string(),
                 ..Default::default()
             },
@@ -3212,8 +3212,11 @@ fn mobile_protocol_archive_requires_cached_archive_folder() {
     .unwrap();
     drop(conn);
 
+    // A single email: a whole conversation is filed into the built-in Archive
+    // instead when the account has no archive mailbox (see
+    // `meron_folders::archive_meron_only`).
     let value = invoke_mobile_protocol_json(
-        r#"{"id":82,"method":"mail.archive","params":{"thread_id":"me@example.com#INBOX#t.dG9waWM"}}"#,
+        r#"{"id":82,"method":"mail.archive","params":{"thread_id":"me@example.com#INBOX#41"}}"#,
         Some(data_dir.to_str().unwrap()),
     );
     assert_eq!(value["id"], 82);
@@ -3419,6 +3422,14 @@ fn unique_test_suffix() -> String {
     let pid = std::process::id();
     let count = TEST_UNIQUE_COUNTER.fetch_add(1, Ordering::Relaxed);
     format!("{pid}-{nanos}-{count}")
+}
+
+/// A send date for test mail that a real Inbox still lists: the Inbox leaves
+/// out mail past its age limit (see `store::inbox_listed_sql`), so a fixed
+/// date ages out. Tests add small offsets to it to order their mail.
+fn fresh_date() -> i64 {
+    static DATE: std::sync::OnceLock<i64> = std::sync::OnceLock::new();
+    *DATE.get_or_init(|| store::now_unix() - 3600)
 }
 
 fn seed_mobile_account(data_dir: &std::path::Path, email: &str) {

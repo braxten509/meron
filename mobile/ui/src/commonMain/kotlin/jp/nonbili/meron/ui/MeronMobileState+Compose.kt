@@ -596,10 +596,18 @@ private suspend fun MeronMobileState.saveComposeDraft(
                 composeDraftSaved = true
                 composeDraftAccountId = accountId
                 discardComposeDraftOwners(cleanupOwners)
-                selectedCoreThread?.let { markThreadDraftEverywhere(it.id) }
+                // Only the conversation this draft answers, and only when it was
+                // written from one. `selectedCoreThread` outlives leaving a
+                // conversation: a new message composed after backing out of one
+                // flagged that conversation "Draft", and since the flag is
+                // re-stamped onto every list load (locallyDraftedThreadIds) and
+                // the sent draft's discard has no conversation to clear, the
+                // badge stayed for the session.
+                draftThreadId?.let { markThreadDraftEverywhere(it) }
                 if (showStatus) status = trs("mobile.status.draftSaved")
                 syncCoreThreads(syncFirst = false)
-                runCatching { reloadCurrentThreadMessages() }
+                // Nothing on an open conversation changed for a draft of its own.
+                if (draftThreadId != null) runCatching { reloadCurrentThreadMessages() }
                 true
             },
             onFailure = {

@@ -190,15 +190,26 @@ func (a *App) beginOAuth(provider string) (any, error) {
 	authURL, _ := res.(map[string]any)["url"].(string)
 
 	a.oauthMu.Lock()
+	// A new attempt replaces any earlier one still waiting: its listener is
+	// closed so a late redirect for it can't land.
+	if a.oauthListener != nil {
+		a.oauthListener.Close()
+	}
+	a.oauthAttempt++
+	attempt := a.oauthAttempt
 	a.oauthState = state
 	a.oauthVerifier = verifier
 	a.oauthProvider = provider
 	a.oauthRedirectURI = redirectURI
 	a.oauthProfile = nil
+	a.oauthListener = listener
+	a.oauthAuthURL = authURL
+	a.oauthFailure = ""
 	a.oauthMu.Unlock()
 
 	a.logf("oauth.begin: provider=%s callback listening on %s", provider, redirectURI)
 	go a.serveOAuthRedirect(listener)
+	go a.expireOAuth(attempt, oauthSignInTimeout)
 
 	if a.ctx != nil {
 		wailsRuntime.BrowserOpenURL(a.ctx, authURL)
@@ -207,9 +218,79 @@ func (a *App) beginOAuth(provider string) (any, error) {
 	return map[string]any{"url": authURL, "needs_external_browser": true}, nil
 }
 
+// oauthSignInTimeout is how long a sign-in waits for the browser to come back
+// before it gives up, so the account screen can never wait forever.
+const oauthSignInTimeout = 5 * time.Minute
+
+// Failure codes the account screen turns into messages.
+const (
+	oauthFailDenied  = "denied"  // the provider (or the user) refused
+	oauthFailTimeout = "timeout" // nobody came back within oauthSignInTimeout
+	oauthFailFailed  = "failed"  // came back, but the code or token exchange failed
+)
+
+// endOAuthLocked stops the running attempt: its listener closes and its state
+// is forgotten, so nothing more can arrive for it. failure is reported to the
+// next poll ("" for a plain cancel). The caller holds oauthMu.
+func (a *App) endOAuthLocked(failure string) {
+	if a.oauthListener != nil {
+		a.oauthListener.Close()
+		a.oauthListener = nil
+	}
+	a.oauthState = ""
+	a.oauthVerifier = ""
+	a.oauthAuthURL = ""
+	a.oauthFailure = failure
+}
+
+// expireOAuth ends attempt after wait if it is still the one running and has
+// not finished.
+func (a *App) expireOAuth(attempt int, wait time.Duration) {
+	time.Sleep(wait)
+	a.oauthMu.Lock()
+	defer a.oauthMu.Unlock()
+	if a.oauthAttempt != attempt || a.oauthState == "" {
+		return
+	}
+	a.logf("oauth: sign-in timed out after %s", wait)
+	a.endOAuthLocked(oauthFailTimeout)
+}
+
+// cancelOAuth stops the running sign-in, if any (the screen's Cancel link).
+func (a *App) cancelOAuth() {
+	a.oauthMu.Lock()
+	defer a.oauthMu.Unlock()
+	a.oauthAttempt++
+	a.endOAuthLocked("")
+	a.oauthFailure = ""
+	a.oauthProfile = nil
+	a.logf("oauth: sign-in cancelled")
+}
+
+// reopenOAuth opens the running sign-in's page in the browser again ("Open the
+// page again"). It reports false when no sign-in is waiting.
+func (a *App) reopenOAuth() bool {
+	a.oauthMu.Lock()
+	authURL := a.oauthAuthURL
+	a.oauthMu.Unlock()
+	if authURL == "" {
+		return false
+	}
+	if a.ctx != nil {
+		wailsRuntime.BrowserOpenURL(a.ctx, authURL)
+	}
+	a.logf("oauth: opened the sign-in page again")
+	return true
+}
+
 func (a *App) oauthPollProfile() any {
 	a.oauthMu.Lock()
 	defer a.oauthMu.Unlock()
+	if a.oauthFailure != "" {
+		failure := a.oauthFailure
+		a.oauthFailure = ""
+		return map[string]any{"exchanged": false, "failed": failure}
+	}
 	if a.oauthProfile == nil {
 		return map[string]any{"exchanged": false}
 	}
@@ -224,47 +305,56 @@ func (a *App) serveOAuthRedirect(listener net.Listener) {
 
 	server := &http.Server{ReadHeaderTimeout: 10 * time.Second}
 	server.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		query := r.URL.Query()
 		a.oauthMu.Lock()
-		expectedState := a.oauthState
+		// Only the provider's redirect carries this attempt's state. Anything
+		// else (a favicon fetch, a stray request) is turned away without
+		// ending the sign-in that is still waiting.
+		if a.oauthState == "" || a.oauthListener != listener || query.Get("state") != a.oauthState {
+			a.oauthMu.Unlock()
+			a.logf("oauth callback ignored: not this sign-in's redirect (path=%s)", r.URL.Path)
+			http.Error(w, "This is not the sign-in Meron is waiting for.", http.StatusBadRequest)
+			return
+		}
 		verifier := a.oauthVerifier
 		provider := a.oauthProvider
 		redirectURI := a.oauthRedirectURI
+		code := query.Get("code")
+		if query.Get("error") != "" || code == "" || verifier == "" {
+			a.logf("oauth callback ended the sign-in: error=%q code_present=%t", query.Get("error"), code != "")
+			a.endOAuthLocked(oauthFailDenied)
+			a.oauthMu.Unlock()
+			http.Error(w, "The sign-in was not completed. You can close this tab and try again in Meron.", http.StatusBadRequest)
+			go server.Shutdown(context.Background())
+			return
+		}
+		// The code is in hand: stop listening and forget the state so the
+		// timeout and Cancel leave this exchange alone.
 		a.oauthState = ""
 		a.oauthVerifier = ""
+		a.oauthAuthURL = ""
+		a.oauthListener = nil
+		attempt := a.oauthAttempt
 		a.oauthMu.Unlock()
 
-		if r.URL.Query().Get("error") != "" {
-			a.logf("oauth callback returned error: %s", r.URL.Query().Get("error"))
-			http.Error(w, "The provider did not authorize the request.", http.StatusBadRequest)
-			go server.Shutdown(context.Background())
-			return
-		}
-		if expectedState == "" || r.URL.Query().Get("state") != expectedState {
-			a.logf("oauth callback rejected: state mismatch")
-			http.Error(w, "Authorization state did not match this sign-in.", http.StatusBadRequest)
-			go server.Shutdown(context.Background())
-			return
-		}
-		code := r.URL.Query().Get("code")
-		if code == "" || verifier == "" {
-			a.logf("oauth callback rejected: code_present=%t verifier_present=%t", code != "", verifier != "")
-			http.Error(w, "Missing authorization code.", http.StatusBadRequest)
-			go server.Shutdown(context.Background())
-			return
-		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		_, _ = io.WriteString(w, "<html><body style=\"font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;text-align:center;padding-top:100px;background-color:#f8fafc;color:#1e293b;\"><h1>Authenticated</h1><p>You can close this tab and return to Meron.</p></body></html>")
 		go server.Shutdown(context.Background())
 
 		profile, err := a.exchangeOAuthCode(provider, code, verifier, redirectURI)
+		a.oauthMu.Lock()
+		defer a.oauthMu.Unlock()
+		if a.oauthAttempt != attempt {
+			// Cancelled or replaced while the exchange ran.
+			return
+		}
 		if err != nil {
 			a.logf("oauth exchange failed (provider=%s): %v", provider, err)
 			fmt.Fprintf(os.Stderr, "meron: OAuth exchange failed: %v\n", err)
+			a.oauthFailure = oauthFailFailed
 			return
 		}
-		a.oauthMu.Lock()
 		a.oauthProfile = profile
-		a.oauthMu.Unlock()
 		a.logf("oauth callback exchanged profile for %s (provider=%s)", profile.Email, provider)
 	})
 	_ = server.Serve(listener)

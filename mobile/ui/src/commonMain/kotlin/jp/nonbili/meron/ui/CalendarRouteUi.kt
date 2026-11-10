@@ -87,6 +87,7 @@ internal fun CalendarRouteContent(
         // a rebuilt state, which starts with no items.
         LaunchedEffect(state) { loadCalendar() }
 
+        DrawerBackHandler(drawerState)
         ModalNavigationDrawer(
             drawerState = drawerState,
             drawerContent = { ViewsDrawer(state, drawerState, drawerFolders) },

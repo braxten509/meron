@@ -25,11 +25,28 @@ use crate::search_query::{SearchQuery, close_open_terms};
 /// STARTTLS upgrade is not yet supported.
 #[derive(Debug)]
 pub enum Stream {
-    Plain(TcpStream, ReadProgress),
-    Tls(Box<TlsStream<TcpStream>>, ReadProgress),
+    Plain(TcpStream, ConnState),
+    Tls(Box<TlsStream<TcpStream>>, ConnState),
 }
 
 pub(crate) type ReadProgress = std::sync::Arc<std::sync::Mutex<Option<tokio::time::Instant>>>;
+
+/// What is kept beside one connection's socket for as long as it lives.
+#[derive(Default)]
+pub struct ConnState {
+    progress: ReadProgress,
+    /// The server's capability list, once it has been asked for (see
+    /// [`capabilities_once`]).
+    capabilities: Option<std::sync::Arc<async_imap::types::Capabilities>>,
+}
+
+impl std::fmt::Debug for ConnState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ConnState")
+            .field("capabilities_known", &self.capabilities.is_some())
+            .finish_non_exhaustive()
+    }
+}
 
 impl Stream {
     pub fn plain(socket: TcpStream) -> Self {
@@ -41,8 +58,86 @@ impl Stream {
     }
 
     pub(crate) fn observe_reads(&mut self, progress: ReadProgress) {
+        self.state_mut().progress = progress;
+    }
+
+    fn state(&self) -> &ConnState {
         match self {
-            Self::Plain(_, clock) | Self::Tls(_, clock) => *clock = progress,
+            Self::Plain(_, state) | Self::Tls(_, state) => state,
+        }
+    }
+
+    fn state_mut(&mut self) -> &mut ConnState {
+        match self {
+            Self::Plain(_, state) | Self::Tls(_, state) => state,
+        }
+    }
+}
+
+/// The server's capability list, asked for once per connection. A session is
+/// only ever handed out signed in, and a server does not change what it
+/// advertises after that, so every later check on the same connection reuses
+/// the first answer instead of spending a round trip on CAPABILITY (a delete
+/// used to ask five times). A failed ask is not remembered.
+pub(crate) async fn capabilities_once(
+    session: &mut Session,
+) -> async_imap::error::Result<std::sync::Arc<async_imap::types::Capabilities>> {
+    if let Some(known) = &session.get_ref().state().capabilities {
+        return Ok(known.clone());
+    }
+    let asked = std::sync::Arc::new(session.capabilities().await?);
+    session.get_mut().state_mut().capabilities = Some(asked.clone());
+    Ok(asked)
+}
+
+/// How long an IDLE watcher keeps listening after a removal or flag notice
+/// before it re-reads the folder (see [`settle_idle`]).
+pub const IDLE_SETTLE_QUIET: std::time::Duration = std::time::Duration::from_millis(300);
+
+/// Longest [`settle_idle`] holds a re-read back, however long the burst runs.
+pub const IDLE_SETTLE_CAP: std::time::Duration = std::time::Duration::from_secs(2);
+
+/// Whether an IDLE notice announces new mail (EXISTS or RECENT) rather than
+/// a removal or a flag change.
+fn idle_notice_is_new_mail(response: &async_imap::extensions::idle::IdleResponse) -> bool {
+    use async_imap::imap_proto::{MailboxDatum, Response};
+    match response {
+        async_imap::extensions::idle::IdleResponse::NewData(data) => matches!(
+            data.parsed(),
+            Response::MailboxData(MailboxDatum::Exists(_) | MailboxDatum::Recent(_))
+        ),
+        _ => false,
+    }
+}
+
+/// After the IDLE notice `first`, keep listening on the same IDLE until the
+/// server has said nothing more for `quiet`, or `cap` has passed in all.
+///
+/// Removals and flag changes come in bursts: a bulk delete here or on another
+/// device is one notice per message, and re-reading the folder after each of
+/// them is all wasted but the last. One re-read after the burst sees the same
+/// result. New mail is not held back: this returns at once when `first`, or
+/// any notice during the wait, announces it.
+pub async fn settle_idle(
+    handle: &mut async_imap::extensions::idle::Handle<Stream>,
+    first: &async_imap::extensions::idle::IdleResponse,
+    quiet: std::time::Duration,
+    cap: std::time::Duration,
+) -> async_imap::error::Result<()> {
+    use async_imap::extensions::idle::IdleResponse;
+    if !matches!(first, IdleResponse::NewData(_)) || idle_notice_is_new_mail(first) {
+        return Ok(());
+    }
+    let deadline = std::time::Instant::now() + cap;
+    loop {
+        let left = deadline.saturating_duration_since(std::time::Instant::now());
+        if left.is_zero() {
+            return Ok(());
+        }
+        let (wait, _stop) = handle.wait_with_timeout(quiet.min(left));
+        let next = wait.await?;
+        if !matches!(next, IdleResponse::NewData(_)) || idle_notice_is_new_mail(&next) {
+            return Ok(());
         }
     }
 }
@@ -54,12 +149,12 @@ impl AsyncRead for Stream {
         buf: &mut ReadBuf<'_>,
     ) -> Poll<std::io::Result<()>> {
         let before = buf.filled().len();
-        let (result, progress) = match self.get_mut() {
-            Stream::Plain(s, progress) => (Pin::new(s).poll_read(cx, buf), progress),
-            Stream::Tls(s, progress) => (Pin::new(s.as_mut()).poll_read(cx, buf), progress),
+        let (result, state) = match self.get_mut() {
+            Stream::Plain(s, state) => (Pin::new(s).poll_read(cx, buf), state),
+            Stream::Tls(s, state) => (Pin::new(s.as_mut()).poll_read(cx, buf), state),
         };
         if matches!(result, Poll::Ready(Ok(()))) && buf.filled().len() > before {
-            let mut clock = progress.lock().unwrap();
+            let mut clock = state.progress.lock().unwrap();
             if clock.is_some() {
                 *clock = Some(tokio::time::Instant::now());
             }
@@ -296,6 +391,20 @@ pub struct MessageHeader {
     /// that read its FLAGS. `None` says nothing about them.
     #[serde(skip)]
     pub server_tags: Option<Vec<String>>,
+    /// The message carries [`AI_SORTED_KEYWORD`]: some device's AI sorting
+    /// already decided on it. Only known from a FETCH that read FLAGS.
+    #[serde(skip)]
+    pub ai_sorted: bool,
+    /// The Meron folder id its `$MeronF_<id>` mark names (see
+    /// [`crate::meron_marks`]): some device filed its conversation there.
+    /// `None`: not known (the FETCH had no FLAGS); `Some(None)`: no mark.
+    #[serde(skip)]
+    pub meron_mark: Option<Option<String>>,
+    /// Listed in the Inbox from its own (other) folder: mail AI sorting left
+    /// there and shows in the Inbox. Set only by the mixed Inbox list reads;
+    /// such rows group into cards of their own folder, never the Inbox's.
+    #[serde(skip)]
+    pub ai_shown: bool,
     /// Normalized RFC Message-ID from the envelope, when available.
     #[serde(default)]
     pub message_id: String,
@@ -491,6 +600,11 @@ async fn connect_tcp_inner(host: &str, port: u16) -> Result<TcpStream> {
                     );
                 }
                 attempts.abort_all();
+                // Send each command at once. With the default (Nagle) a
+                // command written in two pieces waits ~40 ms for the server's
+                // delayed ACK, on every command. Best effort: a refusal only
+                // costs the speed-up.
+                let _ = tcp.set_nodelay(true);
                 return Ok(tcp);
             }
             Ok(Err(err)) => last_err = anyhow::Error::new(err).context(format!("connect {addr}")),
@@ -892,6 +1006,65 @@ pub async fn list_folders(session: &mut Session) -> Result<Vec<Folder>> {
     Ok(out)
 }
 
+/// `(UIDVALIDITY, UIDNEXT)` of `folder` from one STATUS, without selecting
+/// it: how a caller tells, cheaply, whether new mail arrived since its sync.
+pub async fn folder_status(session: &mut Session, folder: &str) -> Result<(u32, u32)> {
+    let mailbox = session
+        .status(folder, "(UIDNEXT UIDVALIDITY)")
+        .await
+        .with_context(|| format!("STATUS {folder}"))?;
+    Ok((mailbox.uid_validity.unwrap_or(0), mailbox.uid_next.unwrap_or(0)))
+}
+
+/// The server's NO or BAD answer somewhere in `err`, if that is what it is (as
+/// opposed to a dropped connection or a timeout).
+fn server_refusal(err: &anyhow::Error) -> Option<&str> {
+    err.chain().find_map(|cause| match cause.downcast_ref::<async_imap::error::Error>()? {
+        async_imap::error::Error::No(text) | async_imap::error::Error::Bad(text) => {
+            Some(text.as_str())
+        }
+        _ => None,
+    })
+}
+
+/// Whether the server refused a command on a mailbox because it can't be
+/// opened at all: it doesn't exist (`[NONEXISTENT]`) or is a `\Noselect`
+/// container. Asking again won't help, unlike a dropped connection or a
+/// temporary refusal (`[UNAVAILABLE]`, `[INUSE]`).
+pub fn is_unselectable_mailbox(err: &anyhow::Error) -> bool {
+    let Some(text) = server_refusal(err) else {
+        return false;
+    };
+    let text = text.to_ascii_uppercase();
+    if text.contains("[UNAVAILABLE]") || text.contains("[INUSE]") || text.contains("[LIMIT]") {
+        return false;
+    }
+    [
+        "[NONEXISTENT]",
+        "NOSELECT",
+        "NOT SELECTABLE",
+        "ISN'T SELECTABLE",
+        "IS NOT SELECTABLE",
+        "CANNOT BE SELECTED",
+        "DOES NOT EXIST",
+        "DOESN'T EXIST",
+        "NOT EXIST",
+        "NO SUCH MAILBOX",
+        "NO SUCH FOLDER",
+        "UNKNOWN MAILBOX",
+        "MAILBOX NOT FOUND",
+        "FOLDER NOT FOUND",
+    ]
+    .iter()
+    .any(|needle| text.contains(needle))
+}
+
+/// Whether the server answered NO or BAD (any reason), rather than the
+/// connection failing.
+pub fn is_server_refusal(err: &anyhow::Error) -> bool {
+    server_refusal(err).is_some()
+}
+
 pub async fn create_folder(session: &mut Session, name: &str) -> Result<()> {
     session.create(name).await.context("CREATE")?;
     Ok(())
@@ -1016,6 +1189,128 @@ pub async fn recent_uids(
     Ok((uidvalidity, uid_next, uids))
 }
 
+/// A folder's UID markers and complete UID set, read by one SELECT and one
+/// `UID SEARCH ALL`.
+pub struct FolderListing {
+    pub uidvalidity: u32,
+    pub uid_next: u32,
+    /// EXISTS from the SELECT.
+    pub exists: u32,
+    pub uids: HashSet<u32>,
+}
+
+impl FolderListing {
+    /// The most recent `limit` UIDs, newest first: the window [`fetch_recent`]
+    /// reads.
+    pub fn window(&self, limit: u32) -> Vec<u32> {
+        let mut uids: Vec<u32> = self.uids.iter().copied().collect();
+        uids.sort_unstable_by(|a, b| b.cmp(a));
+        uids.truncate(limit.max(1) as usize);
+        uids
+    }
+
+    /// The listing agrees with the SELECT that preceded it. A mismatch means
+    /// the mailbox changed in between, or the connection is desynced (see
+    /// [`sync_flags`]); either way the caller should not trust it as a window.
+    pub fn consistent(&self) -> bool {
+        self.uids.len() == self.exists as usize
+    }
+}
+
+pub async fn folder_listing(session: &mut Session, folder: &str) -> Result<FolderListing> {
+    let mailbox = session.select(folder).await.context("SELECT")?;
+    let uids: HashSet<u32> = session.uid_search("ALL").await.context("UID SEARCH ALL")?;
+    Ok(FolderListing {
+        uidvalidity: mailbox.uid_validity.unwrap_or(0),
+        uid_next: mailbox.uid_next.unwrap_or(0),
+        exists: mailbox.exists,
+        uids,
+    })
+}
+
+/// What [`fetch_recent_incremental`] read.
+pub struct IncrementalBatch {
+    /// UID markers plus, in `messages`, only the window's messages the cache
+    /// did not hold, read in full.
+    pub batch: RecentBatch,
+    /// The window's UIDs, newest first: the messages [`fetch_recent`] would
+    /// have read in full.
+    pub window: Vec<u32>,
+    /// Every UID in the folder, listed after `batch.uid_next` was read.
+    pub server_uids: HashSet<u32>,
+}
+
+/// [`fetch_recent`] for a folder synced before: lists the folder's UIDs and
+/// reads in full only the window's messages missing from `known` (the UIDs
+/// the cache holds). Nothing new means no message FETCH at all.
+///
+/// Answers `None`, having read no message, when the full read is needed
+/// instead: UIDVALIDITY is unknown or changed, or the listing contradicts the
+/// SELECT. Flags of the window's cached messages are the caller's to refresh
+/// (CONDSTORE, or [`fetch_flags_by_uid`]).
+pub async fn fetch_recent_incremental(
+    session: &mut Session,
+    folder: &str,
+    limit: u32,
+    prior_validity: u32,
+    known: &HashSet<u32>,
+) -> Result<Option<IncrementalBatch>> {
+    let listing = folder_listing(session, folder).await?;
+    if listing.uidvalidity == 0 || listing.uidvalidity != prior_validity || !listing.consistent() {
+        return Ok(None);
+    }
+    let window = listing.window(limit);
+    let missing: Vec<u32> = window
+        .iter()
+        .copied()
+        .filter(|uid| !known.contains(uid))
+        .collect();
+    let messages = uid_fetch_headers(session, &missing).await?;
+    Ok(Some(IncrementalBatch {
+        batch: RecentBatch {
+            uidvalidity: listing.uidvalidity,
+            uid_next: listing.uid_next,
+            messages,
+        },
+        window,
+        server_uids: listing.uids,
+    }))
+}
+
+/// The changeable state of `uids` in `folder` — `(uid, seen, starred, tags)`,
+/// the shape of [`FlagSync::changes`] — read with a FLAGS-only FETCH.
+pub async fn fetch_flags_by_uid(
+    session: &mut Session,
+    folder: &str,
+    uids: &[u32],
+) -> Result<Vec<(u32, bool, bool, Vec<String>, Option<Option<String>>)>> {
+    if uids.is_empty() {
+        return Ok(Vec::new());
+    }
+    session.select(folder).await.context("SELECT")?;
+    let mut out = Vec::with_capacity(uids.len());
+    for uid_set in uid_set_chunks(uids, MAX_UID_SET_LEN) {
+        let mut stream = session
+            .uid_fetch(uid_set, "(UID FLAGS)")
+            .await
+            .context("UID FETCH FLAGS")?;
+        while let Some(item) = stream.next().await {
+            let fetch = item.context("UID FETCH FLAGS item")?;
+            let Some(uid) = fetch.uid else {
+                continue;
+            };
+            let seen = fetch
+                .flags()
+                .any(|flag| matches!(flag, async_imap::types::Flag::Seen));
+            let starred = fetch
+                .flags()
+                .any(|flag| matches!(flag, async_imap::types::Flag::Flagged));
+            out.push((uid, seen, starred, fetch_tags(&fetch), fetch_meron_mark(&fetch)));
+        }
+    }
+    Ok(out)
+}
+
 /// Fetch the most recent `limit` messages in `folder` as envelope summaries,
 /// newest first. This is the capability Delta Chat core refuses to give us:
 /// reading mail that already existed before setup.
@@ -1070,6 +1365,9 @@ pub async fn fetch_recent(session: &mut Session, folder: &str, limit: u32) -> Re
             seen,
             starred,
             server_tags: Some(fetch_tags(&fetch)),
+            ai_sorted: fetch_ai_sorted(&fetch),
+            meron_mark: fetch_meron_mark(&fetch),
+            ai_shown: false,
             thread_key,
             message_id: ef.message_id,
             gmail_msg_id: fetch.gmail_msg_id().copied(),
@@ -1092,7 +1390,7 @@ pub async fn fetch_recent(session: &mut Session, folder: &str, limit: u32) -> Re
 
 pub async fn search_uids(session: &mut Session, folder: &str, query: &str) -> Result<Vec<u32>> {
     session.select(folder).await.context("SELECT")?;
-    let caps = session.capabilities().await.ok();
+    let caps = capabilities_once(session).await.ok();
     let has = |name: &str| caps.as_ref().is_some_and(|caps| caps.has_str(name));
     let gmail = has("X-GM-EXT-1");
     // SEARCH keys are US-ASCII unless the command names a charset (RFC 3501
@@ -1369,6 +1667,9 @@ pub async fn fetch_by_message_ids(
                     seen,
                     starred,
                     server_tags: Some(fetch_tags(&fetch)),
+                    ai_sorted: fetch_ai_sorted(&fetch),
+                    meron_mark: fetch_meron_mark(&fetch),
+                    ai_shown: false,
                     thread_key,
                     message_id: ef.message_id,
                     gmail_msg_id: fetch.gmail_msg_id().copied(),
@@ -1407,6 +1708,14 @@ pub async fn fetch_headers_by_uid(
         return Ok(Vec::new());
     }
     session.select(folder).await.context("SELECT")?;
+    uid_fetch_headers(session, uids).await
+}
+
+/// [`fetch_headers_by_uid`] in the already selected mailbox.
+async fn uid_fetch_headers(session: &mut Session, uids: &[u32]) -> Result<Vec<MessageHeader>> {
+    if uids.is_empty() {
+        return Ok(Vec::new());
+    }
     let gmail = supports_gmail_ext(session).await;
     let mut out = Vec::new();
     for uid_set in uid_set_chunks(uids, MAX_UID_SET_LEN) {
@@ -1443,6 +1752,9 @@ pub async fn fetch_headers_by_uid(
                 seen,
                 starred,
                 server_tags: Some(fetch_tags(&fetch)),
+                ai_sorted: fetch_ai_sorted(&fetch),
+                meron_mark: fetch_meron_mark(&fetch),
+                ai_shown: false,
                 thread_key,
                 message_id: ef.message_id,
                 gmail_msg_id: fetch.gmail_msg_id().copied(),
@@ -1527,14 +1839,54 @@ pub async fn fetch_dates_by_uid(
     Ok(out)
 }
 
+/// Bulk or automated mail signals (List-Unsubscribe, List-Id, Precedence,
+/// Auto-Submitted) for these UIDs, read with one header-only fetch. Only UIDs
+/// with a signal are in the map.
+pub async fn fetch_bulk_signals(
+    session: &mut Session,
+    folder: &str,
+    uids: &[u32],
+) -> Result<HashMap<u32, &'static str>> {
+    let mut out = HashMap::new();
+    if uids.is_empty() {
+        return Ok(out);
+    }
+    session.select(folder).await.context("SELECT")?;
+    let query = format!(
+        "(UID BODY.PEEK[HEADER.FIELDS ({})])",
+        crate::ai_sort::BULK_HEADERS
+    );
+    for uid_set in uid_set_chunks(uids, MAX_UID_SET_LEN) {
+        let mut stream = session
+            .uid_fetch(uid_set, &query)
+            .await
+            .context("UID FETCH bulk headers")?;
+        while let Some(item) = stream.next().await {
+            let fetch = item.context("UID FETCH bulk header item")?;
+            let Some(uid) = fetch.uid else {
+                continue;
+            };
+            if let Some(signal) = fetch.header().and_then(crate::ai_sort::bulk_header_signal) {
+                out.insert(uid, signal);
+            }
+        }
+    }
+    Ok(out)
+}
+
 /// Read-state changes reconciled via CONDSTORE: which messages flipped \Seen or \Flagged (starred),
 /// plus the folder's current HIGHESTMODSEQ to persist for the next incremental
 /// fetch.
 pub struct FlagSync {
     pub highest_modseq: u64,
-    pub changes: Vec<(u32, bool, bool, Vec<String>)>, // (uid, seen, starred, tags)
+    /// `(uid, seen, starred, tags, Meron folder mark)`.
+    pub changes: Vec<(u32, bool, bool, Vec<String>, Option<Option<String>>)>,
     /// Every message's tags, when the folder still needed that first full read.
     pub tag_baseline: Option<Vec<(u32, Vec<String>)>>,
+    /// `changes` holds every flag change since the given modseq: a cache that
+    /// was current at that modseq needs no other flag reads. False when there
+    /// was no usable baseline (no CONDSTORE, no prior modseq, new UIDVALIDITY).
+    pub complete: bool,
 }
 
 /// Reconcile \Seen and \Flagged across an entire folder using CONDSTORE so updates made
@@ -1563,6 +1915,7 @@ pub async fn sync_flags(
             highest_modseq: 0,
             changes: Vec::new(),
             tag_baseline: None,
+            complete: false,
         });
     }
     let mailbox = session
@@ -1580,6 +1933,11 @@ pub async fn sync_flags(
             highest_modseq,
             changes: Vec::new(),
             tag_baseline: None,
+            // Nothing changed since the baseline: still a complete answer.
+            complete: since_modseq != 0
+                && validity_matches
+                && highest_modseq != 0
+                && highest_modseq == since_modseq,
         });
     }
 
@@ -1602,13 +1960,14 @@ pub async fn sync_flags(
             .flags()
             .any(|flag| matches!(flag, async_imap::types::Flag::Flagged));
         let tags = fetch_tags(&fetch);
-        changes.push((uid, seen, starred, tags));
+        changes.push((uid, seen, starred, tags, fetch_meron_mark(&fetch)));
     }
     drop(stream);
     Ok(FlagSync {
         highest_modseq,
         changes,
         tag_baseline: None,
+        complete: true,
     })
 }
 
@@ -1648,6 +2007,109 @@ pub async fn prepare_tag_update(session: &mut Session, folder: &str, tag: &str) 
         async_imap::types::Flag::Custom(known) => known.eq_ignore_ascii_case(&keyword),
         _ => false,
     }))
+}
+
+/// The hidden keyword AI sorting leaves on mail once it decided on it (moved or
+/// left), so other devices, and mail moved back, aren't sorted again. `$`
+/// keywords are never shown as tags.
+pub const AI_SORTED_KEYWORD: &str = "$MeronSorted";
+
+fn fetch_ai_sorted(fetch: &async_imap::types::Fetch) -> bool {
+    fetch.flags().any(|flag| match flag {
+        async_imap::types::Flag::Custom(keyword) => keyword.eq_ignore_ascii_case(AI_SORTED_KEYWORD),
+        _ => false,
+    })
+}
+
+/// Put [`AI_SORTED_KEYWORD`] on `uids` in `folder`. Answers `false`, writing
+/// nothing, when the mailbox can't take new keywords.
+pub async fn mark_ai_sorted(session: &mut Session, folder: &str, uids: &[u32]) -> Result<bool> {
+    if uids.is_empty() {
+        return Ok(true);
+    }
+    let mailbox = session.select(folder).await.context("SELECT")?;
+    let allowed = mailbox.permanent_flags.iter().any(|flag| match flag {
+        async_imap::types::Flag::MayCreate => true,
+        async_imap::types::Flag::Custom(known) => known.eq_ignore_ascii_case(AI_SORTED_KEYWORD),
+        _ => false,
+    });
+    if !allowed {
+        return Ok(false);
+    }
+    store_flag(session, uids, &format!("+FLAGS.SILENT ({AI_SORTED_KEYWORD})")).await?;
+    Ok(true)
+}
+
+/// The Meron folder id a FETCH response's `$MeronF_<id>` keyword names
+/// (`Some(None)`: no mark). Two devices writing at once can leave two: the
+/// smallest id wins on every device, so they agree. `None` when the response
+/// carries no FLAGS at all (a server's own note of a change, say): that says
+/// nothing about marks and must not read as one taken away.
+fn fetch_meron_mark(fetch: &async_imap::types::Fetch) -> Option<Option<String>> {
+    if !fetch_has_flags(fetch) {
+        return None;
+    }
+    // Any normal folder's mark beats the built-in Archive's: a conversation
+    // moved from Archive into another Meron folder can carry both a moment.
+    Some(
+        fetch
+            .flags()
+            .filter_map(|flag| match flag {
+                async_imap::types::Flag::Custom(keyword) => crate::meron_marks::folder_of_keyword(&keyword),
+                _ => None,
+            })
+            .min_by(|a, b| {
+                crate::store::meron_is_builtin(a)
+                    .cmp(&crate::store::meron_is_builtin(b))
+                    .then_with(|| a.cmp(b))
+            }),
+    )
+}
+
+/// Whether a FETCH response has a FLAGS item. `Fetch` only lists flags, so an
+/// empty list and no FLAGS look alike; a response with a header came from
+/// this app's own full FETCH, which always asks for FLAGS, and the small ones
+/// left are told apart by their parsed form.
+fn fetch_has_flags(fetch: &async_imap::types::Fetch) -> bool {
+    fetch.flags().next().is_some() || fetch.header().is_some() || format!("{fetch:?}").contains("Flags(")
+}
+
+/// Write Meron-folder marks on `uids` of `folder`: take away the marks
+/// `remove` lists, then add `add`. Answers `false`, writing nothing, when an
+/// `add` is asked for and the mailbox can't take new keywords.
+pub async fn store_meron_marks(
+    session: &mut Session,
+    folder: &str,
+    uids: &[u32],
+    remove: &[String],
+    add: Option<&str>,
+) -> Result<bool> {
+    if uids.is_empty() {
+        return Ok(true);
+    }
+    let mailbox = session.select(folder).await.context("SELECT")?;
+    if let Some(add) = add {
+        let allowed = mailbox.permanent_flags.iter().any(|flag| match flag {
+            async_imap::types::Flag::MayCreate => true,
+            async_imap::types::Flag::Custom(known) => known.eq_ignore_ascii_case(add),
+            _ => false,
+        });
+        if !allowed {
+            return Ok(false);
+        }
+    }
+    let remove: Vec<&String> = remove
+        .iter()
+        .filter(|keyword| add.is_none_or(|add| !keyword.eq_ignore_ascii_case(add)))
+        .collect();
+    if !remove.is_empty() {
+        let list = remove.iter().map(|k| k.as_str()).collect::<Vec<_>>().join(" ");
+        store_flag(session, uids, &format!("-FLAGS.SILENT ({list})")).await?;
+    }
+    if let Some(add) = add {
+        store_flag(session, uids, &format!("+FLAGS.SILENT ({add})")).await?;
+    }
+    Ok(true)
 }
 
 /// The tags among a FETCH response's keywords, sorted.
@@ -1780,7 +2242,7 @@ pub async fn move_to_folder(
     // UID MOVE is the RFC 6851 MOVE extension; servers that don't advertise it
     // (e.g. mailo) reject it with "Unknown command". Fall back to the classic
     // COPY + \Deleted + EXPUNGE sequence, which every IMAP server supports.
-    let supports_move = match session.capabilities().await {
+    let supports_move = match capabilities_once(session).await {
         Ok(caps) => caps.has_str("MOVE"),
         Err(_) => false,
     };
@@ -1826,7 +2288,7 @@ pub async fn move_to_folder_once(
     uids: &[u32],
     message_ids: &[String],
 ) -> Result<MoveOutcome> {
-    let supports_move = match session.capabilities().await {
+    let supports_move = match capabilities_once(session).await {
         Ok(caps) => caps.has_str("MOVE"),
         Err(_) => false,
     };
@@ -2153,7 +2615,7 @@ pub async fn expunge_uids(session: &mut Session, folder: &str, uids: &[u32]) -> 
     let uid_sets = uid_set_chunks(uids, MAX_UID_SET_LEN);
     store_deleted(session, &uid_sets).await?;
 
-    let supports_uidplus = match session.capabilities().await {
+    let supports_uidplus = match capabilities_once(session).await {
         Ok(caps) => caps.has_str("UIDPLUS"),
         Err(_) => false,
     };
@@ -2808,7 +3270,7 @@ fn fetch_items(gmail: bool, body: bool) -> &'static str {
 /// `X-GM-THRID`. Covers Gmail/Workspace via both OAuth and app passwords. Issues
 /// one CAPABILITY round-trip; negligible next to the connect-time TLS + auth.
 async fn supports_gmail_ext(session: &mut Session) -> bool {
-    match session.capabilities().await {
+    match capabilities_once(session).await {
         Ok(caps) => caps.has_str("X-GM-EXT-1"),
         Err(_) => false,
     }
@@ -2820,7 +3282,7 @@ async fn supports_gmail_ext(session: &mut Session) -> bool {
 /// that rejects the parameter without a properly tagged response leaves the
 /// connection unusable (see the note there).
 async fn supports_condstore(session: &mut Session) -> bool {
-    match session.capabilities().await {
+    match capabilities_once(session).await {
         Ok(caps) => caps.has_str("CONDSTORE"),
         Err(_) => false,
     }
@@ -3548,7 +4010,7 @@ pub async fn expunge_uids_checked(
     uids: &[u32],
     validity: u32,
 ) -> Result<()> {
-    let caps = session.capabilities().await.context("CAPABILITY")?;
+    let caps = capabilities_once(session).await.context("CAPABILITY")?;
     anyhow::ensure!(
         caps.has_str("UIDPLUS"),
         "This operation requires IMAP UIDPLUS; no messages were changed"
@@ -3604,7 +4066,7 @@ pub async fn move_to_folder_checked(
     target: &str,
     uids: &[u32],
 ) -> Result<()> {
-    let caps = session.capabilities().await.context("CAPABILITY")?;
+    let caps = capabilities_once(session).await.context("CAPABILITY")?;
     let supports_move = caps.has_str("MOVE");
     anyhow::ensure!(
         supports_move || caps.has_str("UIDPLUS"),
@@ -3977,6 +4439,29 @@ mod mcp_mutation_tests {
             .unwrap();
         (session, commands, task)
     }
+    // The capability list is asked once per connection, however many
+    // operations check it afterwards.
+    #[tokio::test]
+    async fn capabilities_are_asked_once_per_connection() {
+        let (mut session, commands, task) = server("MOVE UIDPLUS").await;
+        move_to_folder(&mut session, "INBOX", "Trash", &[7])
+            .await
+            .unwrap();
+        move_to_folder(&mut session, "INBOX", "Trash", &[9])
+            .await
+            .unwrap();
+        assert!(capabilities_once(&mut session).await.unwrap().has_str("UIDPLUS"));
+        let calls = commands.lock().unwrap().clone();
+        assert_eq!(
+            calls.iter().filter(|c| *c == "CAPABILITY").count(),
+            1,
+            "{calls:?}"
+        );
+        assert!(calls.iter().any(|c| c == "UID MOVE 9 \"Trash\""), "{calls:?}");
+        drop(session);
+        task.abort();
+    }
+
     #[tokio::test]
     async fn checked_delete_never_expunges_unselected_messages() {
         let (mut session, commands, task) = server("UIDPLUS").await;
@@ -4068,5 +4553,100 @@ mod mcp_mutation_tests {
             }
             task.abort();
         }
+    }
+}
+
+#[cfg(test)]
+mod idle_settle_tests {
+    use super::*;
+    use async_imap::extensions::idle::IdleResponse;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::time::{Duration, Instant};
+    use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
+
+    // A bulk delete reaches the watcher as one removal notice per message.
+    // The watcher must wait the burst out (one folder re-read, not one per
+    // notice), yet act at once on a notice of new mail.
+    #[tokio::test]
+    async fn a_burst_of_removals_is_waited_out_but_new_mail_is_not() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let removals_sent = Arc::new(AtomicUsize::new(0));
+        let sent = removals_sent.clone();
+        let task = tokio::spawn(async move {
+            let (socket, _) = listener.accept().await.unwrap();
+            let (reader, mut writer) = socket.into_split();
+            writer.write_all(b"* OK IMAP4rev1 ready\r\n").await.unwrap();
+            let mut lines = tokio::io::BufReader::new(reader).lines();
+            let mut idles = 0;
+            let mut idle_tag = String::new();
+            while let Ok(Some(line)) = lines.next_line().await {
+                if line == "DONE" {
+                    let reply = format!("{idle_tag} OK done\r\n");
+                    writer.write_all(reply.as_bytes()).await.unwrap();
+                    continue;
+                }
+                let (tag, command) = line.split_once(' ').unwrap();
+                if command != "IDLE" {
+                    let reply = format!("{tag} OK done\r\n");
+                    writer.write_all(reply.as_bytes()).await.unwrap();
+                    continue;
+                }
+                idle_tag = tag.to_string();
+                idles += 1;
+                writer.write_all(b"+ idling\r\n").await.unwrap();
+                if idles == 1 {
+                    // First IDLE: three removals, 60 ms apart.
+                    for _ in 0..3 {
+                        writer.write_all(b"* 5 EXPUNGE\r\n").await.unwrap();
+                        sent.fetch_add(1, Ordering::SeqCst);
+                        tokio::time::sleep(Duration::from_millis(60)).await;
+                    }
+                } else {
+                    // Second IDLE: new mail.
+                    writer.write_all(b"* 6 EXISTS\r\n").await.unwrap();
+                }
+            }
+        });
+        let tcp = tokio::net::TcpStream::connect(addr).await.unwrap();
+        let mut client = async_imap::Client::new(Stream::plain(tcp));
+        client.read_response().await.unwrap().unwrap();
+        let session = client
+            .login("test", "test")
+            .await
+            .map_err(|(err, _)| err)
+            .unwrap();
+        let (quiet, cap) = (Duration::from_millis(200), Duration::from_secs(2));
+
+        let mut handle = session.idle();
+        handle.init().await.unwrap();
+        let first = {
+            let (wait, _stop) = handle.wait_with_timeout(Duration::from_secs(2));
+            wait.await.unwrap()
+        };
+        assert!(matches!(first, IdleResponse::NewData(_)));
+        settle_idle(&mut handle, &first, quiet, cap).await.unwrap();
+        assert_eq!(
+            removals_sent.load(Ordering::SeqCst),
+            3,
+            "the wait must outlast the whole burst"
+        );
+        let session = handle.done().await.unwrap();
+
+        let mut handle = session.idle();
+        handle.init().await.unwrap();
+        let first = {
+            let (wait, _stop) = handle.wait_with_timeout(Duration::from_secs(2));
+            wait.await.unwrap()
+        };
+        let started = Instant::now();
+        settle_idle(&mut handle, &first, quiet, cap).await.unwrap();
+        assert!(
+            started.elapsed() < Duration::from_millis(100),
+            "new mail must not be held back"
+        );
+        drop(handle);
+        task.abort();
     }
 }

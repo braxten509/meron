@@ -8,6 +8,7 @@ import { clearSyncErrorFor } from '../../states/connectivity'
 import { openMailAccount } from '../../states/kanban'
 import { nextRssAccountDisplayName } from '../../states/feeds'
 import { errorMessage } from '../../lib/errors'
+import { t } from '../../lib/i18n'
 import { securityForPort, serverSelectionAfterDiscovery, type MailSecurity } from './accountSecurity'
 import {
   certificateProbePayload,
@@ -191,12 +192,28 @@ export function useAccountDialog() {
           refresh_token: string
           expires_in: number
         }
+        failed?: 'denied' | 'timeout' | 'failed'
       }>(`oauth.${provider}PollProfile`)
+
+      if (res.failed) {
+        stopOAuthPolling(intervalId)
+        setWaitingForGoogle(false)
+        setError(
+          t(
+            res.failed === 'timeout'
+              ? 'accounts.oauth.timedOut'
+              : res.failed === 'denied'
+                ? 'accounts.oauth.notCompleted'
+                : 'accounts.oauth.failed',
+            { provider: providerLabel },
+          ),
+        )
+        return
+      }
 
       if (res.exchanged && res.profile) {
         const before = new Set(accounts$.peek().map((acc) => acc.id))
-        clearInterval(intervalId)
-        ;(window as any)._oauthPollInterval = null
+        stopOAuthPolling(intervalId)
         setWaitingForGoogle(false)
         setLoading(true)
         setForm((f) => ({
@@ -233,6 +250,36 @@ export function useAccountDialog() {
       setError(errorMessage(err, `${providerLabel} sign-in completed, but account save failed`))
     } finally {
       setLoading(false)
+    }
+  }
+
+  function stopOAuthPolling(intervalId?: any) {
+    const id = intervalId ?? (window as any)._oauthPollInterval
+    if (id) clearInterval(id)
+    ;(window as any)._oauthPollInterval = null
+  }
+
+  // "Cancel" under the waiting line: stop waiting and free the buttons.
+  async function cancelOAuth() {
+    stopOAuthPolling()
+    setWaitingForGoogle(false)
+    try {
+      await invoke('oauth.cancel')
+    } catch (err) {
+      console.error('Failed to cancel sign-in', err)
+    }
+  }
+
+  // "Open the page again": the browser tab got lost or never showed.
+  async function reopenOAuth() {
+    try {
+      const res = await invoke<{ ok: boolean }>('oauth.reopen')
+      if (!res.ok) {
+        stopOAuthPolling()
+        setWaitingForGoogle(false)
+      }
+    } catch (err) {
+      console.error('Failed to reopen sign-in page', err)
     }
   }
 
@@ -507,6 +554,8 @@ export function useAccountDialog() {
     advancedOpen,
     setAdvancedOpen,
     waitingForGoogle,
+    cancelOAuth,
+    reopenOAuth,
     runDiscovery,
     beginOAuth,
     save,

@@ -299,14 +299,14 @@ pub fn open_archive_at(path: impl AsRef<Path>, key: Option<&str>) -> Result<Conn
         let _ = std::fs::create_dir_all(parent);
     }
     let fresh = !path.exists();
-    let conn = open_keyed_connection(path, key, || {})?;
+    let mut conn = open_keyed_connection(path, key, || {})?;
     // Deleting archived mail should give the disk space back. auto_vacuum only
     // takes effect when set before the first table exists.
     if fresh {
         conn.execute_batch("PRAGMA auto_vacuum = INCREMENTAL;")
             .context("set archive auto_vacuum")?;
     }
-    configure_connection(&conn)?;
+    configure_connection(&mut conn)?;
     // The archive holds the only copy of its mail: a commit must reach the
     // disk before the server copy is removed.
     conn.execute_batch("PRAGMA synchronous = FULL;")
@@ -412,20 +412,32 @@ fn open_inner(path: &Path, key: Option<&str>, on_upgrade: impl FnOnce()) -> Resu
             on_upgrade();
         }
     };
-    let conn = open_keyed_connection(path, key, &mut announce_upgrade)?;
-    configure_connection(&conn)?;
+    let mut conn = open_keyed_connection(path, key, &mut announce_upgrade)?;
+    configure_connection(&mut conn)?;
     if upgrade_pending(&conn) {
         announce_upgrade();
     }
     with_anyhow_busy_retry(|| run_migrations(&conn)).context("run migrations")?;
+    // The built-in "Archive" Meron folder (main store only, not archive.db).
+    with_anyhow_busy_retry(|| super::ensure_meron_archive_folder(&conn))
+        .context("ensure the Archive Meron folder")?;
     with_anyhow_busy_retry(|| invalidate_body_cache_if_needed(&conn))
         .context("invalidate body cache if needed")?;
     Ok(conn)
 }
 
-fn configure_connection(conn: &Connection) -> Result<()> {
+fn configure_connection(conn: &mut Connection) -> Result<()> {
     conn.busy_timeout(Duration::from_millis(5000))
         .context("set busy timeout")?;
+    // Every store transaction writes, and most read before their first write
+    // (`upsert_messages`, `move_messages_by_uid`, ...). Under WAL a DEFERRED
+    // transaction starts as a reader, and its first write then fails at once
+    // with SQLITE_BUSY ("database is locked") when another connection holds
+    // or has just committed a write: SQLite does not run the busy handler for
+    // a reader asking to become a writer. Several connections share this file
+    // (each command's own, the engine's, IDLE syncs), so take the write lock
+    // at BEGIN, where the busy timeout above does wait.
+    conn.set_transaction_behavior(TransactionBehavior::Immediate);
     // WAL + synchronous=NORMAL is the durable-but-fast desktop combo; busy_timeout
     // avoids spurious SQLITE_BUSY now that a reader can overlap a writer under WAL.
     with_busy_retry(|| {
@@ -637,7 +649,7 @@ fn config_dir() -> PathBuf {
 // ---- Migrations -------------------------------------------------------------
 
 /// The `user_version` [`run_migrations`] leaves behind.
-pub(super) const SCHEMA_VERSION: i64 = 24;
+pub(super) const SCHEMA_VERSION: i64 = 30;
 
 /// Whether opening this store will rewrite existing data: a schema behind
 /// [`SCHEMA_VERSION`], or bodies rendered by an older version. Only decides
@@ -743,6 +755,26 @@ pub(super) fn run_migrations(conn: &Connection) -> Result<()> {
     }
     if version < 24 {
         migrate_v24(&tx)?;
+    }
+    if version < 25 {
+        migrate_v25(&tx)?;
+    }
+    if version < 26 {
+        migrate_v26(&tx)?;
+    } else {
+        repair_v26_meron_uids(&tx)?;
+    }
+    if version < 27 {
+        migrate_v27(&tx)?;
+    }
+    if version < 28 {
+        migrate_v28(&tx)?;
+    }
+    if version < 29 {
+        migrate_v29(&tx)?;
+    }
+    if version < 30 {
+        migrate_v30(&tx)?;
     }
     tx.commit()?;
     Ok(())
@@ -1514,6 +1546,9 @@ mod tests {
     fn contact_v24_backfills_existing_cache_and_is_idempotent() {
         let conn = Connection::open_in_memory().unwrap();
         run_migrations(&conn).unwrap();
+        let latest: i64 = conn
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .unwrap();
         // Restore the v23 directory shape without changing the message cache.
         conn.execute_batch(
             "DROP TRIGGER contacts_ai; DROP TRIGGER contacts_ad; DROP TRIGGER contacts_au;
@@ -1525,7 +1560,11 @@ mod tests {
         .unwrap();
         contact_message(&conn, 1, "INBOX", 10);
         contact_message(&conn, 2, "Trash", 20);
-        run_migrations(&conn).unwrap();
+        // Replay step 24 alone: later steps add columns the store already
+        // has, which cannot run twice.
+        migrate_v24(&conn).unwrap();
+        conn.execute_batch(&format!("PRAGMA user_version = {latest};"))
+            .unwrap();
         run_migrations(&conn).unwrap();
         let entries: i64 = conn
             .query_row("SELECT count(*) FROM contact_participants", [], |row| {
@@ -1764,5 +1803,196 @@ fn migrate_v24(conn: &Connection) -> Result<()> {
          END;
          PRAGMA user_version = 24;"
     ))?;
+    Ok(())
+}
+
+/// AI sorting: new Inbox mail held back while the AI decides
+/// (`ai_sort_hidden`, ignored once `hide_until` has passed), mail this device
+/// has had decided (`ai_sort_done`), what the AI did (`ai_sort_log`), and how
+/// many emails automatic sorting sent each day (`ai_sort_usage`, for the daily
+/// cap). None of it holds the API key.
+fn migrate_v25(conn: &Connection) -> Result<()> {
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS ai_sort_hidden (
+           account     TEXT NOT NULL,
+           folder      TEXT NOT NULL,
+           uid         INTEGER NOT NULL,
+           uidvalidity INTEGER NOT NULL DEFAULT 0,
+           hide_until  INTEGER NOT NULL,
+           PRIMARY KEY (account, folder, uid)
+         ) WITHOUT ROWID;
+         CREATE TABLE IF NOT EXISTS ai_sort_done (
+           account  TEXT NOT NULL,
+           identity TEXT NOT NULL,
+           at       INTEGER NOT NULL,
+           PRIMARY KEY (account, identity)
+         ) WITHOUT ROWID;
+         CREATE TABLE IF NOT EXISTS ai_sort_log (
+           id          INTEGER PRIMARY KEY AUTOINCREMENT,
+           at          INTEGER NOT NULL,
+           account     TEXT NOT NULL,
+           uid         INTEGER NOT NULL DEFAULT 0,
+           uidvalidity INTEGER NOT NULL DEFAULT 0,
+           message_id  TEXT NOT NULL DEFAULT '',
+           subject     TEXT NOT NULL DEFAULT '',
+           sender      TEXT NOT NULL DEFAULT '',
+           to_folder   TEXT NOT NULL DEFAULT '',
+           reason      TEXT NOT NULL DEFAULT '',
+           state       TEXT NOT NULL,
+           detail      TEXT NOT NULL DEFAULT '',
+           alert       INTEGER NOT NULL DEFAULT 0
+         );
+         CREATE TABLE IF NOT EXISTS ai_sort_usage (
+           day   TEXT PRIMARY KEY,
+           count INTEGER NOT NULL
+         ) WITHOUT ROWID;
+         PRAGMA user_version = 25;",
+    )?;
+    Ok(())
+}
+
+/// Meron folders: folders that exist only on this device. A conversation in
+/// one is an entry; its aliases are the keys that find its messages (thread
+/// root keys and per-message tag keys, see `store::meron_folders`); its UIDs
+/// are remembered so unread counts can leave out server-unseen mail the cache
+/// no longer holds. The AI log learns which Meron folder it filed mail into.
+fn migrate_v26(conn: &Connection) -> Result<()> {
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS meron_folders (
+           id         TEXT PRIMARY KEY,
+           name       TEXT NOT NULL,
+           sort_order INTEGER NOT NULL DEFAULT 0,
+           created_at INTEGER NOT NULL
+         );
+         CREATE UNIQUE INDEX IF NOT EXISTS meron_folders_name_idx ON meron_folders(lower(name));
+         CREATE TABLE IF NOT EXISTS meron_folder_entries (
+           id        TEXT PRIMARY KEY,
+           account   TEXT NOT NULL,
+           folder_id TEXT NOT NULL,
+           added_at  INTEGER NOT NULL
+         );
+         CREATE INDEX IF NOT EXISTS meron_folder_entries_folder_idx
+           ON meron_folder_entries(folder_id);
+         CREATE TABLE IF NOT EXISTS meron_folder_aliases (
+           account  TEXT NOT NULL,
+           key      TEXT NOT NULL,
+           entry_id TEXT NOT NULL,
+           PRIMARY KEY (account, key)
+         ) WITHOUT ROWID;
+         CREATE INDEX IF NOT EXISTS meron_folder_aliases_entry_idx
+           ON meron_folder_aliases(entry_id);
+         CREATE TABLE IF NOT EXISTS meron_folder_uids (
+           account     TEXT NOT NULL,
+           folder      TEXT NOT NULL,
+           uidvalidity INTEGER NOT NULL DEFAULT 0,
+           uid         INTEGER NOT NULL,
+           entry_id    TEXT NOT NULL,
+           tag_key     TEXT NOT NULL DEFAULT '',
+           PRIMARY KEY (account, folder, uid)
+         ) WITHOUT ROWID;
+         CREATE INDEX IF NOT EXISTS meron_folder_uids_entry_idx
+           ON meron_folder_uids(entry_id);
+         ALTER TABLE ai_sort_log ADD COLUMN meron_folder_id TEXT NOT NULL DEFAULT '';
+         PRAGMA user_version = 26;",
+    )?;
+    Ok(())
+}
+
+/// AI sorting of mail server filters deliver straight into other folders:
+/// where each folder's sorting starts (`ai_sort_watch`, so only mail arriving
+/// after the first look is sorted), and the mail it left, shown in the Inbox
+/// on this device only (`ai_sort_inbox`, by location; the identity lets a row
+/// follow its message across a UIDVALIDITY reset). Nothing here reaches the
+/// server.
+fn migrate_v27(conn: &Connection) -> Result<()> {
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS ai_sort_watch (
+           account     TEXT NOT NULL,
+           folder      TEXT NOT NULL,
+           uidvalidity INTEGER NOT NULL,
+           from_uid    INTEGER NOT NULL,
+           PRIMARY KEY (account, folder)
+         ) WITHOUT ROWID;
+         CREATE TABLE IF NOT EXISTS ai_sort_inbox (
+           account     TEXT NOT NULL,
+           folder      TEXT NOT NULL,
+           uid         INTEGER NOT NULL,
+           uidvalidity INTEGER NOT NULL DEFAULT 0,
+           identity    TEXT NOT NULL DEFAULT '',
+           at          INTEGER NOT NULL,
+           PRIMARY KEY (account, folder, uid)
+         ) WITHOUT ROWID;
+         CREATE INDEX IF NOT EXISTS ai_sort_inbox_identity_idx
+           ON ai_sort_inbox(account, identity);
+         ALTER TABLE ai_sort_log ADD COLUMN from_folder TEXT NOT NULL DEFAULT '';
+         ALTER TABLE ai_sort_log ADD COLUMN server_target TEXT NOT NULL DEFAULT '';
+         PRAGMA user_version = 27;",
+    )?;
+    Ok(())
+}
+
+/// New-mail notifications for Meron folders: off unless turned on, kept on
+/// this device only.
+fn migrate_v28(conn: &Connection) -> Result<()> {
+    conn.execute_batch(
+        "ALTER TABLE meron_folders ADD COLUMN notify INTEGER NOT NULL DEFAULT 0;
+         PRAGMA user_version = 28;",
+    )?;
+    Ok(())
+}
+
+/// Who put each conversation into its Meron folder: `'ai'` (AI sorting) or
+/// `'user'` (by hand). Existing entries start as `'user'`; the one-time pass
+/// `store::meron_release_old_ai_entries` marks those the AI filed.
+fn migrate_v29(conn: &Connection) -> Result<()> {
+    conn.execute_batch(
+        "ALTER TABLE meron_folder_entries ADD COLUMN source TEXT NOT NULL DEFAULT 'user';
+         PRAGMA user_version = 29;",
+    )?;
+    Ok(())
+}
+
+/// The Meron-folder marks (`$MeronF_<id>` keywords) each Inbox copy carries
+/// on the server, as this device last read or wrote them, so a mark another
+/// device added or took away is told apart from one that was always there.
+/// `written_at` is when this device wrote it (0 when read), for the grace
+/// period that ignores a read taken just before its own write.
+fn migrate_v30(conn: &Connection) -> Result<()> {
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS meron_marks (
+           account    TEXT NOT NULL,
+           folder     TEXT NOT NULL,
+           uid        INTEGER NOT NULL,
+           folder_id  TEXT NOT NULL,
+           written_at INTEGER NOT NULL DEFAULT 0,
+           PRIMARY KEY (account, folder, uid)
+         ) WITHOUT ROWID;
+         PRAGMA user_version = 30;",
+    )?;
+    Ok(())
+}
+
+/// v26 gained `meron_folder_uids.tag_key` before it shipped; a development
+/// store an earlier v26 build migrated lacks it. Adds it once; a no-op on
+/// every other store.
+fn repair_v26_meron_uids(conn: &Connection) -> Result<()> {
+    let has_table: bool = conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'meron_folder_uids')",
+        [],
+        |row| row.get(0),
+    )?;
+    if !has_table {
+        return Ok(());
+    }
+    let has_column: bool = conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM pragma_table_info('meron_folder_uids') WHERE name = 'tag_key')",
+        [],
+        |row| row.get(0),
+    )?;
+    if !has_column {
+        conn.execute_batch(
+            "ALTER TABLE meron_folder_uids ADD COLUMN tag_key TEXT NOT NULL DEFAULT ''",
+        )?;
+    }
     Ok(())
 }

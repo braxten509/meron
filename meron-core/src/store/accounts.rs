@@ -786,12 +786,21 @@ pub fn delete_secret(conn: &Connection, account_id: &str) -> Result<()> {
 /// subscriptions/items) from the DB.
 pub fn delete_account(conn: &Connection, id: &str) -> Result<()> {
     let tx = conn.unchecked_transaction()?;
+    delete_account_in(&tx, id)?;
+    tx.commit()?;
+    Ok(())
+}
+
+/// [`delete_account`] inside a transaction the caller holds.
+pub fn delete_account_in(tx: &Connection, id: &str) -> Result<()> {
     tx.execute("DELETE FROM accounts WHERE id = ?1", params![id])?;
     tx.execute("DELETE FROM folders WHERE account = ?1", params![id])?;
     tx.execute("DELETE FROM messages WHERE account = ?1", params![id])?;
     tx.execute("DELETE FROM message_tags WHERE account = ?1", params![id])?;
     tx.execute("DELETE FROM rule_actions WHERE account = ?1", params![id])?;
     super::forget_rule_account(&tx, id)?;
+    super::ai_sort_forget_account(&tx, id)?;
+    super::meron_forget_account(&tx, id)?;
     tx.execute(
         "DELETE FROM mail_search_hits WHERE account = ?1",
         params![id],
@@ -836,7 +845,6 @@ pub fn delete_account(conn: &Connection, id: &str) -> Result<()> {
         "UPDATE events SET account = '', thread_id = '', message_id = '' WHERE account = ?1",
         params![id],
     )?;
-    tx.commit()?;
     Ok(())
 }
 

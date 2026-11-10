@@ -25,6 +25,7 @@ import jp.nonbili.meron.shared.rewriteMediaRefsToCid
 import jp.nonbili.meron.shared.splitAddressList
 import jp.nonbili.meron.shared.threadIdIsRss
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.abs
@@ -217,18 +218,19 @@ internal fun MeronMobileState.prefetchThreadPreviews(neighbors: List<ThreadSumma
 
 private suspend fun MeronMobileState.readFirstThreadPage(thread: ThreadSummary): ThreadReadPage {
     val backendThreadId = thread.backendThreadId()
-    val response =
-        withContext(ioDispatcher) {
-            val client = MobileMailCommandClient(core)
+    // Parsed off the main thread too: a page of mail bodies is not small.
+    return withContext(ioDispatcher) {
+        val client = MobileMailCommandClient(core)
+        parseThreadReadPage(
             if (threadIdIsRss(backendThreadId)) {
                 client.readRssThread(RssThreadParams(threadId = backendThreadId))
             } else {
                 withManagedGoogleAuth(client, thread.accountId) {
                     client.readThread(ThreadReadParams(threadId = backendThreadId))
                 }
-            }
-        }
-    return parseThreadReadPage(response)
+            },
+        )
+    }
 }
 
 internal fun draftThreadShouldOpenConversation(messages: List<MessageBody>): Boolean =
@@ -357,6 +359,9 @@ internal fun MeronMobileState.hydrateQuickReplyFromTailDraft(
     // A draft a send already consumed, whose discard has not come back yet: it
     // holds the text we just sent, not a reply left unfinished.
     if (normalizedTailId.isNotBlank() && normalizedTailId in quickReplyConsumedDraftIds) return
+    // Nor one whose discard already succeeded: a read that set off before it
+    // can still bring back the server's old row.
+    if (normalizedTailId.isNotBlank() && normalizedTailId in quickReplyDiscardedDraftIds) return
     // A send still out for this conversation owns whatever draft sits at the
     // tail — the copy it is about to discard, or the one its autosave was
     // mid-write on when the click cancelled it. The bar empties on the click
@@ -649,7 +654,45 @@ internal suspend fun MeronMobileState.refreshOpenThreadFor(eventAccount: String)
     if (eventAccount.isNotBlank() && open.accountId.isNotBlank() && open.accountId != eventAccount) {
         return
     }
-    runCatching { reloadCurrentThreadMessages() }
+    refreshOpenThreadCoalesced()
+}
+
+/**
+ * Re-reads the open conversation, coalesced with every other refresh asked for
+ * this way, and returns once a re-read that started after this call has
+ * finished (a failed one included: failures are not reported).
+ *
+ * Each background body download, sync tail, push and send announces itself,
+ * and a scroll back through a long conversation or a sent reply sets off
+ * several at once. Run side by side, every one re-read every loaded page and
+ * re-laid the list out, and one that set off before a discard could paint the
+ * draft it was deleting. One refresh at a time; the requests landing during it
+ * fold into one more after it.
+ */
+internal suspend fun MeronMobileState.refreshOpenThreadCoalesced() {
+    val waiter = CompletableDeferred<Unit>()
+    openThreadRefreshWaiters += waiter
+    if (!openThreadRefreshRunning) {
+        openThreadRefreshRunning = true
+        var batch = emptyList<CompletableDeferred<Unit>>()
+        try {
+            while (openThreadRefreshWaiters.isNotEmpty()) {
+                batch = openThreadRefreshWaiters.toList()
+                openThreadRefreshWaiters.clear()
+                runCatching { reloadCurrentThreadMessages() }
+                batch.forEach { it.complete(Unit) }
+                batch = emptyList()
+            }
+        } finally {
+            openThreadRefreshRunning = false
+            // Cancelled mid-way: nobody is left to run the queued refresh, so
+            // let its waiters go rather than hang them.
+            batch.forEach { it.complete(Unit) }
+            openThreadRefreshWaiters.forEach { it.complete(Unit) }
+            openThreadRefreshWaiters.clear()
+        }
+    }
+    waiter.await()
 }
 
 /** Opens the conversation a tapped notification names, layered over whatever
@@ -666,7 +709,39 @@ internal fun MeronMobileState.openNotificationThread(target: NotificationThreadT
         openNotificationMailbox(target)
         return
     }
-    openLinkedThread(notificationThreadId(target.accountId, target.folder, target.threadKey), target.accountId)
+    val threadId = notificationThreadId(target.accountId, target.folder, target.threadKey)
+    val address = target.fromAddr.trim().lowercase()
+    if (mailGroupBySender && address.isNotBlank() && !threadIdIsRss(threadId)) {
+        openNotificationSenderChat(target, address)
+        return
+    }
+    openLinkedThread(threadId, target.accountId)
+}
+
+/** With the list grouped by sender, a new-mail tap opens that person's chat
+ *  (`sender:<address>` in the notification's folder) instead of the thread.
+ *  `address` is the notified message's own sender, carried by the
+ *  notification. */
+private fun MeronMobileState.openNotificationSenderChat(
+    target: NotificationThreadTarget,
+    address: String,
+) {
+    val senderId = notificationThreadId(target.accountId, target.folder, "sender:$address")
+    // The list's own row when it is loaded: it knows the person's name,
+    // unread count and whether they are a no-reply address.
+    val row =
+        coreThreads.firstOrNull { it.id == senderId }
+            ?: ThreadSummary(
+                id = senderId,
+                threadId = senderId,
+                accountId = target.accountId,
+                folder = if (target.folder.equals("inbox", ignoreCase = true)) "INBOX" else target.folder,
+                subject = "",
+                sender = address,
+                senderAddress = address,
+                group = "sender",
+            )
+    readCoreThread(row)
 }
 
 /** A group summary names an account and folder but no conversation, so this one
@@ -697,6 +772,7 @@ private fun MeronMobileState.openNotificationMailbox(target: NotificationThreadT
                         requestedFolder = target.folder,
                         query = "",
                         filter = FilterMode.All,
+                        groupBySender = mailGroupBySender,
                         syncFirst = false,
                     )
                 accounts to result
@@ -711,10 +787,11 @@ private fun MeronMobileState.openNotificationMailbox(target: NotificationThreadT
             }
             selectedCoreFolder = result.folder
             coreThreads = withLocalDraftFlags(read.filter(result.threads))
-            visibleMailboxKey = mailboxCacheKey(target.accountId, result.folder, "", FilterMode.All)
+            visibleMailboxKey = mailboxCacheKey(target.accountId, result.folder, "", FilterMode.All, groupBySender = mailGroupBySender)
             mailboxCursor = result.nextCursor
             mailboxAccountCursors = result.accountCursors
             mailboxPageDepth = MAILBOX_PAGE_SIZE
+            mailboxHeldThreads = emptyList()
             syncing = false
             initialThreadsLoaded = true
             selectedMailThreadIds = emptySet()
@@ -740,16 +817,19 @@ internal fun MeronMobileState.loadMoreThreadMessages() {
         runCatching {
             withContext(ioDispatcher) {
                 val client = MobileMailCommandClient(core)
-                if (threadIdIsRss(thread.id)) {
-                    client.readRssThread(RssThreadParams(threadId = thread.id, beforeCursor = cursor))
-                } else {
-                    withManagedGoogleAuth(client, thread.accountId) {
-                        client.readThread(ThreadReadParams(threadId = thread.id, beforeCursor = cursor))
-                    }
-                }
+                // Parsed here, off the main thread: this runs while the reader
+                // is scrolling.
+                parseThreadReadPage(
+                    if (threadIdIsRss(thread.id)) {
+                        client.readRssThread(RssThreadParams(threadId = thread.id, beforeCursor = cursor))
+                    } else {
+                        withManagedGoogleAuth(client, thread.accountId) {
+                            client.readThread(ThreadReadParams(threadId = thread.id, beforeCursor = cursor))
+                        }
+                    },
+                )
             }
-        }.onSuccess {
-            val page = parseThreadReadPage(it)
+        }.onSuccess { page ->
             val existingIds = messages.map { message -> message.id }.toSet()
             val older = page.messages.filterNot { message -> message.id in existingIds }
             messages = (older + messages).sortedBy { message -> message.dateEpochSeconds }

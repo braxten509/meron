@@ -17,7 +17,9 @@ import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'
 import { clsx } from '../../lib/utils'
 import type { BulkSelectionItem } from '../../states/ui'
-import { clearBulkSelection, setBulkSelection } from '../../states/ui'
+import { clearBulkSelection, setBulkSelection, ui$ } from '../../states/ui'
+import { isMeronView } from '../../lib/unifiedFolders'
+import { MeronFolderItems } from './MeronFolderItems'
 import { accounts$, isLocalAccountId, isMailFolderAccount } from '../../states/accounts'
 import { mail$ } from '../../states/mail'
 import { bulkMarkSelectedRead, bulkMarkSelectedUnread, bulkStarSelected } from '../../states/mailFlags'
@@ -65,6 +67,19 @@ export function BulkActionBar({
     mailItems.length > 0 && mailItems.every((item) => !item.draft && !item.trash && !isLocalAccountId(item.accountId))
   const canMove = mailItems.length > 0 && mailAccounts.length > 0
   const canCopy = mailItems.length > 0 && mailAccounts.length > 0
+  // Sender rows (group by sender) stand for a person, not a conversation; stars
+  // belong to single emails inside the chat, so the bar offers none for them.
+  const hasSenderRows = mailItems.some((item) => item.sender)
+  // Meron folders take whole conversations of server accounts: not when the
+  // selection holds a sender row, a feed, local mail, a draft or Trash/Junk.
+  const canUseMeron =
+    mailItems.length > 0 &&
+    mailItems.length === items.length &&
+    mailItems.every((item) => !item.sender && !item.draft && !item.trash && !isLocalAccountId(item.accountId))
+  const selectedAccount = useValue(ui$.selectedAccount)
+  const selectedFolder = useValue(ui$.selectedFolder)
+  // Inside a Meron folder every row is in that folder.
+  const currentMeronFolderId = isMeronView(selectedAccount) ? selectedFolder : null
 
   const loadCopyTargetFolders = async () => {
     if (copyLoadRef.current) return
@@ -224,24 +239,28 @@ export function BulkActionBar({
               void bulkMarkSelectedUnread(mailItems)
             }}
           />
-          <MenuItem
-            icon={<Star size={13} className="text-secondary" />}
-            label={t('threads.actions.starThread')}
-            disabled={mailItems.length === 0}
-            onClick={() => {
-              setMenu(null)
-              void bulkStarSelected(mailItems, true)
-            }}
-          />
-          <MenuItem
-            icon={<Star size={13} className="fill-amber-500 text-amber-500" />}
-            label={t('threads.actions.unstarThread')}
-            disabled={mailItems.length === 0}
-            onClick={() => {
-              setMenu(null)
-              void bulkStarSelected(mailItems, false)
-            }}
-          />
+          {!hasSenderRows && (
+            <>
+              <MenuItem
+                icon={<Star size={13} className="text-secondary" />}
+                label={t('threads.actions.starThread')}
+                disabled={mailItems.length === 0}
+                onClick={() => {
+                  setMenu(null)
+                  void bulkStarSelected(mailItems, true)
+                }}
+              />
+              <MenuItem
+                icon={<Star size={13} className="fill-amber-500 text-amber-500" />}
+                label={t('threads.actions.unstarThread')}
+                disabled={mailItems.length === 0}
+                onClick={() => {
+                  setMenu(null)
+                  void bulkStarSelected(mailItems, false)
+                }}
+              />
+            </>
+          )}
           <div className="my-1 border-t border-border" />
           <MenuItem
             icon={<Archive size={13} className="text-secondary" />}
@@ -269,7 +288,7 @@ export function BulkActionBar({
               disabled={!canMove}
               onClick={() => {
                 if (!canMove) return
-                setMoveOpen((open) => !open)
+                setMoveOpen(true)
               }}
             />
             {moveOpen && moveFlyoutPosition && (
@@ -324,7 +343,7 @@ export function BulkActionBar({
               disabled={!canCopy}
               onClick={() => {
                 if (!canCopy) return
-                setCopyOpen((open) => !open)
+                setCopyOpen(true)
                 void loadCopyTargetFolders()
               }}
             />
@@ -357,6 +376,14 @@ export function BulkActionBar({
               </FloatingContextMenu>
             )}
           </div>
+          {canUseMeron && (
+            <MeronFolderItems
+              threadIds={mailItems.map((item) => item.threadId)}
+              currentFolderId={currentMeronFolderId}
+              close={() => setMenu(null)}
+              onDone={clearBulkSelection}
+            />
+          )}
           <MenuItem
             icon={<Download size={13} className="text-secondary" />}
             label={t('chat.actions.saveAsEml')}

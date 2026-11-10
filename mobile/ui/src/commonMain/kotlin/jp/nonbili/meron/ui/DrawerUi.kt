@@ -54,6 +54,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MarkEmailUnread
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.OpenInFull
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Refresh
@@ -66,7 +67,9 @@ import androidx.compose.material.icons.filled.ViewKanban
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.outlined.Drafts
+import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.FolderOpen
+import androidx.compose.material.icons.outlined.NotificationsNone
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -258,6 +261,13 @@ internal fun MailDrawer(
     onOpenContacts: () -> Unit,
     googleReauthAccountId: String? = null,
     onReconnectGoogle: (AccountSummary) -> Unit = {},
+    meronFolders: List<jp.nonbili.meron.shared.MeronFolderSummary> = emptyList(),
+    selectedFolderId: String = "",
+    onSelectMeronFolder: (jp.nonbili.meron.shared.MeronFolderSummary) -> Unit = {},
+    onNewMeronFolder: () -> Unit = {},
+    onRenameMeronFolder: (jp.nonbili.meron.shared.MeronFolderSummary) -> Unit = {},
+    onSetMeronFolderNotify: (jp.nonbili.meron.shared.MeronFolderSummary, Boolean) -> Unit = { _, _ -> },
+    onDeleteMeronFolder: (jp.nonbili.meron.shared.MeronFolderSummary) -> Unit = {},
 ) {
     val chat = LocalChatColors.current
     // M3's fixed 360dp sheet nearly covers a narrow phone; keep 56dp of the screen behind visible.
@@ -283,6 +293,99 @@ internal fun MailDrawer(
                     )
                 }
                 if (accounts.isNotEmpty()) {
+                    // Above the accounts: folders that live only in Meron, on this device.
+                    item(key = "meron-folders-label") { DrawerLabel(tr("meronFolders.title"), chat) }
+                    items(meronFolders.filterNot(::isMeronArchiveFolder), key = { "meron-folder:${it.id}" }) { folder ->
+                        var menuOpen by remember(folder.id) { mutableStateOf(false) }
+                        Box {
+                            SidebarRow(
+                                selected =
+                                    currentScreen == Screen.Mail &&
+                                        selectedAccountId == MERON_FOLDERS_ACCOUNT_ID &&
+                                        selectedFolderId == folder.id,
+                                chat = chat,
+                                onClick = { onSelectMeronFolder(folder) },
+                                onLongClick = { menuOpen = true },
+                                leading = { Icon(Icons.Outlined.Folder, contentDescription = null, modifier = Modifier.size(20.dp)) },
+                                title = folder.name,
+                                trailing = if (showUnreadBadges) folder.unread.takeIf { it > 0 }?.toString() else null,
+                            )
+                            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                                DropdownMenuItem(
+                                    text = { Text(tr("meronFolders.rename")) },
+                                    leadingIcon = { Icon(Icons.Filled.Edit, contentDescription = null) },
+                                    onClick = {
+                                        menuOpen = false
+                                        onRenameMeronFolder(folder)
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(tr(if (folder.notify) "folders.notify.disable" else "folders.notify.enable")) },
+                                    leadingIcon = {
+                                        Icon(
+                                            if (folder.notify) Icons.Filled.NotificationsOff else Icons.Outlined.NotificationsNone,
+                                            contentDescription = null,
+                                        )
+                                    },
+                                    onClick = {
+                                        menuOpen = false
+                                        onSetMeronFolderNotify(folder, !folder.notify)
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(tr("meronFolders.delete"), color = MaterialTheme.colorScheme.error) },
+                                    leadingIcon = {
+                                        Icon(Icons.Filled.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                                    },
+                                    onClick = {
+                                        menuOpen = false
+                                        onDeleteMeronFolder(folder)
+                                    },
+                                )
+                            }
+                        }
+                    }
+                    item(key = "meron-folders-new") {
+                        SidebarRow(
+                            selected = false,
+                            chat = chat,
+                            onClick = onNewMeronFolder,
+                            leading = { Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(20.dp)) },
+                            title = tr("meronFolders.new"),
+                            trailing = null,
+                        )
+                    }
+                    // The built-in Archive: always last, under a thin line, the
+                    // same folder icon in gray. No menu: it can't be renamed or
+                    // deleted.
+                    meronFolders.firstOrNull(::isMeronArchiveFolder)?.let { archive ->
+                        item(key = "meron-folders-archive-divider") {
+                            HorizontalDivider(
+                                Modifier.padding(vertical = 6.dp, horizontal = 20.dp),
+                                color = chat.onSidebarMuted.copy(alpha = 0.25f),
+                            )
+                        }
+                        item(key = "meron-folder:${archive.id}") {
+                            SidebarRow(
+                                selected =
+                                    currentScreen == Screen.Mail &&
+                                        selectedAccountId == MERON_FOLDERS_ACCOUNT_ID &&
+                                        selectedFolderId == archive.id,
+                                chat = chat,
+                                onClick = { onSelectMeronFolder(archive) },
+                                leading = {
+                                    Icon(
+                                        Icons.Outlined.Folder,
+                                        contentDescription = null,
+                                        tint = chat.onSidebarMuted,
+                                        modifier = Modifier.size(20.dp),
+                                    )
+                                },
+                                title = tr("folders.roles.archive"),
+                                trailing = if (showUnreadBadges) archive.unread.takeIf { it > 0 }?.toString() else null,
+                            )
+                        }
+                    }
                     item { DrawerLabel(tr("drawer.inboxes"), chat) }
                     if (showUnifiedInboxNav) {
                         item {
@@ -523,6 +626,7 @@ private fun AboutLinkButton(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun SidebarRow(
     selected: Boolean,
@@ -531,6 +635,8 @@ internal fun SidebarRow(
     leading: @Composable () -> Unit,
     title: String,
     trailing: String?,
+    /** A long press, when the row has a menu (Meron folders: Rename, Delete). */
+    onLongClick: (() -> Unit)? = null,
 ) {
     val tint = if (selected) chat.sidebarAccent else chat.onSidebarMuted
     Row(
@@ -539,8 +645,13 @@ internal fun SidebarRow(
             .padding(horizontal = 12.dp, vertical = 2.dp)
             .clip(RoundedCornerShape(10.dp))
             .background(if (selected) chat.sidebarSelected else Color.Transparent)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 11.dp),
+            .then(
+                if (onLongClick != null) {
+                    Modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick)
+                } else {
+                    Modifier.clickable(onClick = onClick)
+                },
+            ).padding(horizontal = 12.dp, vertical = 11.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -636,6 +747,7 @@ internal fun EmptyState(
     text: String,
     actionLabel: String? = null,
     onAction: (() -> Unit)? = null,
+    footer: (@Composable () -> Unit)? = null,
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -654,6 +766,10 @@ internal fun EmptyState(
                     Spacer(Modifier.height(20.dp))
                     Button(onClick = onAction) { Text(actionLabel) }
                 }
+                if (footer != null) {
+                    Spacer(Modifier.height(16.dp))
+                    footer()
+                }
             }
         }
     }
@@ -671,5 +787,16 @@ internal fun LoadingState(text: String = tr("common.loading")) {
         CircularProgressIndicator()
         Spacer(Modifier.height(16.dp))
         Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+/** Back closes an open side menu instead of leaving the screen (or the app):
+ *  the menu sheet handles no Back of its own. */
+@OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
+@Composable
+internal fun DrawerBackHandler(drawerState: androidx.compose.material3.DrawerState) {
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    androidx.compose.ui.backhandler.BackHandler(enabled = drawerState.isOpen) {
+        scope.launch { drawerState.close() }
     }
 }

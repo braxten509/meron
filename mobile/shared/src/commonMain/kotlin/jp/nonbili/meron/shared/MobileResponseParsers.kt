@@ -59,14 +59,33 @@ data class ThreadActionLocation(
     val threadId: String = "",
     val folder: String = "",
     val permanent: Boolean = false,
+    /** The moved messages' UIDs in the destination folder, when the core reports them. */
+    val targetUids: List<Long> = emptyList(),
+    /** The Meron folder the action took the card out of, for Undo to put it back. */
+    val meronFolderId: String = "",
+    val meronSource: String = "",
+    /** Archived Meron-only (the account has no archive mailbox): filed into
+     *  the built-in Archive, the mail never moved. */
+    val meronOnly: Boolean = false,
 )
 
-fun parseThreadActionLocationResponse(responseJson: String): ThreadActionLocation =
-    ThreadActionLocation(
-        threadId = responseJson.findJsonStringProperty("thread_id", topLevelOnly = true).orEmpty(),
-        folder = responseJson.findJsonStringProperty("folder", topLevelOnly = true) ?: responseJson.findJsonStringProperty("trash", topLevelOnly = true).orEmpty(),
-        permanent = responseJson.findJsonBooleanProperty("permanent", topLevelOnly = true) ?: false,
+fun parseThreadActionLocationResponse(responseJson: String): ThreadActionLocation {
+    // Core answers come wrapped as {"id":…,"result":{…}}; read the action's own fields.
+    val body = responseJson.fields()["result"]?.takeIf { it.startsWith('{') } ?: responseJson
+    return ThreadActionLocation(
+        threadId = body.findJsonStringProperty("thread_id", topLevelOnly = true).orEmpty(),
+        folder = body.findJsonStringProperty("folder", topLevelOnly = true) ?: body.findJsonStringProperty("trash", topLevelOnly = true).orEmpty(),
+        permanent = body.findJsonBooleanProperty("permanent", topLevelOnly = true) ?: false,
+        targetUids =
+            body.fields()["target_uids"]
+                ?.takeIf { it.startsWith('[') }
+                ?.let { Regex("""\d+""").findAll(it).mapNotNull { match -> match.value.toLongOrNull() }.toList() }
+                .orEmpty(),
+        meronFolderId = body.findJsonStringProperty("meron_folder_id", topLevelOnly = true).orEmpty(),
+        meronSource = body.findJsonStringProperty("meron_source", topLevelOnly = true).orEmpty(),
+        meronOnly = body.findJsonBooleanProperty("meron_only", topLevelOnly = true) ?: false,
     )
+}
 
 fun parseAllocatedMessageId(responseJson: String): String = responseJson.findJsonStringProperty("message_id").orEmpty()
 
@@ -382,6 +401,26 @@ fun parseThreadListPage(responseJson: String): ThreadListPage {
                         }.orEmpty(),
                 dateEpochSeconds = item.findJsonLongProperty("date") ?: item.findJsonLongProperty("date_epoch_seconds") ?: 0,
                 feedUrl = item.findJsonStringProperty("feed_url").orEmpty(),
+                senderAddress = item.findJsonStringProperty("from_addr").orEmpty(),
+                // Top-level keys: a sender row (`group: "sender"`) and whether
+                // that person is a no-reply style address.
+                group =
+                    item
+                        .jsonObjectEntries()
+                        .firstOrNull { it.first == "group" }
+                        ?.second
+                        ?.let { "{\"value\":$it}".findJsonStringProperty("value") }
+                        .orEmpty(),
+                automated = item.jsonObjectEntries().firstOrNull { it.first == "automated" }?.second == "true",
+                // Top-level key: null when the conversation is in no Meron folder.
+                meronFolderId =
+                    item
+                        .jsonObjectEntries()
+                        .firstOrNull { it.first == "meron_folder_id" }
+                        ?.second
+                        ?.takeIf { it.startsWith("\"") }
+                        ?.let { "{\"value\":$it}".findJsonStringProperty("value") }
+                        ?.takeIf { it.isNotBlank() },
             )
         }
     return ThreadListPage(
@@ -844,6 +883,172 @@ fun parseRuleStatusResponse(responseJson: String): RuleStatus {
 /** The `count` answering `mail.ruleMatches` and `mail.runRule`. */
 fun parseRuleCountResponse(responseJson: String): Int = responseJson.findJsonLongProperty("count")?.toInt() ?: 0
 
+// ---- AI sorting ---------------------------------------------------------------
+// Read by top-level fields only: a log row's subject or a folder note may itself
+// contain text that looks like a field name.
+
+private fun String.fields(): Map<String, String> = if (trim().startsWith("{")) jsonObjectEntries().toMap() else emptyMap()
+
+/** A command's own fields. The core hands every answer back wrapped as
+ *  `{"id":…,"result":{…}}`, so read inside `result` when it is there (and the
+ *  object itself when a caller already unwrapped it). */
+private fun String.responseFields(): Map<String, String> {
+    val top = fields()
+    return top["result"]?.takeIf { it.startsWith('{') }?.fields() ?: top
+}
+
+private fun Map<String, String>.str(name: String): String? = this[name]?.takeIf { it.startsWith('"') }?.readJsonString(0)?.value
+
+private fun Map<String, String>.bool(name: String): Boolean? =
+    when (this[name]) {
+        "true" -> true
+        "false" -> false
+        else -> null
+    }
+
+private fun Map<String, String>.number(name: String): Double? = this[name]?.let { raw -> raw.toDoubleOrNull() ?: str(name)?.toDoubleOrNull() }
+
+private fun Map<String, String>.int(name: String): Int? = number(name)?.toInt()
+
+private fun Map<String, String>.obj(name: String): Map<String, String>? = this[name]?.takeIf { it.startsWith('{') }?.fields()
+
+private fun Map<String, String>.list(name: String): List<String> = this[name]?.takeIf { it.startsWith('[') }?.jsonArrayElements().orEmpty()
+
+private fun parseAiSortConfig(fields: Map<String, String>?): AiSortConfig {
+    if (fields == null) return AiSortConfig()
+    return AiSortConfig(
+        enabled = fields.bool("enabled") ?: false,
+        provider = fields.str("provider") ?: "openrouter",
+        model = fields.str("model").orEmpty(),
+        reads = fields.str("reads") ?: "headers",
+        folders =
+            fields.list("folders").map { item ->
+                val folder = item.fields()
+                AiSortFolder(
+                    account = folder.str("account").orEmpty(),
+                    folder = folder.str("folder").orEmpty(),
+                    note = folder.str("note").orEmpty(),
+                    // Kept, or saving the settings here would drop Meron entries.
+                    meronFolderId = folder.str("meron_folder_id").orEmpty(),
+                )
+            },
+        recentModels =
+            fields.obj("recent_models")?.mapValues { (_, ids) ->
+                ids.takeIf { it.startsWith('[') }?.jsonArrayElements().orEmpty().mapNotNull { id ->
+                    id.takeIf { it.startsWith('"') }?.readJsonString(0)?.value
+                }
+            }.orEmpty(),
+    )
+}
+
+private fun parseAiSortError(fields: Map<String, String>?): AiSortError? =
+    fields?.let {
+        AiSortError(
+            at = it.number("at")?.toLong() ?: 0,
+            message = it.str("message").orEmpty(),
+            kind = it.str("kind") ?: "other",
+        )
+    }
+
+private fun parseAiSortKeyState(fields: Map<String, String>?): AiSortKeyState =
+    AiSortKeyState(
+        hasKey = fields?.bool("has_key") ?: false,
+        hint = fields?.str("key_hint").orEmpty(),
+    )
+
+/** `mail.aiSortConfig`: the setup, which providers have a key, and the last error. */
+fun parseAiSortSetupResponse(responseJson: String): AiSortSetup {
+    val fields = responseJson.responseFields()
+    return AiSortSetup(
+        config = parseAiSortConfig(fields.obj("config")),
+        keys = fields.obj("keys")?.mapValues { (_, value) -> parseAiSortKeyState(value.fields()) }.orEmpty(),
+        lastError = parseAiSortError(fields.obj("last_error")),
+    )
+}
+
+/** `mail.setAiSortConfig`: the setup as the core kept it. */
+fun parseAiSortConfigResponse(responseJson: String): AiSortConfig = parseAiSortConfig(responseJson.responseFields().obj("config"))
+
+/** `mail.setAiSortKey`: whether a key is now saved, and its hint. */
+fun parseAiSortKeyResponse(responseJson: String): AiSortKeyState = parseAiSortKeyState(responseJson.responseFields())
+
+fun parseAiSortKeyCheckResponse(responseJson: String): AiSortKeyCheck {
+    val fields = responseJson.responseFields()
+    return AiSortKeyCheck(
+        ok = fields.bool("ok") ?: false,
+        kind = fields.str("kind").orEmpty(),
+        message = fields.str("message").orEmpty(),
+    )
+}
+
+fun parseAiModelsResponse(responseJson: String): AiModelList {
+    val fields = responseJson.responseFields()
+    return AiModelList(
+        models =
+            fields.list("models").mapNotNull { item ->
+                val model = item.fields()
+                val id = model.str("id")?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+                AiModel(
+                    id = id,
+                    name = model.str("name")?.takeIf { it.isNotBlank() } ?: id,
+                    priceInPerM = model.number("price_in_per_m"),
+                    priceOutPerM = model.number("price_out_per_m"),
+                    structured = model.bool("structured") ?: false,
+                    reasoning = model.bool("reasoning") ?: false,
+                    decision = model.bool("decision") ?: false,
+                )
+            },
+        default = fields.str("default")?.takeIf { it.isNotEmpty() },
+    )
+}
+
+fun parseAiSortEstimateResponse(responseJson: String): AiSortEstimate {
+    val fields = responseJson.responseFields()
+    return AiSortEstimate(
+        total = fields.int("total") ?: 0,
+        requests = fields.int("requests") ?: 0,
+        reads = fields.str("reads") ?: "headers",
+        provider = fields.str("provider").orEmpty(),
+        model = fields.str("model").orEmpty(),
+        costUsd = fields.number("cost_usd"),
+        accounts =
+            fields.list("accounts").associate { item ->
+                val account = item.fields()
+                account.str("account").orEmpty() to (account.int("count") ?: 0)
+            },
+    )
+}
+
+fun parseAiSortStatusResponse(responseJson: String): AiSortStatus {
+    val fields = responseJson.responseFields()
+    return AiSortStatus(
+        log =
+            fields.list("log").mapNotNull { item ->
+                val entry = item.fields()
+                AiSortLogEntry(
+                    id = entry.number("id")?.toLong() ?: return@mapNotNull null,
+                    at = entry.number("at")?.toLong() ?: 0,
+                    account = entry.str("account").orEmpty(),
+                    subject = entry.str("subject").orEmpty(),
+                    sender = entry.str("sender").orEmpty(),
+                    toFolder = entry.str("to_folder").orEmpty(),
+                    reason = entry.str("reason").orEmpty(),
+                    state = entry.str("state").orEmpty(),
+                    detail = entry.str("detail").orEmpty(),
+                    meronFolderId = entry.str("meron_folder_id").orEmpty(),
+                )
+            },
+        running = fields.obj("running")?.let { (it.int("total") ?: 0) to (it.int("done") ?: 0) },
+        lastError = parseAiSortError(fields.obj("last_error")),
+    )
+}
+
+/** The `count` answering `mail.runAiSort`. */
+fun parseAiSortRunResponse(responseJson: String): Int = responseJson.responseFields().int("count") ?: 0
+
+/** The `ok` answering `mail.stopAiSort` and `mail.aiSortMoveBack`. */
+fun parseAiSortOkResponse(responseJson: String): Boolean = responseJson.responseFields().bool("ok") ?: false
+
 private fun String.topLevelStringArray(name: String): List<String> =
     jsonObjectEntries()
         .firstOrNull { it.first == name }
@@ -1277,3 +1482,76 @@ private fun String.readBalancedJson(
 }
 
 fun parseSenderImageResponse(responseJson: String): String = responseJson.findJsonStringProperty("src").orEmpty()
+
+private fun parseMeronFolder(item: String): MeronFolderSummary? {
+    val folder = item.fields()
+    val id = folder.str("id")?.takeIf { it.isNotBlank() } ?: return null
+    return MeronFolderSummary(
+        id = id,
+        name = folder.str("name").orEmpty(),
+        unread = folder.int("unread") ?: 0,
+        count = folder.int("count") ?: 0,
+        createdAt = folder.number("created_at")?.toLong() ?: 0,
+        notify = folder.bool("notify") ?: false,
+        builtin = folder.str("builtin")?.takeIf { it.isNotBlank() },
+    )
+}
+
+/** The `folders` list (A to Z) that every Meron folder command answers with;
+ *  null when the answer has none. */
+fun parseMeronFolderList(responseJson: String): List<MeronFolderSummary>? {
+    val fields = responseJson.responseFields()
+    val raw = fields["folders"]?.takeIf { it.startsWith('[') } ?: return null
+    return raw.jsonArrayElements().mapNotNull(::parseMeronFolder)
+}
+
+/** The Inbox thread ids of conversations a move out of Meron folders took
+ *  out of the built-in Archive (un-archived on the server): an Undo archives
+ *  those again. */
+fun parseMeronUnarchived(responseJson: String): List<String> =
+    responseJson.responseFields().list("unarchived").mapNotNull { item ->
+        item.fields().str("thread_id")?.takeIf { it.isNotBlank() }
+    }
+
+/** The `folder` a create or rename answers with. */
+fun parseMeronFolderResponse(responseJson: String): MeronFolderSummary? = responseJson.responseFields()["folder"]?.takeIf { it.startsWith('{') }?.let(::parseMeronFolder)
+
+/** One conversation a move into a Meron folder changed; [previousFolderId]
+ *  null means it was in no Meron folder before. */
+data class MeronFolderMoveChange(
+    val threadId: String,
+    val accountId: String,
+    val sourceFolder: String,
+    val previousFolderId: String?,
+)
+
+data class MeronFolderMoveResult(
+    val moved: Int,
+    /** Thread ids the core refused, with its reason (`not_allowed`, `not_found`, `invalid`). */
+    val skipped: List<Pair<String, String>>,
+    val changes: List<MeronFolderMoveChange>,
+    val folders: List<MeronFolderSummary>?,
+)
+
+fun parseMeronFolderMoveResponse(responseJson: String): MeronFolderMoveResult {
+    val fields = responseJson.responseFields()
+    return MeronFolderMoveResult(
+        moved = fields.int("moved") ?: 0,
+        skipped =
+            fields.list("skipped").map { item ->
+                val skip = item.fields()
+                skip.str("thread_id").orEmpty() to skip.str("reason").orEmpty()
+            },
+        changes =
+            fields.list("changes").mapNotNull { item ->
+                val change = item.fields()
+                MeronFolderMoveChange(
+                    threadId = change.str("thread_id")?.takeIf { it.isNotBlank() } ?: return@mapNotNull null,
+                    accountId = change.str("account_id").orEmpty(),
+                    sourceFolder = change.str("source_folder").orEmpty(),
+                    previousFolderId = change.str("previous_folder_id")?.takeIf { it.isNotBlank() },
+                )
+            },
+        folders = parseMeronFolderList(responseJson),
+    )
+}

@@ -4,6 +4,17 @@ import type { Folder } from '../types'
 export const UNIFIED_ACCOUNT = 'unified'
 
 /**
+ * The pseudo-account id the Meron folder view selects. `ui$.selectedFolder`
+ * then holds the Meron folder's id ("mf_…"). Meron folders exist only in
+ * Meron, on this device, and span every account.
+ */
+export const MERON_ACCOUNT = 'meron-folders'
+
+export function isMeronView(accountId: string): boolean {
+  return accountId === MERON_ACCOUNT
+}
+
+/**
  * The folders the unified view offers, in the same order a single account lists
  * its own — so switching between an account and the unified view keeps the same
  * muscle memory. These are roles, not folder names: "Sent" here means each

@@ -257,13 +257,30 @@ pub(crate) async fn dispatch(
 
         "folders.archive" => {
             let account = req_str(p, "account")?;
-            let archive = engine
-                .with_read_session(&account, |session| {
-                    Box::pin(async move { imap::find_archive_folder(session).await })
-                })
-                .await?;
+            // The saved folder list answers without a server round trip (a
+            // whole LIST, once per archived conversation). Only an account it
+            // names no archive mailbox for still asks the server.
+            let saved = {
+                let folders = store::get_folders(&engine.db.lock().unwrap(), &account)
+                    .unwrap_or_default();
+                cached_archive_folder_from_folders(folders, "")
+            };
+            let archive = match saved {
+                Some(folder) => Some(folder),
+                None => {
+                    engine
+                        .with_read_session(&account, |session| {
+                            Box::pin(async move { imap::find_archive_folder(session).await })
+                        })
+                        .await?
+                }
+            };
             match archive {
                 Some(folder) => Ok(json!({ "folder": folder })),
+                // The caller archives Meron-only then (`allow_missing`).
+                None if p.get("allow_missing").and_then(Value::as_bool).unwrap_or(false) => {
+                    Ok(json!({ "folder": Value::Null }))
+                }
                 None => Err(anyhow::anyhow!("Archive folder not found for this account")),
             }
         }

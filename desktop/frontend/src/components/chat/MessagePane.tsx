@@ -5,7 +5,7 @@ import { openComposeTab } from '../../states/compose'
 import { compose$ } from '../../states/composeState'
 import { withoutHydratedQuickReplyDraft } from '../../states/quickReply'
 import { ui$ } from '../../states/ui'
-import { mail$, getActiveThread, loadThread } from '../../states/mail'
+import { mail$, getActiveThread, loadThread, threadFromTab } from '../../states/mail'
 import { accounts$, isLocalAccountId } from '../../states/accounts'
 import { settings$ } from '../../states/settings'
 import { resetThreadView, thread$ } from '../../states/thread'
@@ -38,27 +38,7 @@ import { wallpaperCss } from '../../lib/wallpapers'
 import { clearMediaSession } from '../../lib/mediaSession'
 import { openCorrespondentMail } from '../../states/kanban'
 import { isRssAccount } from '../../lib/threadActions'
-import type { Message, MessageTab } from '../../types'
-
-function threadFromTab(tab: MessageTab, fallback: Message | null): Message {
-  if (fallback?.thread_id === tab.threadId) return fallback
-  return {
-    id: tab.messageId || tab.threadId,
-    account_id: tab.accountId ?? '',
-    folder_id: tab.folderId ?? 'inbox',
-    thread_id: tab.threadId,
-    from_name: '',
-    from_addr: tab.from,
-    to: '',
-    subject: tab.subject || '(no subject)',
-    preview: '',
-    body: '',
-    date: tab.date ?? 0,
-    unread: false,
-    starred: false,
-    has_attachments: false,
-  }
-}
+import { senderChatIdentity } from '../../lib/senderThread'
 
 export function MessagePane() {
   const { t } = useTranslation()
@@ -102,6 +82,10 @@ export function MessagePane() {
     : (accounts.find((account) => account.id === selectedAccountId) ?? null)
   const isRSS = isRssAccount(activeAccount ?? undefined, activeThread?.account_id ?? selectedAccountId)
   const activeThreadId = activeThread?.thread_id ?? ''
+  // Group by sender: the chat with one person. A no-reply sender gets no quick
+  // reply box (the row says so); the details panel names the person.
+  const sender = activeThread && !isRSS ? senderChatIdentity(activeThread, messages) : null
+  const automatedSender = !!sender && !!activeThread?.automated
   const conversationWallpaper = wallpaperCss(activeAccount?.chat_wallpaper)
   // Show a spinner instead of the previous thread's messages while a freshly
   // selected thread loads. Suppressed once any loaded message belongs to the
@@ -161,7 +145,7 @@ export function MessagePane() {
     return () => {
       host.style.removeProperty(COMPOSER_OVERLAP_VAR)
     }
-  }, [hasConversation, isRSS])
+  }, [hasConversation, isRSS, automatedSender])
   const conversationScroll = useConversationScroll(activeThreadId, displayMessages, conversationActiveTab, unreadKey)
   const { scrollRef, setScrollTop } = conversationScroll
 
@@ -179,7 +163,7 @@ export function MessagePane() {
     mayBeLink,
     dropHandlers: { ref: dropRef, ...dropHandlers },
   } = useFileDrop(addQuickReplyAttachments, {
-    enabled: !!activeThread && !isRSS && !activeDocumentTab,
+    enabled: !!activeThread && !isRSS && !automatedSender && !activeDocumentTab,
     scope: activeThreadId,
   })
   // The conversation element is both the drop area and `conversationRef`.
@@ -217,7 +201,7 @@ export function MessagePane() {
     })
     observer.observe(composer)
     return () => observer.disconnect()
-  }, [hasConversation, isRSS, scrollRef, setScrollTop])
+  }, [hasConversation, isRSS, automatedSender, scrollRef, setScrollTop])
 
   useLayoutEffect(() => {
     return () => {
@@ -336,7 +320,7 @@ export function MessagePane() {
       </ConversationScrollContext>
 
       {/* Local folders cannot send: a reply there starts from the full composer. */}
-      {!isRSS && !isLocalAccountId(activeThread?.account_id ?? selectedAccountId) && (
+      {!isRSS && !automatedSender && !isLocalAccountId(activeThread?.account_id ?? selectedAccountId) && (
         <div ref={composerRef} className="pointer-events-none absolute inset-x-0 bottom-0 z-10">
           {/* What shows around the box is frosted, from a line the box itself
               covers: below the footer's pt-1 and the curve of its rounded-2xl
@@ -402,10 +386,17 @@ export function MessagePane() {
               media={mediaItems}
               files={fileItems}
               participants={participants}
-              scopeTitle={activeThread.subject || '(no subject)'}
+              scopeTitle={sender ? sender.name : activeThread.subject || '(no subject)'}
               // For RSS, from_name duplicates the subject (both the feed title), so
-              // show the feed host instead; otherwise show the sender name.
-              scopeSubtitle={isRSS ? activeThread.from_addr : activeThread.from_name || activeThread.from_addr}
+              // show the feed host instead; a sender chat shows the person's
+              // address; otherwise show the sender name.
+              scopeSubtitle={
+                isRSS
+                  ? activeThread.from_addr
+                  : sender
+                    ? sender.address
+                    : activeThread.from_name || activeThread.from_addr
+              }
               loading={showThreadLoading}
               onOpenImage={(index) => thread$.galleryIndex.set(index)}
               onShowInConversation={showMessageInConversation}

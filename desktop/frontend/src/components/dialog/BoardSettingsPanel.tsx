@@ -18,12 +18,14 @@ import { AvatarCropDialog } from './AvatarCropDialog'
 import { RemoveImageBadge } from './RemoveImageBadge'
 import { WallpaperDialog } from './WallpaperDialog'
 import { SettingRow, SettingsGroup, TextRow, ToggleRow } from './AccountSettingsRows'
+import { SharpImg } from '../../lib/sharpImage'
 
 function BoardTile({ board, size, className = '' }: { board: KanbanBoard; size: number; className?: string }) {
   if (board.avatarUrl) {
     return (
-      <img
+      <SharpImg
         src={board.avatarUrl}
+        box={size}
         alt=""
         style={{ width: size, height: size }}
         className={`shrink-0 rounded-2xl object-cover ring-1 ring-black/5 dark:ring-white/10 ${className}`}

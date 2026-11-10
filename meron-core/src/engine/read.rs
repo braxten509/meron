@@ -101,7 +101,7 @@ pub async fn fill_thread_gaps(
                             // Header row first (writes thread_key etc.), then the
                             // body row (writes body/json) — both keyed on
                             // (account, folder, uid).
-                            let _ = store::upsert_messages(
+                            let _ = store::upsert_read_messages(
                                 &db,
                                 &account,
                                 &folder,

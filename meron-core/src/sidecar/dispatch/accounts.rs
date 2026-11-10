@@ -22,6 +22,7 @@ pub(crate) async fn dispatch(
         // All accounts (mail + rss) as bridge-shaped JSON, from the one DB.
         "account.list" => {
             let mut accounts = store::list_accounts(&engine.db.lock().unwrap())?;
+            meron_core::account_photos::hide_missing(&engine.host.account_media_root(), &mut accounts);
             let live_accounts = engine.accounts.lock().await;
             for account in &mut accounts {
                 if account

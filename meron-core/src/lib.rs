@@ -5,6 +5,8 @@
 //! and wire types live here so desktop, Android, and future FFI bindings share
 //! one source of truth.
 
+pub mod account_photos;
+pub mod ai_sort;
 pub mod avatar;
 pub mod backup;
 pub mod calendar;
@@ -15,6 +17,8 @@ pub mod imap;
 pub mod log;
 pub mod mail_model;
 pub mod mcp_mail;
+pub mod meron_folders;
+pub mod meron_marks;
 pub mod oauth;
 pub mod parse;
 pub mod protocol;
@@ -25,6 +29,7 @@ pub mod reply;
 pub mod rss;
 pub mod search_query;
 pub mod secrets;
+pub mod setup_copy;
 #[cfg(target_os = "linux")]
 mod secrets_portal;
 pub mod smtp;

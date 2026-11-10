@@ -29,6 +29,7 @@ import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.DarkMode
@@ -37,6 +38,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.FitScreen
+import androidx.compose.material.icons.filled.BlurOn
 import androidx.compose.material.icons.filled.FormatQuote
 import androidx.compose.material.icons.filled.FormatSize
 import androidx.compose.material.icons.filled.HideImage
@@ -49,6 +51,7 @@ import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.RssFeed
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Sell
+import androidx.compose.material.icons.filled.SyncAlt
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.UnfoldMore
@@ -106,6 +109,9 @@ import kotlinx.coroutines.withContext
 @Composable
 internal fun SettingsScreen(
     rulesPage: @Composable (Modifier) -> Unit,
+    aiSortPage: @Composable (Modifier, onOpenLog: () -> Unit) -> Unit,
+    aiSortLogPage: @Composable (Modifier) -> Unit,
+    setupCopyPage: @Composable (Modifier) -> Unit = {},
     onOpenTags: () -> Unit,
     onBack: () -> Unit,
     initialGeneral: Boolean,
@@ -170,6 +176,8 @@ internal fun SettingsScreen(
     onToggleAutoFitMessages: () -> Unit,
     readerBottomActions: Boolean,
     onToggleReaderBottomActions: () -> Unit,
+    blurredBars: Boolean,
+    onToggleBlurredBars: () -> Unit,
     showUnreadBadges: Boolean,
     onToggleUnreadBadges: () -> Unit,
     showUnifiedInboxNav: Boolean,
@@ -238,6 +246,9 @@ internal fun SettingsScreen(
             SettingsRoutes.Messages -> SettingsPage.Messages
             SettingsRoutes.Composer -> SettingsPage.Composer
             SettingsRoutes.Rules -> SettingsPage.Rules
+            SettingsRoutes.AiSort -> SettingsPage.AiSort
+            SettingsRoutes.AiSortLog -> SettingsPage.AiSortLog
+            SettingsRoutes.SetupCopy -> SettingsPage.SetupCopy
             SettingsRoutes.Account -> selectedSettingsAccountId?.let { SettingsPage.AccountDetail(it) } ?: SettingsPage.Root
             SettingsRoutes.AccountWallpaper -> selectedSettingsAccountId?.let { SettingsPage.AccountWallpaper(it) } ?: SettingsPage.Root
             SettingsRoutes.KanbanBoard -> selectedSettingsBoardId?.let { SettingsPage.KanbanBoardDetail(it) } ?: SettingsPage.Root
@@ -311,6 +322,9 @@ internal fun SettingsScreen(
                             SettingsPage.Messages -> tr("settings.sections.messages")
                             SettingsPage.Composer -> tr("settings.sections.composer")
                             SettingsPage.Rules -> tr("rules.title")
+                            SettingsPage.AiSort -> tr("aiSort.title")
+                            SettingsPage.AiSortLog -> tr("aiSort.log")
+                            SettingsPage.SetupCopy -> tr("setupCopy.title")
                             is SettingsPage.AccountDetail -> tr("settings.account.account")
                             is SettingsPage.AccountWallpaper -> tr("settings.account.chatBackground")
                             is SettingsPage.KanbanBoardDetail -> tr("kanban.board.label")
@@ -389,6 +403,7 @@ internal fun SettingsScreen(
                     onExportBackup = onExportBackup,
                     onRestoreBackup = onRestoreBackup,
                     backupBusy = backupBusy,
+                    onOpenSetupCopy = { settingsNavController.navigate(SettingsRoutes.SetupCopy) },
                     focusProxy = directOpenRoute == SettingsRoutes.General,
                     modifier = Modifier.fillMaxSize(),
                 )
@@ -408,6 +423,8 @@ internal fun SettingsScreen(
                     onToggleAutoFitMessages = onToggleAutoFitMessages,
                     readerBottomActions = readerBottomActions,
                     onToggleReaderBottomActions = onToggleReaderBottomActions,
+                    blurredBars = blurredBars,
+                    onToggleBlurredBars = onToggleBlurredBars,
                     remoteImageSenderCount = remoteImageSenders.size,
                     onOpenRemoteSenders = { settingsNavController.navigate(SettingsRoutes.RemoteSenders) },
                     onOpenTags = onOpenTags,
@@ -417,6 +434,18 @@ internal fun SettingsScreen(
 
             composable(SettingsRoutes.Rules) {
                 rulesPage(Modifier.fillMaxSize())
+            }
+
+            composable(SettingsRoutes.AiSort) {
+                aiSortPage(Modifier.fillMaxSize()) { settingsNavController.navigate(SettingsRoutes.AiSortLog) }
+            }
+
+            composable(SettingsRoutes.AiSortLog) {
+                aiSortLogPage(Modifier.fillMaxSize())
+            }
+
+            composable(SettingsRoutes.SetupCopy) {
+                setupCopyPage(Modifier.fillMaxSize())
             }
 
             composable(SettingsRoutes.Composer) {
@@ -641,13 +670,21 @@ internal fun SettingsScreen(
                             onClick = { settingsNavController.navigate(SettingsRoutes.Rules) },
                         )
                     }
+                    item {
+                        SettingsRow(
+                            icon = Icons.Filled.AutoAwesome,
+                            title = tr("aiSort.title"),
+                            subtitle = null,
+                            onClick = { settingsNavController.navigate(SettingsRoutes.AiSort) },
+                        )
+                    }
                     item { SettingsSectionLabel(tr("settings.sections.kanbanBoards")) }
                     items(kanbanBoards, key = { it.id }) { board ->
                         SettingsRow(
                             icon = Icons.Filled.ViewKanban,
                             leading = { KanbanBoardTile(board, 40.dp) },
                             title = board.name,
-                            subtitle = trf("settings.kanban.boardColumns", board.columns.size),
+                            subtitle = tr("settings.kanban.boardColumns", mapOf("count" to board.columns.size)),
                             onClick = {
                                 selectedSettingsBoardId = board.id
                                 settingsNavController.navigate(SettingsRoutes.KanbanBoard)
@@ -780,6 +817,12 @@ private sealed class SettingsPage {
 
     data object Rules : SettingsPage()
 
+    data object AiSort : SettingsPage()
+
+    data object AiSortLog : SettingsPage()
+
+    data object SetupCopy : SettingsPage()
+
     data object RemoteSenders : SettingsPage()
 
     data object Theme : SettingsPage()
@@ -809,6 +852,9 @@ private object SettingsRoutes {
     const val Messages = "settings/messages"
     const val Composer = "settings/composer"
     const val Rules = "settings/rules"
+    const val AiSort = "settings/ai-sort"
+    const val AiSortLog = "settings/ai-sort-log"
+    const val SetupCopy = "settings/setup-copy"
     const val Account = "settings/account"
     const val AccountWallpaper = "settings/account-wallpaper"
     const val KanbanBoard = "settings/kanban-board"
@@ -863,6 +909,7 @@ internal fun SettingsGeneralPage(
     onExportBackup: () -> Unit,
     onRestoreBackup: () -> Unit,
     backupBusy: Boolean,
+    onOpenSetupCopy: () -> Unit = {},
     focusProxy: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
@@ -1078,6 +1125,14 @@ internal fun SettingsGeneralPage(
         item { SettingsSectionLabel(tr("settings.sections.data")) }
         item {
             SettingsRow(
+                icon = Icons.Filled.SyncAlt,
+                title = tr("setupCopy.title"),
+                hint = tr("setupCopy.rowHint"),
+                onClick = onOpenSetupCopy,
+            )
+        }
+        item {
+            SettingsRow(
                 icon = Icons.Filled.Save,
                 title = tr("settings.backup.exportTitle"),
                 hint = tr("settings.backup.fileHint"),
@@ -1136,6 +1191,8 @@ internal fun SettingsMessagesPage(
     onToggleAutoFitMessages: () -> Unit,
     readerBottomActions: Boolean,
     onToggleReaderBottomActions: () -> Unit,
+    blurredBars: Boolean,
+    onToggleBlurredBars: () -> Unit,
     remoteImageSenderCount: Int,
     onOpenRemoteSenders: () -> Unit,
     onOpenTags: () -> Unit,
@@ -1204,6 +1261,15 @@ internal fun SettingsMessagesPage(
                 hint = tr("settings.appearance.readerBottomActionsHint"),
                 checked = readerBottomActions,
                 onToggle = onToggleReaderBottomActions,
+            )
+        }
+        item {
+            SettingsToggleRow(
+                icon = Icons.Filled.BlurOn,
+                title = tr("settings.appearance.blurredBars"),
+                hint = tr("settings.appearance.blurredBarsHint"),
+                checked = blurredBars,
+                onToggle = onToggleBlurredBars,
             )
         }
 
@@ -1444,6 +1510,7 @@ internal fun SettingsToggleRow(
     checked: Boolean,
     /** Shown in place of [icon], such as an account's avatar. */
     leading: (@Composable () -> Unit)? = null,
+    enabled: Boolean = true,
     onToggle: () -> Unit,
 ) {
     ListItem(
@@ -1454,10 +1521,11 @@ internal fun SettingsToggleRow(
             Switch(
                 checked = checked,
                 onCheckedChange = { onToggle() },
+                enabled = enabled,
                 colors = settingsSwitchColors(),
             )
         },
-        modifier = Modifier.clickable(onClick = onToggle),
+        modifier = Modifier.clickable(enabled = enabled, onClick = onToggle),
     )
 }
 

@@ -31,6 +31,21 @@ private val mailChangingCommands =
         MobileCommand.FeedRemove,
     )
 
+/** Commands whose error text may quote an AI service, and so is never logged. */
+private val aiSortCommands =
+    setOf(
+        MobileCommand.AiSortConfig,
+        MobileCommand.SetAiSortConfig,
+        MobileCommand.SetAiSortKey,
+        MobileCommand.CheckAiSortKey,
+        MobileCommand.AiSortModels,
+        MobileCommand.AiSortEstimate,
+        MobileCommand.RunAiSort,
+        MobileCommand.StopAiSort,
+        MobileCommand.AiSortStatus,
+        MobileCommand.AiSortMoveBack,
+    )
+
 class JniMeronCore(
     /** Called after a successful [mailChangingCommands] command. */
     private val onMailChanged: () -> Unit = {},
@@ -44,13 +59,17 @@ class JniMeronCore(
         ensureLoaded()
         // Log command names and errors only — never payloads/responses, which
         // carry passwords and OAuth tokens.
-        val logLookup = command != "avatar.resolve"
+        // The setup copy screen asks for its status twice a second.
+        val logLookup = command != "avatar.resolve" && command != "setupCopy.status"
         if (logLookup) android.util.Log.i("MeronCore", "-> $command")
         val startedAt = System.currentTimeMillis()
         val response = MeronCoreNative.invokeJson(CoreRequest(1, command, payloadJson).toJson())
         val error = coreErrorMessage(response)
         if (error != null) {
-            android.util.Log.w("MeronCore", "<- $command error after ${System.currentTimeMillis() - startedAt}ms: $error")
+            // An AI sorting failure can carry the AI service's own answer, which
+            // must never reach the log; say only that it failed.
+            val logged = if (command in aiSortCommands) "(not logged)" else error
+            android.util.Log.w("MeronCore", "<- $command error after ${System.currentTimeMillis() - startedAt}ms: $logged")
         } else {
             if (logLookup) android.util.Log.i("MeronCore", "<- $command ok after ${System.currentTimeMillis() - startedAt}ms")
             if (command in mailChangingCommands) onMailChanged()

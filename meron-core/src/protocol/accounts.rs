@@ -29,6 +29,7 @@ struct AutoconfigServer {
 pub(crate) fn list_mobile_accounts(data_dir: &str) -> Result<Value, String> {
     with_mobile_db(data_dir, |conn| {
         let mut accounts = store::list_accounts(&conn).map_err(|err| err.to_string())?;
+        crate::account_photos::hide_missing(&std::path::Path::new(data_dir.trim()).join("media"), &mut accounts);
         let creds_by_id = store::load_accounts(&conn)
             .map_err(|err| err.to_string())?
             .into_iter()

@@ -222,6 +222,19 @@ export type Message = {
   has_starred_items?: boolean
   has_draft?: boolean
   has_attachments: boolean
+  /** "sender" on a row that stands for one person in the folder (group by
+   * sender); absent on thread rows and messages. Its thread id carries the
+   * key `sender:<address>`, which every thread action already understands. */
+  group?: 'sender'
+  /** Sender row only: the person is a no-reply or bulk address, so the chat
+   * offers no quick reply. */
+  automated?: boolean
+  /** The Meron folder (this device only) the card's conversation sits in;
+   * absent or null when in none, and always absent on sender rows. */
+  meron_folder_id?: string | null
+  /** The card lists in the Inbox from its own folder (mail AI sorting left
+   * there and shows in the Inbox). Its Undo shows it in the Inbox again. */
+  shown_in_inbox?: boolean
   attachments?: Attachment[]
   /** The calendar event this message carries, when it is an invitation (or an
    * update, cancellation or reply to one). Read by meron-core/src/calendar.rs. */

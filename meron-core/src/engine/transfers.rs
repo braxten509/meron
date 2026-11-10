@@ -83,7 +83,7 @@ pub async fn move_between_accounts(
             let batch = &refresh.batch;
             let db = engine.db.lock().unwrap();
             let _ = store::ensure_folder(&db, account, folder)
-                .and_then(|_| store::upsert_messages(&db, account, folder, &batch.messages))
+                .and_then(|_| store::upsert_window_messages(&db, account, folder, batch))
                 .and_then(|_| {
                     store::set_folder_state(&db, account, folder, batch.uidvalidity, batch.uid_next)
                 });

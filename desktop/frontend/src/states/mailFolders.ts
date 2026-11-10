@@ -13,7 +13,8 @@ import {
 } from './kanban'
 import { folderLeafName, pickDelimiter } from '../lib/folderTree'
 import { renameRecentTransferTargets } from './recentThreadTransfers'
-import { unifiedFolders } from '../lib/unifiedFolders'
+import { isMeronView, unifiedFolders } from '../lib/unifiedFolders'
+import { scheduleMeronFoldersRefresh } from './meronFolders'
 import { findLocalThread, mail$ } from './mail'
 import { closeMessageTabs } from './compose'
 import { compose$ } from './composeState'
@@ -374,6 +375,13 @@ export async function renameFolder(accountId: string, folder: Folder): Promise<b
 }
 
 export async function loadFolders(accountId: string, refresh = true) {
+  // The Meron folder view has no server folders of its own; its list lives in
+  // the side navigation, so re-read that (counts change with every move).
+  if (isMeronView(accountId)) {
+    mail$.folders.set([])
+    scheduleMeronFoldersRefresh()
+    return
+  }
   if (accountId === 'unified') {
     const accounts = unifiedAccounts()
     // Publish the synthetic list before the per-account counts land: it never
@@ -477,7 +485,7 @@ export async function promptNewFolder(accountId: string): Promise<Folder | null>
 }
 
 export async function refreshAccountFoldersCache(accountId: string, refresh = false): Promise<Folder[]> {
-  if (!accountId || accountId === 'unified') return []
+  if (!accountId || accountId === 'unified' || isMeronView(accountId)) return []
   try {
     const version = folderReadVersion
     const result = await invoke<{ folders: Folder[] }>('mail.folderList', { account_id: accountId, refresh })

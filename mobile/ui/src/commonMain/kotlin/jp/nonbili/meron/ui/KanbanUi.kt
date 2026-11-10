@@ -610,7 +610,7 @@ internal fun KanbanColumn(
     kanbanColumnWidth: Dp,
 ) {
     val visibleThreads = kanbanColumnVisibleThreads(column, state.threads, filter, search, searchScope, attachmentsOnly)
-    val canLoadMore = state.nextCursor.isNotBlank() || state.accountCursors.isNotEmpty()
+    val canLoadMore = state.nextCursor.isNotBlank() || state.accountCursors.isNotEmpty() || state.heldThreads.isNotEmpty()
     val accountsById = remember(accounts) { accounts.associateBy { it.id } }
     val showAccountBadge = column.accountId == UNIFIED_ACCOUNT_ID
     Card(

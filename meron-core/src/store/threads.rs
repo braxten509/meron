@@ -7,6 +7,7 @@ use std::collections::HashSet;
 
 use crate::imap::MessageHeader;
 
+use super::cleared_chats::ChatScope;
 use super::tags::{TAG_KEY_SQL, has_tags, tags_of_cards};
 
 #[derive(Clone)]
@@ -48,7 +49,14 @@ pub fn group_thread_cards_with_drafts(
     // for one with no threading headers — so on a page that spans folders (search
     // covers the mailbox plus Sent) two unrelated messages that happen to share a
     // UID carry the same key. Qualifying those with the folder keeps them apart.
+    //
+    // Mail shown in the Inbox from another folder (`ai_shown`) stays in a card
+    // of its own folder too, apart from the same conversation's Inbox mail:
+    // each card then acts (archive, delete, move) on the mail it really holds.
     let group_key = |message: &MessageHeader, key: &str| -> String {
+        if message.ai_shown {
+            return format!("{}\u{2}{key}", message.folder);
+        }
         if !key.starts_with("uid:") {
             return key.to_string();
         }
@@ -174,6 +182,8 @@ pub fn group_thread_cards_with_drafts(
         // those name a single message by (folder, uid), so the folder cannot move
         // without pointing at a different message.
         if !base_key.starts_with("uid:")
+            && !card.header.ai_shown
+            && !message.ai_shown
             && !card.header.folder.eq_ignore_ascii_case(default_folder)
             && message.folder.eq_ignore_ascii_case(default_folder)
         {
@@ -291,9 +301,10 @@ pub fn card_message_counts(
     let (uid_roots, threaded_roots): (Vec<String>, Vec<String>) =
         roots.into_iter().partition(|root| root.starts_with("uid:"));
 
+    let scope = ChatScope::for_folder(conn, account, folder)?;
     let mut counts: HashMap<String, u32> = HashMap::new();
-    count_card_rows(conn, account, Some(folder), &uid_roots, &mut counts)?;
-    count_card_rows(conn, account, None, &threaded_roots, &mut counts)?;
+    count_card_rows(conn, account, Some(folder), &scope, &uid_roots, &mut counts)?;
+    count_card_rows(conn, account, None, &scope, &threaded_roots, &mut counts)?;
     Ok(counts)
 }
 
@@ -328,9 +339,10 @@ pub fn card_root_subjects(
     // `uid:` roots name a message by (folder, uid) and never move; a real thread
     // key is the same thread wherever its copies sit, so its oldest message may
     // be cached in another folder.
+    let scope = ChatScope::for_folder(conn, account, folder)?;
     let mut candidates: HashMap<String, Vec<RootCandidate>> = HashMap::new();
-    collect_root_candidates(conn, account, Some(folder), &uid_roots, &mut candidates)?;
-    collect_root_candidates(conn, account, None, &threaded_roots, &mut candidates)?;
+    collect_root_candidates(conn, account, Some(folder), &scope, &uid_roots, &mut candidates)?;
+    collect_root_candidates(conn, account, None, &scope, &threaded_roots, &mut candidates)?;
 
     Ok(candidates
         .into_iter()
@@ -343,10 +355,12 @@ pub fn card_root_subjects(
 
 /// Gather the cached rows of `roots` as root candidates, keyed by root thread
 /// key. `folder` scopes the query to a single mailbox; `None` spans the account.
+/// Mail `scope` leaves out of the conversation cannot title it.
 pub(super) fn collect_root_candidates(
     conn: &Connection,
     account: &str,
     folder: Option<&str>,
+    scope: &ChatScope,
     roots: &[String],
     candidates: &mut std::collections::HashMap<String, Vec<RootCandidate>>,
 ) -> Result<()> {
@@ -364,7 +378,8 @@ pub(super) fn collect_root_candidates(
             ""
         };
         let mut stmt = conn.prepare(&format!(
-            "SELECT COALESCE(NULLIF(thread_key, ''), 'uid:' || uid), folder, uid, date, subject
+            "SELECT COALESCE(NULLIF(thread_key, ''), 'uid:' || uid), folder, uid, date, subject,
+                    {TAG_KEY_SQL}
              FROM messages
              WHERE account = ?1 AND {folder_clause}uid <> 0
                AND COALESCE(NULLIF(thread_key, ''), 'uid:' || uid) IN ({placeholders})"
@@ -381,10 +396,14 @@ pub(super) fn collect_root_candidates(
                     date: row.get(3)?,
                     subject: row.get(4)?,
                 },
+                row.get::<_, String>(5)?,
             ))
         })?;
         for row in rows {
-            let (root, candidate) = row?;
+            let (root, candidate, tag_key) = row?;
+            if scope.leaves_out(&candidate.folder, &tag_key) {
+                continue;
+            }
             candidates.entry(root).or_default().push(candidate);
         }
     }
@@ -426,8 +445,9 @@ pub fn card_attachments(
             rows.entry(key).or_default().push((row.date, row.files));
         }
     };
-    for_each_card_row(conn, account, Some(folder), &uid_roots, &mut collect)?;
-    for_each_card_row(conn, account, None, &threaded_roots, &mut collect)?;
+    let scope = ChatScope::for_folder(conn, account, folder)?;
+    for_each_card_row(conn, account, Some(folder), &scope, &uid_roots, &mut collect)?;
+    for_each_card_row(conn, account, None, &scope, &threaded_roots, &mut collect)?;
 
     Ok(rows
         .into_iter()
@@ -444,10 +464,11 @@ pub(super) fn count_card_rows(
     conn: &Connection,
     account: &str,
     folder: Option<&str>,
+    scope: &ChatScope,
     roots: &[String],
     counts: &mut std::collections::HashMap<String, u32>,
 ) -> Result<()> {
-    for_each_card_row(conn, account, folder, roots, |key, _| {
+    for_each_card_row(conn, account, folder, scope, roots, |key, _| {
         *counts.entry(key).or_insert(0) += 1;
     })
 }
@@ -478,8 +499,9 @@ pub fn card_tags(
     let mut keys_by_card: HashMap<String, Vec<String>> = HashMap::new();
     let mut collect =
         |card: String, row: CardRow| keys_by_card.entry(card).or_default().push(row.tag_key);
-    for_each_card_row(conn, account, Some(folder), &uid_roots, &mut collect)?;
-    for_each_card_row(conn, account, None, &threaded_roots, &mut collect)?;
+    let scope = ChatScope::for_folder(conn, account, folder)?;
+    for_each_card_row(conn, account, Some(folder), &scope, &uid_roots, &mut collect)?;
+    for_each_card_row(conn, account, None, &scope, &threaded_roots, &mut collect)?;
     tags_of_cards(conn, account, keys_by_card)
 }
 
@@ -521,8 +543,9 @@ pub fn card_senders(
     let mine = super::self_addrs(conn, account);
     let mut rows: HashMap<String, Vec<CardRow>> = HashMap::new();
     let mut collect = |key: String, row: CardRow| rows.entry(key).or_default().push(row);
-    for_each_card_row(conn, account, Some(folder), &uid_roots, &mut collect)?;
-    for_each_card_row(conn, account, None, &threaded_roots, &mut collect)?;
+    let scope = ChatScope::for_folder(conn, account, folder)?;
+    for_each_card_row(conn, account, Some(folder), &scope, &uid_roots, &mut collect)?;
+    for_each_card_row(conn, account, None, &scope, &threaded_roots, &mut collect)?;
 
     Ok(rows
         .into_iter()
@@ -636,7 +659,8 @@ pub(super) struct CardRow {
 /// Visit every cached message behind `roots` once, with the card key it belongs
 /// to. `folder` scopes the scan (for `uid:` roots); Message-ID copies across
 /// folders are folded, so a self-sent message cached in Inbox and Sent is one
-/// visit.
+/// visit. Mail `scope` leaves out of the conversation is not visited, so every
+/// tally agrees with what opening the card shows.
 ///
 /// The first copy supplies identity. Attachment metadata prefers a cached body
 /// over header-only copies, even when its refined list is empty.
@@ -644,6 +668,7 @@ fn for_each_card_row(
     conn: &Connection,
     account: &str,
     folder: Option<&str>,
+    scope: &ChatScope,
     roots: &[String],
     mut visit: impl FnMut(String, CardRow),
 ) -> Result<()> {
@@ -701,6 +726,9 @@ fn for_each_card_row(
         })?;
         for row in rows {
             let (root, subject, message_id, card_row) = row?;
+            if scope.leaves_out(&card_row.folder, &card_row.tag_key) {
+                continue;
+            }
             let key = if should_branch_thread_by_subject(&root) {
                 branch_compound_key(&root, &thread_grouping_subject(&subject))
             } else {
@@ -822,7 +850,9 @@ pub fn split_thread_key(thread_key: &str) -> (String, Option<String>) {
 }
 
 pub fn should_branch_thread_by_subject(thread_key: &str) -> bool {
-    !thread_key.starts_with("uid:") && !thread_key.starts_with("gmthrid:")
+    !thread_key.starts_with("uid:")
+        && !thread_key.starts_with("gmthrid:")
+        && !thread_key.starts_with(super::SENDER_KEY_PREFIX)
 }
 
 /// Join a root thread key and a grouping subject into one branch key. The root
@@ -934,6 +964,10 @@ pub fn get_thread_reference_gaps(
     account: &str,
     thread_key: &str,
 ) -> Result<Vec<String>> {
+    // A sender row names a person, not a conversation root.
+    if thread_key.starts_with(super::SENDER_KEY_PREFIX) {
+        return Ok(Vec::new());
+    }
     let mut stmt = conn.prepare(
         "SELECT json FROM messages
          WHERE account = ?1 AND uid <> 0
@@ -995,50 +1029,102 @@ pub fn get_thread_reference_gaps(
 /// per-folder UIDs sidestep the `UNIQUE(account, folder, msg_id)` constraint).
 /// We collapse those to a single bubble by keeping, per non-empty
 /// `Message-ID`, the unread copy if any, otherwise the lowest-`id` row. Rows
-/// without a `Message-ID` (e.g. drafts) are never collapsed — a NULL
-/// `Message-ID` never equates in SQL.
+/// without a `Message-ID` (e.g. drafts) are never collapsed.
+///
+/// This is every cached copy, thrown-away mail included; a conversation on
+/// screen is read with [`get_thread_headers_from_folder`].
 pub fn get_thread_headers_all_folders(
     conn: &Connection,
     account: &str,
     thread_key: &str,
 ) -> Result<Vec<MessageHeader>> {
-    let mut stmt = conn.prepare(
-        "SELECT m.uid, m.folder, m.subject, m.from_name, m.from_addr, m.date, m.seen, m.starred, m.thread_key,
-                json_extract(m.json, '$.in_reply_to')
-         FROM messages m
-         WHERE m.account = ?1 AND m.uid <> 0
-           AND COALESCE(NULLIF(m.thread_key, ''), 'uid:' || m.uid) = ?2
-           AND NOT EXISTS (
-             SELECT 1 FROM messages dup
-             WHERE dup.account = m.account
-               AND COALESCE(NULLIF(dup.thread_key, ''), 'uid:' || dup.uid) = ?2
-               AND COALESCE(json_extract(m.json, '$.message_id'), '') <> ''
-               AND json_extract(dup.json, '$.message_id') = json_extract(m.json, '$.message_id')
-               AND (dup.seen < m.seen OR (dup.seen = m.seen AND dup.id < m.id))
-           )
-         ORDER BY m.date ASC, m.uid ASC",
-    )?;
+    thread_headers_across_folders(conn, account, thread_key, None)
+}
+
+/// [`get_thread_headers_all_folders`] as a conversation read from `folder`
+/// shows it: without the mail a [`ChatScope`] leaves out (copies in Trash or
+/// Junk, and the reader's own replies to a conversation they deleted).
+pub fn get_thread_headers_from_folder(
+    conn: &Connection,
+    account: &str,
+    folder: &str,
+    thread_key: &str,
+) -> Result<Vec<MessageHeader>> {
+    let scope = ChatScope::for_folder(conn, account, folder)?;
+    thread_headers_across_folders(conn, account, thread_key, Some(&scope))
+}
+
+fn thread_headers_across_folders(
+    conn: &Connection,
+    account: &str,
+    thread_key: &str,
+    scope: Option<&ChatScope>,
+) -> Result<Vec<MessageHeader>> {
+    // `date` is an epoch integer, so the ORDER BY sorts chronologically.
+    // Unknown dates (0) sort first.
+    let mut stmt = conn.prepare(&format!(
+        "SELECT uid, folder, subject, from_name, from_addr, date, seen, starred, thread_key,
+                json_extract(json, '$.in_reply_to'),
+                id, COALESCE(json_extract(json, '$.message_id'), ''), {TAG_KEY_SQL}
+         FROM messages
+         WHERE account = ?1 AND uid <> 0
+           AND COALESCE(NULLIF(thread_key, ''), 'uid:' || uid) = ?2
+         ORDER BY date ASC, uid ASC"
+    ))?;
     let rows = stmt.query_map(params![account, thread_key], |row| {
         let uid: u32 = row.get(0)?;
-        Ok(MessageHeader {
-            uid,
-            folder: row.get(1)?,
-            subject: row.get(2)?,
-            from_name: row.get(3)?,
-            from_addr: row.get(4)?,
-            date: row.get(5)?,
-            seen: row.get::<_, i64>(6)? != 0,
-            starred: row.get::<_, i64>(7)? != 0,
-            thread_key: row
-                .get::<_, Option<String>>(8)?
-                .filter(|key| !key.is_empty())
-                .unwrap_or_else(|| format!("uid:{uid}")),
-            in_reply_to: row.get::<_, Option<String>>(9)?.unwrap_or_default(),
-            ..Default::default()
-        })
+        Ok((
+            MessageHeader {
+                uid,
+                folder: row.get(1)?,
+                subject: row.get(2)?,
+                from_name: row.get(3)?,
+                from_addr: row.get(4)?,
+                date: row.get(5)?,
+                seen: row.get::<_, i64>(6)? != 0,
+                starred: row.get::<_, i64>(7)? != 0,
+                thread_key: row
+                    .get::<_, Option<String>>(8)?
+                    .filter(|key| !key.is_empty())
+                    .unwrap_or_else(|| format!("uid:{uid}")),
+                in_reply_to: row.get::<_, Option<String>>(9)?.unwrap_or_default(),
+                ..Default::default()
+            },
+            row.get::<_, i64>(10)?,
+            row.get::<_, String>(11)?,
+            row.get::<_, String>(12)?,
+        ))
     })?;
-    // `date` is now an epoch integer, so the SQL ORDER BY sorts chronologically
-    // (it could not when date was an RFC 2822 string). Unknown dates (0) sort first.
-    let headers = rows.collect::<rusqlite::Result<Vec<_>>>()?;
-    Ok(headers)
+    // Left-out copies go first, so one never stands in for a shown copy of the
+    // same Message-ID.
+    let mut shown: Vec<(MessageHeader, i64, String)> = Vec::new();
+    for row in rows {
+        let (header, id, message_id, tag_key) = row?;
+        if scope.is_some_and(|scope| scope.leaves_out(&header.folder, &tag_key)) {
+            continue;
+        }
+        shown.push((header, id, message_id));
+    }
+    // Per Message-ID: the unread copy if any, otherwise the lowest row id.
+    let mut kept: std::collections::HashMap<&str, (bool, i64)> = Default::default();
+    for (header, id, message_id) in &shown {
+        if message_id.is_empty() {
+            continue;
+        }
+        let rank = (header.seen, *id);
+        kept.entry(message_id.as_str())
+            .and_modify(|best| *best = (*best).min(rank))
+            .or_insert(rank);
+    }
+    let keep: Vec<bool> = shown
+        .iter()
+        .map(|(header, id, message_id)| {
+            message_id.is_empty() || kept[message_id.as_str()] == (header.seen, *id)
+        })
+        .collect();
+    Ok(shown
+        .into_iter()
+        .zip(keep)
+        .filter_map(|((header, _, _), keep)| keep.then_some(header))
+        .collect())
 }

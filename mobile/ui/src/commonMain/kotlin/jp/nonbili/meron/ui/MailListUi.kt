@@ -122,6 +122,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
@@ -332,6 +333,8 @@ internal fun MailList(
     onLoadMore: (userInitiated: Boolean) -> Unit,
     showSenderImages: Boolean,
     showAccountBadge: Boolean,
+    /** The Meron folder a row's conversation is in, for its "In ‹name›" chip; null for none. */
+    meronFolderLabel: (ThreadSummary) -> String? = { null },
 ) {
     val listState = position.listState
     LaunchedEffect(scrollToTopRequest) {
@@ -415,36 +418,29 @@ internal fun MailList(
                     onOpen = { onToggleSelected(thread) },
                     onLongPress = { onLongPress(thread) },
                     onToggleStar = { onToggleStar(thread) },
+                    meronFolderLabel = meronFolderLabel(thread),
                 )
             } else {
                 val isRss = threadIdIsRss(thread.id)
                 val isRssItem = isRss && thread.threadId.isNotBlank() && thread.threadId != thread.id
                 val dismissState = rememberSwipeToDismissBoxState()
-                var dismissHandled by remember(thread.id) { mutableStateOf(false) }
-                LaunchedEffect(dismissState.currentValue) {
-                    if (dismissHandled) return@LaunchedEffect
-                    when (dismissState.currentValue) {
-                        SwipeToDismissBoxValue.StartToEnd -> {
-                            dismissHandled = true
-                            dismissState.snapTo(SwipeToDismissBoxValue.Settled)
-                            onArchive(thread)
-                        }
-
-                        SwipeToDismissBoxValue.EndToStart -> {
-                            dismissHandled = true
-                            dismissState.snapTo(SwipeToDismissBoxValue.Settled)
-                            if (isRss) pendingFeedRemoval = thread else onDelete(thread)
-                        }
-
-                        SwipeToDismissBoxValue.Settled -> {
-                            dismissHandled = false
-                        }
-                    }
-                }
+                val swipeScope = rememberCoroutineScope()
                 SwipeToDismissBox(
                     state = dismissState,
                     enableDismissFromStartToEnd = !isRss,
                     enableDismissFromEndToStart = !isRssItem,
+                    // Called once the swipe has settled past the threshold, never
+                    // mid-drag. Watching the state's value instead fired while the
+                    // finger was still down: the reset lost to the drag, the action
+                    // never ran, and the row stayed slid open on its colour.
+                    onDismiss = { direction ->
+                        swipeScope.launch { dismissState.snapTo(SwipeToDismissBoxValue.Settled) }
+                        when (direction) {
+                            SwipeToDismissBoxValue.StartToEnd -> onArchive(thread)
+                            SwipeToDismissBoxValue.EndToStart -> if (isRss) pendingFeedRemoval = thread else onDelete(thread)
+                            SwipeToDismissBoxValue.Settled -> Unit
+                        }
+                    },
                     backgroundContent = {
                         val direction = dismissState.dismissDirection
                         val deleting = direction == SwipeToDismissBoxValue.EndToStart
@@ -492,6 +488,7 @@ internal fun MailList(
                         onOpen = { onOpen(thread) },
                         onLongPress = { onLongPress(thread) },
                         onToggleStar = { onToggleStar(thread) },
+                        meronFolderLabel = meronFolderLabel(thread),
                     )
                 }
             }
@@ -620,6 +617,7 @@ internal fun MailRow(
     onOpen: () -> Unit,
     onLongPress: () -> Unit,
     onToggleStar: () -> Unit,
+    meronFolderLabel: String? = null,
 ) {
     val unread = thread.unread
     val chat = LocalChatColors.current
@@ -766,7 +764,9 @@ internal fun MailRow(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
-                if (selectionActive) {
+                // Sender rows star single emails inside the chat, not the row; the
+                // spacer keeps the row the same size as a thread row.
+                if (selectionActive || thread.isSenderGroup) {
                     Spacer(Modifier.size(30.dp))
                 } else {
                     IconButton(onClick = onToggleStar, modifier = Modifier.size(30.dp)) {
@@ -779,7 +779,19 @@ internal fun MailRow(
                     }
                 }
             }
-            MailRowTagChips(thread.tags, Modifier.padding(top = 4.dp))
+            if (meronFolderLabel != null) {
+                // One line with the tags, so the row grows no taller than a tagged one.
+                Row(
+                    Modifier.padding(top = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    MeronFolderRowChip(meronFolderLabel, Modifier.widthIn(max = 140.dp))
+                    MailRowTagChips(thread.tags)
+                }
+            } else {
+                MailRowTagChips(thread.tags, Modifier.padding(top = 4.dp))
+            }
             if (thread.files.isNotEmpty()) {
                 MailRowAttachmentChips(thread.files, Modifier.padding(top = 4.dp))
             }
@@ -875,12 +887,13 @@ internal fun AccountBadgeAvatar(
     size: Dp,
     fallbackIcon: ImageVector? = null,
 ) {
-    var image by remember(avatarUrl) { mutableStateOf<ImageBitmap?>(null) }
+    val side = with(LocalDensity.current) { size.roundToPx() }
+    var image by remember(avatarUrl, side) { mutableStateOf<ImageBitmap?>(null) }
 
-    LaunchedEffect(avatarUrl) {
+    LaunchedEffect(avatarUrl, side) {
         image = null
         if (avatarUrl.isNotBlank()) {
-            image = withContext(ioDispatcher) { loadImageBitmapRef(avatarUrl) }
+            image = withContext(ioDispatcher) { loadThumbnailBitmapRef(avatarUrl, side) }
         }
     }
 
@@ -906,12 +919,13 @@ internal fun SenderAvatar(
 ) {
     val core = LocalAvatarCore.current
     val email = remember(label) { extractEmail(label) }
-    var image by remember(email, enabled, core) { mutableStateOf<ImageBitmap?>(null) }
+    val side = with(LocalDensity.current) { size.roundToPx() }
+    var image by remember(email, enabled, core, side) { mutableStateOf<ImageBitmap?>(null) }
 
-    LaunchedEffect(email, enabled, core) {
+    LaunchedEffect(email, enabled, core, side) {
         image = null
         if (enabled && email != null && core != null) {
-            image = loadSenderImage(core, email)
+            image = loadSenderImage(core, email, side)
         }
     }
 
@@ -981,4 +995,25 @@ internal fun accountAvatarFallbackIcon(account: AccountSummary): ImageVector? = 
 internal fun extractEmail(value: String): String? {
     val match = Regex("[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}", RegexOption.IGNORE_CASE).find(value)
     return match?.value?.trim()
+}
+
+/** "In ‹name›" under a search result whose conversation sits in a Meron folder.
+ *  Same size as a tag chip; neutral colours so it never reads as a tag. */
+@Composable
+private fun MeronFolderRowChip(
+    name: String,
+    modifier: Modifier = Modifier,
+) {
+    Text(
+        tr("meronFolders.inFolder", mapOf("name" to name)),
+        fontSize = 11.sp,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier =
+            modifier
+                .clip(RoundedCornerShape(6.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .padding(horizontal = 6.dp, vertical = 2.dp),
+    )
 }

@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.Outbox
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Report
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.ViewKanban
@@ -610,6 +611,23 @@ internal fun AttachmentsOnlyMenuItem(
     DropdownMenuItem(
         text = { Text(tr("filters.hasAttachment")) },
         leadingIcon = { Icon(Icons.Filled.AttachFile, contentDescription = null) },
+        trailingIcon = {
+            if (checked) Icon(Icons.Filled.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+        },
+        onClick = { onCheckedChange(!checked) },
+    )
+}
+
+// The group-by-sender switch, right under the attachments toggle and drawn the
+// same way: one row per person instead of one per conversation.
+@Composable
+internal fun GroupBySenderMenuItem(
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    DropdownMenuItem(
+        text = { Text(tr("filters.groupBySender")) },
+        leadingIcon = { Icon(Icons.Filled.Person, contentDescription = null) },
         trailingIcon = {
             if (checked) Icon(Icons.Filled.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
         },

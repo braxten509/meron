@@ -34,6 +34,8 @@ import { goToSearchMatch, setAllMessagesExpanded, thread$ } from '../../states/t
 import { accounts$, isLocalAccountId } from '../../states/accounts'
 import { exportThreadsAsEml } from '../../states/emlExport'
 import { isRssAccount } from '../../lib/threadActions'
+import { senderChatIdentity } from '../../lib/senderThread'
+import { mail$ } from '../../states/mailState'
 import { closeCurrentConversation, kanban$ } from '../../states/kanban'
 import { openReplyInFullEditor } from '../../states/compose'
 import { canReplyAllToThread } from '../../states/composeReply'
@@ -46,6 +48,7 @@ import { MenuItem } from '../menu/MenuItem'
 import { targetWithin } from '../menu/useDismissOnOutside'
 import { AddToTasksButton } from '../tasks/AddToTasksButton'
 import { ThreadMoveCopyItems } from '../threads/ThreadMoveCopyItems'
+import { MeronFolderItems } from '../threads/MeronFolderItems'
 import { ThreadTagItem } from '../threads/ThreadTagItem'
 import { ConversationSubject } from './ConversationSubject'
 import { useConversationMode } from './useMessageView'
@@ -79,6 +82,12 @@ export function ConversationHeader({
   const expandAllAction = useValue(thread$.expandAllAction)
   const tasksEnabled = useValue(settings$.tasksEnabled)
   const normalizedThreadSearch = threadSearch.trim().toLowerCase()
+  // A sender row's chat (group by sender) is about a person, not a subject: the
+  // header names them, with their address underneath like a feed's host.
+  const loadedMessages = useValue(mail$.messages)
+  const sender = isRSS ? null : senderChatIdentity(activeThread, loadedMessages)
+  const title = sender ? sender.name : activeThread.subject
+  const subtitle = isRSS ? activeThread.from_addr : sender?.address
 
   const [printing, setPrinting] = useState(false)
   const [actionsMenuOpen, setActionsMenuOpen] = useState(false)
@@ -184,25 +193,31 @@ export function ConversationHeader({
           <ReplyAll size={15} className="shrink-0" /> {t('chat.actions.replyAll')}
         </button>
       )}
-      <button
-        onClick={() => {
-          void starThread(activeThread.thread_id, !activeThread.starred)
-          closeActionMenus()
-        }}
-        className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-medium text-primary cursor-pointer hover:bg-hover"
-      >
-        <Star size={15} className={`shrink-0 ${activeThread.starred ? 'fill-amber-500 text-amber-500' : ''}`} />
-        {activeThread.starred ? t('chat.unstar') : t('chat.star')}
-      </button>
+      {/* Stars and tags go on single emails in a sender chat (each bubble's
+          own menu), never on the person as a whole. */}
+      {!sender && (
+        <button
+          onClick={() => {
+            void starThread(activeThread.thread_id, !activeThread.starred)
+            closeActionMenus()
+          }}
+          className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-medium text-primary cursor-pointer hover:bg-hover"
+        >
+          <Star size={15} className={`shrink-0 ${activeThread.starred ? 'fill-amber-500 text-amber-500' : ''}`} />
+          {activeThread.starred ? t('chat.unstar') : t('chat.star')}
+        </button>
+      )}
       {!isRSS && (
         <>
-          <ThreadTagItem
-            key={activeThread.thread_id}
-            threadId={activeThread.thread_id}
-            close={closeActionMenus}
-            itemClassName="h-auto! gap-2.5! px-3! py-2 text-xs! font-medium!"
-            iconSize={15}
-          />
+          {!sender && (
+            <ThreadTagItem
+              key={activeThread.thread_id}
+              threadId={activeThread.thread_id}
+              close={closeActionMenus}
+              itemClassName="h-auto! gap-2.5! px-3! py-2 text-xs! font-medium!"
+              iconSize={15}
+            />
+          )}
           {!isLocalAccountId(activeThread.account_id) && (
             <button
               onClick={() => {
@@ -222,6 +237,20 @@ export function ConversationHeader({
             itemClassName="h-auto! gap-2.5! px-3! py-2 text-xs! font-medium!"
             iconSize={15}
           />
+          {/* Meron folders take whole conversations of server accounts, never
+            a sender chat, and never from Drafts, Trash or Junk. */}
+          {!sender &&
+            !isLocalAccountId(activeThread.account_id) &&
+            !deletesForever(activeThread.account_id, activeThread.folder_id) &&
+            !isDraftFolder(activeThread.folder_id, activeThread.account_id) && (
+              <MeronFolderItems
+                threadIds={[activeThread.thread_id]}
+                currentFolderId={activeThread.meron_folder_id}
+                close={closeActionMenus}
+                itemClassName="h-auto! gap-2.5! px-3! py-2 text-xs! font-medium!"
+                iconSize={15}
+              />
+            )}
           <div className="my-1 h-px bg-border" />
           <MenuItem
             icon={<Printer size={15} className="shrink-0" />}
@@ -255,11 +284,13 @@ export function ConversationHeader({
             className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-medium text-rose-600 dark:text-rose-400 cursor-pointer hover:bg-rose-50 dark:hover:bg-rose-950/25"
           >
             <Trash2 size={15} className="shrink-0" />
-            {inTrash
-              ? t('threads.actions.deleteForever')
-              : inDrafts
-                ? t('threads.actions.discardDraft')
-                : t('threads.actions.moveToTrash')}
+            {sender
+              ? t('buttons.delete')
+              : inTrash
+                ? t('threads.actions.deleteForever')
+                : inDrafts
+                  ? t('threads.actions.discardDraft')
+                  : t('threads.actions.moveToTrash')}
           </button>
         </>
       )}
@@ -298,23 +329,24 @@ export function ConversationHeader({
         )}
 
         <Avatar
-          name={activeThread.from_name || activeThread.from_addr}
-          email={isRSS ? undefined : activeThread.from_addr}
+          name={sender ? sender.name : activeThread.from_name || activeThread.from_addr}
+          email={isRSS ? undefined : (sender?.address ?? activeThread.from_addr)}
           src={isRSS && activeThread.feed_icon ? `/media/${activeThread.feed_icon}` : undefined}
           size={32}
         />
 
         <div className="min-w-0 flex-1">
           <ConversationSubject
-            subject={activeThread.subject}
+            subject={title}
             copyLabel={t('chat.copySubject')}
-            onCopy={() => copyHeaderText(activeThread.subject, 'Subject copied')}
+            onCopy={() => copyHeaderText(title, sender ? 'Copied' : 'Subject copied')}
           />
-          {isRSS && (
+          {subtitle && (
             // RSS subject == from_name (both the feed title), so the feed host
-            // sits under it rather than the name again.
-            <p className="truncate text-[0.71875rem] text-secondary mt-0.5 font-medium" title={activeThread.from_addr}>
-              {activeThread.from_addr}
+            // sits under it rather than the name again; a sender chat shows the
+            // person's address under their name.
+            <p className="truncate text-[0.71875rem] text-secondary mt-0.5 font-medium" title={subtitle}>
+              {subtitle}
             </p>
           )}
         </div>

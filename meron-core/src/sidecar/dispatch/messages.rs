@@ -65,6 +65,7 @@ pub(crate) async fn dispatch(
                     "query": req_str(p, "query").unwrap_or_default(),
                     "filter": req_str(p, "filter").unwrap_or_default(),
                     "attachments": p.get("attachments").and_then(Value::as_bool).unwrap_or(false),
+                    "group_by": req_str(p, "group_by").unwrap_or_default(),
                     "limit": from.fetch_limit(limit),
                     "refresh": p.get("refresh").and_then(Value::as_bool).unwrap_or(true),
                     "group": true,
@@ -404,11 +405,39 @@ async fn messages_recent(engine: &Arc<Engine>, p: &Value, out: &Writer) -> anyho
     }
     let folder = request.folder.clone();
     let limit = request.limit;
+    // The background sync a first page asks for reads a fixed window, not the
+    // page's limit: a reload re-reads as deep as the list was scrolled (up to
+    // hundreds of rows), and syncing that deep pulled older server mail into
+    // the cache, and into the list, on every refresh.
+    let sync_limit = thread_list::DEFAULT_LIMIT;
     // Capture this before spawning the background refresh. The returned
     // page was read from the pre-refresh cache, so its empty-state
     // metadata must describe that same snapshot.
     let folder_synced_before =
         store::get_folder_state(&engine.db.lock().unwrap(), &account, &folder)?.is_some();
+    // Sender mode: one row per correspondent, read from the cache like the
+    // plain Recent view, with the same background sync.
+    let sender_page = {
+        let db = engine.db.lock().unwrap();
+        if request.sender_grouping_in(&db, &account)? {
+            Some(thread_list::sender_page(&db, &account, &request)?)
+        } else {
+            None
+        }
+    };
+    if let Some(mut page) = sender_page {
+        if refresh && request.wants_background_sync() {
+            spawn_message_sync(
+                engine.clone(),
+                out.clone(),
+                account.clone(),
+                folder.clone(),
+                sync_limit,
+            );
+        }
+        page["folder_synced"] = Value::Bool(folder_synced_before);
+        return Ok(page);
+    }
     // Desktop starred reads are online-first. Search first paints the
     // local index with refresh=false, then repeats with refresh=true;
     // snapshot-backed later pages are local even though they travel
@@ -417,17 +446,27 @@ async fn messages_recent(engine: &Arc<Engine>, p: &Value, out: &Writer) -> anyho
     let (messages, next_cursor) = match request.source() {
         thread_list::MailSource::Starred => {
             let folders = starred_search_folders(engine, &account, &folder).await;
-            (
-                search_starred_mail_messages(engine, &account, &folders, limit, refresh).await?,
-                None,
+            // The live server read refreshes the store; the page comes from the
+            // store, Meron-folder conversations left out before the limit,
+            // with a `date:` cursor for the next page.
+            starred_mail_page(
+                engine,
+                &account,
+                &folders,
+                limit,
+                request.before_cursor,
+                request.before_folder.as_deref(),
+                refresh,
             )
+            .await?
         }
-        thread_list::MailSource::Recent { filter } => store::get_recent_page(
+        thread_list::MailSource::Recent { filter } => store::get_recent_page_from(
             &engine.db.lock().unwrap(),
             &account,
             &folder,
             limit,
             request.before_cursor,
+            request.before_folder.as_deref(),
             filter,
         )?,
         thread_list::MailSource::Search => {
@@ -472,7 +511,7 @@ async fn messages_recent(engine: &Arc<Engine>, p: &Value, out: &Writer) -> anyho
             out.clone(),
             account.clone(),
             folder.clone(),
-            limit,
+            sync_limit,
         );
     }
     let mut page = thread_list::mail_page(

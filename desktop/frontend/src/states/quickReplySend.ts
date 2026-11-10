@@ -27,7 +27,13 @@ import {
   textToHtml,
 } from './compose'
 import { inlineRichStyles, prepareInlineImages } from '../components/composer/composerHelpers'
-import { buildReplyRecipients, buildReplyThreading, pickReplyTarget, resolveQuickReplyFrom } from './composeReply'
+import {
+  buildReplyRecipients,
+  buildReplyThreading,
+  pickReplyTarget,
+  replySubject,
+  resolveQuickReplyFrom,
+} from './composeReply'
 import { allocateMessageIdentity, compose$, newDraftMessageId } from './composeState'
 import {
   cancelQuickReplyDraftSave,
@@ -77,6 +83,14 @@ function conversationHtmlBody(text: string, attachments: ComposerAttachment[]): 
   return `${body}${imageHtml}`
 }
 
+/** A send that stopped before anything went out: say why on screen (a button
+ *  that does nothing reads as broken) and leave the details in the app log. */
+function refuseSend(reason: string, details: Record<string, unknown>) {
+  showToast(`${t('compose.toast.sendFailed')}: ${reason}`, 'error')
+  console.error('Reply not sent:', reason, details)
+  invoke('log.note', { text: `reply not sent: ${reason} ${JSON.stringify(details)}` }).catch(() => {})
+}
+
 export async function sendReply() {
   const composerText = quickReplyOutgoingText()
   const attachments = compose$.composerAttachments.get()
@@ -84,13 +98,30 @@ export async function sendReply() {
   const selectedAcc = ui$.selectedAccount.get()
 
   // A box holding only the seeded signature is not a reply worth sending.
-  if (isQuickReplyBlank() || !activeT) return
+  if (isQuickReplyBlank()) return
+  const where = () => ({
+    selectedThread: ui$.selectedThread.peek(),
+    selectedAccount: selectedAcc,
+    selectedFolder: ui$.selectedFolder.peek(),
+    rows: mail$.threads.peek().length,
+    thread: activeT ? { id: activeT.thread_id, account: activeT.account_id, folder: activeT.folder_id } : null,
+  })
+  if (!activeT) {
+    refuseSend('this conversation is not in the list any more. Open it again and retry.', where())
+    return
+  }
 
   const replyAccountId = activeT.account_id || selectedAcc
   const accounts = accounts$.get()
   const activeAcc = accounts.find((acc) => acc.id === replyAccountId) || accounts[0] || null
-  if (!replyAccountId || replyAccountId === 'unified') return
-  if (activeAcc?.provider === 'rss' || activeAcc?.auth_type === 'rss' || isLocalAccountId(replyAccountId)) return
+  if (!replyAccountId || replyAccountId === 'unified' || !accounts.some((acc) => acc.id === replyAccountId)) {
+    refuseSend('no mail account could be found for this conversation.', where())
+    return
+  }
+  if (activeAcc?.provider === 'rss' || activeAcc?.auth_type === 'rss' || isLocalAccountId(replyAccountId)) {
+    refuseSend('this conversation can only be read, not answered.', where())
+    return
+  }
 
   // Claim the box now, synchronously: the thread load and identity allocation
   // below are awaits the user can keep typing through, and an autosave that
@@ -151,7 +182,6 @@ export async function sendReply() {
   const prepared = prepareConversationAttachments(attachments)
   const sendAttachments = prepared.attachments
   const html = prepared.hasInlineImages ? conversationHtmlBody(text, sendAttachments) : ''
-  const subject = activeT.subject.startsWith('Re:') ? activeT.subject : `Re: ${activeT.subject}`
   const tempId = `${LOCAL_SEND_PREFIX}${Date.now()}`
   // Recipients and threading follow the reply target, which the thread load
   // below can change; the From indicator's pick, else the alias the original
@@ -162,7 +192,15 @@ export async function sendReply() {
     const target = pickReplyTarget(activeT, tempId)
     const { to, cc } = buildReplyRecipients(target)
     const { in_reply_to, references } = buildReplyThreading(target)
-    return { target, to, cc, in_reply_to, references, from: resolveQuickReplyFrom(target, activeAcc) }
+    return {
+      target,
+      to,
+      cc,
+      in_reply_to,
+      references,
+      from: resolveQuickReplyFrom(target, activeAcc),
+      subject: replySubject(activeT, target),
+    }
   }
   let addressed = addressReply()
 
@@ -185,7 +223,7 @@ export async function sendReply() {
     from_addr: addressed.from || activeAcc?.email || '',
     to: addressed.to,
     cc: addressed.cc,
-    subject,
+    subject: addressed.subject,
     preview: text || (sendAttachments.length > 0 ? `[Attachment: ${sendAttachments[0].filename}]` : ''),
     body: text,
     date: Math.floor(Date.now() / 1000),
@@ -263,7 +301,7 @@ export async function sendReply() {
           from: addressed.from,
           to: addressed.to,
           cc: addressed.cc,
-          subject,
+          subject: addressed.subject,
           rich: false,
           content: text,
           inReplyTo: addressed.in_reply_to,
@@ -395,7 +433,7 @@ export async function sendReply() {
     account_id: replyAccountId,
     to: addressed.to,
     cc: addressed.cc,
-    subject,
+    subject: addressed.subject,
     body: outgoing.body,
     html: outgoing.html,
     in_reply_to: addressed.in_reply_to,

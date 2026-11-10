@@ -42,6 +42,38 @@ pub(crate) async fn new_messages_detail(
     mail_model::new_messages_detail(&db, account, &account_name, folder, muted, headers)
 }
 
+/// Announce new mail AI sorting filed into Meron folders with notifications
+/// on: one `mail.newMessages` per Meron folder, bodies fetched first as for
+/// any arrivals.
+pub(crate) async fn emit_meron_arrivals(
+    engine: &Arc<Engine>,
+    out: &Writer,
+    account: &str,
+    groups: Vec<meron_core::engine::ai_sort::MeronArrivals>,
+) {
+    for group in groups {
+        let uids: Vec<u32> = group
+            .headers
+            .iter()
+            .take(mail_model::NEW_MESSAGES_DETAIL_MAX)
+            .map(|header| header.uid)
+            .collect();
+        let fetch = fetch_bodies_for_uids(engine, account, &group.folder, &uids, parse::media_root());
+        if tokio::time::timeout(NOTIFY_PREVIEW_TIMEOUT, fetch).await.is_err() {
+            eprintln!("meron-core: notification bodies for {account}: timed out");
+        }
+        let account_name = account_label(engine, account);
+        let muted = engine.is_muted(account);
+        let detail = {
+            let db = engine.db.lock().unwrap();
+            mail_model::meron_new_messages_detail(&db, account, &account_name, muted, &group)
+        };
+        if let Some(detail) = detail {
+            emit(out, "mail.newMessages", detail).await;
+        }
+    }
+}
+
 /// Friendly display name or email address of an account for user-facing notifications.
 pub(crate) fn account_label(engine: &Arc<Engine>, account: &str) -> String {
     let db = engine.db.lock().unwrap();
@@ -309,7 +341,9 @@ pub(crate) async fn sync_and_notify(
     // compare it across the refresh to tell them apart.
     let is_inbox = folder.eq_ignore_ascii_case("INBOX");
     // Refresh on a separate connection (the IDLE one stays dedicated to IDLE).
-    let synced = sync_messages(engine, account, folder, IDLE_LIMIT).await?;
+    let mut synced = sync_messages(engine, account, folder, IDLE_LIMIT).await?;
+    let meron_arrivals = std::mem::take(&mut synced.meron_arrivals);
+    emit_meron_arrivals(engine, out, account, meron_arrivals).await;
 
     let arrivals = (!synced.arrivals.is_empty()).then_some(synced.arrivals);
 
@@ -383,6 +417,16 @@ pub(crate) async fn idle_once(
                     let (idle_fut, _stop) = handle.wait_with_timeout(Duration::from_secs(15 * 60));
                     idle_fut.await.context("IDLE")?
                 };
+                // A burst of removals or flag changes (a bulk delete is one
+                // notice per message) gets one refresh after it, not one each.
+                imap::settle_idle(
+                    &mut handle,
+                    &response,
+                    imap::IDLE_SETTLE_QUIET,
+                    imap::IDLE_SETTLE_CAP,
+                )
+                .await
+                .context("IDLE")?;
                 let session = handle.done().await.context("IDLE done")?;
                 Ok::<_, anyhow::Error>((session, response))
             } => result?,

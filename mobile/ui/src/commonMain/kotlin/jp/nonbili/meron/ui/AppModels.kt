@@ -102,13 +102,21 @@ internal data class ImagePreview(
 }
 
 /** Where a tapped notification lands. A blank [threadKey] — what a group
- *  summary carries — opens the folder without selecting a thread. */
+ *  summary carries — opens the folder without selecting a thread.
+ *  [fromAddr] is the notified mail's sender (lowercase), which group-by-sender
+ *  opens as that person's chat; blank opens the thread. */
 data class NotificationThreadTarget(
     val accountId: String,
     val folder: String,
     val threadKey: String = "",
     val nonce: Long = currentTimeMillis(),
-)
+    val fromAddr: String = "",
+) {
+    /** Swift sees no Kotlin default arguments, so the iOS host's four-argument
+     *  call keeps its own initializer. */
+    constructor(accountId: String, folder: String, threadKey: String, nonce: Long) :
+        this(accountId, folder, threadKey, nonce, "")
+}
 
 internal enum class FilterMode { All, Unread, Starred }
 
@@ -123,6 +131,13 @@ internal enum class SendShortcutMode { Enter, ModEnter }
 internal enum class ConversationLayout { Chat, Traditional }
 
 internal const val UNIFIED_ACCOUNT_ID = "unified"
+
+/** The mail list's pseudo-account for a Meron folder; the folder id is its folder. */
+internal const val MERON_FOLDERS_ACCOUNT_ID = "meron-folders"
+
+/** The built-in Archive Meron folder: whole conversations archived from now on
+ *  are filed here as well as archived on the server. */
+internal const val MERON_ARCHIVE_FOLDER_ID = "mf_archive"
 internal const val INBOX_FOLDER = "inbox"
 internal const val STARRED_FOLDER = "starred"
 internal const val KANBAN_PREFS = "kanban"
@@ -140,6 +155,10 @@ internal const val DARK_THEME_PREF = "dark_theme_v1"
 internal const val CUSTOM_THEMES_PREF = "custom_themes_v1"
 internal const val SHOW_UNREAD_BADGES_PREF = "show_unread_badges_v1"
 internal const val SHOW_UNIFIED_INBOX_PREF = "show_unified_inbox_v1"
+
+/** Whether the mail list groups by sender (one row per person per folder)
+ *  instead of by thread. One setting per device. */
+internal const val GROUP_BY_SENDER_PREF = "group_by_sender_v1"
 
 /** Whether the optional Tasks screen is offered. Off until the user asks for it. */
 internal const val TASKS_ENABLED_PREF = "tasks_enabled_v1"
@@ -163,6 +182,11 @@ internal const val CHAT_FULL_MESSAGES_PREF = "chat_full_messages_v1"
 /** Whether the message reader puts reply, forward and delete in a bottom bar
  *  where they are easier to reach, instead of only in the top overflow menu. */
 internal const val READER_BOTTOM_ACTIONS_PREF = "reader_bottom_actions_v1"
+
+/** Whether the bands under the status bar and over the reply bar blur what
+ *  scrolls under them. Off by default: drawing mail pages blurred costs about
+ *  half of each frame on a long thread, so scrolling stutters. */
+internal const val BLURRED_BARS_PREF = "blurred_bars_v1"
 
 /** Whether replies carry the message they answer, quoted under the reply text.
  *  Off by default: replies read as chat messages. */
@@ -212,6 +236,10 @@ internal data class MailboxLoadResult(
     // mailbox so switching away and back keeps the pages the user paged in.
     // Loaders leave it at the default; the mailbox sets it when caching.
     val pageDepth: Int = MAILBOX_PAGE_SIZE,
+    // Cards a reload read past the oldest card that was on screen. They are
+    // not shown yet: the next "load more" shows them before reading on from
+    // [nextCursor], which already sits below them.
+    val heldThreads: List<ThreadSummary> = emptyList(),
 )
 
 internal data class MailboxCacheKey(
@@ -220,6 +248,8 @@ internal data class MailboxCacheKey(
     val query: String,
     val filter: FilterMode,
     val attachmentsOnly: Boolean = false,
+    /** Sender rows and thread rows are different lists; never mix them. */
+    val groupBySender: Boolean = false,
 )
 
 /** See `MeronMobileState.deferredMailboxReload`. `refreshSearch` is kept so a
@@ -228,6 +258,10 @@ internal data class MailboxCacheKey(
 internal data class DeferredMailboxReload(
     val key: MailboxCacheKey,
     val refreshSearch: Boolean,
+    /** A reload that stepped aside still has to ask the server. */
+    val syncFirst: Boolean = false,
+    /** It was the user's pull-to-refresh, so it keeps the spinner. */
+    val pull: Boolean = false,
 )
 
 internal data class KanbanColumnSpec(
@@ -350,6 +384,9 @@ internal data class KanbanColumnState(
     // limit counts message headers, which group into fewer threads, so a reload
     // re-reads this many rather than the number of cards shown.
     val readDepth: Int = MAILBOX_PAGE_SIZE,
+    // Cards a reload read below the oldest card on screen (see
+    // `readMailboxToOldestShown`): the next "load more" shows them first.
+    val heldThreads: List<ThreadSummary> = emptyList(),
 )
 
 internal data class KanbanColumnView(

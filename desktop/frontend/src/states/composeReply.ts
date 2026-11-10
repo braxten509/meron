@@ -4,6 +4,7 @@ import { accounts$, isSendableAccount, accountIdentities } from './accounts'
 import { mail$, getActiveThread } from './mail'
 import { isDraftFolder, isInboxFolder } from './mailFolders'
 import { bareAddr, splitAddressList } from '../lib/address'
+import { isSenderThreadId } from '../lib/senderThread'
 import { compose$ } from './composeState'
 
 // Reply addressing: which message to answer, from which identity, and to whom.
@@ -21,6 +22,15 @@ export function pickReplyTarget(activeT: Message, excludedId = ''): Message {
   const received = inThread.filter((m) => !sentByUs(m, ownAddrs))
   const replyable = received.filter((m) => m.reply?.accepts_replies !== false)
   return replyable[replyable.length - 1] ?? received[received.length - 1] ?? inThread[inThread.length - 1] ?? activeT
+}
+
+/** The subject a reply to `target` goes out under. A sender chat (group by
+ * sender) mixes many conversations, so its row's subject — the person's newest
+ * mail — is not the one being answered: the reply target's own subject is.
+ * An ordinary thread keeps the conversation's subject. */
+export function replySubject(activeT: Message, target: Message): string {
+  const base = isSenderThreadId(activeT.thread_id) ? target.subject || activeT.subject : activeT.subject
+  return base.startsWith('Re:') ? base : `Re: ${base}`
 }
 
 /** Whether a loaded message is one we sent, as opposed to one we received.

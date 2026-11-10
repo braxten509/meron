@@ -81,12 +81,16 @@ internal fun MeronMobileState.applyAccounts(
     accountsLoading = false
     val previousAccountId = selectedCoreAccountId
     selectedCoreAccountId = preferEmail?.let { wanted -> parsed.firstOrNull { it.email == wanted }?.id }
-        ?: selectedCoreAccountId.takeIf { sel -> sel == UNIFIED_ACCOUNT_ID || parsed.any { it.id == sel } }
+        ?: selectedCoreAccountId.takeIf { sel ->
+            sel == UNIFIED_ACCOUNT_ID || sel == MERON_FOLDERS_ACCOUNT_ID || parsed.any { it.id == sel }
+        }
         ?: UNIFIED_ACCOUNT_ID
     if (selectedCoreAccountId != previousAccountId) {
         selectedCoreFolder = loadMailFolderForAccount(prefs, selectedCoreAccountId)
     }
     saveLastMailLocation(prefs, selectedCoreAccountId, selectedCoreFolder)
+    // The drawer's Meron folders (and a restored Meron folder view) need the list.
+    refreshMeronFolders()
     kanbanBoards = ensureKanbanDefaults(kanbanPrefs, kanbanBoards, parsed)
     if (activeKanbanBoardId.isBlank() || kanbanBoards.none { it.id == activeKanbanBoardId }) {
         activeKanbanBoardId = kanbanBoards.firstOrNull()?.id.orEmpty()
@@ -1039,6 +1043,7 @@ internal fun MeronMobileState.setAccountNavigationVisible(
         coreThreads = emptyList()
         mailboxCursor = ""
         mailboxAccountCursors = emptyMap()
+        mailboxHeldThreads = emptyList()
     }
 }
 

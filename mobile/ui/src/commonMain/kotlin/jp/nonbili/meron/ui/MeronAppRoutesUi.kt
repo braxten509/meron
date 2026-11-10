@@ -38,6 +38,8 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.outlined.Drafts
+import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.material.icons.outlined.FolderOff
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.NotificationsNone
 import androidx.compose.material3.CircularProgressIndicator
@@ -124,6 +126,42 @@ internal fun MailSelectionTitle(
     }
 }
 
+/** "Move to Meron folder" and "Move out" in a selection menu; hidden when any
+ *  selected row is a feed or local mail. A sender row moves every conversation
+ *  of that person in the mailbox; it offers no "Move out", since what it
+ *  shows is never in a Meron folder. */
+@Composable
+internal fun MeronFolderSelectionItems(
+    state: MeronMobileState,
+    threads: List<ThreadSummary>,
+    onDone: () -> Unit,
+) {
+    if (threads.isEmpty() || !threads.all(state::canUseMeronFolders)) return
+    HorizontalDivider(Modifier.padding(vertical = 4.dp))
+    DropdownMenuItem(
+        text = { Text(tr("meronFolders.moveTo")) },
+        leadingIcon = { Icon(Icons.Outlined.Folder, contentDescription = null) },
+        onClick = {
+            onDone()
+            state.meronMoveThreads = threads
+        },
+    )
+    if (threads.none { it.isSenderGroup } && (state.inMeronFolderView || threads.any { it.meronFolderId != null })) {
+        // Out of the built-in Archive is back to the Inbox (un-archived on the server).
+        val outOfArchive =
+            threads.all { (it.meronFolderId ?: state.selectedCoreFolder.takeIf { state.inMeronFolderView }) == MERON_ARCHIVE_FOLDER_ID }
+        DropdownMenuItem(
+            text = { Text(tr(if (outOfArchive) "meronFolders.moveToInbox" else "meronFolders.moveOut")) },
+            leadingIcon = { Icon(Icons.Outlined.FolderOff, contentDescription = null) },
+            onClick = {
+                onDone()
+                state.moveOutOfMeronFolder(threads)
+                state.selectedMailThreadIds = emptySet()
+            },
+        )
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
 internal fun KanbanRouteContent(
@@ -203,6 +241,7 @@ internal fun KanbanRouteContent(
                 submitLabel = tr("buttons.save"),
             )
         }
+        DrawerBackHandler(drawerState)
         ModalNavigationDrawer(
             drawerState = drawerState,
             drawerContent = {
@@ -217,6 +256,28 @@ internal fun KanbanRouteContent(
                     activeKanbanBoardId = activeKanbanBoardId,
                     tasksEnabled = tasksEnabled,
                     calendarEnabled = calendarEnabled,
+                    meronFolders = meronFolders,
+                    selectedFolderId = selectedCoreFolder,
+                    onSelectMeronFolder = { folder ->
+                        screen = Screen.Mail
+                        openMeronFolderView(folder.id)
+                        scope.launch { drawerState.close() }
+                    },
+                    onNewMeronFolder = {
+                        promptNewMeronFolder()
+                        scope.launch { drawerState.close() }
+                    },
+                    onRenameMeronFolder = { folder ->
+                        promptRenameMeronFolder(folder)
+                        scope.launch { drawerState.close() }
+                    },
+                    onSetMeronFolderNotify = { folder, enabled ->
+                        setMeronFolderNotify(folder, enabled)
+                    },
+                    onDeleteMeronFolder = { folder ->
+                        promptDeleteMeronFolder(folder)
+                        scope.launch { drawerState.close() }
+                    },
                     onSelectUnified = {
                         screen = Screen.Mail
                         if (selectedCoreAccountId != UNIFIED_ACCOUNT_ID) {
@@ -332,13 +393,13 @@ internal fun KanbanRouteContent(
                         actions = {
                             if (mailSelectionActive) {
                                 IconButton(onClick = {
-                                    selectedMailThreads.forEach(::archiveOrRemove)
+                                    archiveThreads(selectedMailThreads)
                                     selectedMailThreadIds = emptySet()
                                 }) {
                                     Icon(Icons.Filled.Archive, contentDescription = tr("threads.actions.archiveThread"))
                                 }
                                 IconButton(onClick = {
-                                    selectedMailThreads.forEach(::deleteThread)
+                                    deleteThreads(selectedMailThreads)
                                     selectedMailThreadIds = emptySet()
                                 }) {
                                     Icon(Icons.Filled.Delete, contentDescription = tr("buttons.delete"))
@@ -438,6 +499,11 @@ internal fun KanbanRouteContent(
                                                 },
                                             )
                                         }
+                                        MeronFolderSelectionItems(
+                                            state = state,
+                                            threads = selectedMailThreads,
+                                            onDone = { mailSelectionMenuOpen = false },
+                                        )
                                     }
                                 }
                             } else if (!showKanbanSearch) {
@@ -683,7 +749,7 @@ internal fun MailRouteContent(
         }
         val mailListKey =
             visibleMailboxKey
-                ?: mailboxCacheKey(selectedCoreAccountId, selectedCoreFolder, mailSearch, mailFilter, mailAttachmentsOnly)
+                ?: mailboxCacheKey(selectedCoreAccountId, selectedCoreFolder, mailSearch, mailFilter, mailAttachmentsOnly, mailGroupBySender)
         val mailListPosition =
             remember(mailListKey) {
                 // Keyed by search text and filter as well as the mailbox, so every
@@ -704,6 +770,7 @@ internal fun MailRouteContent(
         val appBarColor by animateColorAsState(
             targetValue = if (listScrolled) appBarColors.scrolledContainerColor else appBarColors.containerColor,
         )
+        DrawerBackHandler(drawerState)
         ModalNavigationDrawer(
             drawerState = drawerState,
             drawerContent = {
@@ -718,6 +785,28 @@ internal fun MailRouteContent(
                     activeKanbanBoardId = activeKanbanBoardId,
                     tasksEnabled = tasksEnabled,
                     calendarEnabled = calendarEnabled,
+                    meronFolders = meronFolders,
+                    selectedFolderId = selectedCoreFolder,
+                    onSelectMeronFolder = { folder ->
+                        openMeronFolderView(folder.id)
+                        screen = Screen.Mail
+                        scope.launch { drawerState.close() }
+                    },
+                    onNewMeronFolder = {
+                        promptNewMeronFolder()
+                        scope.launch { drawerState.close() }
+                    },
+                    onRenameMeronFolder = { folder ->
+                        promptRenameMeronFolder(folder)
+                        scope.launch { drawerState.close() }
+                    },
+                    onSetMeronFolderNotify = { folder, enabled ->
+                        setMeronFolderNotify(folder, enabled)
+                    },
+                    onDeleteMeronFolder = { folder ->
+                        promptDeleteMeronFolder(folder)
+                        scope.launch { drawerState.close() }
+                    },
                     onSelectUnified = {
                         if (selectedCoreAccountId != UNIFIED_ACCOUNT_ID) {
                             selectCoreMailbox(UNIFIED_ACCOUNT_ID)
@@ -807,7 +896,15 @@ internal fun MailRouteContent(
                                     // mailbox name — each entry means "every account's
                                     // own Sent/Archive/…".
                                     val unifiedMailbox = selectedCoreAccountId == UNIFIED_ACCOUNT_ID
-                                    if (!selectedAccountIsRss) {
+                                    if (inMeronFolderView) {
+                                        Text(
+                                            meronFolderName(openMeronFolder?.id).orEmpty(),
+                                            fontSize = 18.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    } else if (!selectedAccountIsRss) {
                                         FolderSwitcher(
                                             label =
                                                 folderTitle(
@@ -882,14 +979,17 @@ internal fun MailRouteContent(
                         },
                         actions = {
                             if (mailSelectionActive) {
-                                IconButton(onClick = {
-                                    selectedMailThreads.forEach(::archiveOrRemove)
-                                    selectedMailThreadIds = emptySet()
-                                }) {
-                                    Icon(Icons.Filled.Archive, contentDescription = tr("threads.actions.archiveThread"))
+                                // Conversations in the built-in Archive are archived already.
+                                if (!(inMeronFolderView && selectedCoreFolder == MERON_ARCHIVE_FOLDER_ID)) {
+                                    IconButton(onClick = {
+                                        archiveThreads(selectedMailThreads)
+                                        selectedMailThreadIds = emptySet()
+                                    }) {
+                                        Icon(Icons.Filled.Archive, contentDescription = tr("threads.actions.archiveThread"))
+                                    }
                                 }
                                 IconButton(onClick = {
-                                    selectedMailThreads.forEach(::deleteThread)
+                                    deleteThreads(selectedMailThreads)
                                     selectedMailThreadIds = emptySet()
                                 }) {
                                     Icon(Icons.Filled.Delete, contentDescription = tr("buttons.delete"))
@@ -902,6 +1002,9 @@ internal fun MailRouteContent(
                                         expanded = mailSelectionMenuOpen,
                                         onDismissRequest = { mailSelectionMenuOpen = false },
                                     ) {
+                                        // Sender rows carry no star or tags of their own: those
+                                        // stay on the single emails inside the chat.
+                                        val senderRowsSelected = selectedMailThreads.any { it.isSenderGroup }
                                         val selectableThreadIds = coreThreads.map { it.id }.toSet()
                                         if (!selectedMailThreadIds.containsAll(selectableThreadIds)) {
                                             DropdownMenuItem(
@@ -926,30 +1029,32 @@ internal fun MailRouteContent(
                                                 selectedMailThreadIds = emptySet()
                                             },
                                         )
-                                        val star = selectedMailThreads.any { !it.starred }
-                                        DropdownMenuItem(
-                                            text = { Text(if (star) tr("chat.star") else tr("chat.unstar")) },
-                                            leadingIcon = {
-                                                Icon(
-                                                    if (star) Icons.Filled.StarBorder else Icons.Filled.Star,
-                                                    contentDescription = null,
-                                                )
-                                            },
-                                            onClick = {
-                                                mailSelectionMenuOpen = false
-                                                selectedMailThreads
-                                                    .filter { it.starred != star }
-                                                    .forEach(::toggleStar)
-                                                selectedMailThreadIds = emptySet()
-                                            },
-                                        )
+                                        if (!senderRowsSelected) {
+                                            val star = selectedMailThreads.any { !it.starred }
+                                            DropdownMenuItem(
+                                                text = { Text(if (star) tr("chat.star") else tr("chat.unstar")) },
+                                                leadingIcon = {
+                                                    Icon(
+                                                        if (star) Icons.Filled.StarBorder else Icons.Filled.Star,
+                                                        contentDescription = null,
+                                                    )
+                                                },
+                                                onClick = {
+                                                    mailSelectionMenuOpen = false
+                                                    selectedMailThreads
+                                                        .filter { it.starred != star }
+                                                        .forEach(::toggleStar)
+                                                    selectedMailThreadIds = emptySet()
+                                                },
+                                            )
+                                        }
                                         val singleSelectedMailThread =
                                             selectedMailThreads
                                                 .singleOrNull()
                                                 ?.takeUnless { threadIdIsRss(it.id) }
                                         if (singleSelectedMailThread != null) {
                                             HorizontalDivider(Modifier.padding(vertical = 4.dp))
-                                            if (!threadIdIsRss(singleSelectedMailThread.id)) {
+                                            if (!threadIdIsRss(singleSelectedMailThread.id) && !singleSelectedMailThread.isSenderGroup) {
                                                 DropdownMenuItem(
                                                     text = { Text(tr("tags.title")) },
                                                     leadingIcon = { Icon(Icons.Filled.Sell, contentDescription = null) },
@@ -986,13 +1091,20 @@ internal fun MailRouteContent(
                                                 },
                                             )
                                         }
+                                        MeronFolderSelectionItems(
+                                            state = state,
+                                            threads = selectedMailThreads,
+                                            onDone = { mailSelectionMenuOpen = false },
+                                        )
                                     }
                                 }
                             } else if (!showMailSearch) {
                                 // An open search takes the whole bar, the folder's menu included.
                                 val loadedUnread = coreThreads.any { it.unread }
                                 val folderUnreadTotal =
-                                    if (selectedCoreAccountId == UNIFIED_ACCOUNT_ID) {
+                                    if (inMeronFolderView) {
+                                        openMeronFolder?.unread ?: 0
+                                    } else if (selectedCoreAccountId == UNIFIED_ACCOUNT_ID) {
                                         val includedAccountIds =
                                             coreAccounts.filter { it.includedInUnified }.map { it.id }.toSet()
                                         coreFolders
@@ -1087,18 +1199,42 @@ internal fun MailRouteContent(
                                                 syncCoreThreads(syncFirst = false)
                                             },
                                         )
+                                        // Starred lists starred items, never people; a
+                                        // Meron folder lists conversations.
+                                        if (
+                                            !(selectedCoreAccountId == UNIFIED_ACCOUNT_ID && isUnifiedStarredFolder(selectedCoreFolder)) &&
+                                            !inMeronFolderView
+                                        ) {
+                                            GroupBySenderMenuItem(
+                                                checked = mailGroupBySender,
+                                                onCheckedChange = { on ->
+                                                    mailGroupBySender = on
+                                                    saveAppBoolean(prefs, GROUP_BY_SENDER_PREF, on)
+                                                    // A selection of thread rows means nothing
+                                                    // among sender rows, and the other way round.
+                                                    selectedMailThreadIds = emptySet()
+                                                    syncCoreThreads(syncFirst = false)
+                                                },
+                                            )
+                                        }
                                         if (showMarkAllRead || showAccountActions) {
                                             HorizontalDivider(Modifier.padding(vertical = 4.dp))
                                         }
                                         if (showMarkAllRead) {
                                             DropdownMenuItem(
-                                                text = { Text(tr("threads.actions.markAllAsRead")) },
+                                                text = {
+                                                    Text(tr(if (inMeronFolderView) "meronFolders.markAllRead" else "threads.actions.markAllAsRead"))
+                                                },
                                                 leadingIcon = {
                                                     Icon(Icons.Filled.MarkEmailUnread, contentDescription = null)
                                                 },
                                                 onClick = {
                                                     mailboxMenuOpen = false
-                                                    markVisibleMailboxAllRead()
+                                                    if (inMeronFolderView) {
+                                                        markMeronFolderAllRead(selectedCoreFolder)
+                                                    } else {
+                                                        markVisibleMailboxAllRead()
+                                                    }
                                                 },
                                             )
                                         }
@@ -1522,8 +1658,11 @@ internal fun MailRouteContent(
                         if (stillBlocked()) expireBlockingMailboxLoad()
                     }
                     PullToRefreshBox(
-                        isRefreshing = syncing && !showingBlockingInboxLoad,
-                        onRefresh = { syncCoreThreads(scrollToTopOnSuccess = true) },
+                        isRefreshing = pullRefreshing && syncing && !showingBlockingInboxLoad,
+                        onRefresh = {
+                            pullRefreshing = true
+                            syncCoreThreads(scrollToTopOnSuccess = true)
+                        },
                         modifier = Modifier.fillMaxSize(),
                     ) {
                         when {
@@ -1544,6 +1683,7 @@ internal fun MailRouteContent(
                                         addSection = 0
                                         screen = Screen.AddAccount
                                     },
+                                    footer = { state.CopySetupFromComputerLink() },
                                 )
                             }
 
@@ -1562,6 +1702,25 @@ internal fun MailRouteContent(
                                             tr("mobile.status.loadingInbox")
                                         }
                                     },
+                                )
+                            }
+
+                            coreThreads.isEmpty() &&
+                                inMeronFolderView &&
+                                mailSearch.isBlank() &&
+                                mailFilter == FilterMode.All &&
+                                !mailAttachmentsOnly -> {
+                                EmptyState(
+                                    icon = Icons.Outlined.Folder,
+                                    title = tr("meronFolders.empty"),
+                                    text =
+                                        tr(
+                                            if (selectedCoreFolder == MERON_ARCHIVE_FOLDER_ID) {
+                                                "meronFolders.archiveEmptyHint"
+                                            } else {
+                                                "meronFolders.emptyHint"
+                                            },
+                                        ),
                                 )
                             }
 
@@ -1638,7 +1797,14 @@ internal fun MailRouteContent(
                                         loadMoreCoreThreads(quiet = !userInitiated)
                                     },
                                     showSenderImages = showSenderImages,
-                                    showAccountBadge = selectedCoreAccountId == UNIFIED_ACCOUNT_ID,
+                                    showAccountBadge = selectedCoreAccountId == UNIFIED_ACCOUNT_ID || inMeronFolderView,
+                                    // Search shows conversations from Meron folders too; say which.
+                                    meronFolderLabel =
+                                        if (!inMeronFolderView && visibleMailboxKey?.query?.isNotBlank() == true) {
+                                            { thread -> meronFolderName(thread.meronFolderId) }
+                                        } else {
+                                            { null }
+                                        },
                                 )
                             }
                         }

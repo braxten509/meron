@@ -53,6 +53,15 @@ internal fun threadHeaderItemCount(hasLoadOlderRow: Boolean): Int = if (hasLoadO
 // page, so the watcher fires on any first-visible index at or above it.
 internal const val THREAD_LOAD_OLDER_ITEM_INDEX = 1
 
+// The conversation's oldest loaded message as last composed, and the message
+// to hold in place (its key and its offset in the viewport) once a page of
+// older ones lands above it. Plain fields: written and read during
+// composition and its side effect, never observed.
+internal class OlderPageAnchor {
+    var oldestId: String? = null
+    var pending: Pair<String, Int>? = null
+}
+
 // Geometry of one visible LazyColumn item, decoupled from compose types so the
 // scroll-driven read marking below is unit-testable.
 internal data class ListItemGeometry(
@@ -371,4 +380,34 @@ internal fun highlightedMessageText(
             start = index + needle.length
         }
     }
+}
+
+private val SUBJECT_REPLY_PREFIX = Regex("""^\s*((re|fw|fwd)(\[\d+])?\s*:\s*)+""", RegexOption.IGNORE_CASE)
+
+/** A subject with its Re:/Fwd: prefixes, case and spacing set aside, so a
+ *  reply reads as the same topic as the mail it answers. */
+internal fun subjectTopic(subject: String): String =
+    subject
+        .replace(SUBJECT_REPLY_PREFIX, "")
+        .trim()
+        .replace(Regex("""\s+"""), " ")
+        .lowercase()
+
+/**
+ * The small subject line each bubble of a sender chat shows, by message id:
+ * only where the topic differs from the bubble before it (the first bubble
+ * always names its topic). A sender chat mixes every conversation with one
+ * person, so this is what tells the reader where one topic ends.
+ */
+internal fun senderChatSubjectLines(messages: List<MessageBody>): Map<String, String> {
+    val lines = mutableMapOf<String, String>()
+    var previousTopic: String? = null
+    messages.forEach { message ->
+        val topic = subjectTopic(message.subject)
+        if (topic != previousTopic && message.subject.isNotBlank()) {
+            lines[message.id] = message.subject.trim()
+        }
+        previousTopic = topic
+    }
+    return lines
 }

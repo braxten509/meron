@@ -15,15 +15,16 @@ internal val LocalAvatarCore = staticCompositionLocalOf<MeronCore?> { null }
 internal suspend fun loadSenderImage(
     core: MeronCore,
     email: String,
+    side: Int = 0,
 ): ImageBitmap? =
-    loadCachedImageBitmap("sender:$email") {
+    loadCachedImageBitmap("sender:$email#$side") {
         withContext(ioDispatcher) {
             try {
                 val src = parseSenderImageResponse(MobileMailCommandClient(core).resolveSenderImage(email))
                 if (!src.startsWith("data:image/") || !src.contains(";base64,")) {
                     null
                 } else {
-                    decodeImageBitmap(Base64.Default.decode(src.substringAfter(";base64,")))
+                    decodeThumbnailBitmap(Base64.Default.decode(src.substringAfter(";base64,")), side)
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled

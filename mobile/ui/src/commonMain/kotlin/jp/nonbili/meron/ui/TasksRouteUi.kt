@@ -81,6 +81,7 @@ internal fun TasksRouteContent(
 
         val activeList = taskLists.firstOrNull { it.id == activeTaskListId }
 
+        DrawerBackHandler(drawerState)
         ModalNavigationDrawer(
             drawerState = drawerState,
             drawerContent = {

@@ -263,6 +263,14 @@ pub(crate) async fn dispatch(
                     &explicit_uids,
                 )?
             };
+            // Deleting a sender row also takes their older mail in this folder
+            // that the cache never held.
+            let uids = match store::sender_key_addr(&thread_key) {
+                Some(addr) if explicit_uids.is_empty() => {
+                    sender_delete_uids(engine, &account, &folder, &addr, uids).await?
+                }
+                _ => uids,
+            };
 
             if uids.is_empty() {
                 return mail_model::mutation_result(
@@ -280,19 +288,37 @@ pub(crate) async fn dispatch(
 
             let cached_ids =
                 store::cached_message_ids(&engine.db.lock().unwrap(), &account, &folder, &uids)?;
+            // Deleting the whole conversation takes it out of its Meron folder.
+            let meron_entry = meron_core::meron_folders::entry_before_action(
+                &engine.db.lock().unwrap(),
+                &account,
+                &folder,
+                &thread_key,
+                uid.filter(|_| thread_key.starts_with("uid:")),
+                explicit_uids.is_empty() && (uid.is_none() || thread_key.starts_with("uid:")),
+            );
             let moved_ids = moved_message_ids(engine, &account, &folder, &uids, cached_ids).await;
+            meron_core::meron_folders::unmark_before_action(engine, &account, &meron_entry).await;
             // Mutating, so it never auto-retries.
             let trashed = delete_to_trash(engine, &account, &folder, &uids).await?;
+            // One of a bulk run with more to come: Trash is re-read once, by
+            // the run's last delete, instead of after every conversation.
+            let more_coming = p.get("more_coming").and_then(Value::as_bool).unwrap_or(false);
+            let meron_released = meron_core::meron_folders::release_after_action(
+                &engine.db.lock().unwrap(),
+                meron_entry,
+            );
             // Undo moves exactly these copies back out of Trash.
             let copies = match &trashed {
                 Some(trash) => {
-                    let copies = refresh_moved_copies(
+                    let copies = refresh_moved_copies_with(
                         engine,
                         &account,
                         &trash.folder,
                         uids.len(),
                         trash.uid_next_before,
                         moved_ids.as_deref(),
+                        !more_coming,
                     )
                     .await;
                     copies.store(&engine.db.lock().unwrap(), &account, &trash.folder)?;
@@ -311,6 +337,23 @@ pub(crate) async fn dispatch(
                     store::delete_draft_sibling_copies(&db, &account, &folder, &uids)?;
                 }
                 store::delete_messages_by_uid(&db, &account, &folder, &uids)?;
+                // The whole conversation went: it starts fresh when new mail
+                // arrives (see `store::ChatScope`).
+                if explicit_uids.is_empty()
+                    && uid.is_none()
+                    && store::leave_replies_out_after_delete(
+                        &db,
+                        &account,
+                        &folder,
+                        &thread_key,
+                        subject_filter.as_deref(),
+                        trash_folder
+                            .zip(copies.as_ref())
+                            .map(|(trash, copies)| (trash, copies.uids.as_slice())),
+                    )
+                {
+                    spawn_tag_push(engine, &account);
+                }
             }
             // The server delete/move-to-Trash completed for every resolved UID.
             // A concurrent source refresh may already have pruned the cache rows.
@@ -324,7 +367,7 @@ pub(crate) async fn dispatch(
                 }),
                 _ => json!({ "ok": true, "deleted": deleted, "permanent": true }),
             };
-            mail_model::mutation_result(
+            let mut result = mail_model::mutation_result(
                 result,
                 &engine.db.lock().unwrap(),
                 &account,
@@ -334,7 +377,10 @@ pub(crate) async fn dispatch(
                 None,
                 None,
                 true,
-            )
+            )?;
+            // An Undo puts the card back in its Meron folder.
+            meron_core::meron_folders::ReleasedCard::annotate(&meron_released, &mut result);
+            Ok(result)
         }
 
         "messages.move" => {
@@ -409,8 +455,63 @@ pub(crate) async fn dispatch(
                 );
             }
 
+            // An Undo of an archive, delete or move: what it puts back besides
+            // the mail (see `UndoRestore`).
+            let undo = meron_core::meron_folders::UndoRestore::from_params(p);
+            // Archiving or moving the whole conversation takes it out of its
+            // Meron folder once the server move succeeded.
+            let whole =
+                explicit_uids.is_empty() && (uid.is_none() || thread_key.starts_with("uid:"));
+            let (meron_entry, archive_keys) = {
+                let db = engine.db.lock().unwrap();
+                let mut meron_entry = meron_core::meron_folders::entry_before_action(
+                    &db,
+                    &account,
+                    &folder,
+                    &thread_key,
+                    uid.filter(|_| thread_key.starts_with("uid:")),
+                    whole,
+                );
+                // Exactly these copies out of the archive mailbox (an Undo of
+                // an archive, say): they leave the built-in Archive.
+                if meron_entry.is_none() && !explicit_uids.is_empty() && target_account == account {
+                    meron_entry = meron_core::meron_folders::archive_card_of_copies(
+                        &db, &account, &folder, &uids,
+                    );
+                }
+                // Moved into the archive mailbox as a whole: filed into
+                // Archive too.
+                let archive_keys = (target_account == account
+                    && meron_core::meron_folders::is_archive_target(&db, &account, &target_folder))
+                .then(|| {
+                    meron_core::meron_folders::archive_filing_keys(
+                        &db,
+                        &account,
+                        &folder,
+                        &thread_key,
+                        &uids,
+                        whole,
+                    )
+                })
+                .flatten();
+                (meron_entry, archive_keys)
+            };
+            if archive_keys.is_some() {
+                meron_core::meron_folders::prepare_archive_marks(
+                    engine,
+                    &account,
+                    &meron_entry,
+                    &folder,
+                    &uids,
+                )
+                .await;
+            } else {
+                meron_core::meron_folders::unmark_before_action(engine, &account, &meron_entry)
+                    .await;
+            }
+
             if target_account != account {
-                return move_between_accounts(
+                let mut result = move_between_accounts(
                     engine,
                     &account,
                     &folder,
@@ -419,16 +520,84 @@ pub(crate) async fn dispatch(
                     &target_folder,
                     &uids,
                 )
-                .await;
+                .await?;
+                let meron_released = meron_core::meron_folders::release_after_action(
+                    &engine.db.lock().unwrap(),
+                    meron_entry,
+                );
+                meron_core::meron_folders::ReleasedCard::annotate(&meron_released, &mut result);
+                return Ok(result);
             }
 
-            let copies =
-                move_within_account(engine, &account, &folder, &target_folder, &uids).await?;
+            // One of a bulk run with more to come: the target is re-read once,
+            // by the run's last move. Never put off for an archive or an Undo:
+            // both read the moved copies from the cache straight after.
+            let reread_target = !p.get("more_coming").and_then(Value::as_bool).unwrap_or(false)
+                || archive_keys.is_some()
+                || undo.is_some();
+            let copies = match move_within_account_with(
+                engine,
+                &account,
+                &folder,
+                &target_folder,
+                &uids,
+                reread_target,
+            )
+            .await
+            {
+                Ok(copies) => copies,
+                Err(err) => {
+                    if archive_keys.is_some() {
+                        meron_core::meron_folders::restore_marks_after_failed_archive(
+                            engine,
+                            &engine.db.lock().unwrap(),
+                            &account,
+                            &meron_entry,
+                            &folder,
+                            &uids,
+                        );
+                    } else {
+                        // Out of the archive mailbox: the Archive card keeps
+                        // its place, so its marks come back.
+                        meron_core::meron_folders::restore_archive_card_marks(
+                            engine,
+                            &engine.db.lock().unwrap(),
+                            &meron_entry,
+                        );
+                    }
+                    return Err(err);
+                }
+            };
+            let meron_released = meron_core::meron_folders::release_after_action(
+                &engine.db.lock().unwrap(),
+                meron_entry,
+            );
+            {
+                let db = engine.db.lock().unwrap();
+                if let Some(keys) = &archive_keys {
+                    meron_core::meron_folders::file_after_archive(
+                        &db,
+                        &account,
+                        &target_folder,
+                        &copies.uids,
+                        keys,
+                    );
+                }
+                if let Some(undo) = &undo {
+                    let jobs = undo.apply(&db, &account, &thread_key, &target_folder, &copies.uids);
+                    meron_core::meron_marks::spawn_writes(engine, jobs);
+                    // An Undo of a delete: the replies it left out come back.
+                    if store::bring_replies_back_after_undo(&db, &account, &folder, &uids) {
+                        spawn_tag_push(engine, &account);
+                    }
+                }
+            }
+            meron_core::meron_marks::flush_archive_unmarks(engine);
             // The IMAP MOVE above completed for every resolved UID. A concurrent
             // source-folder refresh may already have pruned those rows locally,
             // so the cache DELETE count is not the number moved on the server.
             let moved = uids.len();
-            mail_model::mutation_result(
+            let mut result = mail_model::mutation_result(
                 json!({
                     "ok": true,
                     "moved": moved,
@@ -444,7 +613,10 @@ pub(crate) async fn dispatch(
                 None,
                 None,
                 true,
-            )
+            )?;
+            // An Undo puts the card back in its Meron folder.
+            meron_core::meron_folders::ReleasedCard::annotate(&meron_released, &mut result);
+            Ok(result)
         }
 
         "messages.copy" => {
@@ -550,12 +722,7 @@ pub(crate) async fn dispatch(
             {
                 let db = engine.db.lock().unwrap();
                 store::ensure_folder(&db, &target_account, &target_folder)?;
-                store::upsert_messages(
-                    &db,
-                    &target_account,
-                    &target_folder,
-                    &target_batch.messages,
-                )?;
+                store::upsert_window_messages(&db, &target_account, &target_folder, target_batch)?;
                 store::set_folder_state(
                     &db,
                     &target_account,
@@ -575,9 +742,10 @@ pub(crate) async fn dispatch(
             let folder =
                 canon_folder(&req_str(p, "folder").unwrap_or_else(|_| "INBOX".to_string()));
 
+            // Mail in Meron folders stays unread: each has its own Mark all read.
             let uids = {
                 let db = engine.db.lock().unwrap();
-                store::get_unseen_uids(&db, &account, &folder)?
+                store::get_visible_unseen_uids(&db, &account, &folder)?
             };
 
             if !uids.is_empty() {
@@ -600,10 +768,42 @@ pub(crate) async fn dispatch(
 
             {
                 let db = engine.db.lock().unwrap();
-                store::mark_folder_seen(&db, &account, &folder, true)?;
+                store::mark_visible_folder_seen(&db, &account, &folder)?;
+            }
+            // The Inbox also lists mail the AI left in other folders: mark it
+            // read where each message really is.
+            let mut updated = uids.len();
+            if folder.eq_ignore_ascii_case("INBOX") {
+                let shown = store::ai_sort_inbox_unseen(&engine.db.lock().unwrap(), &account)?;
+                for (shown_folder, shown_uids) in shown {
+                    engine
+                        .with_flag_write_session(
+                            &account,
+                            |session| {
+                                let folder = shown_folder.clone();
+                                Box::pin(async move {
+                                    imap::prepare_flag_update(session, &folder).await
+                                })
+                            },
+                            |session| {
+                                let uids = shown_uids.clone();
+                                Box::pin(
+                                    async move { imap::store_seen(session, &uids, true).await },
+                                )
+                            },
+                        )
+                        .await?;
+                    store::meron_mark_seen(
+                        &engine.db.lock().unwrap(),
+                        &account,
+                        &shown_folder,
+                        &shown_uids,
+                    )?;
+                    updated += shown_uids.len();
+                }
             }
             mail_model::mutation_result(
-                json!({ "ok": true, "updated": uids.len(), "folder": folder }),
+                json!({ "ok": true, "updated": updated, "folder": folder }),
                 &engine.db.lock().unwrap(),
                 &account,
                 "",

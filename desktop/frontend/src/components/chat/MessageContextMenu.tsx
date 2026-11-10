@@ -1,4 +1,5 @@
 import {
+  Archive,
   CheckSquare,
   Copy,
   Download,
@@ -30,7 +31,10 @@ import { printMail } from '../../lib/printMail'
 import { copyAttachmentImage, downloadAttachment, saveMessageAsEml } from '../../states/mail'
 import { markMessageReadState, starMessage } from '../../states/mailFlags'
 import { isDraftFolder } from '../../states/mailFolders'
-import { deleteMessage } from '../../states/mailMoves'
+import { deleteMessage, moveMessage } from '../../states/mailMoves'
+import { isLocalAccountId } from '../../states/accounts'
+import { isLocalSendId } from '../../states/pendingSends'
+import { ThreadMoveCopyItems } from '../threads/ThreadMoveCopyItems'
 import { copyText, openExternal } from '../../lib/native'
 import { FloatingContextMenu } from '../menu/FloatingContextMenu'
 import { MenuItem } from '../menu/MenuItem'
@@ -282,6 +286,37 @@ export function MessageContextMenu({
                 onClose()
                 if (onPrint) onPrint()
                 else void printMail(state.message)
+              }}
+            />
+          )}
+          {/* One email, not the whole chat: move it to another folder or
+              archive it. Drafts and unsent mail have nowhere to go. */}
+          {!isRSS && !isDraft && !isLocalSendId(state.message.id) && (
+            <ThreadMoveCopyItems
+              threadId={state.message.id}
+              accountId={state.message.account_id}
+              folderId={state.message.folder_id}
+              close={onClose}
+              moveOnly
+              onMove={(_id, targetAccountId, targetFolderId) => {
+                const message = state.message
+                onClose()
+                void moveMessage(message, targetFolderId, { targetAccountId }).then((moved) => {
+                  if (moved) onDeleted?.()
+                })
+              }}
+            />
+          )}
+          {!isRSS && !isDraft && !isLocalSendId(state.message.id) && !isLocalAccountId(state.message.account_id) && (
+            <MenuItem
+              icon={<Archive size={13} className="text-accent" />}
+              label={t('chat.actions.archiveMessage')}
+              onClick={() => {
+                const message = state.message
+                onClose()
+                void moveMessage(message, '', { archive: true }).then((moved) => {
+                  if (moved) onDeleted?.()
+                })
               }}
             />
           )}

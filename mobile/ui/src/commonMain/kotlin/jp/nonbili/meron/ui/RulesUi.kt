@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -13,9 +14,11 @@ import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -40,10 +43,12 @@ import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import jp.nonbili.meron.shared.AccountSummary
+import jp.nonbili.meron.shared.FolderSummary
 import jp.nonbili.meron.shared.Rule
 import jp.nonbili.meron.shared.RuleStatus
 import jp.nonbili.meron.shared.SearchFields
@@ -98,13 +103,19 @@ private fun MeronMobileState.ruleSummary(
         tr("rules.summaryMove", mapOf("folder" to moveLabel(accounts, rule))).takeIf { rule.moveTo.isNotEmpty() },
     ).joinToString(" · ")
 
-/** A rule's target: `options` first, then every folder of every account. */
+/** A rule's target: `options` first, then every folder of every account that [include] keeps. */
 @Composable
-private fun MeronMobileState.RuleTargetRow(
+internal fun MeronMobileState.RuleTargetRow(
     title: String,
     value: String,
     accounts: List<AccountSummary>,
     options: List<Pair<String, () -> Unit>>,
+    include: (FolderSummary) -> Boolean = { true },
+    /** AI sorting only: Meron folders listed first under their own heading
+     *  ([meronChosen] greyed out). Rules leave this null. */
+    meronOptions: List<jp.nonbili.meron.shared.MeronFolderSummary>? = null,
+    meronChosen: Set<String> = emptySet(),
+    onPickMeron: (jp.nonbili.meron.shared.MeronFolderSummary) -> Unit = {},
     onPick: (accountId: String, folder: String) -> Unit,
 ) {
     var open by remember { mutableStateOf(false) }
@@ -132,9 +143,39 @@ private fun MeronMobileState.RuleTargetRow(
                         },
                     )
                 }
+                if (meronOptions != null) {
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                tr("meronFolders.title").uppercase(),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                            )
+                        },
+                        enabled = false,
+                        onClick = {},
+                    )
+                    // The built-in Archive is never a target.
+                    val meronTargets = meronOptions.filterNot(::isMeronArchiveFolder)
+                    if (meronTargets.isEmpty()) {
+                        DropdownMenuItem(text = { Text(tr("meronFolders.none")) }, enabled = false, onClick = {})
+                    }
+                    meronTargets.forEach { folder ->
+                        DropdownMenuItem(
+                            text = { Text(folder.name) },
+                            leadingIcon = { Icon(Icons.Outlined.Folder, contentDescription = null, modifier = Modifier.size(20.dp)) },
+                            enabled = folder.id !in meronChosen,
+                            onClick = {
+                                close()
+                                onPickMeron(folder)
+                            },
+                        )
+                    }
+                    HorizontalDivider(Modifier.padding(vertical = 4.dp))
+                }
             }
             if (folderAccount != null) {
-                foldersByAccount[folderAccount.id].orEmpty().forEach { folder ->
+                foldersByAccount[folderAccount.id].orEmpty().filter(include).forEach { folder ->
                     DropdownMenuItem(
                         text = { Text(folder.displayName) },
                         onClick = {

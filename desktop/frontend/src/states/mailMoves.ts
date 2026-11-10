@@ -6,7 +6,9 @@ import { contextualErrorMessage } from '../lib/errors'
 import { t } from '../lib/i18n'
 import { mailTransferError } from '../lib/mailTransferErrors'
 import { clearBulkSelection, confirmAction, ui$, showToast, showUndoToast, type BulkSelectionItem } from './ui'
+import { bulkJobRunning, runBulkJob, type BulkJobResult } from './bulkProgress'
 import { kanban$ } from './kanban'
+import { MERON_ARCHIVE_ID, scheduleMeronFoldersRefresh } from './meronFolders'
 import { isLocalSendId, discardPendingSend, cancelUnsentRescue } from './pendingSends'
 import {
   captureKeys,
@@ -14,6 +16,7 @@ import {
   getFilteredThreads,
   kanbanKeysWithThread,
   listFilterKey,
+  loadThread,
   loadThreads,
   mail$,
   normalizeMessageId,
@@ -74,6 +77,37 @@ function assertMoveAffected(res: unknown, label = 'Move') {
   }
 }
 
+/** An archive's failure toast. An account with no archive mailbox answers a
+ *  single email's Archive with "no archive folder": the plain message then,
+ *  not the server's text. */
+function archiveFailureText(error: unknown): string {
+  const detail = error instanceof Error ? error.message : String(error)
+  if (/archive folder not found/i.test(detail)) return t('mail.toast.archiveFailed')
+  return mailTransferError(error, t('mail.toast.archiveFailed'))
+}
+
+/** Archived Meron-only (the account has no archive mailbox): the answer of
+ *  the filing into the built-in Archive. */
+type MeronOnlyArchive = {
+  meron_only?: boolean
+  changes?: Array<{ previous_folder_id?: string | null }>
+}
+
+/** Undo of a Meron-only archive: back into the Meron folder it came from, or
+ *  out of Meron folders (it never left its mailbox). */
+async function undoMeronOnlyArchive(threadId: string, accountId: string | undefined, res: MeronOnlyArchive) {
+  releaseRemovedThread(threadId)
+  const previous = res.changes?.[0]?.previous_folder_id
+  try {
+    if (previous) await invoke('mail.moveToMeronFolder', { folder_id: previous, thread_ids: [threadId] })
+    else await invoke('mail.moveOutOfMeronFolder', { thread_ids: [threadId] })
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : t('notification.undoFailed'), 'error')
+  }
+  scheduleMeronFoldersRefresh()
+  await refreshThreadLocation(accountId, false)
+}
+
 function assertCopyAffected(res: unknown) {
   if (!res || typeof res !== 'object') return
   const copied = (res as { copied?: unknown }).copied
@@ -88,10 +122,22 @@ function assertCopyAffected(res: unknown) {
 // UID the move changed. Undefined when the core couldn't tell the copies apart
 // from other mail there: then no Undo is offered, since any other way back
 // could move mail the action never touched.
-type MovedCopiesResult = { target_uids?: number[] }
+type MovedCopiesResult = { target_uids?: number[]; meron_folder_id?: string; meron_source?: string }
 
 function movedCopyIds(res: MovedCopiesResult): string[] | undefined {
   return res.target_uids?.length ? res.target_uids.map(String) : undefined
+}
+
+// What an Undo hands the core besides the copies to move back: show them in
+// the Inbox again (mail that was shown there from its own folder), or put them
+// back in the Meron folder the action took the card out of.
+type UndoRestore = { showInInbox?: boolean; meronFolderId?: string; meronSource?: string }
+
+function undoRestore(thread: Message | undefined, res: MovedCopiesResult): UndoRestore {
+  return {
+    showInInbox: !!thread?.shown_in_inbox,
+    ...(res.meron_folder_id ? { meronFolderId: res.meron_folder_id, meronSource: res.meron_source } : {}),
+  }
 }
 
 function threadAccountId(threadId: string): string {
@@ -138,7 +184,7 @@ function restoreRemovedThread(current: Message[], previous: Message[], threadId:
   )
 }
 
-function removeThreadLocally(threadId: string) {
+export function removeThreadLocally(threadId: string) {
   const previousThreads = mail$.threads.get()
   const previousMessages = mail$.messages.get()
   const previousKanbanThreads = captureKeys(kanban$.threads.get(), kanbanKeysWithThread(threadId))
@@ -257,7 +303,7 @@ async function refreshThreadLocation(accountId?: string, refresh = false) {
 export async function moveThreadToFolder(
   threadId: string,
   targetFolderId: string,
-  options: { undo?: boolean; messageIds?: string[]; targetAccountId?: string } = {},
+  options: { undo?: boolean; messageIds?: string[]; targetAccountId?: string; restore?: UndoRestore } = {},
 ) {
   if (!threadId || !targetFolderId) return
   const sourceThread = findLocalThread(threadId)
@@ -275,6 +321,16 @@ export async function moveThreadToFolder(
       target_folder_id: targetFolderId,
       ...(options.targetAccountId ? { target_account_id: options.targetAccountId } : {}),
       ...(options.messageIds ? { message_ids: options.messageIds } : {}),
+      // An Undo: the core moves back exactly messageIds, or refuses.
+      ...(options.restore
+        ? {
+            undo: true,
+            ...(options.restore.showInInbox ? { show_in_inbox: true } : {}),
+            ...(options.restore.meronFolderId
+              ? { meron_folder_id: options.restore.meronFolderId, meron_source: options.restore.meronSource }
+              : {}),
+          }
+        : {}),
     })
     assertMoveAffected(res)
     complete()
@@ -298,9 +354,10 @@ export async function moveThreadToFolder(
         })
       }
       if (!crossAccount && options.undo !== false && sourceFolder && copyIds) {
+        const restore = undoRestore(sourceThread, res)
         showUndoToast(t('mail.toast.threadMoved'), () => {
           releaseRemovedThread(threadId)
-          void moveThreadToFolder(targetThreadId, sourceFolder, { undo: false, messageIds: copyIds })
+          void moveThreadToFolder(targetThreadId, sourceFolder, { undo: false, messageIds: copyIds, restore })
         })
       } else {
         showToast(t('mail.toast.threadMoved'))
@@ -344,39 +401,74 @@ export async function copyThreadToFolder(threadId: string, targetAccountId: stri
   }
 }
 
-export async function bulkArchiveSelected(items: BulkSelectionItem[]) {
-  // Local folders have no Archive folder.
-  const targets = uniqueThreadItems(items).filter(
-    (item) => !item.draft && !item.trash && !isLocalAccountId(item.accountId),
-  )
-  if (targets.length === 0) return
-  const rollbacks: Array<() => void> = []
-  let completed = 0
-  try {
-    for (const item of targets) {
-      const sourceThread = findLocalThread(item.threadId)
-      const removal = removeThreadLocally(item.threadId)
-      rollbacks.push(removal.rollback)
-      const res = await invoke('mail.archive', { thread_id: item.threadId })
-      assertMoveAffected(res, 'Archive')
-      removal.complete()
-      rollbacks.pop()
-      completed++
-      applyMutationFolderUnreads(res as MutationResult)
-      if (sourceThread?.account_id) void refreshAccountFoldersCache(sourceThread.account_id, false)
-    }
-    await refreshThreadLocation(undefined, false)
-    clearBulkSelection()
-    showToast(t('mail.toast.archivedCount', { count: targets.length }))
-  } catch (error) {
-    for (const rollback of rollbacks.reverse()) rollback()
-    const message = mailTransferError(error, t('mail.toast.archiveFailed'))
+/** Only one bulk Delete / Archive / Move runs at a time. */
+function bulkJobBusy(): boolean {
+  if (!bulkJobRunning()) return false
+  showToast(t('threads.bulkProgress.busy'), 'error')
+  return true
+}
+
+/** Which of a bulk run's calls say "more coming": every one but the last for
+ *  its account. The core then re-reads the destination folder once, on that
+ *  last call, instead of after every conversation. */
+function moreComingFlags(targets: BulkSelectionItem[]): (item: BulkSelectionItem) => { more_coming?: true } {
+  const lastOfAccount = new Map<string, string>()
+  for (const item of targets) lastOfAccount.set(item.accountId, item.threadId)
+  return (item) => (lastOfAccount.get(item.accountId) === item.threadId ? {} : { more_coming: true })
+}
+
+/** After a bulk job: the toast for what happened. Finished, stopped by the
+ *  reader, or failed part-way (then only the unreached conversations remain). */
+function reportBulkJob(
+  result: BulkJobResult,
+  words: { finished: string; stopped: string; failed: (error: unknown) => string },
+) {
+  if (result.error !== undefined) {
+    const message = words.failed(result.error)
     showToast(
-      completed ? `${message} ${t('mail.transferError.bulkProgress', { completed, total: targets.length })}` : message,
+      result.completed
+        ? `${message} ${t('mail.transferError.bulkProgress', { completed: result.completed, total: result.total })}`
+        : message,
       'error',
     )
-    if (completed) void refreshThreadLocation(undefined, false)
+  } else if (result.stopped) {
+    showToast(words.stopped)
+  } else {
+    showToast(words.finished)
   }
+}
+
+export async function bulkArchiveSelected(items: BulkSelectionItem[]) {
+  // Local folders have no Archive folder; conversations in the built-in
+  // Archive Meron folder are archived already.
+  const targets = uniqueThreadItems(items).filter(
+    (item) =>
+      !item.draft &&
+      !item.trash &&
+      !isLocalAccountId(item.accountId) &&
+      findLocalThread(item.threadId)?.meron_folder_id !== MERON_ARCHIVE_ID,
+  )
+  if (targets.length === 0 || bulkJobBusy()) return
+  // Each row leaves once the server has archived it; the ones still waiting
+  // stay in the list (greyed), so a stop or a failure has nothing to put back.
+  const result = await runBulkJob('archive', targets, async (item) => {
+    const sourceThread = findLocalThread(item.threadId)
+    const res = await invoke('mail.archive', { thread_id: item.threadId })
+    assertMoveAffected(res, 'Archive')
+    removeThreadLocally(item.threadId).complete()
+    applyMutationFolderUnreads(res as MutationResult)
+    if (sourceThread?.account_id) void refreshAccountFoldersCache(sourceThread.account_id, false)
+  })
+  if (result.completed) {
+    await refreshThreadLocation(undefined, false)
+    // Archived conversations are filed in the built-in Archive folder too.
+    scheduleMeronFoldersRefresh()
+  }
+  reportBulkJob(result, {
+    finished: t('mail.toast.archivedCount', { count: targets.length }),
+    stopped: t('mail.toast.bulkStopped.archived', { done: result.completed, total: result.total }),
+    failed: archiveFailureText,
+  })
 }
 
 export async function bulkMoveSelectedToFolder(
@@ -387,43 +479,34 @@ export async function bulkMoveSelectedToFolder(
   const targets = uniqueThreadItems(items).filter(
     (item) => (targetAccountId && item.accountId !== targetAccountId) || item.folderId !== targetFolderId,
   )
-  if (targets.length === 0) return
-  const rollbacks: Array<() => void> = []
-  let completed = 0
-  try {
-    for (const item of targets) {
-      const removal = removeThreadLocally(item.threadId)
-      rollbacks.push(removal.rollback)
-      const res = await invoke('mail.move', {
-        thread_id: item.threadId,
-        target_folder_id: targetFolderId,
-        ...(targetAccountId ? { target_account_id: targetAccountId } : {}),
-      })
-      assertMoveAffected(res)
-      removal.complete()
-      rollbacks.pop()
-      completed++
-      rememberThreadTransfer({
-        action: 'move',
-        sourceAccountId: item.accountId,
-        targetAccountId: targetAccountId || item.accountId,
-        targetFolderId,
-      })
-      applyMutationFolderUnreads(res as MutationResult)
-    }
-    await refreshThreadLocation(targets[0]?.accountId, false)
+  if (targets.length === 0 || bulkJobBusy()) return
+  const moreComing = moreComingFlags(targets)
+  const result = await runBulkJob('move', targets, async (item) => {
+    const res = await invoke('mail.move', {
+      thread_id: item.threadId,
+      target_folder_id: targetFolderId,
+      ...(targetAccountId ? { target_account_id: targetAccountId } : {}),
+      ...moreComing(item),
+    })
+    assertMoveAffected(res)
+    removeThreadLocally(item.threadId).complete()
+    rememberThreadTransfer({
+      action: 'move',
+      sourceAccountId: item.accountId,
+      targetAccountId: targetAccountId || item.accountId,
+      targetFolderId,
+    })
+    applyMutationFolderUnreads(res as MutationResult)
+  })
+  if (result.completed) {
+    await refreshThreadLocation(result.error === undefined ? targets[0]?.accountId : undefined, false)
     if (targetAccountId) void loadFolders(targetAccountId, false)
-    clearBulkSelection()
-    showToast(t('mail.toast.movedCount', { count: targets.length }))
-  } catch (error) {
-    for (const rollback of rollbacks.reverse()) rollback()
-    const message = mailTransferError(error, t('mail.toast.moveFailed'))
-    showToast(
-      completed ? `${message} ${t('mail.transferError.bulkProgress', { completed, total: targets.length })}` : message,
-      'error',
-    )
-    if (completed) void refreshThreadLocation(undefined, false)
   }
+  reportBulkJob(result, {
+    finished: t('mail.toast.movedCount', { count: targets.length }),
+    stopped: t('mail.toast.bulkStopped.moved', { done: result.completed, total: result.total }),
+    failed: (error) => mailTransferError(error, t('mail.toast.moveFailed')),
+  })
 }
 
 export async function bulkCopySelectedToFolder(
@@ -461,7 +544,7 @@ export async function bulkCopySelectedToFolder(
 
 export async function bulkDeleteSelected(items: BulkSelectionItem[]) {
   const targets = uniqueThreadItems(items)
-  if (targets.length === 0) return
+  if (targets.length === 0 || bulkJobBusy()) return
   const permanentTargets = targets.filter(
     (item) => item.draft || item.trash || deletesForever(item.accountId, item.folderId),
   )
@@ -478,63 +561,69 @@ export async function bulkDeleteSelected(items: BulkSelectionItem[]) {
     if (!confirmed) return
   }
 
-  const rollbacks: Array<() => void> = []
-  try {
-    for (const item of targets) {
-      const removal = removeThreadLocally(item.threadId)
-      rollbacks.push(removal.rollback)
-      const res = await invoke('mail.delete', {
-        thread_id: item.threadId,
-        ...(item.folderId ? { folder: item.folderId } : {}),
-      })
-      assertDeleteAffected(res)
-      removal.complete()
-      applyMutationFolderUnreads(res as MutationResult)
-    }
-    await refreshThreadLocation(undefined, false)
-    clearBulkSelection()
-    showToast(t('mail.toast.deletedCount', { count: targets.length }))
-  } catch (error) {
-    for (const rollback of rollbacks.reverse()) rollback()
-    showToast(error instanceof Error ? error.message : t('mail.toast.deleteFailed'), 'error')
-  }
+  const moreComing = moreComingFlags(targets)
+  const result = await runBulkJob('delete', targets, async (item) => {
+    const res = await invoke('mail.delete', {
+      thread_id: item.threadId,
+      ...(item.folderId ? { folder: item.folderId } : {}),
+      ...moreComing(item),
+    })
+    assertDeleteAffected(res)
+    removeThreadLocally(item.threadId).complete()
+    applyMutationFolderUnreads(res as MutationResult)
+  })
+  if (result.completed) await refreshThreadLocation(undefined, false)
+  reportBulkJob(result, {
+    finished: t('mail.toast.deletedCount', { count: targets.length }),
+    stopped: t('mail.toast.bulkStopped.deleted', { done: result.completed, total: result.total }),
+    failed: (error) => (error instanceof Error ? error.message : t('mail.toast.deleteFailed')),
+  })
 }
 
 export async function archiveThread(threadId: string) {
   if (!threadId) return
   const sourceThread = findLocalThread(threadId)
   if (isLocalAccountId(sourceThread?.account_id || threadAccountId(threadId))) return
+  // Already in the built-in Archive Meron folder: archived already.
+  if (sourceThread?.meron_folder_id === MERON_ARCHIVE_ID) return
   const sourceFolder = sourceThread?.folder_id ?? ''
   const { rollback, complete } = removeThreadLocally(threadId)
   try {
-    const res = await invoke<{ folder?: string; thread_id?: string } & MovedCopiesResult & MutationResult>(
-      'mail.archive',
-      {
-        thread_id: threadId,
-      },
-    )
+    const res = await invoke<
+      { folder?: string; thread_id?: string } & MovedCopiesResult & MutationResult & MeronOnlyArchive
+    >('mail.archive', {
+      thread_id: threadId,
+    })
     assertMoveAffected(res, 'Archive')
     complete()
     applyMutationFolderUnreads(res)
     const archivedThreadId = res.thread_id ?? threadIdInFolder(threadId, sourceThread?.account_id, res.folder)
     const copyIds = movedCopyIds(res)
     await refreshThreadLocation(sourceThread?.account_id, false)
-    if (threadStillListed(threadId)) {
+    // Filed in the built-in Archive folder too: its row follows.
+    scheduleMeronFoldersRefresh()
+    if (res.meron_only) {
+      // Filed into the built-in Archive only; the mail stayed on the server.
+      showUndoToast(t('mail.toast.archivedCount', { count: 1 }), () => {
+        void undoMeronOnlyArchive(threadId, sourceThread?.account_id, res)
+      })
+    } else if (threadStillListed(threadId)) {
       showToast(t('mail.toast.archiveFailedInSameFolder'), 'error')
     } else if (sourceFolder && copyIds) {
       // Offer to move it back where it came from. Falls back to a plain toast
       // when the origin folder or the archived copies are unknown (nothing
       // reliable to restore to, or from).
+      const restore = undoRestore(sourceThread, res)
       showUndoToast(t('mail.toast.archivedCount', { count: 1 }), () => {
         releaseRemovedThread(threadId)
-        void moveThreadToFolder(archivedThreadId, sourceFolder, { undo: false, messageIds: copyIds })
+        void moveThreadToFolder(archivedThreadId, sourceFolder, { undo: false, messageIds: copyIds, restore })
       })
     } else {
       showToast(t('mail.toast.archivedCount', { count: 1 }))
     }
   } catch (error) {
     rollback()
-    showToast(mailTransferError(error, t('mail.toast.archiveFailed')), 'error')
+    showToast(archiveFailureText(error), 'error')
   }
 }
 
@@ -585,9 +674,10 @@ export async function deleteThread(threadId: string, options: { permanent?: bool
     if (threadStillListed(threadId)) {
       showToast(t('mail.toast.deleteFailedInSameFolder'), 'error')
     } else if (!isDraft && !permanent && !res.permanent && sourceFolder && canUndoTrashMove) {
+      const restore = undoRestore(sourceThread, res)
       showUndoToast(t('mail.toast.threadMovedToTrash'), () => {
         releaseRemovedThread(threadId)
-        void moveThreadToFolder(trashedThreadId, sourceFolder, { undo: false, messageIds: copyIds })
+        void moveThreadToFolder(trashedThreadId, sourceFolder, { undo: false, messageIds: copyIds, restore })
       })
     } else {
       showToast(
@@ -827,6 +917,84 @@ export async function deleteMessage(message: Message): Promise<boolean> {
   } catch (error) {
     mail$.messages.set(previousMessages)
     showToast(error instanceof Error ? error.message : t('mail.toast.deleteFailed'), 'error')
+    return false
+  }
+}
+
+// Moves (or archives) one email, not its whole conversation: right-click an
+// email in a chat. The message id names its own folder and uid
+// (account#folder#uid), so a sender chat's Sent reply moves out of Sent and an
+// inbox email out of the inbox. Undo moves that one copy back.
+export async function moveMessage(
+  message: Message,
+  targetFolderId: string,
+  options: { targetAccountId?: string; archive?: boolean } = {},
+): Promise<boolean> {
+  if (!message?.id || isLocalSendId(message.id)) return false
+  const accountId = message.account_id
+  const sourceFolder = message.folder_id
+  const targetAccountId = options.targetAccountId || accountId
+  const crossAccount = targetAccountId !== accountId
+  if (!options.archive && (!targetFolderId || (!crossAccount && sourceFolder === targetFolderId))) return false
+
+  const threadId = message.thread_id
+  const previousMessages = mail$.messages.get()
+  const nextMessages = previousMessages.filter((item) => item.id !== message.id)
+  const kanbanKeys = kanbanKeysWithThread(threadId)
+  mail$.messages.set(nextMessages)
+
+  try {
+    const res = options.archive
+      ? await invoke<{ folder?: string } & MovedCopiesResult & MutationResult>('mail.archive', {
+          thread_id: message.id,
+        })
+      : await invoke<MovedCopiesResult & MutationResult>('mail.move', {
+          thread_id: message.id,
+          target_folder_id: targetFolderId,
+          ...(crossAccount ? { target_account_id: targetAccountId } : {}),
+        })
+    assertMoveAffected(res, options.archive ? 'Archive' : 'Move')
+    applyMutationFolderUnreads(res)
+    const landedFolder = options.archive ? ((res as { folder?: string }).folder ?? '') : targetFolderId
+    const copyUid = movedCopyIds(res)?.[0]
+    const done = options.archive ? t('mail.toast.messageArchived') : t('mail.toast.messageMoved')
+    if (!crossAccount && landedFolder && sourceFolder && copyUid) {
+      showUndoToast(done, () => {
+        void invoke('mail.move', {
+          thread_id: `${accountId}#${landedFolder}#${copyUid}`,
+          target_folder_id: sourceFolder,
+        })
+          .then(async () => {
+            await reloadThreadCards(kanbanKeysWithThread(threadId))
+            if (ui$.selectedThread.get() === threadId) await loadThread(threadId)
+            void loadFolders(accountId, false)
+          })
+          .catch((error) => showToast(mailTransferError(error, t('mail.toast.moveFailed')), 'error'))
+      })
+    } else {
+      showToast(done)
+    }
+    if (!options.archive && !crossAccount) {
+      rememberThreadTransfer({ action: 'move', sourceAccountId: accountId, targetAccountId, targetFolderId })
+    }
+    // No messages left in this chat: drop the now-empty conversation.
+    if (!nextMessages.some((item) => item.thread_id === threadId)) {
+      if (ui$.selectedThread.get() === threadId) {
+        ui$.selectedThread.set('')
+        requestThreadReselect()
+      }
+      removeKanbanThread(threadId)
+    }
+    await reloadThreadCards(kanbanKeys)
+    void loadFolders(accountId, false)
+    if (crossAccount) void loadFolders(targetAccountId, false)
+    return true
+  } catch (error) {
+    mail$.messages.set(previousMessages)
+    showToast(
+      options.archive ? archiveFailureText(error) : mailTransferError(error, t('mail.toast.moveFailed')),
+      'error',
+    )
     return false
   }
 }

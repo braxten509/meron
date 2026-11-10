@@ -19,7 +19,13 @@ import {
   resolveSignatureFor,
   saveComposedDraft,
 } from './compose'
-import { buildReplyRecipients, buildReplyThreading, pickReplyTarget, resolveQuickReplyFrom } from './composeReply'
+import {
+  buildReplyRecipients,
+  buildReplyThreading,
+  pickReplyTarget,
+  replySubject,
+  resolveQuickReplyFrom,
+} from './composeReply'
 import { compose$, newDraftMessageId } from './composeState'
 import { draftSaveRunning } from './composeSessions'
 import { parseAddressList } from '../components/chat/messageHelpers'
@@ -160,7 +166,7 @@ async function performQuickReplyDraftSave() {
   const { to, cc } = buildReplyRecipients(target)
   const { in_reply_to, references } = buildReplyThreading(target)
   const fromEmail = resolveQuickReplyFrom(target, activeAcc)
-  const subject = activeT.subject.startsWith('Re:') ? activeT.subject : `Re: ${activeT.subject}`
+  const subject = replySubject(activeT, target)
   // Whatever is in the box now is a different reply from the one a send took, so
   // it needs a draft of its own: reusing the claimed id would write this text
   // over the copy that send is about to discard, taking the box's safety copy
@@ -489,8 +495,9 @@ function quickReplyCanHoldDraft(draft: Message): boolean {
   if (draft.body_html?.trim() || draft.bcc?.trim() || draft.reply_to?.trim()) return false
   const activeT = getActiveThread()
   if (!activeT) return true
-  const { to, cc } = buildReplyRecipients(pickReplyTarget(activeT))
-  const subject = activeT.subject.startsWith('Re:') ? activeT.subject : `Re: ${activeT.subject}`
+  const target = pickReplyTarget(activeT)
+  const { to, cc } = buildReplyRecipients(target)
+  const subject = replySubject(activeT, target)
   return (
     addressesOf(draft.to) === addressesOf(to) &&
     addressesOf(draft.cc) === addressesOf(cc) &&

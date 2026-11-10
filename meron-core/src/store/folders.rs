@@ -85,6 +85,8 @@ pub(super) fn delete_folder_rows(conn: &Connection, account: &str, name: &str) -
         "DELETE FROM folders WHERE account = ?1 AND name = ?2",
         params![account, name],
     )?;
+    // Its mail shown in the Inbox, and where its AI sorting started.
+    super::ai_sort_inbox::ai_sort_inbox_forget_folder(conn, account, name)?;
     Ok(deleted)
 }
 
@@ -167,20 +169,35 @@ pub fn child_folders(conn: &Connection, account: &str, name: &str) -> Result<Vec
 
 pub fn get_folders(conn: &Connection, account: &str) -> Result<Vec<Folder>> {
     let mut stmt = conn.prepare(&format!(
-        "SELECT f.name, f.delimiter, f.special_use, {UNREAD_SQL} AS unread, f.notify <> 0
+        "SELECT f.name, f.delimiter, f.special_use, {UNREAD_SQL} AS unread, f.notify <> 0,
+                {HIDDEN_SQL} AS meron_unread,
+                CASE WHEN f.name = 'INBOX' COLLATE NOCASE THEN {SHOWN_ALL}
+                     ELSE -{SHOWN_HERE} END AS shown_unread
            FROM folders f WHERE f.account = ?1 ORDER BY f.name",
         UNREAD_SQL = unread_sql("f.account", "f.name"),
+        HIDDEN_SQL = meron_unread_sql("f.account", "f.name"),
+        SHOWN_ALL = super::ai_sort_inbox_unread_sql("f.account", None),
+        SHOWN_HERE = super::ai_sort_inbox_unread_sql("f.account", Some("f.name")),
     ))?;
     let rows = stmt.query_map(params![account], |row| {
         let name = row.get::<_, String>(0)?;
         let special_use = row.get::<_, Option<String>>(2)?;
+        let role = classify_folder_role(&name, special_use.as_deref());
+        let mut unread = row.get::<_, i64>(3)?;
+        // Mail in Meron folders counts there, not here (except in Drafts,
+        // Trash and Junk, which never hide it).
+        if super::meron_hides_role(role) {
+            unread -= row.get::<_, i64>(5)?;
+        }
+        // Mail the AI left in another folder counts in the Inbox, not there.
+        unread += row.get::<_, i64>(6)?;
         Ok(Folder {
-            role: classify_folder_role(&name, special_use.as_deref()).to_string(),
+            role: role.to_string(),
             display_name: crate::utf7::decode(&name),
             name,
             delimiter: row.get(1)?,
             special_use,
-            unread: row.get::<_, i64>(3)? as u32,
+            unread: unread.max(0) as u32,
             notify: row.get(4)?,
         })
     })?;
@@ -271,14 +288,67 @@ pub fn notify_folder_plan(conn: &Connection, account: &str) -> Result<NotifyFold
     Ok(NotifyFolderPlan { live, polled })
 }
 
+/// SQL true when the `messages` row `m` counts in its folder: any row outside
+/// the Inbox, and in the Inbox only mail the Inbox lists (newer than the age
+/// limit and not backfill, see [`super::inbox_listed_sql`]).
+fn counted_sql() -> String {
+    format!(
+        "(m.folder <> 'INBOX' COLLATE NOCASE OR m.account = '{local}' OR {listed})",
+        local = super::LOCAL_ACCOUNT_ID.replace('\'', "''"),
+        listed = super::inbox_listed_sql("m", super::now_unix())
+    )
+}
+
+/// SQL true when the `uncached_unseen` row `u` counts in its folder: anywhere
+/// but a real Inbox. The Inbox counts only mail it lists, and an unseen UID the
+/// cache doesn't hold was never listed: it sits below the sync window, so on
+/// the server before Meron watched (or in a burst too big for one window).
+fn uncached_counted_sql() -> String {
+    format!(
+        "(u.folder <> 'INBOX' COLLATE NOCASE OR u.account = '{local}')",
+        local = super::LOCAL_ACCOUNT_ID.replace('\'', "''"),
+    )
+}
+
 /// Unread total for the folder named by the `account`/`folder` SQL expressions:
 /// cached unseen messages plus the unseen server UIDs the cache doesn't hold.
 fn unread_sql(account: &str, folder: &str) -> String {
     format!(
         "((SELECT COUNT(*) FROM messages m
-            WHERE m.account = {account} AND m.folder = {folder} AND m.seen = 0)
+            WHERE m.account = {account} AND m.folder = {folder} AND m.seen = 0
+              AND {counted}
+              AND NOT EXISTS (SELECT 1 FROM ai_sort_hidden h
+                   WHERE h.account = m.account AND h.folder = m.folder AND h.uid = m.uid
+                     AND h.hide_until > CAST(strftime('%s','now') AS INTEGER)))
           + (SELECT COUNT(*) FROM uncached_unseen u
-            WHERE u.account = {account} AND u.folder = {folder}))"
+            WHERE u.account = {account} AND u.folder = {folder} AND {uncached}))",
+        counted = counted_sql(),
+        uncached = uncached_counted_sql(),
+    )
+}
+
+/// The part of [`unread_sql`] that sits in Meron folders: cached unseen mail
+/// whose conversation is in one, and server-unseen UIDs the cache doesn't hold
+/// that are remembered as members. Zero, without looking at the folder's mail,
+/// for an account with nothing in Meron folders.
+fn meron_unread_sql(account: &str, folder: &str) -> String {
+    format!(
+        "(CASE WHEN EXISTS (SELECT 1 FROM meron_folder_aliases WHERE account = {account})
+          THEN (SELECT COUNT(*) FROM messages m
+                 WHERE m.account = {account} AND m.folder = {folder} AND m.seen = 0
+                   AND {counted}
+                   AND NOT EXISTS (SELECT 1 FROM ai_sort_hidden h
+                        WHERE h.account = m.account AND h.folder = m.folder AND h.uid = m.uid
+                          AND h.hide_until > CAST(strftime('%s','now') AS INTEGER))
+                   AND {hidden})
+             + (SELECT COUNT(*) FROM uncached_unseen u
+                 WHERE u.account = {account} AND u.folder = {folder} AND {uncached}
+                   AND EXISTS (SELECT 1 FROM meron_folder_uids x
+                        WHERE x.account = u.account AND x.folder = u.folder AND x.uid = u.uid))
+          ELSE 0 END)",
+        hidden = super::meron_hidden_sql("m"),
+        counted = counted_sql(),
+        uncached = uncached_counted_sql(),
     )
 }
 
@@ -286,12 +356,25 @@ fn unread_sql(account: &str, folder: &str) -> String {
 /// carry this alongside their cards so clients do not have to join a separately
 /// cached folder-list response to the freshly loaded page.
 pub fn get_folder_unread(conn: &Connection, account: &str, folder: &str) -> Result<u32> {
-    let unread = conn.query_row(
-        &format!("SELECT {}", unread_sql("?1", "?2")),
-        params![account, folder],
-        |row| row.get::<_, i64>(0),
-    )?;
-    Ok(unread as u32)
+    let mut sql = if super::meron_hides_folder(conn, account, folder)? {
+        format!(
+            "SELECT {} - {}",
+            unread_sql("?1", "?2"),
+            meron_unread_sql("?1", "?2")
+        )
+    } else {
+        format!("SELECT {}", unread_sql("?1", "?2"))
+    };
+    // Mail the AI left in another folder counts in the Inbox, not there.
+    if super::ai_sort_inbox_has_rows(conn, account)? {
+        if folder.eq_ignore_ascii_case("INBOX") {
+            sql.push_str(&format!(" + {}", super::ai_sort_inbox_unread_sql("?1", None)));
+        } else {
+            sql.push_str(&format!(" - {}", super::ai_sort_inbox_unread_sql("?1", Some("?2"))));
+        }
+    }
+    let unread = conn.query_row(&sql, params![account, folder], |row| row.get::<_, i64>(0))?;
+    Ok(unread.max(0) as u32)
 }
 
 /// Replace the folder's `uncached_unseen` rows with the members of

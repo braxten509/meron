@@ -437,8 +437,10 @@ func sidecarCallTimeout(method string) time.Duration {
 	// A copy downloads every message in the thread in full, then APPENDs each
 	// one to the target.
 	// Moving into or out of local folders downloads or uploads every message
-	// in full; so does a move between accounts.
-	case "messages.saveRawBatch", "messages.copy", "messages.move":
+	// in full; so does a move between accounts. A delete is a move to Trash
+	// (or a STORE + EXPUNGE) on the server, which often takes 3-6s: a shorter
+	// wait showed "Delete failed" while the delete went on to finish.
+	case "messages.saveRawBatch", "messages.copy", "messages.move", "messages.delete":
 		return 2 * time.Minute
 	// A snapshot or a restore copies every archived message.
 	case "account.localBackup", "account.localRestore":
@@ -447,6 +449,23 @@ func sidecarCallTimeout(method string) time.Duration {
 		return 30 * time.Second
 	// A token exchange plus the profile, or the profile photo.
 	case "oauth.exchangeCode", "oauth.fetchPhoto":
+		return 30 * time.Second
+	// A key check may run Tinfoil's enclave check before a 1-token chat; the
+	// model list follows OpenRouter's pages; Move back may search the server.
+	case "aiSort.checkKey", "aiSort.models", "aiSort.moveBack":
+		return 45 * time.Second
+	// Saving or removing a key goes through the keychain, which can be slow.
+	case "aiSort.setKey", "aiSort.set", "aiSort.estimate", "aiSort.run":
+		return 15 * time.Second
+	// A Meron folder's page merges conversations from every account; a move
+	// writes every member message's aliases in one transaction.
+	case "meronFolders.threads", "meronFolders.delete":
+		return 15 * time.Second
+	// Out of (or back into) the built-in Archive moves mail on the server.
+	case "meronFolders.moveIn", "meronFolders.moveOut":
+		return 2 * time.Minute
+	// Mark all read sets \Seen on every account the folder's mail lives in.
+	case "meronFolders.markAllRead":
 		return 30 * time.Second
 	case "messages.read", "messages.thread", "messages.markRead", "messages.markStarred", "messages.markAllRead", "messages.markAllReadUnified", "send", "save_draft", "discard_draft", "folders.delete", "folders.rename":
 		return 30 * time.Second

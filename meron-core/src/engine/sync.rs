@@ -1,6 +1,6 @@
 //! Folder and message sync against the server, including companion folders.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -171,19 +171,37 @@ pub async fn delete_to_trash(
     folder: &str,
     uids: &[u32],
 ) -> anyhow::Result<Option<Trashed>> {
+    // Drafts and Trash from the saved folder list. Asking the server is a
+    // whole LIST each, and a delete used to pay for two of them; only a role
+    // the saved list cannot name (a new account, a server without one) still
+    // asks.
+    let saved_role = |special_use: &str, looks_like: fn(&str) -> bool| {
+        let folders = store::get_folders(&engine.db.lock().unwrap(), account).unwrap_or_default();
+        super::folders::find_role_folder(folders, special_use, looks_like, "")
+    };
+    let saved_drafts = saved_role("drafts", imap::looks_like_drafts);
+    let saved_trash = saved_role("trash", imap::looks_like_trash);
     engine
         .with_write_session(account, |session| {
             let folder = folder.to_string();
             let uids = uids.to_vec();
+            let saved_drafts = saved_drafts.clone();
+            let saved_trash = saved_trash.clone();
             Box::pin(async move {
-                let drafts = imap::find_drafts_folder(session).await?;
+                let drafts = match saved_drafts {
+                    Some(drafts) => Some(drafts),
+                    None => imap::find_drafts_folder(session).await?,
+                };
                 if drafts.as_deref() == Some(folder.as_str()) {
                     imap::expunge_uids(session, &folder, &uids).await?;
                     return anyhow::Ok(None);
                 }
-                let trash = imap::find_trash_folder(session)
-                    .await?
-                    .ok_or_else(|| anyhow::anyhow!("Trash folder not found for this account"))?;
+                let trash = match saved_trash {
+                    Some(trash) => trash,
+                    None => imap::find_trash_folder(session)
+                        .await?
+                        .ok_or_else(|| anyhow::anyhow!("Trash folder not found for this account"))?,
+                };
                 if trash == folder {
                     imap::expunge_uids(session, &folder, &uids).await?;
                     return anyhow::Ok(None);
@@ -219,7 +237,7 @@ impl MovedCopies {
             return Ok(());
         };
         store::ensure_folder(conn, account, target)?;
-        store::upsert_messages(conn, account, target, &batch.messages)?;
+        store::upsert_window_messages(conn, account, target, batch)?;
         store::set_folder_state(conn, account, target, batch.uidvalidity, batch.uid_next)?;
         Ok(())
     }
@@ -233,6 +251,19 @@ pub async fn move_within_account(
     target: &str,
     uids: &[u32],
 ) -> anyhow::Result<MovedCopies> {
+    move_within_account_with(engine, account, folder, target, uids, true).await
+}
+
+/// [`move_within_account`], with the re-read of `target`'s recent window put
+/// off when `reread_window` is false (see [`refresh_moved_copies_with`]).
+pub async fn move_within_account_with(
+    engine: &Arc<Engine>,
+    account: &str,
+    folder: &str,
+    target: &str,
+    uids: &[u32],
+    reread_window: bool,
+) -> anyhow::Result<MovedCopies> {
     let cached_ids = store::cached_message_ids(&engine.db.lock().unwrap(), account, folder, uids)?;
     let moved_ids = moved_message_ids(engine, account, folder, uids, cached_ids).await;
     let uid_next_before = engine
@@ -243,13 +274,14 @@ pub async fn move_within_account(
             Box::pin(async move { imap::move_to_folder(session, &folder, &target, &uids).await })
         })
         .await?;
-    let copies = refresh_moved_copies(
+    let copies = refresh_moved_copies_with(
         engine,
         account,
         target,
         uids.len(),
         uid_next_before,
         moved_ids.as_deref(),
+        reread_window,
     )
     .await;
     let db = engine.db.lock().unwrap();
@@ -302,6 +334,99 @@ pub async fn moved_message_ids(
         .zip(cached)
         .map(|(uid, id)| id.or_else(|| fetched.get(uid).cloned()))
         .collect()
+}
+
+/// What deleting a sender row removes: `cached` (their cached messages in
+/// `folder`, see `store::sender_folder_uids`) plus older messages of theirs in
+/// `folder` that only the server holds. The server is asked with two SEARCHes,
+/// FROM the address and TO it, because the row's person follows the "other
+/// person" rule (`store::sender_person`): mail From one of my own addresses,
+/// or any mail in a Sent-like mailbox, belongs to its first recipient. Each
+/// uncached hit is read back and kept only when that rule names exactly
+/// `addr` — SEARCH matches substrings, and `bob@x.com` must not take
+/// `jimbob@x.com` with it. Sent copies elsewhere are never touched: the search
+/// covers `folder` alone.
+///
+/// All or nothing: when the server cannot tell which messages are theirs (a
+/// failed search, or a hit that could not be read back), this fails and
+/// nothing is deleted, rather than deleting only part of the row.
+pub async fn sender_delete_uids(
+    engine: &Arc<Engine>,
+    account: &str,
+    folder: &str,
+    addr: &str,
+    cached: Vec<u32>,
+) -> anyhow::Result<Vec<u32>> {
+    let addr = addr.trim().to_lowercase();
+    if addr.is_empty() || store::is_local_account(account) {
+        return Ok(cached);
+    }
+    let found = engine
+        .with_read_session(account, |session| {
+            let folder = folder.to_string();
+            let addr = addr.clone();
+            Box::pin(async move {
+                let mut found =
+                    imap::search_uids(session, &folder, &format!("from:{addr}")).await?;
+                found.extend(imap::search_uids(session, &folder, &format!("to:{addr}")).await?);
+                Ok(found)
+            })
+        })
+        .await
+        .map_err(|err| {
+            crate::mlog!(
+                crate::log::Level::Warn,
+                "mail.sync",
+                "account={account} folder={folder}: sender search before delete failed: {err:#}"
+            );
+            err.context("searching the server for the sender's mail")
+        })?;
+    // A hit the cache already holds is either in `cached` or someone else's.
+    let (uncached, mine) = {
+        let db = engine.db.lock().unwrap();
+        let held = store::cached_uids_in_folder(&db, account, folder, &found)?;
+        let mut uncached: Vec<u32> = found
+            .into_iter()
+            .filter(|uid| !held.contains(uid))
+            .collect();
+        uncached.sort_unstable();
+        uncached.dedup();
+        (uncached, store::self_addrs(&db, account))
+    };
+    if uncached.is_empty() {
+        return Ok(cached);
+    }
+    let (headers, skipped) =
+        fetch_headers_isolating_unparseable(engine, account, folder, uncached.clone())
+            .await
+            .map_err(|err| {
+                crate::mlog!(
+                    crate::log::Level::Warn,
+                    "mail.sync",
+                    "account={account} folder={folder}: reading sender search hits failed: {err:#}"
+                );
+                err.context("reading the sender's mail from the server")
+            })?;
+    let read: std::collections::HashSet<u32> = headers.iter().map(|header| header.uid).collect();
+    let missing = uncached.iter().filter(|uid| !read.contains(uid)).count();
+    if !skipped.is_empty() || missing > 0 {
+        crate::mlog!(
+            crate::log::Level::Warn,
+            "mail.sync",
+            "account={account} folder={folder}: {missing} sender search hits could not be read, \
+             not deleting"
+        );
+        anyhow::bail!("could not read {missing} of the sender's messages from the server");
+    }
+    let mut uids = cached;
+    for header in headers {
+        if store::sender_person(account, &mine, folder, &header) == addr
+            && !uids.contains(&header.uid)
+        {
+            uids.push(header.uid);
+        }
+    }
+    Ok(uids)
 }
 
 /// The UIDs of the copies a move created, among the target's messages at or
@@ -358,6 +483,47 @@ pub async fn refresh_moved_copies(
     uid_next_before: Option<u32>,
     moved: Option<&[String]>,
 ) -> MovedCopies {
+    refresh_moved_copies_with(engine, account, target, count, uid_next_before, moved, true).await
+}
+
+/// Messages moved into a folder while its re-read was put off: how many the
+/// next re-read of that (account, folder) still has to cover.
+static OWED_REREADS: std::sync::LazyLock<std::sync::Mutex<HashMap<(String, String), u32>>> =
+    std::sync::LazyLock::new(Default::default);
+
+/// Upper bound on one catch-up re-read, however much a long run put off.
+const MAX_OWED_REREAD: u32 = 1000;
+
+fn take_owed_reread(account: &str, target: &str) -> u32 {
+    OWED_REREADS
+        .lock()
+        .unwrap()
+        .remove(&(account.to_string(), target.to_string()))
+        .unwrap_or(0)
+}
+
+fn owe_reread(account: &str, target: &str, count: u32) {
+    let mut owed = OWED_REREADS.lock().unwrap();
+    let entry = owed.entry((account.to_string(), target.to_string())).or_insert(0);
+    *entry = entry.saturating_add(count).min(MAX_OWED_REREAD);
+}
+
+/// [`refresh_moved_copies`], optionally without re-reading `target`'s recent
+/// window. A bulk delete or move handles one conversation per call; re-reading
+/// the same folder after each of them is the heaviest step and only the last
+/// one's result matters. With `reread_window` false the window is left alone
+/// and the moved count is remembered, so the next re-read of that folder (the
+/// run's last call, or any later move into it) reaches back far enough to
+/// cover everything that was skipped. Locating the moved copies is unchanged.
+pub async fn refresh_moved_copies_with(
+    engine: &Arc<Engine>,
+    account: &str,
+    target: &str,
+    count: usize,
+    uid_next_before: Option<u32>,
+    moved: Option<&[String]>,
+    reread_window: bool,
+) -> MovedCopies {
     let guard = match MessageSyncGuard::begin(engine) {
         Ok(guard) => guard,
         Err(err) => {
@@ -373,16 +539,27 @@ pub async fn refresh_moved_copies(
             };
         }
     };
-    let batch = match fetch_recent_resilient(engine, account, target, 50.max(count as u32)).await {
-        Ok(batch) => Some(batch),
-        Err(err) => {
-            crate::mlog!(
-                crate::log::Level::Warn,
-                "mail.sync",
-                "account={account} folder={target}: refresh after move failed: {err:#}"
-            );
-            None
+    let count = count as u32;
+    let batch = if reread_window {
+        let owed = take_owed_reread(account, target);
+        match fetch_recent_resilient(engine, account, target, 50.max(count.saturating_add(owed)))
+            .await
+        {
+            Ok(batch) => Some(batch),
+            Err(err) => {
+                crate::mlog!(
+                    crate::log::Level::Warn,
+                    "mail.sync",
+                    "account={account} folder={target}: refresh after move failed: {err:#}"
+                );
+                // Still not read: the next re-read has to cover these too.
+                owe_reread(account, target, count.saturating_add(owed));
+                None
+            }
         }
+    } else {
+        owe_reread(account, target, count);
+        None
     };
     let uids = match (uid_next_before.filter(|uid_next| *uid_next > 0), moved) {
         (Some(floor), Some(moved)) => match moved_arrivals(engine, account, target, floor).await {
@@ -433,15 +610,121 @@ async fn moved_arrivals(
 /// Reconnect to IMAP, fetch the most recent `limit` messages of a folder into
 /// the store, resetting cached messages if the server's UIDVALIDITY changed.
 pub struct SyncMessagesResult {
+    /// Messages in the synced window.
     pub count: usize,
+    /// Headers read in full this sync: the whole window on a full sync, only
+    /// the window's messages the cache lacked on an incremental one.
     pub messages: Vec<imap::MessageHeader>,
     pub arrivals: Vec<imap::MessageHeader>,
+    /// New mail AI sorting filed into Meron folders with notifications on,
+    /// to announce under those folders.
+    pub meron_arrivals: Vec<ai_sort::MeronArrivals>,
+}
+
+/// `(uid, seen, starred, tags, Meron folder mark)`, as in
+/// [`imap::FlagSync::changes`].
+type FlagState = (u32, bool, bool, Vec<String>, Option<Option<String>>);
+
+/// What the network phase of a folder sync read.
+pub(super) struct FolderSyncState {
+    pub(super) batch: imap::RecentBatch,
+    pub(super) flag_sync: Option<imap::FlagSync>,
+    pub(super) server_uids: Option<HashSet<u32>>,
+    pub(super) server_unseen: Option<HashSet<u32>>,
+    /// Set by an incremental sync: the window's UIDs, newest first. Then
+    /// `batch.messages` holds only the window's messages the cache lacked;
+    /// the rest are cached and only their flags can have changed.
+    pub(super) window: Option<Vec<u32>>,
+    /// Incremental sync whose CONDSTORE changes were not complete: the FLAGS
+    /// of the window's cached messages, read on their own.
+    pub(super) window_flags: Vec<FlagState>,
+}
+
+/// The flag and UID state a folder sync reads after its window.
+struct FlagReads {
+    flag_sync: Option<imap::FlagSync>,
+    server_uids: Option<HashSet<u32>>,
+    server_unseen: Option<HashSet<u32>>,
+    window_flags: Vec<FlagState>,
+}
+
+/// Read the folder's flag changes, UIDs and unseen UIDs after its window.
+///
+/// `flags_for` is set for an incremental sync: the window's cached messages,
+/// whose flags no full FETCH read. When CONDSTORE reports every change since
+/// the stored modseq they cost nothing; otherwise their FLAGS are read here,
+/// and a failure to read them fails the call, since the sync would otherwise
+/// miss flag changes a full read would have seen. `listed_uids` is a UID
+/// listing already taken after the window's UIDNEXT, reused for pruning.
+#[allow(clippy::too_many_arguments)]
+async fn read_flag_state(
+    session: &mut imap::Session,
+    folder: &str,
+    uidvalidity: u32,
+    flags_for: Option<Vec<u32>>,
+    listed_uids: Option<HashSet<u32>>,
+    prior_modseq: u64,
+    prior_validity: u32,
+    needs_tag_baseline: bool,
+) -> anyhow::Result<FlagReads> {
+    // Reconcile \Seen across the whole folder (catches reads on other
+    // devices, even for messages older than the recent window).
+    // Best-effort: a no-op when there's no baseline, UIDVALIDITY changed,
+    // or the server lacks CONDSTORE.
+    let validity_matches = prior_validity != 0 && prior_validity == uidvalidity;
+    let mut flag_sync = imap::sync_flags(session, folder, prior_modseq, validity_matches)
+        .await
+        .ok();
+    if needs_tag_baseline
+        && validity_matches
+        && let Some(flag_sync) = flag_sync.as_mut()
+    {
+        flag_sync.tag_baseline = imap::fetch_all_tags(session).await.ok();
+    }
+    let window_flags = match flags_for {
+        Some(uids) if !flag_sync.as_ref().is_some_and(|sync| sync.complete) => {
+            imap::fetch_flags_by_uid(session, folder, &uids).await?
+        }
+        _ => Vec::new(),
+    };
+    // Server-side UID set so we can drop locally cached messages another
+    // client moved or deleted. Best-effort: a failure here skips the prune.
+    let server_uids = match listed_uids {
+        Some(uids) => Some(uids),
+        None => imap::list_all_uids(session, folder).await.ok(),
+    };
+    // Unread mail older than the window still counts toward the
+    // folder's unread total. Best-effort like the prune above. The whole
+    // set is kept: Meron folders count (and mark read) the members among
+    // it. The Inbox's own count leaves these out, as it counts only mail it
+    // lists (see `store::inbox_listed_sql` and `folders::unread_sql`).
+    let server_unseen = imap::list_unseen_uids(session, folder).await.ok();
+    Ok(FlagReads {
+        flag_sync,
+        server_uids,
+        server_unseen,
+        window_flags,
+    })
+}
+
+/// The window's UIDs no full FETCH in `batch` read.
+fn cached_in_window(window: &[u32], batch: &imap::RecentBatch) -> Vec<u32> {
+    let fetched: HashSet<u32> = batch.messages.iter().map(|message| message.uid).collect();
+    window
+        .iter()
+        .copied()
+        .filter(|uid| !fetched.contains(uid))
+        .collect()
 }
 
 /// Rebuild what the batched sync would have produced, for a folder holding at
 /// least one message whose FETCH response cannot be parsed. Establishes the
-/// window with [`recover_recent_batch`], then re-runs the best-effort flag
-/// reconciliation and UID listing that the failed attempt never reached.
+/// window as UIDs, reads in full what needs it (only the messages missing from
+/// `known` when the folder was synced before, else the whole window, see
+/// [`recover_recent_batch`]) a narrower range at a time, then re-runs the
+/// best-effort flag reconciliation and UID listing that the failed attempt
+/// never reached.
+#[allow(clippy::too_many_arguments)]
 pub(super) async fn sync_state_isolating_unparseable(
     engine: &Arc<Engine>,
     account: &str,
@@ -449,30 +732,95 @@ pub(super) async fn sync_state_isolating_unparseable(
     limit: u32,
     prior_modseq: u64,
     prior_validity: u32,
-) -> anyhow::Result<(
-    imap::RecentBatch,
-    Option<imap::FlagSync>,
-    Option<std::collections::HashSet<u32>>,
-    Option<std::collections::HashSet<u32>>,
-)> {
-    let batch = recover_recent_batch(engine, account, folder, limit).await?;
+    known: Option<&HashSet<u32>>,
+    needs_tag_baseline: bool,
+) -> anyhow::Result<FolderSyncState> {
+    let listing = match known {
+        Some(_) if prior_validity != 0 => Some(
+            engine
+                .with_read_session(account, |session| {
+                    let folder = folder.to_string();
+                    Box::pin(async move { imap::folder_listing(session, &folder).await })
+                })
+                .await?,
+        )
+        .filter(|listing| listing.uidvalidity == prior_validity && listing.consistent()),
+        _ => None,
+    };
+    let (batch, window, listed_uids) = match (listing, known) {
+        (Some(listing), Some(known)) => {
+            let window = listing.window(limit);
+            let missing: Vec<u32> = window
+                .iter()
+                .copied()
+                .filter(|uid| !known.contains(uid))
+                .collect();
+            let messages = read_isolating(engine, account, folder, missing).await?;
+            let batch = imap::RecentBatch {
+                uidvalidity: listing.uidvalidity,
+                uid_next: listing.uid_next,
+                messages,
+            };
+            (batch, Some(window), Some(listing.uids))
+        }
+        _ => (
+            recover_recent_batch(engine, account, folder, limit).await?,
+            None,
+            None,
+        ),
+    };
     let uidvalidity = batch.uidvalidity;
-    let (flag_sync, server_uids, server_unseen) = engine
+    let flags_for = window
+        .as_deref()
+        .map(|window| cached_in_window(window, &batch));
+    let reads = engine
         .with_read_session(account, |session| {
             let folder = folder.to_string();
+            let flags_for = flags_for.clone();
+            let listed_uids = listed_uids.clone();
             Box::pin(async move {
-                let validity_matches = prior_validity != 0 && prior_validity == uidvalidity;
-                let flag_sync = imap::sync_flags(session, &folder, prior_modseq, validity_matches)
-                    .await
-                    .ok();
-                let server_uids = imap::list_all_uids(session, &folder).await.ok();
-                let server_unseen = imap::list_unseen_uids(session, &folder).await.ok();
-                anyhow::Ok((flag_sync, server_uids, server_unseen))
+                read_flag_state(
+                    session,
+                    &folder,
+                    uidvalidity,
+                    flags_for,
+                    listed_uids,
+                    prior_modseq,
+                    prior_validity,
+                    needs_tag_baseline,
+                )
+                .await
             })
         })
-        .await
-        .unwrap_or((None, None, None));
-    Ok((batch, flag_sync, server_uids, server_unseen))
+        .await;
+    let reads = match reads {
+        Ok(reads) => reads,
+        // An incremental read fetched no flags for the cached messages, so
+        // without this read their read/star state and deletions would go
+        // stale while the sync reported success.
+        Err(err) if window.is_some() => return Err(err),
+        Err(err) => {
+            crate::mlog!(
+                crate::log::Level::Warn,
+                "mail.sync",
+                "account={account} folder={folder}: flag and UID reads skipped: {err:#}"
+            );
+            FlagReads {
+                flag_sync: None,
+                server_uids: None,
+                server_unseen: None,
+                window_flags: Vec::new(),
+            }
+        }
+    };
+    Ok(FolderSyncState {
+        batch,
+        flag_sync: reads.flag_sync,
+        server_uids: reads.server_uids,
+        server_unseen: reads.server_unseen,
+        window,
+        window_flags: reads.window_flags,
+    })
 }
 
 /// [`imap::fetch_recent`] for one folder, recovering from messages whose FETCH
@@ -525,6 +873,21 @@ pub(super) async fn recover_recent_batch(
             Box::pin(async move { imap::recent_uids(session, &folder, limit).await })
         })
         .await?;
+    let messages = read_isolating(engine, account, folder, uids).await?;
+    Ok(imap::RecentBatch {
+        uidvalidity,
+        uid_next,
+        messages,
+    })
+}
+
+/// [`fetch_headers_isolating_unparseable`], logging what it had to skip.
+async fn read_isolating(
+    engine: &Arc<Engine>,
+    account: &str,
+    folder: &str,
+    uids: Vec<u32>,
+) -> anyhow::Result<Vec<imap::MessageHeader>> {
     let (messages, skipped) =
         fetch_headers_isolating_unparseable(engine, account, folder, uids).await?;
     if !skipped.is_empty() {
@@ -536,11 +899,7 @@ pub(super) async fn recover_recent_batch(
             messages.len() + skipped.len()
         );
     }
-    Ok(imap::RecentBatch {
-        uidvalidity,
-        uid_next,
-        messages,
-    })
+    Ok(messages)
 }
 
 /// Ceiling on FETCH attempts one poison-message recovery may spend. A run with
@@ -754,6 +1113,9 @@ async fn sync_messages_with_policy(
     background: bool,
     catchup_budget: Duration,
 ) -> anyhow::Result<SyncMessagesResult> {
+    // When this sync's reads began: a Meron-folder mark this device wrote
+    // after it may not show in them (see `store::meron_marks_observe`).
+    let read_at = store::meron_mark_tick();
     // Read the prior sync position before any network I/O so we can ask the
     // server for only the flag changes since then (CONDSTORE CHANGEDSINCE).
     // Callers must await this operation rather than timing out the whole sync;
@@ -768,6 +1130,7 @@ async fn sync_messages_with_policy(
         removal_guard,
         missing_files,
         needs_tag_baseline,
+        known,
     ) = tokio::task::spawn_blocking(move || {
         let engine = prepare_engine;
         let account = prepare_account.as_str();
@@ -790,6 +1153,13 @@ async fn sync_messages_with_policy(
             id,
         };
         let tag_baseline = store::needs_tag_baseline(&db, account, folder)?;
+        // A folder synced before reads only what changed: the UIDs it already
+        // caches are left out of the full FETCH.
+        let known = if validity != 0 {
+            Some(Arc::new(store::header_synced_uids(&db, account, folder)?))
+        } else {
+            None
+        };
         anyhow::Ok((
             modseq,
             validity,
@@ -797,6 +1167,7 @@ async fn sync_messages_with_policy(
             guard,
             missing_files,
             tag_baseline,
+            known,
         ))
     })
     .await??;
@@ -805,31 +1176,51 @@ async fn sync_messages_with_policy(
         let attempt = engine
             .with_read_session(account, |session| {
                 let folder = folder.to_string();
+                let known = known.clone();
                 Box::pin(async move {
-                    let batch = imap::fetch_recent(session, &folder, limit).await?;
-                    // Reconcile \Seen across the whole folder (catches reads on other
-                    // devices, even for messages older than the recent window).
-                    // Best-effort: a no-op when there's no baseline, UIDVALIDITY changed,
-                    // or the server lacks CONDSTORE.
-                    let validity_matches =
-                        prior_validity != 0 && prior_validity == batch.uidvalidity;
-                    let mut flag_sync =
-                        imap::sync_flags(session, &folder, prior_modseq, validity_matches)
-                            .await
-                            .ok();
-                    if needs_tag_baseline
-                        && validity_matches
-                        && let Some(flag_sync) = flag_sync.as_mut()
-                    {
-                        flag_sync.tag_baseline = imap::fetch_all_tags(session).await.ok();
-                    }
-                    // Server-side UID set so we can drop locally cached messages another
-                    // client moved or deleted. Best-effort: a failure here skips the prune.
-                    let server_uids = imap::list_all_uids(session, &folder).await.ok();
-                    // Unread mail older than the window still counts toward the
-                    // folder's unread total. Best-effort like the prune above.
-                    let server_unseen = imap::list_unseen_uids(session, &folder).await.ok();
-                    anyhow::Ok((batch, flag_sync, server_uids, server_unseen))
+                    // Folder synced before: read in full only the window's
+                    // messages the cache lacks. Otherwise (first sync, new
+                    // UIDVALIDITY, a listing that contradicts its SELECT) the
+                    // whole window, as always.
+                    let incremental = match known.as_deref() {
+                        Some(known) => {
+                            imap::fetch_recent_incremental(
+                                session,
+                                &folder,
+                                limit,
+                                prior_validity,
+                                known,
+                            )
+                            .await?
+                        }
+                        None => None,
+                    };
+                    let (batch, window, listed_uids) = match incremental {
+                        Some(read) => (read.batch, Some(read.window), Some(read.server_uids)),
+                        None => (imap::fetch_recent(session, &folder, limit).await?, None, None),
+                    };
+                    let flags_for = window
+                        .as_deref()
+                        .map(|window| cached_in_window(window, &batch));
+                    let reads = read_flag_state(
+                        session,
+                        &folder,
+                        batch.uidvalidity,
+                        flags_for,
+                        listed_uids,
+                        prior_modseq,
+                        prior_validity,
+                        needs_tag_baseline,
+                    )
+                    .await?;
+                    anyhow::Ok(FolderSyncState {
+                        batch,
+                        flag_sync: reads.flag_sync,
+                        server_uids: reads.server_uids,
+                        server_unseen: reads.server_unseen,
+                        window,
+                        window_flags: reads.window_flags,
+                    })
                 })
             })
             .await;
@@ -852,6 +1243,8 @@ async fn sync_messages_with_policy(
                     limit,
                     prior_modseq,
                     prior_validity,
+                    known.as_deref(),
+                    needs_tag_baseline,
                 )
                 .await
             }
@@ -859,11 +1252,36 @@ async fn sync_messages_with_policy(
         }?;
         Ok(state)
     };
-    let (batch, flag_sync, server_uids, server_unseen) = if background {
+    let network_started = std::time::Instant::now();
+    let FolderSyncState {
+        batch,
+        flag_sync,
+        server_uids,
+        server_unseen,
+        window,
+        window_flags,
+    } = if background {
         retry_background_sync(&format!("sync {folder} for {account}"), || true, fetch).await?
     } else {
         fetch().await?
     };
+    let network_ms = network_started.elapsed().as_millis();
+    // What the network phase read: messages in full, and FLAGS-only reads of
+    // cached ones. An unchanged folder synced before reads 0 and 0.
+    let fetched_full = batch.messages.len();
+    let fetched_flags = window_flags.len();
+    let mode = if window.is_some() { "incremental" } else { "full" };
+    crate::mlog!(
+        crate::log::Level::Info,
+        "sync.fetch",
+        "account={account} folder={folder:?} mode={mode} window={} fetched_full={fetched_full} \
+         fetched_flags={fetched_flags} condstore_changes={} network_ms={network_ms}",
+        window.as_ref().map_or(fetched_full, Vec::len),
+        flag_sync
+            .as_ref()
+            .filter(|sync| sync.complete)
+            .map_or(-1, |sync| sync.changes.len() as i64)
+    );
     let synced_validity = batch.uidvalidity;
     let catchup_uids: Vec<_> = if prior_validity != 0 && prior_validity == synced_validity {
         missing_files
@@ -886,7 +1304,19 @@ async fn sync_messages_with_policy(
     let catchup_folder = folder.to_string();
 
     let synced_messages = batch.messages.clone();
-    let count = synced_messages.len();
+    // The window's size either way, so "synced" means what it always did.
+    let count = window.as_ref().map_or(synced_messages.len(), Vec::len);
+    // The lowest UID from which every message on the server was in the window:
+    // all of them when the window wasn't full, else the window's oldest UID.
+    let covered_from = if (count as u32) < limit {
+        0
+    } else {
+        window
+            .as_ref()
+            .and_then(|window| window.iter().min().copied())
+            .or_else(|| synced_messages.iter().map(|message| message.uid).min())
+            .unwrap_or(u32::MAX)
+    };
     crate::mlog!(
         crate::log::Level::Debug,
         "mail.sync",
@@ -896,39 +1326,84 @@ async fn sync_messages_with_policy(
         batch.uid_next,
         server_uids.as_ref().map_or(-1, |u| u.len() as i64)
     );
+    // AI sorting of new Inbox mail, when it is on and set up for this account.
+    let ai_plan = ai_sort::plan_for(engine, account, folder).await;
+    let ai_hold = ai_plan.is_some();
     let engine = engine.clone();
     let account = account.to_string();
     let folder = folder.to_string();
     // Outside the network timeout: always observe the committed result.
-    let (mut result, removal_guard) = tokio::task::spawn_blocking(move || {
+    let (mut result, removal_guard, ai_candidates, new_unread, mark_filed, uncached_marked, deferred_modseq) = tokio::task::spawn_blocking(move || {
     let account = account.as_str();
     let folder = folder.as_str();
     let db = crate::log::timed_db_lock(&engine.db, "sync_messages.persist");
     let current = store::get_folder_state(&db, account, folder)?;
-    let arrivals = if current.is_some_and(|(validity, _)| validity == batch.uidvalidity) && store::folder_notifies(&db, account, folder)? {
+    let notifies = store::folder_notifies(&db, account, folder)?;
+    // Also when AI sorting may file this folder's new mail into a Meron folder
+    // with notifications on; announced as the folder's own only when it notifies.
+    // And when another device's Meron-folder mark may file new Inbox mail into
+    // a Meron folder with notifications on.
+    let marks_notify = folder.eq_ignore_ascii_case("INBOX") && store::meron_any_folder_notifies(&db)?;
+    let new_unread = if current.is_some_and(|(validity, _)| validity == batch.uidvalidity) && (notifies || ai_hold || marks_notify) {
         store::classify_arrivals(&db, account, folder, current.unwrap().1, batch.uid_next, &batch.messages)?
     } else { Vec::new() };
+    let arrivals = if notifies { new_unread.clone() } else { Vec::new() };
     // Before the upsert records them as observed. Nothing on a first sync, when
     // everything is new to the store and none of it to the mailbox.
-    let first_seen: Vec<u32> = match current {
+    let first_seen_headers = match current {
         Some((validity, uid_next)) if validity == batch.uidvalidity => {
             store::first_seen_messages(&db, account, folder, uid_next, batch.uid_next, &batch.messages)?
-                .into_iter()
-                .map(|message| message.uid)
-                .collect()
         }
         _ => Vec::new(),
+    };
+    let first_seen: Vec<u32> = first_seen_headers.iter().map(|message| message.uid).collect();
+    // Held back before the upsert, so no other connection lists the row first.
+    // Another folder AI sorting watches (mail a server filter delivered
+    // there): only what arrived since its first look, never on that look.
+    // Its watch only moves past what this sync's window covered, so mail that
+    // didn't fit is read later (see `ai_sort::check_watched_folders`).
+    let hold = || if folder.eq_ignore_ascii_case("INBOX") {
+        store::ai_sort_hold(&db, account, folder, batch.uidvalidity, &first_seen_headers, store::now_unix())
+    } else {
+        store::ai_sort_hold_folder(&db, account, folder, batch.uidvalidity, batch.uid_next, (covered_from, batch.uid_next), &batch.messages, store::now_unix())
+    };
+    // New Inbox copies (Gmail) of mail the AI already sent to a server folder
+    // from a label: they get that move, without asking the AI again.
+    if ai_hold && folder.eq_ignore_ascii_case("INBOX") {
+        if let Err(err) = store::ai_sort_reuse_for_inbox(&db, account, batch.uidvalidity, &batch.messages, store::now_unix()) {
+            crate::mlog!(crate::log::Level::Warn, "mail.aiSort", "account={account}: reusing decisions skipped: {err:#}");
+        }
+    }
+    // Synced while sorting is off for it: as in the Inbox, that mail is never
+    // sorted later, so a watched folder's watch moves past it.
+    if !ai_hold && !folder.eq_ignore_ascii_case("INBOX") {
+        store::ai_sort_watch_skip(&db, account, folder, batch.uidvalidity, batch.uid_next)?;
+    }
+    let mut ai_candidates = if ai_hold {
+        hold()
+            .unwrap_or_else(|err| {
+                crate::mlog!(crate::log::Level::Warn, "mail.aiSort", "account={account}: hold skipped: {err:#}");
+                Vec::new()
+            })
+    } else {
+        Vec::new()
     };
     let persist_started = std::time::Instant::now();
     let phase_started = std::time::Instant::now();
     if prior_validity != 0 && prior_validity != batch.uidvalidity {
         store::clear_folder_messages(&db, account, folder)?;
+        store::ai_sort_clear_folder(&db, account, folder)?;
     }
     let clear_time = phase_started.elapsed();
     let phase_started = std::time::Instant::now();
     let fetched_uids: Vec<u32> = batch.messages.iter().map(|message| message.uid).collect();
     store::release_removed_messages(&db, account, folder, &fetched_uids, removed_epoch)?;
-    store::upsert_messages(&db, account, folder, &batch.messages)?;
+    // Inbox mail that was there before Meron watched, read now only because the
+    // window reached further back: kept out of the Inbox views. Decided before
+    // the upsert, which would make it look cached already, and marked in the
+    // same write that stores it.
+    let backfill = store::inbox_backfill_uids(&db, account, folder, batch.uidvalidity, batch.uid_next, &batch.messages)?;
+    store::upsert_messages_marking(&db, account, folder, &batch.messages, &backfill)?;
     store::mark_attachment_metadata_attempted(&db, account, folder, &attempted)?;
     let upsert_time = phase_started.elapsed();
     // Make sure the folder is represented in the folders table so its unread
@@ -948,7 +1423,10 @@ async fn sync_messages_with_policy(
         // pruning against it would delete the very messages just stored.
         let uids_credible = !uids.is_empty() || count == 0;
         if validity_ok && uids_credible {
-            pruned = store::prune_missing_messages(&db, account, folder, uids)?;
+            // The batch's UIDNEXT was read before the UID list, so any row at
+            // or above it was cached after this snapshot and is not stale.
+            pruned =
+                store::prune_missing_messages(&db, account, folder, uids, batch.uid_next)?;
         } else if !uids_credible {
             crate::mlog!(
                 crate::log::Level::Warn,
@@ -959,10 +1437,41 @@ async fn sync_messages_with_policy(
         }
     }
     let prune_time = phase_started.elapsed();
+    // Mail the AI shows in the Inbox from another folder follows what this
+    // sync stored: gone from its folder, or now in the Inbox itself.
+    if let Err(err) = store::ai_sort_inbox_after_sync(&db, account, folder, batch.uidvalidity, batch.uid_next, &batch.messages) {
+        crate::mlog!(crate::log::Level::Warn, "mail.aiSort", "account={account} folder={folder}: shown-in-Inbox upkeep skipped: {err:#}");
+    }
+    // Meron folder releases a failed write left behind, from any account.
+    crate::meron_folders::retry_pending_releases(&db);
     let flag_count = flag_sync.as_ref().map_or(0, |fs| fs.changes.len());
     let phase_started = std::time::Instant::now();
+    // Meron-folder marks this sync read on the Inbox's copies: new mail, and
+    // flag reads of cached mail. Only responses that carried FLAGS count.
+    let mut marks_seen: Vec<store::MeronMarkSeen> = Vec::new();
+    for message in batch.messages.iter().filter(|message| message.server_tags.is_some()) {
+        if let Some(mark) = &message.meron_mark {
+            marks_seen.push(store::MeronMarkSeen { uid: message.uid, mark: mark.clone() });
+        }
+    }
+    // Cached window messages an incremental sync did not re-read in full:
+    // only their flags and tags change, leaving every other column as is.
+    for (uid, seen, starred, tags, mark) in &window_flags {
+        store::update_message_seen(&db, account, folder, *uid, *seen)?;
+        store::update_message_starred(&db, account, folder, *uid, *starred)?;
+        store::observe_server_tags(&db, account, folder, *uid, tags)?;
+        if let Some(mark) = mark {
+            marks_seen.push(store::MeronMarkSeen { uid: *uid, mark: mark.clone() });
+        }
+    }
+    // The CONDSTORE position this sync reached; stored after the marks are
+    // read, as one skipped there must be read again.
+    let mut reached_modseq = 0;
     if let Some(fs) = flag_sync {
-        for (uid, seen, starred, tags) in &fs.changes {
+        for (uid, seen, starred, tags, mark) in &fs.changes {
+            if let Some(mark) = mark {
+                marks_seen.push(store::MeronMarkSeen { uid: *uid, mark: mark.clone() });
+            }
             store::update_message_seen(&db, account, folder, *uid, *seen)?;
             store::update_message_starred(&db, account, folder, *uid, *starred)?;
             store::observe_server_tags(&db, account, folder, *uid, tags)?;
@@ -973,11 +1482,41 @@ async fn sync_messages_with_policy(
             }
             store::mark_tag_baseline(&db, account, folder)?;
         }
-        if fs.highest_modseq > 0 {
-            store::set_folder_modseq(&db, account, folder, fs.highest_modseq)?;
-        }
+        reached_modseq = fs.highest_modseq;
     }
     let flags_time = phase_started.elapsed();
+    // Another device filed (or took out) Inbox or archived mail in a Meron
+    // folder: follow.
+    let mut mark_filed = Vec::new();
+    let mut uncached_marked = Vec::new();
+    if store::meron_reads_marks(&db, account, folder) {
+        // Copies gone from the server first: one still remembered would keep
+        // its conversation filed when its last other copy loses the mark.
+        if let Some(uids) = server_uids.as_ref().filter(|uids| !uids.is_empty()) {
+            let _ = store::meron_marks_prune(&db, account, folder, uids);
+        }
+        match store::meron_marks_observe(&db, account, folder, &marks_seen, read_at, store::now_unix()) {
+            Ok(applied) => {
+                mark_filed = applied.filed;
+                uncached_marked = applied.uncached_marked;
+                // Marks left unread: the next sync's CHANGEDSINCE reads them again.
+                if applied.skipped_stale {
+                    reached_modseq = 0;
+                }
+            }
+            Err(err) => {
+                crate::mlog!(crate::log::Level::Warn, "mail.meronMarks", "account={account}: reading Meron folder marks skipped: {err:#}");
+                reached_modseq = 0;
+            }
+        }
+    }
+    // Archived marked mail this sync couldn't cache is read after it: the
+    // CONDSTORE position moves past those marks only once every one is read
+    // (see `fetch_uncached_marked`), so none is lost if that read fails.
+    let deferred_modseq = if uncached_marked.is_empty() { 0 } else { reached_modseq };
+    if reached_modseq > 0 && deferred_modseq == 0 {
+        store::set_folder_modseq(&db, account, folder, reached_modseq)?;
+    }
     if let Some(unseen) = server_unseen.as_ref() {
         store::set_uncached_unseen(&db, account, folder, unseen)?;
     }
@@ -988,6 +1527,29 @@ async fn sync_messages_with_policy(
             "account={account} folder={folder}: rules skipped: {err:#}"
         );
     }
+    // The user's rules come first: what they queued work for isn't the AI's.
+    if !ai_candidates.is_empty() {
+        let candidates = std::mem::take(&mut ai_candidates);
+        let uids: Vec<u32> = candidates.iter().map(|candidate| candidate.uid).collect();
+        ai_candidates = store::ai_sort_skip_rule_actions(&db, account, folder, candidates)
+            .unwrap_or_else(|err| {
+                crate::mlog!(crate::log::Level::Warn, "mail.aiSort", "account={account}: sort skipped: {err:#}");
+                let _ = store::ai_sort_release(&db, account, folder, &uids);
+                Vec::new()
+            });
+    }
+    // A conversation already in a Meron folder (the upsert just adopted it) is
+    // never re-sorted: shown at once, its cap charge given back.
+    if !ai_candidates.is_empty() {
+        let candidates = std::mem::take(&mut ai_candidates);
+        let uids: Vec<u32> = candidates.iter().map(|candidate| candidate.uid).collect();
+        ai_candidates = store::ai_sort_skip_meron_foldered(&db, account, folder, candidates)
+            .unwrap_or_else(|err| {
+                crate::mlog!(crate::log::Level::Warn, "mail.aiSort", "account={account}: sort skipped: {err:#}");
+                let _ = store::ai_sort_release(&db, account, folder, &uids);
+                Vec::new()
+            });
+    }
     let phase_started = std::time::Instant::now();
     store::set_folder_state(&db, account, folder, batch.uidvalidity, batch.uid_next)?;
     let state_time = phase_started.elapsed();
@@ -997,7 +1559,7 @@ async fn sync_messages_with_policy(
         crate::mlog!(
             crate::log::Level::Warn,
             "sync.persist.timing",
-            "account={account} folder={folder:?} fetched={count} server_uids={} pruned={pruned} flag_changes={flag_count} clear_ms={} upsert_ms={} ensure_ms={} prune_ms={} flags_ms={} state_ms={} total_ms={}",
+            "account={account} folder={folder:?} fetched={count} mode={mode} fetched_full={fetched_full} fetched_flags={fetched_flags} server_uids={} pruned={pruned} flag_changes={flag_count} clear_ms={} upsert_ms={} ensure_ms={} prune_ms={} flags_ms={} state_ms={} total_ms={}",
             server_uids.as_ref().map_or(0, |uids| uids.len()),
             clear_time.as_millis(),
             upsert_time.as_millis(),
@@ -1009,9 +1571,28 @@ async fn sync_messages_with_policy(
         );
     }
     Ok::<_, anyhow::Error>((SyncMessagesResult {
-        count, messages: synced_messages, arrivals,
-    }, removal_guard))
+        count, messages: synced_messages, arrivals, meron_arrivals: Vec::new(),
+    }, removal_guard, ai_candidates, new_unread, mark_filed, uncached_marked, deferred_modseq))
     }).await??;
+    // A conversation in the built-in Archive that got Inbox mail left it in
+    // the upsert above: its marks go now.
+    crate::meron_marks::flush_archive_unmarks(&tag_engine);
+    // Archived mail another device filed whose copy this sync didn't cache:
+    // read and stored, then its mark is acted on.
+    if !uncached_marked.is_empty() {
+        let all_read = fetch_uncached_marked(&tag_engine, &tag_account, &rule_folder, uncached_marked).await;
+        // Every one read: the position the sync reached can be kept now. A
+        // later sync that already moved further is left alone.
+        if all_read && deferred_modseq > 0 {
+            let db = tag_engine.db.lock().unwrap();
+            let stored = store::get_folder_modseq(&db, &tag_account, &rule_folder).unwrap_or(0);
+            if stored < deferred_modseq
+                && let Err(err) = store::set_folder_modseq(&db, &tag_account, &rule_folder, deferred_modseq)
+            {
+                crate::mlog!(crate::log::Level::Warn, "mail.meronMarks", "account={tag_account}: keeping the sync position skipped: {err:#}");
+            }
+        }
+    }
 
     // The main sync is already committed. Catch-up gets its own small budget;
     // an exhausted deadline cannot discard new mail, flags, or sync markers.
@@ -1076,6 +1657,28 @@ async fn sync_messages_with_policy(
     // Awaited, unlike the tags, so what the caller announces next is where the
     // rules left it: mail they read or moved doesn't notify, and mail they failed
     // to still does. Whatever doesn't finish stays queued for the next sync.
+    // Within its own budget, before the queue runs the moves it decides on.
+    let sorted = match ai_plan {
+        Some(plan) if !ai_candidates.is_empty() => {
+            ai_sort::sort_new_mail(
+                &tag_engine,
+                &tag_account,
+                &rule_folder,
+                synced_validity,
+                plan,
+                ai_candidates,
+            )
+            .await
+        }
+        _ => ai_sort::SortedNewMail::default(),
+    };
+    // What another device's marks filed is announced the same way, and stays
+    // silent as the folder's own arrivals.
+    let mut filed = sorted.filed;
+    filed.extend(mark_filed.iter().cloned());
+    result.meron_arrivals = ai_sort::meron_arrivals(&tag_engine, &rule_folder, &new_unread, &filed);
+    let mut ai_moved = sorted.silenced;
+    ai_moved.extend(mark_filed.iter().map(|(uid, _)| *uid));
     let mut silenced = std::collections::BTreeSet::new();
     let rules_ran = tokio::time::timeout(
         RULE_ACTIONS_BUDGET,
@@ -1092,10 +1695,131 @@ async fn sync_messages_with_policy(
         // A large message can take longer to copy than any sync may wait.
         Err(_) => spawn_rule_worker(&tag_engine, &tag_account, &rule_folder),
     }
-    result
-        .arrivals
-        .retain(|message| !silenced.contains(&message.uid));
+    // Mail the AI is moving doesn't alert, even while the move still waits.
+    silenced.extend(ai_moved);
+    // An AI move that failed for good alerts now, as a failed rule move does.
+    let late = if rule_folder.eq_ignore_ascii_case("INBOX") {
+        let db = tag_engine.db.lock().unwrap();
+        store::ai_sort_take_alerts(&db, &tag_account, &rule_folder)
+            .ok()
+            .filter(|_| store::folder_notifies(&db, &tag_account, &rule_folder).unwrap_or(false))
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+    ai_sort::settle_arrivals(&mut result.arrivals, &silenced, late);
     Ok(result)
+}
+
+/// New mail of a folder AI sorting watches (besides the Inbox) that a sync's
+/// window couldn't hold, because more arrived at once than it reads: the
+/// oldest `max` of it not cached yet, from the folder's watch up, read and put
+/// through the same steps as a sync's new mail (held, stored, rules, then the
+/// AI). The watch moves past what was read; the rest waits for the next check.
+/// Answers with what it filed into Meron folders with notifications on.
+pub(super) async fn sort_carried_mail(
+    engine: &Arc<Engine>,
+    account: &str,
+    folder: &str,
+    max: usize,
+) -> anyhow::Result<Vec<ai_sort::MeronArrivals>> {
+    let Some(plan) = ai_sort::plan_for(engine, account, folder).await else {
+        return Ok(Vec::new());
+    };
+    let (validity, uid_next, from) = {
+        let db = engine.db.lock().unwrap();
+        let state = store::get_folder_state(&db, account, folder)?;
+        let watch = store::ai_sort_watch(&db, account, folder)?;
+        match (state, watch) {
+            (Some((validity, uid_next)), Some((watched, from)))
+                if validity == watched && from < uid_next =>
+            {
+                (validity, uid_next, from)
+            }
+            _ => return Ok(Vec::new()),
+        }
+    };
+    let guard = MessageSyncGuard::begin(engine)?;
+    let listed = engine
+        .with_read_session(account, |session| {
+            let folder = folder.to_string();
+            Box::pin(async move { imap::uids_from(session, &folder, from).await })
+        })
+        .await?;
+    let cached = store::header_synced_uids(&engine.db.lock().unwrap(), account, folder)?;
+    let missing: Vec<u32> = listed
+        .into_iter()
+        .filter(|uid| *uid < uid_next && !cached.contains(uid))
+        .collect();
+    let take: Vec<u32> = missing.iter().copied().take(max).collect();
+    // Past the last UID read when some are left for later; else all the way.
+    let read_to = match take.last() {
+        Some(last) if take.len() < missing.len() => last + 1,
+        _ => uid_next,
+    };
+    let (headers, skipped) = if take.is_empty() {
+        (Vec::new(), Vec::new())
+    } else {
+        fetch_headers_isolating_unparseable(engine, account, folder, take).await?
+    };
+    // Mail that couldn't be read this time is asked for again next check:
+    // the mark stops before the first such UID.
+    let read_to = skipped.iter().copied().min().map_or(read_to, |first| read_to.min(first));
+    let persist_engine = engine.clone();
+    let persist_account = account.to_string();
+    let persist_folder = folder.to_string();
+    let (candidates, ruled, new_unread) = tokio::task::spawn_blocking(move || {
+        let _guard = guard;
+        let account = persist_account.as_str();
+        let folder = persist_folder.as_str();
+        let db = persist_engine.db.lock().unwrap();
+        if store::get_folder_state(&db, account, folder)?.map(|(validity, _)| validity)
+            != Some(validity)
+        {
+            return anyhow::Ok((Vec::new(), false, Vec::new()));
+        }
+        // As a sync does: first seen and held before the upsert stores them.
+        let first_seen_headers =
+            store::first_seen_messages(&db, account, folder, from, uid_next, &headers)?;
+        let first_seen: Vec<u32> = first_seen_headers.iter().map(|header| header.uid).collect();
+        // What a sync would count as arrivals: new to the account and unread.
+        let new_unread: Vec<imap::MessageHeader> = first_seen_headers
+            .into_iter()
+            .filter(|header| !header.seen)
+            .collect();
+        let held = store::ai_sort_hold_folder(
+            &db,
+            account,
+            folder,
+            validity,
+            uid_next,
+            (from, read_to),
+            &headers,
+            store::now_unix(),
+        )?;
+        store::upsert_messages(&db, account, folder, &headers)?;
+        if let Err(err) = store::apply_rules(&db, account, folder, validity, &first_seen) {
+            crate::mlog!(
+                crate::log::Level::Warn,
+                "mail.rules",
+                "account={account} folder={folder}: rules skipped: {err:#}"
+            );
+        }
+        let held = store::ai_sort_skip_rule_actions(&db, account, folder, held)?;
+        let held = store::ai_sort_skip_meron_foldered(&db, account, folder, held)?;
+        anyhow::Ok((held, !first_seen.is_empty(), new_unread))
+    })
+    .await??;
+    let mut alerts = Vec::new();
+    if !candidates.is_empty() {
+        let sorted =
+            ai_sort::sort_new_mail(engine, account, folder, validity, plan, candidates).await;
+        alerts = ai_sort::meron_arrivals(engine, folder, &new_unread, &sorted.filed);
+    }
+    if ruled {
+        spawn_rule_worker(engine, account, folder);
+    }
+    Ok(alerts)
 }
 
 /// How long a sync waits on the server work its rules queued.
@@ -1173,7 +1897,9 @@ pub async fn sync_companion_folders(
     let sent = cached_sent_folder(engine, account, folder);
     let drafts = cached_drafts_folder(engine, account, folder);
     let mut outcomes = Vec::new();
-    for (role, companion) in companion_folders(sent, drafts) {
+    let companions = companion_folders(sent, drafts);
+    let archive = archive_companion(engine, account, folder, &companions);
+    for (role, companion) in companions {
         let result = sync_background_messages(engine, account, &companion, limit).await;
         outcomes.push(CompanionSync {
             role,
@@ -1181,7 +1907,148 @@ pub async fn sync_companion_folders(
             result,
         });
     }
+    // The archive mailbox too, now and then: another device's archives reach
+    // the built-in Archive Meron folder through the marks it reads there.
+    if let Some(archive) = archive {
+        let result = sync_background_messages(engine, account, &archive, limit).await;
+        outcomes.push(CompanionSync {
+            role: "Archive",
+            folder: archive,
+            result,
+        });
+    }
     outcomes
+}
+
+/// How often a companion sync of the archive mailbox runs, per account.
+const ARCHIVE_COMPANION_EVERY: Duration = Duration::from_secs(5 * 60);
+
+/// When each account's archive mailbox last had its companion sync.
+static ARCHIVE_COMPANION_AT: std::sync::LazyLock<
+    std::sync::Mutex<std::collections::HashMap<String, std::time::Instant>>,
+> = std::sync::LazyLock::new(Default::default);
+
+/// The account's archive mailbox when its companion sync is due: not the
+/// folder just synced (or another companion), not for local or feed
+/// accounts, at most once per [`ARCHIVE_COMPANION_EVERY`].
+fn archive_companion(
+    engine: &Arc<Engine>,
+    account: &str,
+    folder: &str,
+    companions: &[(&'static str, String)],
+) -> Option<String> {
+    if store::is_local_account(account) {
+        return None;
+    }
+    let archive = store::meron_archive_mailbox(&engine.db.lock().unwrap(), account)?;
+    if archive.eq_ignore_ascii_case(folder)
+        || companions
+            .iter()
+            .any(|(_, companion)| companion.eq_ignore_ascii_case(&archive))
+    {
+        return None;
+    }
+    let mut last = ARCHIVE_COMPANION_AT.lock().unwrap();
+    let now = std::time::Instant::now();
+    if last
+        .get(account)
+        .is_some_and(|at| now.duration_since(*at) < ARCHIVE_COMPANION_EVERY)
+    {
+        return None;
+    }
+    last.insert(account.to_string(), now);
+    Some(archive)
+}
+
+/// Most archive-mailbox copies [`fetch_uncached_marked`] reads in one batch.
+const UNCACHED_MARKED_CAP: usize = 200;
+
+/// Archive-mailbox copies whose mark names a Meron folder here but which the
+/// sync didn't cache: read in batches of [`UNCACHED_MARKED_CAP`] (newest
+/// first), stored, and their marks acted on. Answers whether every one was
+/// read; when not, the sync keeps its old CONDSTORE position, so the next one
+/// reports the rest again. Logged.
+async fn fetch_uncached_marked(engine: &Arc<Engine>, account: &str, folder: &str, mut uids: Vec<u32>) -> bool {
+    uids.sort_unstable_by(|a, b| b.cmp(a));
+    uids.dedup();
+    let mut all_read = true;
+    for batch in uids.chunks(UNCACHED_MARKED_CAP) {
+        if !fetch_uncached_marked_batch(engine, account, folder, batch).await {
+            all_read = false;
+            break;
+        }
+    }
+    crate::meron_marks::flush_archive_unmarks(engine);
+    all_read
+}
+
+/// One batch of [`fetch_uncached_marked`]; false when it couldn't be read or
+/// stored.
+async fn fetch_uncached_marked_batch(engine: &Arc<Engine>, account: &str, folder: &str, uids: &[u32]) -> bool {
+    let read_at = store::meron_mark_tick();
+    let fetched = engine
+        .with_read_session(account, |session| {
+            let folder = folder.to_string();
+            let uids = uids.to_vec();
+            Box::pin(async move { imap::fetch_headers_by_uid(session, &folder, &uids).await })
+        })
+        .await;
+    let mut headers = match fetched {
+        Ok(headers) => headers,
+        Err(err) => {
+            crate::mlog!(crate::log::Level::Warn, "mail.meronMarks", "account={account}: reading archived marked mail skipped: {err:#}");
+            return false;
+        }
+    };
+    for header in &mut headers {
+        header.folder = folder.to_string();
+    }
+    let db = engine.db.lock().unwrap();
+    if let Err(err) = store::upsert_read_messages(&db, account, folder, &headers) {
+        crate::mlog!(crate::log::Level::Warn, "mail.meronMarks", "account={account}: storing archived marked mail skipped: {err:#}");
+        return false;
+    }
+    let seen: Vec<store::MeronMarkSeen> = headers
+        .iter()
+        .filter(|header| header.server_tags.is_some())
+        .filter_map(|header| {
+            header
+                .meron_mark
+                .clone()
+                .map(|mark| store::MeronMarkSeen { uid: header.uid, mark })
+        })
+        .collect();
+    match store::meron_marks_observe(&db, account, folder, &seen, read_at, store::now_unix()) {
+        // A mark this device wrote since the read began is read again later.
+        Ok(applied) => !applied.skipped_stale,
+        Err(err) => {
+            crate::mlog!(crate::log::Level::Warn, "mail.meronMarks", "account={account}: archived marks skipped: {err:#}");
+            false
+        }
+    }
+}
+
+#[cfg(test)]
+mod owed_reread_tests {
+    use super::*;
+
+    // A bulk run puts off the re-read of the folder it moves mail into. What
+    // it skipped has to be remembered, or the run's last re-read (sized for
+    // one conversation) would leave the earlier ones out of the cache.
+    #[test]
+    fn a_put_off_reread_is_remembered_until_the_next_one_takes_it() {
+        let (account, folder) = ("owed-test@example.com", "Trash");
+        assert_eq!(take_owed_reread(account, folder), 0);
+        owe_reread(account, folder, 12);
+        owe_reread(account, folder, 30);
+        owe_reread(account, "Archive", 5);
+        assert_eq!(take_owed_reread(account, folder), 42);
+        assert_eq!(take_owed_reread(account, folder), 0);
+        assert_eq!(take_owed_reread(account, "Archive"), 5);
+        owe_reread(account, folder, MAX_OWED_REREAD);
+        owe_reread(account, folder, 10);
+        assert_eq!(take_owed_reread(account, folder), MAX_OWED_REREAD);
+    }
 }
 
 #[cfg(test)]
@@ -1267,16 +2134,25 @@ mod removal_guard_tests {
                         } else if command.starts_with("UID FETCH") {
                             let set = command.split_whitespace().nth(2).unwrap();
                             let mut uids = Vec::new();
+                            // `*` is the newest message, as in "1:*" (the whole folder).
+                            let bound = |text: &str| match text {
+                                "*" => total,
+                                number => number.parse::<u32>().unwrap(),
+                            };
                             for segment in set.split(',') {
                                 if let Some((lo, hi)) = segment.split_once(':') {
-                                    uids.extend(
-                                        lo.parse::<u32>().unwrap()..=hi.parse::<u32>().unwrap(),
-                                    );
+                                    uids.extend(bound(lo)..=bound(hi));
                                 } else {
-                                    uids.push(segment.parse::<u32>().unwrap());
+                                    uids.push(bound(segment));
                                 }
                             }
-                            if let Some(uid) = uids.iter().find(|uid| poison_uids.contains(uid)) {
+                            // Only a read that asks for BODYSTRUCTURE can carry the
+                            // broken one: a flags-only read neither poisons nor stalls.
+                            if !command.contains("BODYSTRUCTURE") {
+                                uids.iter()
+                                    .map(|uid| format!("* {uid} FETCH (UID {uid} FLAGS (\\Seen))\r\n"))
+                                    .collect()
+                            } else if let Some(uid) = uids.iter().find(|uid| poison_uids.contains(uid)) {
                                 poisoned = true;
                                 format!(
                                     "* {uid} FETCH (UID {uid} BODYSTRUCTURE (\"APPLICATION\" \"café\" NIL NIL NIL \"7BIT\" 1))\r\n"
@@ -1292,6 +2168,7 @@ mod removal_guard_tests {
                             } else {
                                 uids.iter().map(|uid| {
                                     if *uid == 2 { format!("* 2 FETCH (UID 2 FLAGS (\\Seen) BODYSTRUCTURE (\"APPLICATION\" \"PDF\" (\"NAME\" \"older.pdf\") NIL NIL \"BASE64\" 4))\r\n") }
+                                    else if *uid == total { format!("* {uid} FETCH (UID {uid} FLAGS (\\Seen) BODYSTRUCTURE (\"TEXT\" \"PLAIN\" NIL NIL NIL \"7BIT\" 4 1))\r\n") }
                                     else { format!("* {uid} FETCH (UID {uid} FLAGS (\\Seen))\r\n") }
                                 }).collect()
                             }
@@ -1343,7 +2220,7 @@ mod removal_guard_tests {
     async fn catchup_discards_poison_sessions_advances_and_preserves_sync_count() {
         use std::sync::atomic::Ordering;
         let (engine, server, commands_after_poison) = metadata_test_server(5, vec![4]).await;
-        for expected_missing in [vec![2, 1], vec![]] {
+        for (expected_missing, expected_read) in [(vec![2, 1], 1), (vec![], 0)] {
             let result = tokio::time::timeout(
                 Duration::from_secs(10),
                 sync_messages(&engine, "acct", "INBOX", 2),
@@ -1351,8 +2228,8 @@ mod removal_guard_tests {
             .await
             .unwrap()
             .unwrap();
-            assert_eq!(result.count, 1);
-            assert_eq!(result.messages.len(), 1);
+            assert_eq!(result.count, 2);
+            assert_eq!(result.messages.len(), expected_read);
             let db = engine.db.lock().unwrap();
             assert_eq!(
                 store::missing_attachment_metadata_uids(&db, "acct", "INBOX", 10).unwrap(),
@@ -1394,7 +2271,7 @@ mod removal_guard_tests {
                 sync_messages(&engine, "acct", "INBOX", 50),
             )
         };
-        assert_eq!(sync().await.unwrap().unwrap().count, 1);
+        assert_eq!(sync().await.unwrap().unwrap().count, 50);
         let missing = store::missing_attachment_metadata_uids(
             &engine.db.lock().unwrap(),
             "acct",
@@ -1468,7 +2345,7 @@ mod removal_guard_tests {
         .await
         .unwrap()
         .unwrap();
-        assert_eq!(result.count, 1);
+        assert_eq!(result.count, 4);
         assert_eq!(
             store::missing_attachment_metadata_uids(
                 &engine.db.lock().unwrap(),
@@ -1477,7 +2354,7 @@ mod removal_guard_tests {
                 10
             )
             .unwrap(),
-            vec![2, 1]
+            vec![1]
         );
         for _ in 0..2 {
             {
@@ -1502,7 +2379,7 @@ mod removal_guard_tests {
             .await
             .unwrap()
             .unwrap();
-            assert_eq!(result.count, 1);
+            assert_eq!(result.count, 4);
             let db = engine.db.lock().unwrap();
             assert_eq!(
                 store::get_folder_state(&db, "acct", "INBOX").unwrap(),
@@ -1517,7 +2394,7 @@ mod removal_guard_tests {
             );
             assert_eq!(
                 store::missing_attachment_metadata_uids(&db, "acct", "INBOX", 10).unwrap(),
-                vec![2, 1]
+                vec![1]
             );
         }
         assert_eq!(

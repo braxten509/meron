@@ -1,3 +1,5 @@
+import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import { X, RefreshCw } from 'lucide-react'
 import { useTranslation } from '../../lib/i18n'
 import { Dialog } from './Dialog'
@@ -14,6 +16,8 @@ import { AccountProviderGrid } from './AccountProviderGrid'
 import { AccountProviderRail } from './AccountProviderRail'
 import { PROVIDERS } from './providerIcons'
 import { CertificateTrustPanel } from './CertificateTrustPanel'
+import { SetupCopyDialog } from './SetupCopyDialog'
+import { SharpImg } from '../../lib/sharpImage'
 
 type AccountDialogProps = {
   variant?: 'dialog' | 'setup'
@@ -47,7 +51,7 @@ export function AccountDialog({ variant = 'dialog' }: AccountDialogProps) {
       <div className={classes.panelClass}>
         <div>
           <div className="w-16 h-16 mb-4">
-            <img src={logo} alt={t('app.logoAlt')} className="w-full h-full object-contain" />
+            <SharpImg src={logo} box={64} fit="contain" alt={t('app.logoAlt')} className="w-full h-full object-contain" />
           </div>
           <h2 className="text-[1.625rem] max-[640px]:text-2xl font-bold tracking-tight leading-tight">
             {t('accounts.setup.connectMailAccount')}
@@ -75,6 +79,8 @@ export function AccountDialog({ variant = 'dialog' }: AccountDialogProps) {
             <SaveButton ctl={ctl} isSetup />
           </div>
         )}
+
+        <CopyFromPhoneLine />
       </div>
     )
   }
@@ -211,5 +217,28 @@ function SaveButton({ ctl, isSetup }: { ctl: AccountDialogController; isSetup: b
             : t('accounts.actions.saveAccount')}
       </span>
     </button>
+  )
+}
+
+// First-run shortcut: set this computer up from a phone that already runs
+// Meron, through the same QR copy as Settings. The copy keeps whichever side
+// has accounts, so an empty computer receives by default.
+function CopyFromPhoneLine() {
+  const { t } = useTranslation()
+  const [open, setOpen] = useState(false)
+  return (
+    <>
+      <p className="border-t border-border pt-4 text-center text-sm text-secondary">
+        {t('accounts.setup.copyFromPhone')}{' '}
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="cursor-pointer font-semibold text-accent underline underline-offset-2 hover:opacity-80"
+        >
+          {t('accounts.setup.copyFromPhoneLink')}
+        </button>
+      </p>
+      {open && createPortal(<SetupCopyDialog onClose={() => setOpen(false)} />, document.body)}
+    </>
   )
 }

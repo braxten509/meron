@@ -14,7 +14,7 @@ path = "src/lib.rs"
 crate-type = ["rlib", "staticlib", "cdylib"]
 
 [dependencies]
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-util", "io-std", "sync", "time"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-util", "io-std", "sync", "time", "net"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 jni = "0.21"
@@ -46,10 +46,21 @@ url = "2.5.8"
 uuid = { version = "1.23.1", features = ["v4"] }
 hickory-resolver = { version = "0.26.1", features = ["system-config"] }
 ring = "0.17"
+spake2 = "0.4"
 x509-parser = "0.18.1"
 calcard = { version = "0.3.14", default-features = false }
 iana-time-zone = "0.1.65"
 zstd = "0.13"
+# AI sorting through Tinfoil: verifies the enclave and pins TLS to it.
+tinfoil = { git = "https://github.com/tinfoilsh/tinfoil-rs", rev = "e33eea56ebecc9e4bbcd79158ab4d3db534d1e19" }
+
+# "Copy setup to another device": the computer shows its address as a QR code.
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+qrcode = { version = "0.14", default-features = false, features = ["svg"] }
+
+# "Copy setup to another device" lists this computer's network addresses.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 oo7 = { version = "0.6.0", default-features = false, features = ["tokio", "native_crypto"] }
@@ -60,6 +71,11 @@ ndk-context = "0.1.1"
 # Fork adds a `gmail_thread_id()` accessor (X-GM-THRID) missing from upstream.
 [patch.crates-io]
 async-imap = { git = "https://github.com/nonbili/async-imap.git", rev = "d04be74" }
+
+# Meron's copy: trusts bundled webpki roots for the unpinned fetches, as the
+# platform verifier panics on Android without a JNI init. See its MERON-PATCH.md.
+[patch."https://github.com/tinfoilsh/tinfoil-rs"]
+tinfoil = { path = "../vendor/tinfoil-rs" }
 
 # Xcode 27's strip corrupts macOS proc-macro dylibs, and release strips
 # debuginfo by default, so rustc then fails with "can't find crate for

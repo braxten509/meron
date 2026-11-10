@@ -65,6 +65,8 @@ internal fun MessageRow(
     isRss: Boolean,
     remoteContent: MessageRemoteContent,
     onForward: (MessageBody) -> Unit,
+    // See MessageBubble's subjectLine.
+    subjectLine: String = "",
     onReplyAllToMessage: (MessageBody) -> Unit,
     canReplyAllToMessage: (MessageBody) -> Boolean,
     onEditAsNew: (MessageBody) -> Unit,
@@ -72,6 +74,9 @@ internal fun MessageRow(
     onToggleRead: (MessageBody) -> Unit,
     onToggleStarred: (MessageBody) -> Unit,
     onDelete: (MessageBody) -> Unit,
+    // One email moved or archived on its own; null where that is not offered.
+    onMove: ((MessageBody) -> Unit)? = null,
+    onArchive: ((MessageBody) -> Unit)? = null,
     onOpenAttachment: (MessageAttachment) -> Unit,
     onSaveAttachment: (MessageAttachment) -> Unit,
     loadImageAttachment: suspend (MessageAttachment) -> ImageBitmap?,
@@ -144,6 +149,8 @@ internal fun MessageRow(
                     onToggleRead = onToggleRead,
                     onToggleStarred = onToggleStarred,
                     onDelete = onDelete,
+                    onMove = onMove,
+                    onArchive = onArchive,
                     onCopyMessageText = onCopyMessageText,
                     onOpenUrl = onOpenUrl,
                     onComposeTo = onComposeTo,
@@ -155,6 +162,7 @@ internal fun MessageRow(
                     searchQuery = searchQuery,
                     activeSearchMatch = activeSearchMatch,
                     showSubject = showSubject,
+                    subjectLine = subjectLine,
                     // Uncapped: a full-width reading view shows the whole
                     // message and the conversation list does the scrolling.
                     bodyMaxHeight = Dp.Unspecified,
@@ -315,6 +323,9 @@ internal fun MessageRowHeader(
     onToggleRead: (MessageBody) -> Unit,
     onToggleStarred: (MessageBody) -> Unit,
     onDelete: (MessageBody) -> Unit,
+    // One email moved or archived on its own; null where that is not offered.
+    onMove: ((MessageBody) -> Unit)? = null,
+    onArchive: ((MessageBody) -> Unit)? = null,
     onCopyMessageText: (String, String) -> Unit,
     onOpenUrl: (String) -> Unit,
     onComposeTo: (String) -> Unit,
@@ -426,6 +437,8 @@ internal fun MessageRowHeader(
             onToggleRead = onToggleRead,
             onToggleStarred = onToggleStarred,
             onDelete = onDelete,
+            onMove = onMove,
+            onArchive = onArchive,
             onCopyMessageText = onCopyMessageText,
             onOpenUrl = onOpenUrl,
         )

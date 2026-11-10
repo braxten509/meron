@@ -7,7 +7,7 @@ import { installWindowChrome, syncWindowFrame } from './lib/windowChrome'
 import { ui$, showToast } from './states/ui'
 import { mail$, loadThreads, loadThread, findLocalThread } from './states/mail'
 import { loadFolders, refreshAccountFoldersCache, inboxUnread } from './states/mailFolders'
-import { openMailtoCompose, openThreadTabById } from './states/compose'
+import { openMailtoCompose, openNotificationThread } from './states/compose'
 import { accounts$, unifiedAccounts } from './states/accounts'
 import type { Account } from './types'
 import { kanban$ } from './states/kanban'
@@ -19,6 +19,8 @@ import type { UpdateStatus } from './lib/update'
 import { syncFolderAndWait, useFoldersByAccount } from './lib/kanbanData'
 import { boardBadgeAccountIds, boardBadgeSyncTargets } from './lib/boardUnread'
 import { setTrayUnread } from './lib/trayUnread'
+import { loadMeronFolders, meronUnreadTotal, scheduleMeronFoldersRefresh } from './states/meronFolders'
+import { isMeronView } from './lib/unifiedFolders'
 import i18n, { resolveI18nLanguageFromWebLocale, t, translationTemplate } from './lib/i18n'
 import { isConnectivitySyncError } from './components/banner/connectivityBannerHelpers'
 
@@ -60,11 +62,13 @@ export function useAppEffects() {
   const accounts = useValue(accounts$)
   const foldersByAccount = useFoldersByAccount()
   const selectedAccount = useValue(ui$.selectedAccount)
+  const meronUnread = useValue(meronUnreadTotal)
   const selectedFolder = useValue(ui$.selectedFolder)
   const selectedThread = useValue(ui$.selectedThread)
   const query = useValue(ui$.query)
   const filterMode = useValue(ui$.filterMode)
   const attachmentsOnly = useValue(ui$.attachmentsOnly)
+  const groupBySender = useValue(ui$.groupBySender)
   const activeBoardId = useValue(kanban$.activeBoardId)
   const startupSyncDone = useRef(false)
   const boardBadgeSyncRunning = useRef(false)
@@ -147,6 +151,7 @@ export function useAppEffects() {
     const unsubFolder = ui$.selectedFolder.onChange(() => mail$.readThreads.set({}))
     const unsubFilter = ui$.filterMode.onChange(() => mail$.readThreads.set({}))
     const unsubAttachments = ui$.attachmentsOnly.onChange(() => mail$.readThreads.set({}))
+    const unsubGroupBySender = ui$.groupBySender.onChange(() => mail$.readThreads.set({}))
     const unsubBoard = kanban$.activeBoardId.onChange(() => mail$.readThreads.set({}))
     const unsubGlobalFilter = kanban$.globalFilter.onChange(() => mail$.readThreads.set({}))
     return () => {
@@ -154,6 +159,7 @@ export function useAppEffects() {
       unsubFolder()
       unsubFilter()
       unsubAttachments()
+      unsubGroupBySender()
       unsubBoard()
       unsubGlobalFilter()
     }
@@ -167,6 +173,16 @@ export function useAppEffects() {
       void refreshAccountFoldersCache(account.id, false)
     }
   }, [showAccountBadges, boardBadgeAccounts, accounts])
+
+  useEffect(() => {
+    // Meron folders (this device only) for the side navigation. Re-read when
+    // the accounts change (an account's removal takes its conversations out)
+    // and once a minute as the same safety net as the folder caches below.
+    if (accounts.length === 0) return
+    void loadMeronFolders()
+    const timer = window.setInterval(() => void loadMeronFolders(), 60_000)
+    return () => window.clearInterval(timer)
+  }, [accounts])
 
   useEffect(() => {
     // Safety net: event-driven refreshes (refreshFoldersAfterFlagChange,
@@ -306,10 +322,10 @@ export function useAppEffects() {
     if (!eventsOn) return
     const offNotification = eventsOn(
       'notification-clicked',
-      (detail: { account?: string; threadId?: string; threadKey?: string }) => {
+      (detail: { account?: string; threadId?: string; threadKey?: string; from_addr?: string }) => {
         const threadId = detail?.threadId || detail?.threadKey
         if (threadId) {
-          void openThreadTabById(threadId)
+          void openNotificationThread(threadId, detail?.from_addr)
         }
       },
     )
@@ -337,7 +353,7 @@ export function useAppEffects() {
       void loadThreads()
     }, SEARCH_DEBOUNCE_MS)
     return () => window.clearTimeout(timer)
-  }, [selectedAccount, selectedFolder, query, filterMode, attachmentsOnly, activeBoardId])
+  }, [selectedAccount, selectedFolder, query, filterMode, attachmentsOnly, groupBySender, activeBoardId])
 
   useEffect(() => {
     if (!selectedThread) return
@@ -351,9 +367,11 @@ export function useAppEffects() {
     // inbox is read. Use the exact per-account cache that renders the sidebar;
     // launching separate folder queries here allowed a slow, stale result to
     // overwrite a newer unread event and leave the two indicators disagreeing.
-    const unread = accounts.some((account) => inboxUnread(foldersByAccount[account.id]) > 0)
+    // Mail in a Meron folder is hidden from its Inbox's count, so the Meron
+    // folders' unread counts in too (owner's decision).
+    const unread = meronUnread > 0 || accounts.some((account) => inboxUnread(foldersByAccount[account.id]) > 0)
     setTrayUnread(unread)
-  }, [accounts, foldersByAccount])
+  }, [accounts, foldersByAccount, meronUnread])
 
   useEffect(() => {
     const eventsOn = (window as any).runtime?.EventsOn
@@ -362,6 +380,9 @@ export function useAppEffects() {
     const refreshCurrentMailbox = async () => {
       await loadThreads(false)
     }
+    // The unified view and a Meron folder list mail from every account, so
+    // any account's event can change them.
+    const spansAccounts = selectedAccount === 'unified' || isMeronView(selectedAccount)
 
     // The open conversation pane shows whichever thread is selected, which may
     // belong to a different account than the mailbox view — in a Kanban board or
@@ -404,6 +425,16 @@ export function useAppEffects() {
         .catch(console.error)
     })
 
+    // Core fetched an account's photo again (one copied from the phone named
+    // a file only the phone has): re-read the list so the new photo shows.
+    const offPhoto = eventsOn('account.photoChanged', () => {
+      void invoke<{ accounts: Account[] }>('account.list')
+        .then((res) => {
+          if (res.accounts.length) accounts$.set(res.accounts)
+        })
+        .catch(console.error)
+    })
+
     const offNew = eventsOn(
       'mail.newMessages',
       (detail: { account?: string; folder?: string; folderName?: string; count?: number }) => {
@@ -420,8 +451,10 @@ export function useAppEffects() {
         // dark while the column (which falls back to counting loaded cards) shows
         // the real count. Done before the selection early-return below.
         if (detail?.account) void refreshAccountFoldersCache(detail.account, false)
+        // A new reply may have landed in a Meron folder.
+        scheduleMeronFoldersRefresh()
         refreshOpenThread(detail?.account)
-        if (detail?.account && selectedAccount !== 'unified' && detail.account !== selectedAccount) return
+        if (detail?.account && !spansAccounts && detail.account !== selectedAccount) return
         const folder = detail?.folderName || (detail?.folder ?? 'inbox')
         const count = detail?.count ?? 1
         showToast(`New mail in ${folder} (+${count})`)
@@ -436,13 +469,14 @@ export function useAppEffects() {
       // cache regardless, keeping the side navigation's per-account/unified badges in
       // sync for background accounts (e.g. ones only shown as a Kanban column).
       if (detail?.account) void refreshAccountFoldersCache(detail.account, false)
+      scheduleMeronFoldersRefresh()
       if (detail?.folders) {
         if (!detail.account || selectedAccount === 'unified' || detail.account === selectedAccount) {
           void loadFolders(selectedAccount, false)
         }
       }
       refreshOpenThread(detail?.account)
-      if (detail?.account && selectedAccount !== 'unified' && detail.account !== selectedAccount) return
+      if (detail?.account && !spansAccounts && detail.account !== selectedAccount) return
       void refreshCurrentMailbox().catch(console.error)
     })
 
@@ -453,7 +487,7 @@ export function useAppEffects() {
     // changes no unread count.
     const offSentCopy = eventsOn('mail.sentCopyCached', (detail: { account?: string }) => {
       refreshOpenThread(detail?.account)
-      if (detail?.account && selectedAccount !== 'unified' && detail.account !== selectedAccount) return
+      if (detail?.account && !spansAccounts && detail.account !== selectedAccount) return
       void refreshCurrentMailbox().catch(console.error)
     })
 
@@ -461,6 +495,7 @@ export function useAppEffects() {
       if (typeof offError === 'function') offError()
       if (typeof offNew === 'function') offNew()
       if (typeof offNeedsReconnect === 'function') offNeedsReconnect()
+      if (typeof offPhoto === 'function') offPhoto()
       if (typeof offSynced === 'function') offSynced()
       if (typeof offSentCopy === 'function') offSentCopy()
     }

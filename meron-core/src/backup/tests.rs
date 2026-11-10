@@ -310,6 +310,29 @@ fn accounts_with_no_stored_secret_carry_none() {
     assert!(sink.0.lock().unwrap().is_empty());
 }
 
+#[test]
+fn an_ai_sorting_key_never_reaches_a_backup() {
+    use crate::engine::EngineHost;
+    let source = std::sync::Mutex::new(test_conn());
+    let key = "sk-or-v1-testvalue1234";
+    let host = crate::protocol::MobileHost {
+        data_dir: String::new(),
+    };
+    host.store_named_secret(&source, &crate::ai_sort::key_name("openrouter"), Some(key))
+        .unwrap();
+    let conn = source.lock().unwrap();
+    insert_mail_account(&conn, "ada@example.com", sample_config(), json!({}));
+    store::setting_set(&conn, store::AI_SORT_KEY, &json!({ "provider": "openrouter" })).unwrap();
+    let load = |account: &str| crate::protocol::load_mobile_secret(&conn, account);
+
+    let plain = export(&conn, false, None, Host::default(), &load).unwrap();
+    assert!(!plain.contains(key));
+    let sealed = export(&conn, true, Some("pw"), Host::default(), &load).unwrap();
+    let data = parse(&sealed, Some("pw")).unwrap();
+    let opened = serde_json::to_string(&(&data.accounts, &data.settings)).unwrap();
+    assert!(opened.contains("openrouter") && !opened.contains(key));
+}
+
 // ---- Passphrase failures ----------------------------------------------------
 
 #[test]

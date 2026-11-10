@@ -6,7 +6,12 @@ import { CSS as DndCSS } from '@dnd-kit/utilities'
 import { MessageSquare, SquarePen, X } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'
-import { closeMessageTab, closeMessageTabs, activateConversationTab, moveMessageTab } from '../../states/compose'
+import {
+  closeMessageTabKeepingDraft,
+  closeMessageTabs,
+  activateConversationTab,
+  moveMessageTab,
+} from '../../states/compose'
 import { compose$ } from '../../states/composeState'
 import { closeCurrentConversation, kanban$ } from '../../states/kanban'
 import { ui$ } from '../../states/ui'
@@ -247,7 +252,7 @@ function SortableTab({
         data-no-drag
         onClick={(event) => {
           event.stopPropagation()
-          void closeMessageTab(tab.id)
+          void closeMessageTabKeepingDraft(tab.id)
         }}
         // Overlay the label so revealing the × never consumes tab width.
         className={`absolute right-1 top-1/2 z-10 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full bg-header text-secondary shadow-[-4px_0_4px_var(--color-header)] hover:bg-active hover:text-primary ${
@@ -319,7 +324,7 @@ function TabContextMenu({
         onClick={() => {
           if (tabId !== '') {
             onClose()
-            void closeMessageTab(tabId)
+            void closeMessageTabKeepingDraft(tabId)
           } else close([''])
         }}
       />

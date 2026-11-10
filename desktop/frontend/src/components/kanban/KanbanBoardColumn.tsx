@@ -134,6 +134,7 @@ function KanbanColumnContent({
   const allLoadingMore = useValue(kanban$.loadingMore)
   const allCursors = useValue(kanban$.cursors)
   const allAccountCursors = useValue(kanban$.accountCursors)
+  const allHeldThreads = useValue(kanban$.heldThreads)
   const allFilters = useValue(kanban$.filters)
   const globalFilter = useValue(kanban$.globalFilter)
   const allAttachmentsOnly = useValue(kanban$.attachmentsOnly)
@@ -170,7 +171,8 @@ function KanbanColumnContent({
   // Every column pages on the single cursor now, unified included — the core
   // merges the per-account pages behind one. (The legacy per-account cursors
   // are still read from persisted boards, but nothing writes them.)
-  const hasMore = starredColumn ? false : !!(allCursors[key] ?? '')
+  // Cards the last reload held back count too (see loadKanbanColumn).
+  const hasMore = starredColumn ? false : !!(allCursors[key] ?? '') || (allHeldThreads[key]?.length ?? 0) > 0
   const minimized = !!minimizedColumns[boardKey]
   const columnAccount =
     column.accountId !== 'unified' ? accounts.find((account) => account.id === column.accountId) : undefined

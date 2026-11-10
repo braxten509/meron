@@ -2,6 +2,7 @@ import { observable } from '@legendapp/state'
 import type { Account, SystemCheck } from '../types'
 import { invoke } from '../lib/bridge'
 import { persistedField } from '../lib/sessionPref'
+import { MERON_ACCOUNT } from '../lib/unifiedFolders'
 
 // Mostly ephemeral UI state: selections, view chrome, transient flags, and the
 // one-time system check, reset every launch. A small subset — the last
@@ -44,6 +45,8 @@ export type BulkSelectionItem = {
   kind: BulkSelectionKind
   unread: boolean
   starred: boolean
+  /** A sender row (one person in the folder): no star or tag actions. */
+  sender?: boolean
   draft: boolean
   trash: boolean
 }
@@ -62,6 +65,9 @@ export const ui$ = observable({
   /** Keep only threads with attachments. Independent of `filterMode`, so it
    * combines with unread and starred. */
   attachmentsOnly: false,
+  /** Fold the plain mail list into one row per person (the other side of the
+   * mail) instead of one row per thread. One setting for every mailbox. */
+  groupBySender: false,
   // Modals / panels.
   setupOpen: false,
   setupMode: 'gmail' as SetupMode,
@@ -317,6 +323,10 @@ const attachmentsSession = persistedField(ui$.attachmentsOnly, 'session_attachme
   typeof raw === 'boolean' ? raw : undefined,
 )
 
+const groupBySenderSession = persistedField(ui$.groupBySender, 'session_group_by_sender', (raw) =>
+  typeof raw === 'boolean' ? raw : undefined,
+)
+
 let restoringNav = false
 function persistNav(key: string, value: string) {
   if (restoringNav) return
@@ -348,9 +358,13 @@ ui$.selectedFolder.onChange(() => clearBulkSelection())
 ui$.query.onChange(() => clearBulkSelection())
 ui$.filterMode.onChange(() => clearBulkSelection())
 ui$.attachmentsOnly.onChange(() => clearBulkSelection())
+ui$.groupBySender.onChange(() => clearBulkSelection())
 
 /** Prefs keys this module owns; boot requests them in its single prefsGet. */
-export const UI_SESSION_KEYS = ['session_account', 'session_folder', filterSession.key, attachmentsSession.key]
+export const UI_SESSION_KEYS = ['session_account', 'session_folder', filterSession.key,
+  attachmentsSession.key,
+  groupBySenderSession.key,
+]
 
 /**
  * Seed ui$ navigation from the persisted last session. Call once at boot after
@@ -368,7 +382,11 @@ export function restoreUiSession(prefs: Record<string, unknown>, accounts: Accou
       // the unified view, so an old saved session lands there instead of on a
       // selection nothing can render.
       const account = saved === 'starred' ? 'unified' : saved
-      const valid = typeof account === 'string' && (account === 'unified' || accounts.some((a) => a.id === account))
+      // A Meron folder that is gone by now is caught once the list loads
+      // (meronFolders.ts), which then falls back to the unified inbox.
+      const valid =
+        typeof account === 'string' &&
+        (account === 'unified' || account === MERON_ACCOUNT || accounts.some((a) => a.id === account))
       ui$.selectedAccount.set(valid ? (account as string) : 'unified')
       const folder = saved === 'starred' ? 'starred' : prefs['session_folder']
       if (typeof folder === 'string' && folder) ui$.selectedFolder.set(folder)
@@ -378,4 +396,5 @@ export function restoreUiSession(prefs: Record<string, unknown>, accounts: Accou
   }
   filterSession.restore(prefs)
   attachmentsSession.restore(prefs)
+  groupBySenderSession.restore(prefs)
 }

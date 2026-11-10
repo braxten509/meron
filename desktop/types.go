@@ -111,6 +111,14 @@ type Message struct {
 	// Files lists a thread card's attachments in thread order, for the chips
 	// under the row; only messages whose body is cached are known.
 	Files []ThreadFile `json:"files,omitempty"`
+	// Group is "sender" on a row that stands for one person in the folder
+	// (sender grouping); empty on thread rows and messages.
+	Group string `json:"group,omitempty"`
+	// Automated marks a sender row whose address is a no-reply/bulk sender.
+	Automated bool `json:"automated,omitempty"`
+	// MeronFolderID is the Meron folder (this device only) the card's
+	// conversation sits in; empty when it is in none, and on sender rows.
+	MeronFolderID string `json:"meron_folder_id,omitempty"`
 }
 
 // ThreadFile is one attachment named on a thread card.
@@ -198,7 +206,10 @@ type ThreadListRequest struct {
 	Query      string `json:"query"`
 	Filter     string `json:"filter"`
 	// Attachments keeps only threads with attachments; it combines with Filter.
-	Attachments  bool   `json:"attachments"`
+	Attachments bool `json:"attachments"`
+	// GroupBy "sender" folds the plain list into one row per person (the
+	// core's sender grouping); anything else keeps thread rows.
+	GroupBy      string `json:"group_by"`
 	BeforeCursor string `json:"before_cursor"`
 	Refresh      bool   `json:"refresh"`
 	// Limit is the page size; a reload of a column the user has scrolled asks

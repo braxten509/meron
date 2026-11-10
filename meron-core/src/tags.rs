@@ -11,6 +11,21 @@ pub const MAX_TAG_BYTES: usize = 48;
 
 const ENCODED_PREFIX: &str = "meron-x-";
 
+/// What every system tag starts with. A system tag is bookkeeping the app
+/// keeps on a message: it is stored and carried to other devices exactly like
+/// a tag, but never listed as one, and a reader cannot set it.
+pub const SYSTEM_TAG_PREFIX: &str = "meron.";
+
+/// On a message of the reader's own that was part of a conversation they then
+/// deleted: it stays in its mailbox, but conversations read from other
+/// folders leave it out (see `store::ChatScope`).
+pub const LEFT_OUT_OF_CHAT_TAG: &str = "meron.left-out-of-chat";
+
+/// Whether `tag` is one of the app's own (see [`SYSTEM_TAG_PREFIX`]).
+pub fn is_system_tag(tag: &str) -> bool {
+    tag.starts_with(SYSTEM_TAG_PREFIX)
+}
+
 /// Keywords that mail software sets for its own bookkeeping. Showing them as
 /// tags would be noise; `$`-prefixed ones are ruled out the same way.
 const SYSTEM_KEYWORDS: &[&str] = &[
@@ -88,7 +103,10 @@ pub fn parse_tag_list(value: Option<&serde_json::Value>) -> Result<Vec<String>, 
         .flatten()
     {
         let input = item.as_str().unwrap_or_default();
-        tags.push(normalize_tag(input).ok_or_else(|| format!("invalid tag: {input}"))?);
+        let tag = normalize_tag(input)
+            .filter(|tag| !is_system_tag(tag))
+            .ok_or_else(|| format!("invalid tag: {input}"))?;
+        tags.push(tag);
     }
     tags.sort();
     tags.dedup();

@@ -716,12 +716,7 @@ async fn local_mail(
                 let db = main.db.lock().unwrap();
                 let _ = store::ensure_folder(&db, &target_account, &target_folder)
                     .and_then(|_| {
-                        store::upsert_messages(
-                            &db,
-                            &target_account,
-                            &target_folder,
-                            &batch.messages,
-                        )
+                        store::upsert_window_messages(&db, &target_account, &target_folder, batch)
                     })
                     .and_then(|_| {
                         store::set_folder_state(

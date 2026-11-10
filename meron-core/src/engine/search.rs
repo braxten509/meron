@@ -387,7 +387,7 @@ async fn append_search_batch(
     // Each step takes the store lock on its own, so sync, thread reads and flag
     // writes can interleave with a large search instead of queueing behind it.
     for (folder, headers) in &live {
-        store::upsert_messages(&engine.db.lock().unwrap(), account, folder, headers)?;
+        store::upsert_read_messages(&engine.db.lock().unwrap(), account, folder, headers)?;
     }
 
     let fetched = cached
@@ -794,8 +794,13 @@ pub async fn search_starred_mail_messages(
     let mut by_key: HashMap<(String, u32), imap::MessageHeader> = HashMap::new();
     for folder in folders {
         for mut message in store::get_starred(&engine.db.lock().unwrap(), account, folder, limit)? {
-            message.folder = folder.clone();
-            by_key.insert((folder.clone(), message.uid), message);
+            // The Inbox's starred list carries mail the AI shows there from
+            // other folders under their real folder; keep it, so the unflag
+            // check below never takes one for an Inbox UID.
+            if message.folder.is_empty() {
+                message.folder = folder.clone();
+            }
+            by_key.insert((message.folder.clone(), message.uid), message);
         }
     }
 
@@ -854,7 +859,7 @@ pub async fn search_starred_mail_messages(
                         for key in &unstarred {
                             store::update_message_starred(&db, account, &folder, key.1, false)?;
                         }
-                        store::upsert_messages(&db, account, &folder, &headers)?;
+                        store::upsert_read_messages(&db, account, &folder, &headers)?;
                     }
                     for key in unstarred {
                         by_key.remove(&key);
@@ -875,4 +880,56 @@ pub async fn search_starred_mail_messages(
     let mut messages = by_key.into_values().collect::<Vec<_>>();
     store::sort_search_hits(&mut messages, limit);
     Ok(messages)
+}
+
+/// One cursor-paged page of starred mail across `folders`, newest first, for
+/// a folder's Starred filter. The first page (no cursor) with `refresh` first
+/// brings the store up to date with the server's `\Flagged` set
+/// ([`search_starred_mail_messages`] stores what it fetches); the page itself
+/// is then read from the store, where conversations in a Meron folder are left
+/// out before the LIMIT, so pages stay full and the cursor exact. Later pages
+/// are store reads (`date:<date>:<uid>` cursors).
+pub async fn starred_mail_page(
+    engine: &Arc<Engine>,
+    account: &str,
+    folders: &[String],
+    limit: u32,
+    before_cursor: Option<(i64, u32)>,
+    before_folder: Option<&str>,
+    refresh: bool,
+) -> anyhow::Result<(Vec<imap::MessageHeader>, Option<String>)> {
+    if refresh && before_cursor.is_none() {
+        search_starred_mail_messages(engine, account, folders, limit, true).await?;
+    }
+    let db = engine.db.lock().unwrap();
+    let mut merged = Vec::new();
+    let mut more = false;
+    for folder in folders {
+        let (page, next) = store::get_starred_page_from(
+            &db,
+            account,
+            folder,
+            limit,
+            before_cursor,
+            before_folder,
+        )?;
+        more |= next.is_some();
+        merged.extend(page);
+    }
+    // Folder breaks (date, uid) ties, as the store's pages do: the Inbox's
+    // page also holds mail from other folders, whose UIDs can repeat.
+    merged.sort_by(|a, b| {
+        b.date
+            .cmp(&a.date)
+            .then_with(|| b.uid.cmp(&a.uid))
+            .then_with(|| b.folder.cmp(&a.folder))
+    });
+    if merged.len() > limit as usize {
+        merged.truncate(limit as usize);
+        more = true;
+    }
+    let next_cursor = more.then(|| merged.last()).flatten().map(|header| {
+        store::format_mail_cursor(header.date, header.uid, Some(header.folder.as_str()))
+    });
+    Ok((merged, next_cursor))
 }

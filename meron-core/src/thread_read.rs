@@ -6,7 +6,7 @@
 //! parse their own id formats and decide how a finished background fetch is
 //! announced (sidecar event vs FFI event callback).
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -73,14 +73,48 @@ pub fn thread_page_headers(
     limit: Option<u32>,
     before_cursor: Option<&str>,
 ) -> anyhow::Result<(Vec<imap::MessageHeader>, Option<String>)> {
+    let (page, next_cursor, _) = thread_page_headers_and_older(
+        db,
+        account,
+        folder,
+        thread_key,
+        subject_filter,
+        limit,
+        before_cursor,
+    )?;
+    Ok((page, next_cursor))
+}
+
+/// [`thread_page_headers`], plus the headers of the page before it (at most
+/// `limit` of them, oldest first): the page a reader scrolling back reaches
+/// next. Empty for full reads and for the oldest page.
+fn thread_page_headers_and_older(
+    db: &rusqlite::Connection,
+    account: &str,
+    folder: &str,
+    thread_key: &str,
+    subject_filter: Option<&str>,
+    limit: Option<u32>,
+    before_cursor: Option<&str>,
+) -> anyhow::Result<(
+    Vec<imap::MessageHeader>,
+    Option<String>,
+    Vec<imap::MessageHeader>,
+)> {
     // Thread view spans folders within the account so the user's own Sent
     // replies appear alongside the inbox messages they thread with.
+    // Mail in Trash or Junk, and replies to a conversation deleted earlier,
+    // stay out unless read from their own folder (see `store::ChatScope`).
     //
     // Exception: a synthetic `uid:N` key (a message with no real threading
     // headers — e.g. a freshly-saved draft) is folder-local, because UIDs are
     // folder-scoped. Spanning folders would match an unrelated message that
     // happens to share UID N elsewhere and render the wrong thread.
-    let mut headers = if thread_key.starts_with("uid:") {
+    // A sender row's chat: their mail in this folder plus Sent mail and
+    // drafts to them (see `store::sender_chat_headers`).
+    let mut headers = if let Some(addr) = store::sender_key_addr(thread_key) {
+        store::sender_chat_headers(db, account, folder, &addr)?
+    } else if thread_key.starts_with("uid:") {
         let mut headers = store::get_thread_headers(db, account, folder, thread_key)?;
         // A message opened straight from a notification can have a cached body
         // before its header row is synced; synthesize a header so the read
@@ -101,7 +135,7 @@ pub fn thread_page_headers(
         }
         headers
     } else {
-        store::get_thread_headers_all_folders(db, account, thread_key)?
+        store::get_thread_headers_from_folder(db, account, folder, thread_key)?
     };
     if let Some(filter) = subject_filter {
         headers.retain(|header| store::thread_grouping_subject(&header.subject) == filter);
@@ -129,9 +163,10 @@ pub fn thread_page_headers(
         } else {
             None
         };
-        (page, next_cursor)
+        let older = headers[start.saturating_sub(limit as usize)..start].to_vec();
+        (page, next_cursor, older)
     } else {
-        (headers, None)
+        (headers, None, Vec::new())
     })
 }
 
@@ -142,6 +177,37 @@ pub async fn read_thread_page(
     args: ThreadReadArgs<'_>,
     on_bodies_fetched: Option<BodiesFetchedHook>,
 ) -> anyhow::Result<Value> {
+    read_thread_page_inner(engine, args, on_bodies_fetched, false).await
+}
+
+/// [`read_thread_page`] for a reader that scrolls back through the thread a page
+/// at a time (mobile, which stores envelopes only): a UI page also starts
+/// downloading the bodies of the page before it, so that page is readable by
+/// the time the reader scrolls up to it rather than arriving as placeholders
+/// that fill in, and grow, under their finger.
+pub async fn read_thread_page_with_lookahead(
+    engine: &Arc<Engine>,
+    args: ThreadReadArgs<'_>,
+    on_bodies_fetched: Option<BodiesFetchedHook>,
+) -> anyhow::Result<Value> {
+    read_thread_page_inner(engine, args, on_bodies_fetched, true).await
+}
+
+async fn read_thread_page_inner(
+    engine: &Arc<Engine>,
+    args: ThreadReadArgs<'_>,
+    on_bodies_fetched: Option<BodiesFetchedHook>,
+    lookahead: bool,
+) -> anyhow::Result<Value> {
+    // Shared between this page's own fill and the look-ahead fill: each
+    // announces itself when it lands.
+    let on_bodies_fetched: Option<Arc<dyn Fn() + Send + Sync + 'static>> =
+        on_bodies_fetched.map(Arc::from);
+    let hook = || -> Option<BodiesFetchedHook> {
+        on_bodies_fetched
+            .clone()
+            .map(|notify| Box::new(move || (*notify)()) as BodiesFetchedHook)
+    };
     let ThreadReadArgs {
         account,
         folder,
@@ -154,9 +220,9 @@ pub async fn read_thread_page(
         media_root,
     } = args;
 
-    let (headers, next_cursor) = {
+    let (headers, next_cursor, older_headers) = {
         let db = engine.db.lock().unwrap();
-        thread_page_headers(
+        thread_page_headers_and_older(
             &db,
             account,
             folder,
@@ -382,13 +448,7 @@ pub async fn read_thread_page(
                 }
             }
             if !background.is_empty() {
-                spawn_fill_thread_bodies(
-                    engine,
-                    account,
-                    background,
-                    media_root.clone(),
-                    on_bodies_fetched,
-                );
+                spawn_fill_thread_bodies(engine, account, background, media_root.clone(), hook());
             }
             // Even a first-ever body that exceeds the interactive budget gets
             // a longer background attempt, while the caller receives its error.
@@ -407,13 +467,41 @@ pub async fn read_thread_page(
             &headers,
         );
         if !background.is_empty() {
-            spawn_fill_thread_bodies(
-                engine,
-                account,
-                background,
-                media_root.clone(),
-                on_bodies_fetched,
-            );
+            spawn_fill_thread_bodies(engine, account, background, media_root.clone(), hook());
+        }
+    }
+
+    // The page before this one, for a reader scrolling back: its missing bodies
+    // download now, in one batch, while this page is being read. Not for full
+    // or print reads, and never a body whose download just failed — that
+    // failure is the read of its own page's to show, and fetching it again on
+    // every re-read would turn an unreachable server into a loop.
+    if lookahead && limit.is_some() && !for_print && !older_headers.is_empty() {
+        let pending: Vec<(String, u32)> = {
+            let db = engine.db.lock().unwrap();
+            older_headers
+                .iter()
+                .map(|header| {
+                    let msg_folder = if header.folder.is_empty() {
+                        folder.to_string()
+                    } else {
+                        header.folder.clone()
+                    };
+                    (msg_folder, header.uid)
+                })
+                .filter(|(msg_folder, uid)| {
+                    !store::has_cached_body(&db, account, msg_folder, *uid).unwrap_or(true)
+                })
+                .collect()
+        };
+        let pending: Vec<(String, u32)> = pending
+            .into_iter()
+            .filter(|(msg_folder, uid)| {
+                !engine.body_failure_pending(&message_key(account, msg_folder, *uid))
+            })
+            .collect();
+        if !pending.is_empty() {
+            spawn_fill_thread_bodies(engine, account, pending, media_root.clone(), hook());
         }
     }
 
@@ -823,6 +911,25 @@ pub(crate) fn spawn_fill_thread_bodies(
                 })
                 .collect()
         };
+        // A FETCH that succeeded yet left a message out means the server no
+        // longer has it there: another client (or a write whose cache update
+        // failed) moved or deleted it, and folders nobody watches never sync
+        // the stale row away. Resync those folders before the readers wake, so
+        // the re-read shows the message's current copy instead of a dead row.
+        if result.is_ok() {
+            let stale: BTreeSet<&String> = uncached.iter().map(|(folder, _)| *folder).collect();
+            for folder in stale {
+                if let Err(err) =
+                    crate::engine::sync_messages(&engine, &account, folder, 50).await
+                {
+                    crate::mlog!(
+                        crate::log::Level::Warn,
+                        "mail.sync",
+                        "account={account} folder={folder}: resync after a vanished message failed: {err:#}"
+                    );
+                }
+            }
+        }
         for (folder, uid) in &uncached {
             engine.record_body_failure(
                 message_key(&account, folder, *uid),

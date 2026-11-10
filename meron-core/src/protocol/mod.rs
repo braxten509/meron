@@ -135,6 +135,14 @@ pub fn dispatch_protocol_request(req: &Request) -> Result<Value, String> {
         "mail.ruleMatches" | "mail.runRule" => Ok(json!({ "count": 0 })),
         "mail.ruleStatus" => Ok(json!({ "log": [], "running": {} })),
         "mail.stopRule" => Ok(json!({ "ok": true })),
+        method if crate::ai_sort::mobile_command(method).is_some() => Ok(crate::ai_sort::mobile_stub(
+            crate::ai_sort::mobile_command(method).unwrap_or_default(),
+        )),
+        method if crate::meron_folders::mobile_command(method).is_some() => {
+            Ok(crate::meron_folders::mobile_stub(
+                crate::meron_folders::mobile_command(method).unwrap_or_default(),
+            ))
+        }
         "rss.thread" => Ok(json!({ "messages": [] })),
         "rss.markRead" => Ok(json!({ "ok": true })),
         "rss.markStarred" => Ok(json!({ "ok": true })),
@@ -271,6 +279,21 @@ pub fn dispatch_mobile_protocol_request(req: &Request, data_dir: &str) -> Result
         "mail.runRule" => run_mobile_rule(data_dir, &req.params),
         "mail.ruleStatus" => mobile_rule_status(data_dir),
         "mail.stopRule" => stop_mobile_rule(data_dir, &req.params),
+        method if crate::ai_sort::mobile_command(method).is_some() => mobile_ai_sort(
+            data_dir,
+            crate::ai_sort::mobile_command(method).unwrap_or_default(),
+            &req.params,
+        ),
+        method if method.starts_with("setupCopy.") => mobile_setup_copy(
+            data_dir,
+            &method["setupCopy.".len()..],
+            &req.params,
+        ),
+        method if crate::meron_folders::mobile_command(method).is_some() => mobile_meron_folders(
+            data_dir,
+            crate::meron_folders::mobile_command(method).unwrap_or_default(),
+            &req.params,
+        ),
         "rss.sync" => sync_mobile_rss(data_dir, &req.params),
         "rss.thread" => read_mobile_rss_thread(data_dir, &req.params),
         "rss.markRead" => mark_mobile_rss_thread_read(data_dir, &req.params),

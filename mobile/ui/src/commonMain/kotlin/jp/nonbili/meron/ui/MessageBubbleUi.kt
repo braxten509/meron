@@ -20,6 +20,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Forward
 import androidx.compose.material.icons.automirrored.filled.ReplyAll
+import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -36,6 +37,8 @@ import androidx.compose.material.icons.filled.Print
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
+import androidx.compose.material.icons.filled.UnfoldLess
+import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -104,6 +107,10 @@ private val HtmlBubbleHorizontalPadding = 6.dp
 /** How long a bubble stays invisible waiting for its web view to report a width
  *  before it shows at full width anyway (a page whose script never runs). */
 private const val NATURAL_WIDTH_WAIT_MS = 1000L
+
+/** How long a reported width has to stand before the bubble shows at it: a few
+ *  frames, enough for the report that follows the web view's own resize. */
+private const val NATURAL_WIDTH_SETTLE_MS = 120L
 
 /** What each HTML body last reported as the width it needs, so a bubble scrolled
  *  back into the list takes its width on the first frame instead of flashing at
@@ -185,6 +192,24 @@ internal fun usesHtmlBody(
     searchQuery: String,
 ): Boolean = preferHtml && message.bodyHtml.isNotBlank() && searchQuery.isBlank()
 
+/** Whether a chat bubble may start folded: one that needs a web page or shows
+ *  pictures. Those are what make a long thread scroll slowly; a short plain
+ *  email is cheap and always stays open. An open search never folds. */
+internal fun bubbleFoldable(
+    message: MessageBody,
+    preferHtml: Boolean,
+    searchQuery: String,
+): Boolean =
+    searchQuery.isBlank() &&
+        (usesHtmlBody(message, preferHtml, searchQuery) || standaloneAttachments(message).any { it.mimeType.startsWith("image/") })
+
+/** The start of what a folded bubble says, from the plain text the core keeps
+ *  for every mail (HTML mail included), quoted reply left out. */
+internal fun foldedPreviewText(message: MessageBody): String {
+    val body = message.bodyQuoteStart?.let { message.body.take(it) } ?: message.body
+    return body.take(600).replace(Regex("\\s+"), " ").trim()
+}
+
 @Composable
 internal fun MessageBubble(
     message: MessageBody,
@@ -201,6 +226,9 @@ internal fun MessageBubble(
     isRss: Boolean,
     remoteContent: MessageRemoteContent,
     onForward: (MessageBody) -> Unit,
+    // A small subject line at the top of the bubble; blank for none. A sender
+    // chat sets it where the topic changes from the bubble before.
+    subjectLine: String = "",
     onReplyAllToMessage: (MessageBody) -> Unit,
     canReplyAllToMessage: (MessageBody) -> Boolean,
     onEditAsNew: (MessageBody) -> Unit,
@@ -208,6 +236,9 @@ internal fun MessageBubble(
     onToggleRead: (MessageBody) -> Unit,
     onToggleStarred: (MessageBody) -> Unit,
     onDelete: (MessageBody) -> Unit,
+    // One email moved or archived on its own; null where that is not offered.
+    onMove: ((MessageBody) -> Unit)? = null,
+    onArchive: ((MessageBody) -> Unit)? = null,
     onOpenAttachment: (MessageAttachment) -> Unit,
     onSaveAttachment: (MessageAttachment) -> Unit,
     loadImageAttachment: suspend (MessageAttachment) -> ImageBitmap?,
@@ -221,6 +252,10 @@ internal fun MessageBubble(
     onRespondToInvite: (MessageBody, String) -> Unit = { _, _ -> },
     onRemoveInviteEvent: (MessageBody) -> Unit = {},
     onAddInviteToCalendar: (MessageBody) -> Unit = {},
+    // Folded: header plus two lines of text and no web page, until tapped.
+    folded: Boolean = false,
+    // Folds or opens this bubble; null where it can't fold.
+    onToggleFold: (() -> Unit)? = null,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     var addressesOpen by remember(message.id) { mutableStateOf(false) }
@@ -235,7 +270,7 @@ internal fun MessageBubble(
     // Capped, a long body scrolls inside its bubble; uncapped (the full
     // messages setting), it grows to fit and only the conversation scrolls.
     val bodyMaxHeight = if (LocalChatFullMessages.current) Dp.Unspecified else 360.dp
-    val htmlBody = usesHtmlBody(message, preferHtml, searchQuery)
+    val htmlBody = usesHtmlBody(message, preferHtml, searchQuery) && !folded
     // The web view paints the mail on white, so a tinted light bubble (Material
     // You) would frame it as a square white box inside a rounded card. Let the
     // whole bubble be white instead, so the header and body read as one card.
@@ -253,7 +288,7 @@ internal fun MessageBubble(
     // A plain-text bubble shrinks to its images as well: one or two take only the
     // columns they fill. Counted the way the body decides what it shows.
     val visibleImageCount =
-        if (htmlBody) {
+        if (htmlBody || folded) {
             0
         } else {
             visibleImageAttachments(
@@ -263,13 +298,26 @@ internal fun MessageBubble(
         }
     val naturalWidthKey = "${message.id}:${message.bodyHtml.hashCode()}:${LocalDensity.current.fontScale}"
     var naturalWidth by remember(naturalWidthKey) { mutableStateOf(htmlNaturalWidths[naturalWidthKey] ?: Dp.Unspecified) }
+    // Settled once the web view's reports stop changing. Each width the bubble
+    // takes resizes the web view, which measures and reports again; shown on
+    // the first report, the bubble visibly slid as it followed the next few
+    // (an outgoing one, pinned to the right, moving its left edge). A width
+    // remembered from an earlier showing has already settled.
+    var widthSettled by remember(naturalWidthKey) { mutableStateOf(htmlNaturalWidths[naturalWidthKey] != null) }
     // An unmeasured body is laid out at full width but not painted: showing it
     // would flash it wide before it shrinks to its text.
-    val widthPending = hugsText && naturalWidth == Dp.Unspecified
+    val widthPending = hugsText && !widthSettled
     LaunchedEffect(widthPending) {
         if (widthPending) {
             delay(NATURAL_WIDTH_WAIT_MS)
             if (naturalWidth == Dp.Unspecified) naturalWidth = 0.dp
+            widthSettled = true
+        }
+    }
+    LaunchedEffect(widthPending, naturalWidth) {
+        if (widthPending && naturalWidth != Dp.Unspecified) {
+            delay(NATURAL_WIDTH_SETTLE_MS)
+            widthSettled = true
         }
     }
     // What the chrome around an HTML body adds back to sit where it always does.
@@ -301,6 +349,7 @@ internal fun MessageBubble(
                         Modifier
                     },
                 ).background(bubbleColor)
+                .then(if (folded && onToggleFold != null) Modifier.clickable(onClick = onToggleFold) else Modifier)
                 .padding(start = bubblePadding, end = bubblePadding, top = 8.dp, bottom = 6.dp),
             verticalArrangement = Arrangement.spacedBy(3.dp),
         ) {
@@ -407,6 +456,16 @@ internal fun MessageBubble(
                     fontSize = 10.5.sp,
                     color = textColor.copy(alpha = 0.55f),
                 )
+                if (onToggleFold != null && !folded) {
+                    IconButton(onClick = onToggleFold, modifier = Modifier.size(24.dp)) {
+                        Icon(
+                            imageVector = Icons.Filled.UnfoldLess,
+                            contentDescription = tr("chat.fold"),
+                            modifier = Modifier.size(16.dp),
+                            tint = textColor.copy(alpha = 0.55f),
+                        )
+                    }
+                }
                 val isDraft = folderIsDrafts(message.folderId)
                 IconButton(
                     onClick = {
@@ -440,6 +499,8 @@ internal fun MessageBubble(
                     onToggleRead = onToggleRead,
                     onToggleStarred = onToggleStarred,
                     onDelete = onDelete,
+                    onMove = onMove,
+                    onArchive = onArchive,
                     onCopyMessageText = onCopyMessageText,
                     onOpenUrl = onOpenUrl,
                 )
@@ -453,13 +514,21 @@ internal fun MessageBubble(
                     modifier = Modifier.padding(bottom = 2.dp, start = chromeInset, end = chromeInset),
                 )
             }
-            MessageBodyContent(
+            if (folded) {
+                FoldedBubbleBody(
+                    message = message,
+                    textColor = textColor,
+                    subjectLine = if (showSubject) message.subject else subjectLine,
+                    modifier = Modifier.padding(horizontal = chromeInset),
+                )
+            } else MessageBodyContent(
                 message = message,
                 textColor = textColor,
                 preferHtml = preferHtml,
                 searchQuery = searchQuery,
                 activeSearchMatch = activeSearchMatch,
                 showSubject = showSubject,
+                subjectLine = subjectLine,
                 bodyMaxHeight = bodyMaxHeight,
                 chromeInset = chromeInset,
                 surface = bubbleColor,
@@ -490,6 +559,48 @@ internal fun MessageBubble(
 }
 
 /** The overflow button shared by both conversation layouts, opening [MessageActionsMenu]. */
+/** A folded bubble's body: the subject line, two lines of the mail's text and
+ *  the cue that a tap opens it. The bubble itself takes the tap. */
+@Composable
+private fun FoldedBubbleBody(
+    message: MessageBody,
+    textColor: Color,
+    subjectLine: String,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        if (subjectLine.isNotBlank()) {
+            Text(
+                subjectLine,
+                color = textColor.copy(alpha = 0.7f),
+                fontSize = 12.sp,
+                lineHeight = 16.sp,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        val preview = remember(message.id, message.body) { foldedPreviewText(message) }
+        if (preview.isNotBlank()) {
+            Text(
+                preview,
+                color = textColor.copy(alpha = 0.8f),
+                fontSize = 14.sp,
+                lineHeight = 19.sp,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Text(
+            tr("chat.tapToOpen"),
+            color = MaterialTheme.colorScheme.primary,
+            fontSize = 12.5.sp,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.padding(top = 2.dp, bottom = 2.dp),
+        )
+    }
+}
+
 @Composable
 internal fun MessageActionsButton(
     preferHtml: Boolean,
@@ -506,6 +617,9 @@ internal fun MessageActionsButton(
     onToggleRead: (MessageBody) -> Unit,
     onToggleStarred: (MessageBody) -> Unit,
     onDelete: (MessageBody) -> Unit,
+    // One email moved or archived on its own; null where that is not offered.
+    onMove: ((MessageBody) -> Unit)? = null,
+    onArchive: ((MessageBody) -> Unit)? = null,
     onCopyMessageText: (String, String) -> Unit,
     onOpenUrl: (String) -> Unit,
 ) {
@@ -534,6 +648,8 @@ internal fun MessageActionsButton(
             onToggleRead = if (itemActionsEnabled) onToggleRead else null,
             onToggleStarred = if (itemActionsEnabled) onToggleStarred else null,
             onDelete = onDelete,
+            onMove = onMove,
+            onArchive = onArchive,
             onCopyMessageText = onCopyMessageText,
             onOpenUrl = onOpenUrl,
         )
@@ -559,6 +675,9 @@ internal fun MessageActionsMenu(
     onToggleRead: ((MessageBody) -> Unit)?,
     onToggleStarred: ((MessageBody) -> Unit)?,
     onDelete: (MessageBody) -> Unit,
+    // One email moved or archived on its own; null where that is not offered.
+    onMove: ((MessageBody) -> Unit)? = null,
+    onArchive: ((MessageBody) -> Unit)? = null,
     onCopyMessageText: (String, String) -> Unit,
     onOpenUrl: (String) -> Unit,
     // Reply all, forward and delete sit in the reader's bottom bar instead.
@@ -639,6 +758,10 @@ internal fun MessageActionsMenu(
                 Item(tr("chat.actions.forward"), Icons.AutoMirrored.Filled.Forward) { onForward(message) }
             }
             Item(tr("chat.actions.editAsNewMessage"), Icons.Filled.EditNote) { onEditAsNew(message) }
+            if (!isRss && !folderIsDrafts(message.folderId)) {
+                onMove?.let { move -> Item(tr("threads.actions.moveTo"), Icons.Outlined.FolderOpen) { move(message) } }
+                onArchive?.let { archive -> Item(tr("chat.actions.archiveMessage"), Icons.Filled.Archive) { archive(message) } }
+            }
             if (!mailActionsInBar) {
                 Item(tr("chat.actions.deleteMessage"), Icons.Filled.Delete, danger = true) { onDelete(message) }
             }
@@ -662,6 +785,8 @@ internal fun ColumnScope.MessageBodyContent(
     activeSearchMatch: Boolean,
     showSubject: Boolean,
     bodyMaxHeight: Dp,
+    // See MessageBubble's subjectLine: small, one line, above the body.
+    subjectLine: String = "",
     // Horizontal inset for everything but the HTML body: the chat bubble trims
     // its own padding for HTML mail (see [HtmlBubbleHorizontalPadding]) and pads
     // the rest of the message back to where it sits in every other bubble.
@@ -699,6 +824,17 @@ internal fun ColumnScope.MessageBodyContent(
             fontSize = 16.sp,
             lineHeight = 21.sp,
             fontWeight = FontWeight.SemiBold,
+        )
+    } else if (subjectLine.isNotBlank()) {
+        Text(
+            text = highlightedMessageText(subjectLine, searchQuery, activeSearchMatch),
+            modifier = Modifier.padding(horizontal = chromeInset).padding(bottom = 2.dp),
+            color = textColor.copy(alpha = 0.7f),
+            fontSize = 12.sp,
+            lineHeight = 16.sp,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
     }
     message.invite?.let { invite ->

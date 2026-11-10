@@ -1,9 +1,11 @@
 import { useRef, useState, type ReactNode } from 'react'
 import { useValue } from '@legendapp/state/react'
-import { ChevronDown } from 'lucide-react'
+import { ChevronDown, Folder as FolderIcon } from 'lucide-react'
+import { useTranslation } from '../../lib/i18n'
 import { accounts$, isSendableAccount } from '../../states/accounts'
 import { mail$ } from '../../states/mail'
 import { ensureAccountFolders } from '../../states/mailFolders'
+import { isMeronArchive } from '../../states/meronFolders'
 import { FloatingContextMenu } from '../menu/FloatingContextMenu'
 import { FolderMenuTree } from '../menu/FolderMenuTree'
 import { MenuItem } from '../menu/MenuItem'
@@ -34,13 +36,28 @@ export function RuleFolderPicker({
   value,
   options,
   onPick,
+  exclude,
+  meronFolders,
+  chosenMeronIds = [],
+  onPickMeron,
 }: {
   label: string
   /** What the button shows. */
   value: string
   options: { label: string; onPick: () => void }[]
   onPick: (target: RuleFolderTarget) => void
+  /** Folders shown greyed out instead of offered (an AI can't sort into Sent, etc.). */
+  exclude?: (folder: Folder) => boolean
+  /** AI sorting only: Meron folders (this device only) offered in their own
+   *  group above the accounts. Rules don't pass it: they act on the server. */
+  meronFolders?: { id: string; name: string }[]
+  /** Meron folders already chosen, shown greyed out. */
+  chosenMeronIds?: string[]
+  onPickMeron?: (id: string) => void
 }) {
+  const { t } = useTranslation()
+  // The built-in Archive is filled by archiving, never a sorting target.
+  const meronTargets = (meronFolders ?? []).filter((folder) => !isMeronArchive(folder))
   const accounts = useValue(accounts$).filter(isSendableAccount)
   const foldersByAccount = useValue(mail$.foldersByAccount)
   const [position, setPosition] = useState<{ x: number; y: number } | null>(null)
@@ -69,6 +86,9 @@ export function RuleFolderPicker({
     onPick({ accountId, folderId: folder.id })
   }
 
+  const excludedIds = (accountId: string) =>
+    exclude ? (foldersByAccount[accountId] ?? []).filter(exclude).map((folder) => folder.id) : []
+
   const inlineAccount = accounts.length === 1 ? accounts[0] : undefined
   const menu: ReactNode = position && (
     <FloatingContextMenu
@@ -90,13 +110,38 @@ export function RuleFolderPicker({
           }}
         />
       ))}
+      {meronFolders && onPickMeron && (
+        <>
+          {options.length > 0 && <div className="my-1 border-t border-border" />}
+          <div className="px-3 pb-1 pt-2 text-[0.6875rem] font-semibold text-secondary">{t('meronFolders.title')}</div>
+          {meronTargets.length === 0 && (
+            <div className="px-3 py-2 text-xs font-semibold text-secondary">{t('meronFolders.none')}</div>
+          )}
+          {meronTargets.map((folder) => (
+            <MenuItem
+              key={folder.id}
+              icon={<FolderIcon size={13} className="shrink-0 text-secondary" />}
+              label={
+                <span className="min-w-0 max-w-[260px] truncate" title={folder.name}>
+                  {folder.name}
+                </span>
+              }
+              disabled={chosenMeronIds.includes(folder.id)}
+              onClick={() => {
+                close()
+                onPickMeron(folder.id)
+              }}
+            />
+          ))}
+        </>
+      )}
       {accounts.length > 0 && <div className="my-1 border-t border-border" />}
       {inlineAccount ? (
         <>
           {(foldersByAccount[inlineAccount.id] ?? []).length === 0 && <FolderListStatus loading={loading} />}
           <FolderMenuTree
             folders={foldersByAccount[inlineAccount.id] ?? []}
-            excludedFolderIds={[]}
+            excludedFolderIds={excludedIds(inlineAccount.id)}
             onPick={(folder) => pick(inlineAccount.id, folder)}
           />
         </>
@@ -106,7 +151,7 @@ export function RuleFolderPicker({
             key={account.id}
             account={account}
             folders={foldersByAccount[account.id] ?? []}
-            excludedFolderIds={[]}
+            excludedFolderIds={excludedIds(account.id)}
             loading={loading}
             open={openAccountId === account.id}
             setOpen={(next) =>

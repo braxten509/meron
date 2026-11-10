@@ -86,6 +86,55 @@ impl crate::engine::EngineHost for MobileHost {
         let blob = serde_json::to_string(secrets)?;
         store::upsert_secret(conn, account, &blob).map_err(|err| anyhow::anyhow!(err))
     }
+
+    /// An AI sorting key, in the same encrypted, app-private table as account
+    /// secrets, under its own name. Backups only read rows of real accounts.
+    fn load_named_secret(
+        &self,
+        db: &std::sync::Mutex<rusqlite::Connection>,
+        name: &str,
+    ) -> anyhow::Result<Option<String>> {
+        let blob = store::load_secret(&db.lock().unwrap(), name)?;
+        Ok(blob
+            .and_then(|blob| serde_json::from_str::<Value>(&blob).ok())
+            .and_then(|value| value.get("api_key").and_then(Value::as_str).map(str::to_string))
+            .filter(|value| !value.is_empty()))
+    }
+
+    fn load_account_secret(
+        &self,
+        db: &std::sync::Mutex<rusqlite::Connection>,
+        account: &str,
+    ) -> anyhow::Result<Secrets> {
+        match store::load_secret(&db.lock().unwrap(), account)? {
+            Some(blob) => Ok(serde_json::from_str::<Secrets>(&blob)?),
+            None => Ok(Secrets::default()),
+        }
+    }
+
+    fn store_named_secret(
+        &self,
+        db: &std::sync::Mutex<rusqlite::Connection>,
+        name: &str,
+        value: Option<&str>,
+    ) -> anyhow::Result<()> {
+        let conn = db.lock().unwrap();
+        match value {
+            Some(value) => {
+                let blob = json!({ "api_key": value }).to_string();
+                store::upsert_secret(&conn, name, &blob)
+            }
+            None => store::delete_secret(&conn, name),
+        }
+    }
+
+    fn media_root(&self) -> std::path::PathBuf {
+        Path::new(self.data_dir.trim()).join("attachments")
+    }
+
+    fn account_media_root(&self) -> std::path::PathBuf {
+        Path::new(self.data_dir.trim()).join("media")
+    }
 }
 
 pub(crate) fn load_mobile_account_creds(

@@ -137,6 +137,29 @@ data class ThreadSummary(
     val dateEpochSeconds: Long = 0,
     val feedUrl: String = "",
     val threadId: String = "",
+    /** The other person's address (`from_addr`); blank when the core sent none. */
+    val senderAddress: String = "",
+    /** "sender" for a row standing for one correspondent (group-by-sender
+     *  mode), blank for an ordinary thread row. */
+    val group: String = "",
+    /** The correspondent is a no-reply style address: nothing to reply to. */
+    val automated: Boolean = false,
+    /** The Meron folder the conversation was moved into on this device, if any. */
+    val meronFolderId: String? = null,
+)
+
+/** A folder that exists only inside Meron, on this device. */
+data class MeronFolderSummary(
+    val id: String,
+    val name: String,
+    val unread: Int = 0,
+    val count: Int = 0,
+    val createdAt: Long = 0,
+    /** New mail AI sorting files here notifies (this device only). */
+    val notify: Boolean = false,
+    /** `"archive"` for the built-in Archive folder (always there, can't be
+     *  renamed or deleted); null for the user's own. */
+    val builtin: String? = null,
 )
 
 data class StarredItemSummary(

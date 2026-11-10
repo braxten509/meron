@@ -18,6 +18,7 @@ import { BoardDialog, type BoardDialogState } from '../sidenav/BoardDialog'
 import { QuickSettingsMenu } from '../sidenav/QuickSettingsMenu'
 import { ThreadSearchInput } from '../threads/ThreadSearchInput'
 import { WindowControls } from './WindowControls'
+import { SharpImg } from '../../lib/sharpImage'
 
 /**
  * Whether Meron draws its own title bar: always on macOS (the native one is
@@ -76,8 +77,10 @@ export function TitleBar({ tools = true }: { tools?: boolean }) {
           the 3.75rem side navigation's tiles: row padding + margin + half the logo,
           all in rem so the two stay aligned at any text size. */}
         {!isMac && startControls.length === 0 && (
-          <img
+          <SharpImg
             src={logo}
+            box={windows ? 16 : 20}
+            fit="contain"
             alt=""
             draggable={false}
             className={`shrink-0 ${windows ? 'ml-4 h-4 w-4' : 'ml-3.5 h-5 w-5'}`}

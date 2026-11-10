@@ -196,7 +196,7 @@ pub fn carried_tags(
     copies: &BTreeMap<String, Vec<u32>>,
 ) -> Result<HashMap<String, Vec<String>>> {
     let keys = message_tag_keys(conn, account, copies)?;
-    let mut tags = tags_by_key(conn, account, &keys)?;
+    let mut tags = all_tags_by_key(conn, account, &keys)?;
     tags.retain(|key, _| !key.starts_with("uid:"));
     Ok(tags)
 }
@@ -598,9 +598,10 @@ pub fn tag_counts(conn: &Connection, account: Option<&str>) -> Result<BTreeMap<S
     let mut stmt = conn.prepare(&format!(
         "SELECT tag, COUNT(*) FROM message_tags
          WHERE state IN {LIVE_STATES} AND (?1 IS NULL OR account = ?1)
+           AND tag NOT LIKE ?2
          GROUP BY tag"
     ))?;
-    let rows = stmt.query_map(params![account], |row| {
+    let rows = stmt.query_map(params![account, system_tag_pattern()], |row| {
         Ok((row.get::<_, String>(0)?, row.get::<_, u32>(1)?))
     })?;
     Ok(rows.collect::<rusqlite::Result<_>>()?)
@@ -689,8 +690,30 @@ pub fn message_tags(
         .unwrap_or_default())
 }
 
-/// The tags of each tag key among `keys`.
+/// SQL `LIKE` pattern matching every system tag (see
+/// [`crate::tags::SYSTEM_TAG_PREFIX`]).
+fn system_tag_pattern() -> String {
+    format!("{}%", crate::tags::SYSTEM_TAG_PREFIX)
+}
+
+/// The tags of each tag key among `keys`, as a reader sees them: system tags
+/// are the app's own bookkeeping and stay out.
 pub fn tags_by_key(
+    conn: &Connection,
+    account: &str,
+    keys: &[String],
+) -> Result<HashMap<String, Vec<String>>> {
+    let mut tags = all_tags_by_key(conn, account, keys)?;
+    for shown in tags.values_mut() {
+        shown.retain(|tag| !crate::tags::is_system_tag(tag));
+    }
+    tags.retain(|_, shown| !shown.is_empty());
+    Ok(tags)
+}
+
+/// [`tags_by_key`] with system tags included: what a message really carries,
+/// for carrying it elsewhere.
+fn all_tags_by_key(
     conn: &Connection,
     account: &str,
     keys: &[String],
@@ -710,6 +733,16 @@ pub fn tags_by_key(
         }
     }
     Ok(out)
+}
+
+/// The tag keys on `account` that carry `tag` (system tags included).
+pub fn keys_with_tag(conn: &Connection, account: &str, tag: &str) -> Result<HashSet<String>> {
+    let mut stmt = conn.prepare_cached(&format!(
+        "SELECT tag_key FROM message_tags
+         WHERE account = ?1 AND tag = ?2 AND state IN {LIVE_STATES}"
+    ))?;
+    let rows = stmt.query_map(params![account, tag], |row| row.get::<_, String>(0))?;
+    Ok(rows.collect::<rusqlite::Result<_>>()?)
 }
 
 /// The tags on a thread card's messages, keyed by card key, scoped and folded

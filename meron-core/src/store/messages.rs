@@ -18,6 +18,20 @@ pub fn upsert_messages(
     folder: &str,
     messages: &[MessageHeader],
 ) -> Result<()> {
+    upsert_messages_marking(conn, account, folder, messages, &[])
+}
+
+/// [`upsert_messages`], marking the rows of `backfill` Inbox backfill (see
+/// [`super::inbox_backfill_uids`]) in the same write, so a stop halfway can't
+/// leave them stored but unmarked (a later sync sees them cached and would
+/// never mark them).
+pub fn upsert_messages_marking(
+    conn: &Connection,
+    account: &str,
+    folder: &str,
+    messages: &[MessageHeader],
+    backfill: &[u32],
+) -> Result<()> {
     let tx = conn.unchecked_transaction()?;
     let removed = removed_uids_in(&tx, account, folder)?;
     // The Message-IDs this batch cached: the only ids whose arrival can hand a
@@ -50,6 +64,9 @@ pub fn upsert_messages(
         }
         if m.files.is_some() {
             extra.insert("attachment_metadata".to_string(), json!(true));
+        }
+        if backfill.contains(&m.uid) {
+            extra.insert(super::ai_sort::INBOX_BACKFILL_KEY.to_string(), json!(1));
         }
         let extra_json = Value::Object(extra).to_string();
         let thread_key = resolve_message_thread_key(&tx, account, &m.thread_key)?;
@@ -98,7 +115,22 @@ pub fn upsert_messages(
             observe_server_tags(&tx, account, folder, m.uid, server_tags)?;
         }
     }
-    reconcile_thread_keys_from(&tx, account, upserted_ids)?;
+    let rekeyed = reconcile_thread_keys_from(&tx, account, upserted_ids)?;
+    // Meron folders follow their conversations: the rows just written and the
+    // rows reconciliation re-keyed, in this same transaction.
+    let mut adopt = meron_row_ids(
+        &tx,
+        account,
+        folder,
+        messages
+            .iter()
+            .filter(|m| !removed.contains(&m.uid))
+            .map(|m| m.uid),
+    )?;
+    if !adopt.is_empty() {
+        adopt.extend(rekeyed.into_iter().map(|(id, old)| (id, Some(old))));
+        meron_adopt(&tx, account, &adopt)?;
+    }
     tx.commit()?;
     Ok(())
 }
@@ -156,11 +188,15 @@ pub(super) fn cached_thread_key_of(
 /// becomes the next id to walk out from, since its own children inherited
 /// through it. `seen` stops the walk from revisiting an id, so a reference cycle
 /// (two messages naming each other) terminates instead of flip-flopping.
+///
+/// Answers with every row it re-keyed and that row's thread key from before,
+/// lowercased, so Meron folders can follow the conversation.
 pub(super) fn reconcile_thread_keys_from(
     conn: &rusqlite::Transaction<'_>,
     account: &str,
     seeds: HashSet<String>,
-) -> Result<()> {
+) -> Result<Vec<(i64, String)>> {
+    let mut rekeyed = Vec::new();
     let mut seen = seeds;
     let mut pending: Vec<String> = seen.iter().cloned().collect();
 
@@ -171,7 +207,8 @@ pub(super) fn reconcile_thread_keys_from(
                 continue;
             };
             let mut stmt = conn.prepare_cached(
-                "SELECT id, lower(COALESCE(json_extract(json, '$.message_id'), ''))
+                "SELECT id, lower(COALESCE(json_extract(json, '$.message_id'), '')),
+                        lower(COALESCE(thread_key, ''))
                    FROM messages
                   WHERE account = ?1
                     AND uid <> 0
@@ -182,14 +219,19 @@ pub(super) fn reconcile_thread_keys_from(
             )?;
             let children = stmt
                 .query_map(params![account, parent_id, canonical], |row| {
-                    Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+                    Ok((
+                        row.get::<_, i64>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                    ))
                 })?
                 .collect::<rusqlite::Result<Vec<_>>>()?;
-            for (id, child_message_id) in children {
+            for (id, child_message_id, old_key) in children {
                 conn.execute(
                     "UPDATE messages SET thread_key = ?1 WHERE id = ?2",
                     params![canonical, id],
                 )?;
+                rekeyed.push((id, old_key));
                 if !child_message_id.is_empty() && seen.insert(child_message_id.clone()) {
                     next.push(child_message_id);
                 }
@@ -197,7 +239,19 @@ pub(super) fn reconcile_thread_keys_from(
         }
         pending = next;
     }
-    Ok(())
+    Ok(rekeyed)
+}
+
+/// UIDs in `folder` whose row a header sync wrote (it always sets a thread
+/// key). A sync reads only the window's other UIDs in full; a row some other
+/// path left without its header fields is read again.
+pub fn header_synced_uids(conn: &Connection, account: &str, folder: &str) -> Result<HashSet<u32>> {
+    let mut stmt = conn.prepare(
+        "SELECT uid FROM messages WHERE account = ?1 AND folder = ?2 AND uid <> 0
+         AND COALESCE(thread_key, '') <> ''",
+    )?;
+    let rows = stmt.query_map(params![account, folder], |row| row.get::<_, u32>(0))?;
+    Ok(rows.collect::<rusqlite::Result<HashSet<_>>>()?)
 }
 
 /// Older header-only rows from before BODYSTRUCTURE was indexed. Bound each
@@ -252,6 +306,21 @@ pub struct RecentFilter {
     pub attachments_only: bool,
 }
 
+/// The keyset cursor of a page that ended at `(date, uid)`: `date:<date>:<uid>`,
+/// or, for a page that mixes folders, `date:<date>:<uid>:<base64url(folder)>`
+/// with the last row's folder as the tie-breaker of equal (date, uid) (UIDs
+/// repeat across folders). See `thread_list::parse_mail_cursor`.
+pub fn format_mail_cursor(date: i64, uid: u32, folder: Option<&str>) -> String {
+    use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
+    match folder {
+        Some(folder) => format!(
+            "date:{date}:{uid}:{}",
+            URL_SAFE_NO_PAD.encode(folder.as_bytes())
+        ),
+        None => format!("date:{date}:{uid}"),
+    }
+}
+
 pub fn get_recent_page(
     conn: &Connection,
     account: &str,
@@ -260,14 +329,59 @@ pub fn get_recent_page(
     before_cursor: Option<(i64, u32)>,
     filter: RecentFilter,
 ) -> Result<(Vec<MessageHeader>, Option<String>)> {
+    get_recent_page_from(conn, account, folder, limit, before_cursor, None, filter)
+}
+
+/// [`get_recent_page`] continuing a cursor that carries its folder
+/// tie-breaker (`before_folder`, see [`format_mail_cursor`]).
+pub fn get_recent_page_from(
+    conn: &Connection,
+    account: &str,
+    folder: &str,
+    limit: u32,
+    before_cursor: Option<(i64, u32)>,
+    before_folder: Option<&str>,
+    filter: RecentFilter,
+) -> Result<(Vec<MessageHeader>, Option<String>)> {
     let probe = limit.saturating_add(1);
+    // Conversations moved into a Meron folder show there instead (never hidden
+    // from Drafts, Trash or Junk).
+    let hide_meron = meron_hides_folder(conn, account, folder)?;
+    // Mail the AI left in another folder: listed in the Inbox (each row
+    // carrying its own folder, so opening it acts on the real message) and
+    // left out of its own folder. Without any, the query is as it always was.
+    let shown = super::ai_sort_inbox_has_rows(conn, account)?;
+    let mixed = shown && folder.eq_ignore_ascii_case("INBOX");
     // Newest-first by send time. The cursor is the (date, uid) of the last row of
     // the previous page; uid is the keyset tiebreaker because `date` is not unique
     // (two messages can share a second), so it gives a stable, gap-free walk.
-    let mut stmt = conn.prepare(
-        "SELECT uid, subject, from_name, from_addr, date, seen, starred, thread_key,
-                json_extract(json, '$.to') FROM messages
-         WHERE account = ?1 AND folder = ?2
+    // A page mixing folders breaks (date, uid) ties by folder too, as UIDs
+    // repeat across folders; an older cursor without it cuts ties as before.
+    let after = if mixed {
+        "(?3 IS NULL
+                OR date < ?3
+                OR (date = ?3 AND (uid < ?4
+                     OR (?9 IS NOT NULL AND uid = ?4 AND folder < ?9))))"
+    } else {
+        "(?3 IS NULL
+                OR date < ?3
+                OR (date = ?3 AND uid < ?4))"
+    };
+    // The Inbox lists only mail newer than the AI sorting age limit (both its
+    // own rows and mail shown there from other folders). Filtered here, before
+    // the LIMIT, so pages stay full and the cursor exact; a card shows while
+    // any of its Inbox messages is new enough, since its newest row decides.
+    let recent = if super::inbox_hides_old(account, folder) {
+        format!(" AND {}", super::inbox_listed_sql("messages", super::now_unix()))
+    } else {
+        String::new()
+    };
+    let narrow = format!(
+        "NOT EXISTS (SELECT 1 FROM ai_sort_hidden h
+                WHERE h.account = messages.account AND h.folder = messages.folder
+                  AND h.uid = messages.uid
+                  AND h.hide_until > CAST(strftime('%s','now') AS INTEGER)){recent}
+           AND (?8 = 0 OR NOT {hidden})
            AND (?6 = 0 OR seen = 0)
            AND (?7 = 0 OR files IS NOT NULL
                 OR (COALESCE(thread_key, '') <> '' AND EXISTS (
@@ -275,55 +389,94 @@ pub fn get_recent_page(
                       WHERE t.account = messages.account
                         AND lower(COALESCE(t.thread_key, '')) = lower(COALESCE(messages.thread_key, ''))
                         AND t.files IS NOT NULL)))
-           AND (?3 IS NULL
-                OR date < ?3
-                OR (date = ?3 AND uid < ?4))
-         ORDER BY date DESC, uid DESC LIMIT ?5",
-    )?;
+           AND {after}",
+        hidden = meron_hidden_sql("messages"),
+    );
+    let columns = "uid, subject, from_name, from_addr, date, seen, starred, thread_key,
+                json_extract(json, '$.to')";
+    let sql = if mixed {
+        format!(
+            "SELECT {columns}, '', folder FROM messages
+              WHERE account = ?1 AND folder = ?2 AND {narrow}
+             UNION ALL
+             SELECT {columns}, folder, folder FROM messages
+              WHERE id IN {ids} AND {narrow}
+             ORDER BY 5 DESC, 1 DESC, 11 DESC LIMIT ?5",
+            ids = super::ai_sort_inbox_ids_sql("?1"),
+        )
+    } else if shown {
+        format!(
+            "SELECT {columns}, '', folder FROM messages
+              WHERE account = ?1 AND folder = ?2 AND {narrow} AND NOT {shown_here}
+             ORDER BY date DESC, uid DESC LIMIT ?5",
+            shown_here = super::ai_sort_inbox_sql("messages"),
+        )
+    } else {
+        format!(
+            "SELECT {columns}, '', folder FROM messages
+              WHERE account = ?1 AND folder = ?2 AND {narrow}
+             ORDER BY date DESC, uid DESC LIMIT ?5"
+        )
+    };
+    let mut stmt = conn.prepare(&sql)?;
     let cursor_date = before_cursor.map(|(date, _)| date);
     let cursor_uid = before_cursor.map(|(_, uid)| uid as i64).unwrap_or(0);
-    let rows = stmt.query_map(
-        params![
-            account,
-            folder,
-            cursor_date,
-            cursor_uid,
-            probe as i64,
-            filter.unread_only as i64,
-            filter.attachments_only as i64
-        ],
-        |row| {
-            let uid = row.get(0)?;
-            Ok(MessageHeader {
-                uid,
-                subject: row.get(1)?,
-                from_name: row.get(2)?,
-                from_addr: row.get(3)?,
-                date: row.get(4)?,
-                seen: row.get::<_, i64>(5)? != 0,
-                starred: row.get::<_, i64>(6)? != 0,
-                thread_key: row
-                    .get::<_, Option<String>>(7)?
-                    .filter(|key| !key.is_empty())
-                    .unwrap_or_else(|| format!("uid:{}", uid)),
-                to: parse_recipients_json(row.get::<_, Option<String>>(8)?),
-                folder: String::new(),
-                ..Default::default()
-            })
-        },
-    )?;
-    let mut out = rows.collect::<rusqlite::Result<Vec<_>>>()?;
+    // Each row, with its real folder (the tie-breaker of a mixed page).
+    let map = |row: &rusqlite::Row<'_>| {
+        let uid = row.get(0)?;
+        let mut header = MessageHeader {
+            uid,
+            subject: row.get(1)?,
+            from_name: row.get(2)?,
+            from_addr: row.get(3)?,
+            date: row.get(4)?,
+            seen: row.get::<_, i64>(5)? != 0,
+            starred: row.get::<_, i64>(6)? != 0,
+            thread_key: row
+                .get::<_, Option<String>>(7)?
+                .filter(|key| !key.is_empty())
+                .unwrap_or_else(|| format!("uid:{}", uid)),
+            to: parse_recipients_json(row.get::<_, Option<String>>(8)?),
+            // Empty for the folder's own mail; another folder's name for
+            // mail shown in the Inbox from there.
+            folder: row.get(9)?,
+            ..Default::default()
+        };
+        // Only the mixed Inbox read fills the folder column, and only for
+        // mail shown from elsewhere: those rows make cards of their own.
+        header.ai_shown = mixed && !header.folder.is_empty();
+        Ok((header, row.get::<_, String>(10)?))
+    };
+    let base = params![
+        account,
+        folder,
+        cursor_date,
+        cursor_uid,
+        probe as i64,
+        filter.unread_only as i64,
+        filter.attachments_only as i64,
+        hide_meron as i64
+    ];
+    let mut out: Vec<(MessageHeader, String)> = if mixed {
+        let mut all: Vec<&dyn rusqlite::ToSql> = base.to_vec();
+        all.push(&before_folder);
+        stmt.query_map(all.as_slice(), map)?
+            .collect::<rusqlite::Result<_>>()?
+    } else {
+        stmt.query_map(base, map)?.collect::<rusqlite::Result<_>>()?
+    };
     let has_more = out.len() > limit as usize;
     if has_more {
         out.truncate(limit as usize);
     }
     let next_cursor = if has_more {
-        out.last()
-            .map(|header| format!("date:{}:{}", header.date, header.uid))
+        out.last().map(|(header, real)| {
+            format_mail_cursor(header.date, header.uid, mixed.then_some(real.as_str()))
+        })
     } else {
         None
     };
-    Ok((out, next_cursor))
+    Ok((out.into_iter().map(|(header, _)| header).collect(), next_cursor))
 }
 
 #[cfg(test)]
@@ -521,18 +674,102 @@ pub fn get_starred(
     folder: &str,
     limit: u32,
 ) -> Result<Vec<MessageHeader>> {
-    let mut stmt = conn.prepare(
-        "SELECT uid, subject, from_name, from_addr, date, seen, starred, thread_key,
-                json_extract(json, '$.to') FROM messages
-         WHERE account = ?1 AND folder = ?2 AND starred <> 0 AND uid <> 0
-         ORDER BY date DESC, uid DESC LIMIT ?3",
-    )?;
-    let rows = stmt.query_map(params![account, folder, limit], message_header_from_row)?;
-    let mut out = rows.collect::<rusqlite::Result<Vec<_>>>()?;
-    for header in &mut out {
-        header.folder = folder.to_string();
+    Ok(get_starred_page(conn, account, folder, limit, None)?.0)
+}
+
+/// One newest-first page of a folder's starred mail, keyset paged like
+/// [`get_recent_page`] (`date:<date>:<uid>` cursors). Conversations in a Meron
+/// folder are left out inside the query, before the LIMIT, so pages stay full.
+pub fn get_starred_page(
+    conn: &Connection,
+    account: &str,
+    folder: &str,
+    limit: u32,
+    before_cursor: Option<(i64, u32)>,
+) -> Result<(Vec<MessageHeader>, Option<String>)> {
+    get_starred_page_from(conn, account, folder, limit, before_cursor, None)
+}
+
+/// [`get_starred_page`] continuing a cursor that carries its folder
+/// tie-breaker (see [`format_mail_cursor`]). The Inbox's Starred view also
+/// lists starred mail the AI shows in the Inbox from other folders (each row
+/// carrying its real folder), which its own folder leaves out.
+pub fn get_starred_page_from(
+    conn: &Connection,
+    account: &str,
+    folder: &str,
+    limit: u32,
+    before_cursor: Option<(i64, u32)>,
+    before_folder: Option<&str>,
+) -> Result<(Vec<MessageHeader>, Option<String>)> {
+    let hide_meron = meron_hides_folder(conn, account, folder)?;
+    let mixed =
+        folder.eq_ignore_ascii_case("INBOX") && super::ai_sort_inbox_has_rows(conn, account)?;
+    // Mail the AI shows in the Inbox from here is left out, as in the folder's list.
+    let shown = if super::ai_sort_inbox_uids(conn, account, folder)?.is_empty() {
+        String::new()
+    } else {
+        format!(" AND NOT {}", super::ai_sort_inbox_sql("messages"))
+    };
+    let columns = "uid, subject, from_name, from_addr, date, seen, starred, thread_key,
+                json_extract(json, '$.to'), folder";
+    let sql = if mixed {
+        // As in `get_recent_page_from`: folder breaks (date, uid) ties.
+        let narrow = format!(
+            "starred <> 0 AND uid <> 0 AND (?6 = 0 OR NOT {hidden})
+               AND (?4 IS NULL OR date < ?4 OR (date = ?4 AND (uid < ?5
+                    OR (?7 IS NOT NULL AND uid = ?5 AND folder < ?7))))",
+            hidden = meron_hidden_sql("messages"),
+        );
+        format!(
+            "SELECT {columns}, 0 FROM messages WHERE account = ?1 AND folder = ?2 AND {narrow}
+             UNION ALL
+             SELECT {columns}, 1 FROM messages WHERE id IN {ids} AND {narrow}
+             ORDER BY 5 DESC, 1 DESC, 10 DESC LIMIT ?3",
+            ids = super::ai_sort_inbox_ids_sql("?1"),
+        )
+    } else {
+        format!(
+            "SELECT {columns}, 0 FROM messages
+             WHERE account = ?1 AND folder = ?2 AND starred <> 0 AND uid <> 0
+               AND (?6 = 0 OR NOT {hidden}){shown}
+               AND (?4 IS NULL OR date < ?4 OR (date = ?4 AND uid < ?5))
+             ORDER BY date DESC, uid DESC LIMIT ?3",
+            hidden = meron_hidden_sql("messages"),
+        )
+    };
+    let mut stmt = conn.prepare(&sql)?;
+    let map = |row: &rusqlite::Row<'_>| {
+        let mut header = message_header_from_row(row)?;
+        header.folder = row.get(9)?;
+        // Mail shown in the Inbox from another folder: a card of its own.
+        header.ai_shown = row.get::<_, i64>(10)? != 0;
+        Ok(header)
+    };
+    let base = params![
+        account,
+        folder,
+        limit.saturating_add(1) as i64,
+        before_cursor.map(|(date, _)| date),
+        before_cursor.map(|(_, uid)| uid as i64).unwrap_or(0),
+        hide_meron as i64
+    ];
+    let mut out: Vec<MessageHeader> = if mixed {
+        let mut all: Vec<&dyn rusqlite::ToSql> = base.to_vec();
+        all.push(&before_folder);
+        stmt.query_map(all.as_slice(), map)?
+            .collect::<rusqlite::Result<_>>()?
+    } else {
+        stmt.query_map(base, map)?.collect::<rusqlite::Result<_>>()?
+    };
+    let has_more = out.len() > limit as usize;
+    if has_more {
+        out.truncate(limit as usize);
     }
-    Ok(out)
+    let next_cursor = has_more.then(|| out.last()).flatten().map(|header| {
+        format_mail_cursor(header.date, header.uid, mixed.then_some(header.folder.as_str()))
+    });
+    Ok((out, next_cursor))
 }
 
 /// What makes two cached rows the same starred conversation.
@@ -615,6 +852,15 @@ pub fn get_thread_headers(
     folder: &str,
     thread_key: &str,
 ) -> Result<Vec<MessageHeader>> {
+    // A sender row acts on that person's messages in this folder only; their
+    // Sent copies and drafts are in the chat but not in its actions.
+    if let Some(addr) = sender_key_addr(thread_key) {
+        let mut headers = sender_folder_headers(conn, account, folder, &addr)?;
+        for header in &mut headers {
+            header.folder = String::new();
+        }
+        return Ok(headers);
+    }
     let mut stmt = conn.prepare(
         "SELECT uid, subject, from_name, from_addr, date, seen, starred, thread_key,
                 json_extract(json, '$.in_reply_to') FROM messages
@@ -686,6 +932,9 @@ pub fn thread_uids_by_folder(
     subject_filter: Option<&str>,
     unseen_only: bool,
 ) -> Result<std::collections::BTreeMap<String, Vec<u32>>> {
+    if let Some(addr) = sender_key_addr(thread_key) {
+        return sender_uids_by_folder(conn, account, folder, &addr, unseen_only);
+    }
     let only_folder = thread_key.starts_with("uid:").then_some(folder);
     let mut stmt = conn.prepare(
         "SELECT folder, uid, subject FROM messages
@@ -767,13 +1016,18 @@ pub fn resolve_message_uids(
 }
 
 /// Delete locally cached messages whose UIDs are no longer on the server.
-/// `server_uids` must be the complete UID set for the folder. Returns the
-/// number of rows removed.
+/// `server_uids` must be the complete UID set for the folder, listed no
+/// earlier than `uid_next` was read. Rows at or above `uid_next` arrived after
+/// that snapshot (a move's copy cached meanwhile, say), so the list cannot
+/// speak for them and they are kept. With `0` (no UIDNEXT) the newest listed
+/// UID bounds it instead; an empty listing prunes everything. Returns the number
+/// of rows removed.
 pub fn prune_missing_messages(
     conn: &Connection,
     account: &str,
     folder: &str,
     server_uids: &std::collections::HashSet<u32>,
+    uid_next: u32,
 ) -> Result<usize> {
     let mut stmt = conn.prepare("SELECT uid FROM messages WHERE account = ?1 AND folder = ?2")?;
     let local_uids: Vec<u32> = stmt
@@ -782,10 +1036,20 @@ pub fn prune_missing_messages(
         .collect();
     drop(stmt);
 
+    // Without a UIDNEXT from the server, the newest listed UID still bounds
+    // the snapshot: anything above it was cached after the listing.
+    let bound = if uid_next == 0 {
+        server_uids
+            .iter()
+            .max()
+            .map_or(0, |max| max.saturating_add(1))
+    } else {
+        uid_next
+    };
     let mut removed = 0usize;
     let mut gone = Vec::new();
     for uid in local_uids {
-        if !server_uids.contains(&uid) {
+        if (bound == 0 || uid < bound) && !server_uids.contains(&uid) {
             conn.execute(
                 "DELETE FROM messages WHERE account = ?1 AND folder = ?2 AND uid = ?3",
                 params![account, folder, uid],
@@ -935,6 +1199,8 @@ pub fn clear_folder_messages(conn: &Connection, account: &str, folder: &str) -> 
         "DELETE FROM removed_message_uids WHERE account = ?1 AND folder = ?2",
         params![account, folder],
     )?;
+    // Nor name Meron-folder members; sync re-adopts the mail by Message-ID.
+    meron_clear_folder_uids(conn, account, folder)?;
     Ok(())
 }
 

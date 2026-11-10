@@ -60,6 +60,7 @@ export function ThreadMoveCopyItems({
   onCopied,
   itemClassName,
   iconSize = 13,
+  moveOnly = false,
 }: {
   threadId: string
   accountId: string
@@ -72,6 +73,8 @@ export function ThreadMoveCopyItems({
   onCopied?: (targetAccountId: string, targetFolderId: string) => void | Promise<void>
   itemClassName?: string
   iconSize?: number
+  /** Show only "Move to" (a single email's menu has no Copy). */
+  moveOnly?: boolean
 }) {
   const { t } = useTranslation()
   const foldersByAccount = useValue(mail$.foldersByAccount)
@@ -251,12 +254,12 @@ export function ThreadMoveCopyItems({
             submenuOpen={moveOpen}
             trailing={<ChevronRight size={13} className="text-secondary" />}
             className={itemClassName}
-            onClick={() => setMoveOpen((open) => !open)}
+            onClick={() => setMoveOpen(true)}
           />
           {moveOpen && moveFlyoutPosition && flyout('move', moveFlyoutPosition)}
         </div>
       )}
-      {mailAccounts.length > 0 && (
+      {!moveOnly && mailAccounts.length > 0 && (
         <div
           ref={copyAnchorRef}
           onMouseEnter={() => {
@@ -274,7 +277,7 @@ export function ThreadMoveCopyItems({
             trailing={<ChevronRight size={13} className="text-secondary" />}
             className={itemClassName}
             onClick={() => {
-              setCopyOpen((open) => !open)
+              setCopyOpen(true)
               void loadCopyTargetFolders()
             }}
           />

@@ -411,7 +411,7 @@ fn own_addresses(conn: &Connection) -> Result<std::collections::HashSet<String>>
 /// An address that sends but doesn't read replies: `no-reply@`,
 /// `account-security-noreply@`, `comment@noreply.github.com`, bounce handlers
 /// and the like. Only the first domain label is checked for no-reply patterns.
-fn is_automated_address(addr: &str) -> bool {
+pub fn is_automated_address(addr: &str) -> bool {
     let (local, domain) = addr.split_once('@').unwrap_or((addr, ""));
     let local = local.to_lowercase();
     let is_no_reply = |part: &str| {

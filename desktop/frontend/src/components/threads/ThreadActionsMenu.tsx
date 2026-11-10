@@ -21,6 +21,7 @@ import {
   RefreshCw,
   Search,
   Trash2,
+  Users,
 } from 'lucide-react'
 import { useTranslation } from '../../lib/i18n'
 import type { FilterMode } from '../../states/ui'
@@ -34,6 +35,9 @@ export type ThreadActionsMenuItemsProps = {
   /** The attachments toggle, independent of `filterMode`; hidden unless wired. */
   attachmentsOnly?: boolean
   onAttachmentsOnlyChange?: (on: boolean) => void
+  /** The group-by-sender switch (one row per person); hidden unless wired. */
+  groupBySender?: boolean
+  onGroupBySenderChange?: (on: boolean) => void
   hasUnread: boolean
   onMarkAllRead: () => void
   /** Only wired for a per-account Trash or Junk folder; the item is hidden otherwise. */
@@ -72,6 +76,8 @@ export function ThreadActionsMenuItems({
   onFilterChange,
   attachmentsOnly = false,
   onAttachmentsOnlyChange,
+  groupBySender = false,
+  onGroupBySenderChange,
   hasUnread,
   onMarkAllRead,
   onEmptyFolder,
@@ -119,11 +125,15 @@ export function ThreadActionsMenuItems({
           {filterItem('all', allLabel ?? t('filters.all'), <Inbox size={13} className="text-secondary shrink-0" />)}
           {filterItem('unread', t('filters.unread'), <Mail size={13} className="text-secondary shrink-0" />)}
           {filterItem('starred', t('filters.starred'), <Star size={13} className="text-secondary shrink-0" />)}
-          {onAttachmentsOnlyChange && (
+          {(onAttachmentsOnlyChange || onGroupBySenderChange) && (
             <>
               {/* An on/off narrowing on top of the choice above, not a fourth
                   choice: unread mail with attachments is a view of its own. */}
               <div className="my-1 border-t border-border" />
+            </>
+          )}
+          {onAttachmentsOnlyChange && (
+            <>
               <button
                 role="menuitemcheckbox"
                 aria-checked={attachmentsOnly}
@@ -140,6 +150,25 @@ export function ThreadActionsMenuItems({
                 <Check size={13} className={`ml-auto shrink-0 ${attachmentsOnly ? '' : 'invisible'}`} />
               </button>
             </>
+          )}
+          {onGroupBySenderChange && (
+            // How the list is grouped, not what it keeps: one row per person
+            // instead of one per conversation.
+            <button
+              role="menuitemcheckbox"
+              aria-checked={groupBySender}
+              className={`${menuItemBase} flex-nowrap ${
+                groupBySender ? 'bg-accent/10 dark:bg-accent/15 text-accent' : 'text-primary hover:bg-hover'
+              }`}
+              onClick={() => {
+                onGroupBySenderChange(!groupBySender)
+                closeMenu()
+              }}
+            >
+              <Users size={13} className="text-secondary shrink-0" />
+              <span className="whitespace-nowrap shrink-0">{t('filters.groupBySender')}</span>
+              <Check size={13} className={`ml-auto shrink-0 ${groupBySender ? '' : 'invisible'}`} />
+            </button>
           )}
           <div className="my-1 border-t border-border" />
         </>
@@ -325,6 +354,8 @@ export function ThreadActionsMenu({
   onFilterChange,
   attachmentsOnly = false,
   onAttachmentsOnlyChange,
+  groupBySender = false,
+  onGroupBySenderChange,
   hasUnread,
   onMarkAllRead,
   onEmptyFolder,
@@ -352,6 +383,8 @@ export function ThreadActionsMenu({
   onFilterChange: (mode: FilterMode) => void
   attachmentsOnly?: boolean
   onAttachmentsOnlyChange?: (on: boolean) => void
+  groupBySender?: boolean
+  onGroupBySenderChange?: (on: boolean) => void
   hasUnread: boolean
   onMarkAllRead: () => void
   onEmptyFolder?: () => void
@@ -413,6 +446,8 @@ export function ThreadActionsMenu({
             onFilterChange={onFilterChange}
             attachmentsOnly={attachmentsOnly}
             onAttachmentsOnlyChange={onAttachmentsOnlyChange}
+            groupBySender={groupBySender}
+            onGroupBySenderChange={onGroupBySenderChange}
             hasUnread={hasUnread}
             onMarkAllRead={onMarkAllRead}
             onEmptyFolder={onEmptyFolder}

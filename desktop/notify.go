@@ -290,13 +290,53 @@ func (a *App) openThreadFromNotification(account, threadID string) {
 		"account":   account,
 		"threadId":  threadID,
 		"threadKey": threadID,
+		// Who sent the notified mail, so group-by-sender opens their chat.
+		"from_addr": notificationSender(account, threadID),
 	})
+}
+
+// notificationSenderEntry remembers the sender address of a delivered
+// notification by the account and thread id its click reports, so every
+// platform's click path gets it without carrying a third value.
+type notificationSenderEntry struct {
+	account, threadID, fromAddr string
+}
+
+var (
+	notificationSendersMu sync.Mutex
+	notificationSenders   []notificationSenderEntry
+)
+
+func rememberNotificationSender(account, threadID, fromAddr string) {
+	if threadID == "" || fromAddr == "" {
+		return
+	}
+	notificationSendersMu.Lock()
+	defer notificationSendersMu.Unlock()
+	notificationSenders = append(notificationSenders, notificationSenderEntry{account, threadID, fromAddr})
+	if over := len(notificationSenders) - maxTrackedNotifications; over > 0 {
+		notificationSenders = notificationSenders[over:]
+	}
+}
+
+// notificationSender is the sender of the newest notification for this
+// thread, or "" when none is remembered.
+func notificationSender(account, threadID string) string {
+	notificationSendersMu.Lock()
+	defer notificationSendersMu.Unlock()
+	for i := len(notificationSenders) - 1; i >= 0; i-- {
+		entry := notificationSenders[i]
+		if entry.account == account && entry.threadID == threadID {
+			return entry.fromAddr
+		}
+	}
+	return ""
 }
 
 func (a *App) notifyNewMail(detail any) {
 	labels := a.currentNativeLabels()
 	count := 1
-	var account, accountName, folder, folderName, from, subject, preview, threadKey string
+	var account, accountName, folder, folderName, from, fromAddr, subject, preview, threadKey string
 	var storeMessages []storeMessage
 	if m, ok := detail.(map[string]any); ok {
 		// Muted accounts still sync (the UI refreshes), they just don't raise an
@@ -312,6 +352,7 @@ func (a *App) notifyNewMail(detail any) {
 		folder, _ = m["folder"].(string)
 		folderName, _ = m["folderName"].(string)
 		from, _ = m["from"].(string)
+		fromAddr, _ = m["from_addr"].(string)
 		subject, _ = m["subject"].(string)
 		preview, _ = m["preview"].(string)
 		threadKey, _ = m["threadKey"].(string)
@@ -362,6 +403,7 @@ func (a *App) notifyNewMail(detail any) {
 		threadID:      notificationThreadID(account, folder, threadKey),
 		storeMessages: storeMessages,
 	}
+	rememberNotificationSender(account, n.threadID, fromAddr)
 
 	// Off the sidecar read loop: the platform notify call can block briefly and
 	// must not stall event processing.
@@ -438,6 +480,7 @@ var notifyReconcileCommands = map[string]bool{
 	"mail.sync": true, "mail.markRead": true, "mail.markAllRead": true, "mail.archive": true,
 	"mail.delete": true, "mail.move": true, "mail.emptyFolder": true, "mail.folderDelete": true,
 	"mail.runRule": true, "account.remove": true, "rss.removeFeed": true,
+	"mail.markMeronFolderRead": true,
 }
 
 // requestNotificationReconcile coalesces a burst of syncs and writes into one

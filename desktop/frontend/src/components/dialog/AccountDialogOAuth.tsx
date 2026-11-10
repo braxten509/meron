@@ -7,7 +7,16 @@ import { useTranslation } from '../../lib/i18n'
 // here later without adding more account-type tabs.
 export function AccountDialogOAuth({ ctl, isSetup }: { ctl: AccountDialogController; isSetup: boolean }) {
   const { t } = useTranslation()
-  const { mode, oauthLabel, gmailConfigured, outlookConfigured, waitingForGoogle, beginOAuth } = ctl
+  const {
+    mode,
+    oauthLabel,
+    gmailConfigured,
+    outlookConfigured,
+    waitingForGoogle,
+    beginOAuth,
+    cancelOAuth,
+    reopenOAuth,
+  } = ctl
   const providerButtons = [
     {
       mode: 'gmail' as const,
@@ -50,11 +59,32 @@ export function AccountDialogOAuth({ ctl, isSetup }: { ctl: AccountDialogControl
         })}
       </div>
       {waitingForGoogle && (
-        <p
-          className={`${isSetup ? 'text-base' : 'text-[0.625rem]'} text-accent font-semibold text-center animate-pulse`}
-        >
-          {t('accounts.oauth.waitingForSignIn', { provider: oauthLabel })}
-        </p>
+        <div className="flex flex-col items-center gap-1.5">
+          <p
+            className={`${isSetup ? 'text-base' : 'text-[0.625rem]'} text-accent font-semibold text-center animate-pulse`}
+          >
+            {t('accounts.oauth.waitingForSignIn', { provider: oauthLabel })}
+          </p>
+          <p className={`${isSetup ? 'text-sm' : 'text-[0.625rem]'} text-secondary text-center`}>
+            <button
+              type="button"
+              onClick={() => void reopenOAuth()}
+              className="cursor-pointer font-semibold text-accent underline underline-offset-2 hover:opacity-80"
+            >
+              {t('accounts.oauth.openAgain')}
+            </button>
+            <span className="mx-2" aria-hidden="true">
+              ·
+            </span>
+            <button
+              type="button"
+              onClick={() => void cancelOAuth()}
+              className="cursor-pointer font-semibold text-accent underline underline-offset-2 hover:opacity-80"
+            >
+              {t('accounts.oauth.cancel')}
+            </button>
+          </p>
+        </div>
       )}
     </div>
   )

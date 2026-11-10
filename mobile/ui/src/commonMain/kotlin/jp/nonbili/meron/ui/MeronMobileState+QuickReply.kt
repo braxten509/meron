@@ -292,6 +292,8 @@ private suspend fun MeronMobileState.saveQuickReplyDraftLocked(showStatus: Boole
     }.fold(
         onSuccess = { savedDraftId ->
             val threadId = thread.backendThreadId()
+            // Its copy can now come back in a read before its body does.
+            quickReplyDraftThreadIds += threadId
             val sameEditor = selectedCoreThread?.backendThreadId() == threadId && quickReplyThreadId == threadId
             val newlyAllocated = draftId.startsWith("local-draft-")
             if (sameEditor && newlyAllocated && quickReplyDraftId.isBlank()) {
@@ -335,11 +337,23 @@ internal fun MeronMobileState.visibleThreadMessages(): List<MessageBody> {
     // Drafts a send has taken over are hidden too, until their discard comes
     // back: navigating away clears the bar's id, so reopening the conversation
     // mid-send would otherwise show the draft beside the reply it was sent as.
-    val hidden = quickReplyConsumedDraftIds.toMutableSet()
+    val hidden = (quickReplyConsumedDraftIds + quickReplyDiscardedDraftIds).toMutableSet()
     if (quickReplyDraftId.isNotBlank()) hidden += quickReplyDraftId.normalizedComposeDraftId()
-    if (hidden.isEmpty()) return messages
+    // A read can find the bar's draft (saved by autosave, or being sent and
+    // discarded) synced from its envelope alone: no body yet, so no Message-ID
+    // to match it by, and it would paint as a "Draft … Loading…" bubble beside
+    // the reply until the discard landed. In a conversation the bar has saved
+    // into, such a row is taken for that draft; once its body arrives it is
+    // recognised by id like any other, and shown if it is a different one.
+    val openThreadId = selectedCoreThread?.backendThreadId().orEmpty()
+    val hideUnidentifiedDrafts = openThreadId.isNotBlank() && openThreadId in quickReplyDraftThreadIds
+    if (hidden.isEmpty() && !hideUnidentifiedDrafts) return messages
     return messages.filterNot {
-        folderIsDrafts(it.folderId) && it.messageId.normalizedComposeDraftId() in hidden
+        folderIsDrafts(it.folderId) &&
+            (
+                it.messageId.normalizedComposeDraftId() in hidden ||
+                    (hideUnidentifiedDrafts && it.bodyMissing && it.messageId.isBlank())
+            )
     }
 }
 
@@ -574,6 +588,10 @@ internal fun MeronMobileState.sendQuickReply() {
     // the text being sent — indistinguishable, by the time the send settles,
     // from a newer reply the user has started.
     claimedDraftOwner?.let { quickReplyConsumedDraftIds += it.draftId.normalizedComposeDraftId() }
+    // Whatever draft this send turns out to consume (the bar's, or one an
+    // autosave hands over below), its server row can come back in a read
+    // before its body does.
+    quickReplyDraftThreadIds += threadId
     val account = coreAccounts.firstOrNull { it.id == accountId }
     val replyFrom = resolveQuickReplyFrom(parent, account)
     val baseParams =
@@ -764,6 +782,7 @@ private suspend fun MeronMobileState.dispatchQuickReplySend(pending: PendingQuic
                     }
                 }.isSuccess
             if (consumedDraftDiscarded) {
+                quickReplyDiscardedDraftIds += owner.draftId.normalizedComposeDraftId()
                 removeDiscardedDraftFromOpenThread(owner.draftId, owner.threadId)
                 // The bar can still be claiming the copy just deleted — an empty
                 // box that was typed in and cleared keeps its id. Leaving the
@@ -794,10 +813,16 @@ private suspend fun MeronMobileState.dispatchQuickReplySend(pending: PendingQuic
             messages = messages.map { if (it.id == pending.tempMessageId) it.copy(sendStatus = SendStatus.None) else it }
         }
         errorBanner = null
-        syncCoreThreads(syncFirst = false)
+        // Shared with the reloads the send's own announcements ask for at the
+        // same moment, instead of one each.
+        scheduleVisibleMailboxReload()
         refreshKanbanColumnsHoldingThread(pending.threadId)
         if (threadStillOpen) {
-            runCatching { reloadCurrentThreadMessages() }.onSuccess {
+            // Through the coalescer: the send's own announcements (Sent copy
+            // cached, sync) ask for the same re-read at the same moment, and
+            // one of those set off before the discard. This returns once a
+            // re-read started after the discard has finished.
+            runCatching { refreshOpenThreadCoalesced() }.onSuccess {
                 // The read can race the server-side discard and return its stale
                 // pre-discard row. The discard already succeeded, so reconcile
                 // that row once more after applying the refreshed conversation.
@@ -875,6 +900,7 @@ internal fun MeronMobileState.retrySentDraftDiscard(owner: ComposeDraftOwner) {
                     }
                 }.isSuccess
             if (discarded) {
+                quickReplyDiscardedDraftIds += id
                 quickReplyConsumedDraftIds -= id
                 removeDiscardedDraftFromOpenThread(owner.draftId, owner.threadId)
                 return@launch

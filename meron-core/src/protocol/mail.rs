@@ -101,7 +101,8 @@ fn finish_mobile_sync(
     account_id: &str,
     folder: &str,
     limit: u32,
-) {
+    announce: bool,
+) -> Vec<Value> {
     prefetch_mobile_bodies(data_dir, engine, account_id, folder);
 
     // Also pull Sent and Drafts so messages sent or drafted from another
@@ -128,6 +129,38 @@ fn finish_mobile_sync(
             ),
         }
     }
+
+    // New mail server filters delivered into other folders goes through AI
+    // sorting too (a no-op unless sorting is set up for the account). Last, as
+    // it doesn't gate the Inbox list either. What it files into Meron folders
+    // with notifications on comes back as `mail.newMessages` details.
+    if folder.eq_ignore_ascii_case("INBOX") {
+        let filed = crate::ffi::engine_block_on(async {
+            anyhow::Ok(crate::engine::ai_sort::check_watched_folders(engine, account_id).await)
+        })
+        .unwrap_or_default();
+        if announce {
+            return meron_details(data_dir, engine, account_id, &filed);
+        }
+    }
+    Vec::new()
+}
+
+/// `mail.newMessages` details for new mail AI sorting filed into Meron
+/// folders with notifications on, one per folder, bodies fetched first.
+fn meron_details(
+    data_dir: &str,
+    engine: &std::sync::Arc<crate::engine::Engine>,
+    account_id: &str,
+    groups: &[crate::engine::ai_sort::MeronArrivals],
+) -> Vec<Value> {
+    groups
+        .iter()
+        .filter_map(|group| {
+            fetch_notification_bodies(data_dir, engine, account_id, &group.folder, &group.headers);
+            crate::ffi::mobile_meron_new_messages_detail(data_dir, account_id, group)
+        })
+        .collect()
 }
 
 /// Run the non-gating sync tail. When the caller opted in via `defer_tail`
@@ -144,21 +177,22 @@ fn run_mobile_sync_tail(
     folder: &str,
     limit: u32,
     defer_tail: bool,
-) {
+) -> Vec<Value> {
     if !defer_tail {
-        finish_mobile_sync(data_dir, engine, account_id, folder, limit);
-        return;
+        return finish_mobile_sync(data_dir, engine, account_id, folder, limit, true);
     }
     let key = format!("{account_id}/{folder}");
     if !claim_sync_tail(&key) {
-        return;
+        return Vec::new();
     }
     let data_dir = data_dir.to_string();
     let engine = engine.clone();
     let account_id = account_id.to_string();
     let folder = folder.to_string();
     std::thread::spawn(move || {
-        finish_mobile_sync(&data_dir, &engine, &account_id, &folder, limit);
+        // The foreground UI's sync: like its own arrivals, which it doesn't
+        // notify for, what this files into Meron folders isn't announced.
+        finish_mobile_sync(&data_dir, &engine, &account_id, &folder, limit, false);
         release_sync_tail(&key);
         // Not `mail.synced`: that handler reloads the thread list (resetting
         // pagination), and the tail never changes the open folder's headers —
@@ -168,6 +202,7 @@ fn run_mobile_sync_tail(
             json!({ "account": account_id, "folder": folder }),
         );
     });
+    Vec::new()
 }
 
 /// Wait out a Sent copy the provider has not exposed yet, off the send call, and
@@ -507,13 +542,16 @@ pub(crate) fn sync_mobile_mail(data_dir: &str, params: &Value) -> Result<Value, 
     };
     let folders_ms = folders_started.elapsed().as_millis();
     let messages_started = std::time::Instant::now();
-    let synced = crate::ffi::engine_block_on(crate::engine::sync_messages(
+    let mut synced = crate::ffi::engine_block_on(crate::engine::sync_messages(
         &engine,
         &account_id,
         &folder,
         limit,
     ))?;
     let messages_ms = messages_started.elapsed().as_millis();
+    // New mail AI sorting filed into Meron folders with notifications on.
+    let mut meron_new_messages =
+        meron_details(data_dir, &engine, &account_id, &std::mem::take(&mut synced.meron_arrivals));
     // Arrivals are only reported for INBOX and folders opted in to notifications.
     let new_messages = (!synced.arrivals.is_empty())
         .then_some(synced.arrivals)
@@ -530,7 +568,14 @@ pub(crate) fn sync_mobile_mail(data_dir: &str, params: &Value) -> Result<Value, 
         "account={account_id} folder={folder} synced={} folders={folders_count} creds_ms={creds_ms} folders_ms={folders_ms} messages_ms={messages_ms}",
         synced.count
     );
-    run_mobile_sync_tail(data_dir, &engine, &account_id, &folder, limit, defer_tail);
+    meron_new_messages.extend(run_mobile_sync_tail(
+        data_dir,
+        &engine,
+        &account_id,
+        &folder,
+        limit,
+        defer_tail,
+    ));
     let mut response = json!({
         "ok": true,
         "account": account_id,
@@ -540,6 +585,10 @@ pub(crate) fn sync_mobile_mail(data_dir: &str, params: &Value) -> Result<Value, 
     });
     if let Some(detail) = new_messages {
         response["new_messages"] = detail;
+    }
+    // One `mail.newMessages`-shaped detail per Meron folder, named after it.
+    if !meron_new_messages.is_empty() {
+        response["meron_new_messages"] = Value::Array(meron_new_messages);
     }
     Ok(response)
 }
@@ -867,21 +916,41 @@ fn list_mobile_account_threads(
         });
     }
 
+    // Sender mode: one row per correspondent, straight from the cache.
+    let sender_page = with_mobile_db(data_dir, |conn| {
+        if request
+            .sender_grouping_in(&conn, &account_id)
+            .map_err(|err| format!("{err:#}"))?
+        {
+            thread_list::sender_page(&conn, &account_id, &request).map_err(|err| format!("{err:#}"))
+        } else {
+            Ok(Value::Null)
+        }
+    })?;
+    if !sender_page.is_null() {
+        return Ok(sender_page);
+    }
+
     // Mobile is cache-first: unlike desktop, starred reads the flags the last
     // sync stored so the list still answers offline, and a failed live search
     // falls back to the cached one.
     let mut search_incomplete = false;
     let (messages, next_cursor) = match request.source() {
-        thread_list::MailSource::Starred => (
-            get_cached_mobile_starred(data_dir, &account_id, &folder_id, limit)?,
-            None,
-        ),
+        thread_list::MailSource::Starred => get_cached_mobile_starred(
+            data_dir,
+            &account_id,
+            &folder_id,
+            limit,
+            request.before_cursor,
+            request.before_folder.as_deref(),
+        )?,
         thread_list::MailSource::Recent { filter } => get_cached_mobile_mail_page(
             data_dir,
             &account_id,
             &folder_id,
             limit,
             request.before_cursor,
+            request.before_folder.as_deref(),
             filter,
         )?,
         thread_list::MailSource::Search => {
@@ -1094,21 +1163,35 @@ fn get_cached_mobile_mail_page(
     folder_id: &str,
     limit: u32,
     before_cursor: Option<(i64, u32)>,
+    before_folder: Option<&str>,
     filter: store::RecentFilter,
 ) -> Result<(Vec<MessageHeader>, Option<String>), String> {
     let conn = open_mobile_db(data_dir)?;
-    store::get_recent_page(&conn, account_id, folder_id, limit, before_cursor, filter)
-        .map_err(|err| err.to_string())
+    store::get_recent_page_from(
+        &conn,
+        account_id,
+        folder_id,
+        limit,
+        before_cursor,
+        before_folder,
+        filter,
+    )
+    .map_err(|err| err.to_string())
 }
 
+/// The folder's starred mail, newest first and cursor paged; conversations in
+/// a Meron folder are left out before the LIMIT.
 fn get_cached_mobile_starred(
     data_dir: &str,
     account_id: &str,
     folder_id: &str,
     limit: u32,
-) -> Result<Vec<MessageHeader>, String> {
+    before_cursor: Option<(i64, u32)>,
+    before_folder: Option<&str>,
+) -> Result<(Vec<MessageHeader>, Option<String>), String> {
     let conn = open_mobile_db(data_dir)?;
-    store::get_starred(&conn, account_id, folder_id, limit).map_err(|err| err.to_string())
+    store::get_starred_page_from(&conn, account_id, folder_id, limit, before_cursor, before_folder)
+        .map_err(|err| err.to_string())
 }
 
 /// The mailboxes a mobile search covers: the open folder plus Sent, read from
@@ -1206,7 +1289,9 @@ pub(crate) fn read_mobile_thread(data_dir: &str, params: &Value) -> Result<Value
             );
         })
     };
-    crate::ffi::engine_block_on(crate::thread_read::read_thread_page(
+    // With look-ahead: the reader pages back a page at a time and would
+    // otherwise meet every older page as placeholders filling in under it.
+    crate::ffi::engine_block_on(crate::thread_read::read_thread_page_with_lookahead(
         &engine,
         crate::thread_read::ThreadReadArgs {
             account: &parsed.account,
@@ -1303,6 +1388,65 @@ pub(crate) fn mobile_messages_still_unread(
     with_mobile_db(data_dir, |conn| messages_still_unread(&conn, params))
 }
 
+/// A local cache write after the server already moved or deleted the mail.
+/// Its failure is logged, not returned: the server change stands, so the
+/// command reports it done (and its undo still works from the server copies),
+/// and the next sync of the folders brings the cache in line with the server.
+fn local_after_server_change<T>(action: &str, account: &str, result: anyhow::Result<T>) {
+    if let Err(err) = result {
+        crate::mlog!(
+            crate::log::Level::Warn,
+            "mail.sync",
+            "account={account}: {action} done on the server, local cache update failed: {err:#}"
+        );
+    }
+}
+
+/// Cache a server move within one account the way
+/// [`crate::engine::move_within_account`] does: store the target's re-read
+/// window (the real copies, under their new UIDs), then drop the source rows.
+/// Source rows are never relabelled into the target, since their UIDs name
+/// other messages there. Failures are logged and the affected folders resynced,
+/// as is the target when the move's copies could not be read or identified.
+/// Returns whether the cache now holds the move, so its unread counts are real.
+#[allow(clippy::too_many_arguments)]
+fn cache_server_move(
+    data_dir: &str,
+    conn: &rusqlite::Connection,
+    action: &str,
+    account: &str,
+    source: &str,
+    target: &str,
+    uids: &[u32],
+    copies: &crate::engine::MovedCopies,
+) -> bool {
+    let stored = copies.store(conn, account, target);
+    let removed = store::delete_messages_by_uid(conn, account, source, uids);
+    // The re-read window holds the newest messages, so mail arriving at the
+    // same time can push a copy out of it. The target counts are only real
+    // when every identified copy is in the stored window.
+    let copies_in_batch = copies.batch.as_ref().is_some_and(|batch| {
+        let cached: std::collections::HashSet<u32> =
+            batch.messages.iter().map(|message| message.uid).collect();
+        copies.uids.iter().all(|uid| cached.contains(uid))
+    });
+    let target_cached = stored.is_ok() && !copies.uids.is_empty() && copies_in_batch;
+    let removed_ok = removed.is_ok();
+    local_after_server_change(action, account, stored);
+    local_after_server_change(action, account, removed);
+    let mut resync = Vec::new();
+    if !removed_ok {
+        resync.push(source);
+    }
+    if !target_cached {
+        resync.push(target);
+    }
+    if !resync.is_empty() {
+        crate::ffi::spawn_folder_resync(data_dir, account, &resync);
+    }
+    target_cached && removed_ok
+}
+
 pub(crate) fn delete_mobile_thread(data_dir: &str, params: &Value) -> Result<Value, String> {
     let thread_id = req_str(params, "thread_id")?;
     let parsed = parse_thread_id_with_request_folder(&thread_id, params)
@@ -1310,6 +1454,20 @@ pub(crate) fn delete_mobile_thread(data_dir: &str, params: &Value) -> Result<Val
     let engine = crate::ffi::engine_for(data_dir)?;
     with_mobile_db(data_dir, |conn| {
         let uids = requested_mobile_uids(&conn, &parsed, params)?;
+        // Deleting a sender row also takes their older mail in this folder
+        // that the cache never held.
+        let uids = match store::sender_key_addr(&parsed.thread_key) {
+            Some(addr) if !has_requested_mobile_message_ids(params) => {
+                crate::ffi::engine_block_on(crate::engine::sender_delete_uids(
+                    &engine,
+                    &parsed.account,
+                    &parsed.folder,
+                    &addr,
+                    uids,
+                ))?
+            }
+            _ => uids,
+        };
         if uids.is_empty() {
             return Ok(json!({ "ok": true, "deleted": 0 }));
         }
@@ -1331,12 +1489,23 @@ pub(crate) fn delete_mobile_thread(data_dir: &str, params: &Value) -> Result<Val
                 .await,
             )
         })?;
+        // Deleting the whole conversation takes it out of its Meron folder.
+        let meron_entry = crate::meron_folders::entry_before_action(
+            &conn,
+            &parsed.account,
+            &parsed.folder,
+            &parsed.thread_key,
+            parsed.uid,
+            !has_requested_mobile_message_ids(params),
+        );
+        crate::meron_folders::unmark_before_action_blocking(&engine, &parsed.account, &meron_entry);
         let delete_result = crate::ffi::engine_block_on(crate::engine::delete_to_trash(
             &engine,
             &parsed.account,
             &parsed.folder,
             &uids,
         ))?;
+        let meron_released = crate::meron_folders::release_after_action(&conn, meron_entry);
         // Undo moves exactly these copies back out of Trash.
         let trash_copies = match &delete_result {
             Some(trashed) => {
@@ -1353,9 +1522,14 @@ pub(crate) fn delete_mobile_thread(data_dir: &str, params: &Value) -> Result<Val
                         .await,
                     )
                 })?;
-                copies
-                    .store(&conn, &parsed.account, &trashed.folder)
-                    .map_err(|err| err.to_string())?;
+                if let Err(err) = copies.store(&conn, &parsed.account, &trashed.folder) {
+                    local_after_server_change("delete", &parsed.account, Err::<(), _>(err));
+                    crate::ffi::spawn_folder_resync(
+                        data_dir,
+                        &parsed.account,
+                        &[trashed.folder.as_str()],
+                    );
+                }
                 copies.uids
             }
             None => Vec::new(),
@@ -1363,17 +1537,57 @@ pub(crate) fn delete_mobile_thread(data_dir: &str, params: &Value) -> Result<Val
         // Discarding a draft must also drop hidden local copies sharing its
         // Message-ID (stale autosaves the pane deduped away), or the thread
         // card keeps its has_draft badge until the next full sync.
-        if store::folder_role(&conn, &parsed.account, &parsed.folder)
-            .map_err(|err| err.to_string())?
-            == "drafts"
+        let siblings = if store::folder_role(&conn, &parsed.account, &parsed.folder)
+            .is_ok_and(|role| role == "drafts")
         {
             store::delete_draft_sibling_copies(&conn, &parsed.account, &parsed.folder, &uids)
-                .map_err(|err| err.to_string())?;
+        } else {
+            Ok(0)
+        };
+        let rows = store::delete_messages_by_uid(&conn, &parsed.account, &parsed.folder, &uids);
+        let cache_ok = siblings.is_ok() && rows.is_ok();
+        // The whole conversation went: it starts fresh when new mail arrives
+        // (see `store::ChatScope`). Needs the deleted rows out of the cache.
+        if cache_ok
+            && !has_requested_mobile_message_ids(params)
+            && store::leave_replies_out_after_delete(
+                &conn,
+                &parsed.account,
+                &parsed.folder,
+                &parsed.thread_key,
+                parsed.subject_filter.as_deref(),
+                delete_result
+                    .as_ref()
+                    .map(|trashed| (trashed.folder.as_str(), trash_copies.as_slice())),
+            )
+        {
+            crate::ffi::spawn_tag_push(data_dir, &parsed.account);
         }
-        store::delete_messages_by_uid(&conn, &parsed.account, &parsed.folder, &uids)
-            .map_err(|err| err.to_string())?;
+        if !cache_ok {
+            // Deleted rows are still cached: resync the folder, whose server
+            // UID list no longer has them, so the sync prunes them.
+            local_after_server_change("delete", &parsed.account, siblings);
+            local_after_server_change("delete", &parsed.account, rows);
+            crate::ffi::spawn_folder_resync(data_dir, &parsed.account, &[parsed.folder.as_str()]);
+        }
         // Report the successful server operation, not the racy local row count.
         let deleted = uids.len();
+        // A cache still holding the deleted rows would report wrong unread
+        // counts: answer without them.
+        if !cache_ok {
+            let mut out = match &delete_result {
+                None => json!({ "ok": true, "deleted": deleted, "permanent": true }),
+                Some(crate::engine::Trashed { folder: trash, .. }) => json!({
+                    "ok": true,
+                    "deleted": deleted,
+                    "trash": trash,
+                    "thread_id": format_thread_id(&parsed.account, trash, &parsed.thread_key),
+                    "target_uids": trash_copies,
+                }),
+            };
+            crate::meron_folders::ReleasedCard::annotate(&meron_released, &mut out);
+            return Ok(out);
+        }
         match delete_result {
             None => crate::mail_model::mutation_result(
                 json!({ "ok": true, "deleted": deleted, "permanent": true }),
@@ -1407,6 +1621,10 @@ pub(crate) fn delete_mobile_thread(data_dir: &str, params: &Value) -> Result<Val
                 )
             }
         }
+        .map(|mut out| {
+            crate::meron_folders::ReleasedCard::annotate(&meron_released, &mut out);
+            out
+        })
         .map_err(|err| err.to_string())
     })
 }
@@ -1416,7 +1634,20 @@ pub(crate) fn archive_mobile_thread(data_dir: &str, params: &Value) -> Result<Va
     let parsed = parse_thread_id(&thread_id).ok_or_else(|| "invalid thread_id".to_string())?;
     let engine = crate::ffi::engine_for(data_dir)?;
     with_mobile_db(data_dir, |conn| {
-        let target_folder = find_cached_archive_folder(&conn, &parsed.account)?;
+        let target_folder = match find_cached_archive_folder(&conn, &parsed.account) {
+            Ok(folder) => folder,
+            // No archive mailbox: a whole conversation is archived Meron-only
+            // (filed into the built-in Archive here, no server move).
+            Err(no_archive) => {
+                let Some((result, jobs)) = crate::meron_folders::archive_meron_only(&conn, &thread_id)
+                    .map_err(|err| format!("{err:#}"))?
+                else {
+                    return Err(no_archive);
+                };
+                crate::meron_marks::spawn_writes(&engine, jobs);
+                return Ok(result);
+            }
+        };
         if parsed.folder == target_folder {
             return Ok(json!({
                 "ok": true,
@@ -1452,10 +1683,40 @@ pub(crate) fn archive_mobile_thread(data_dir: &str, params: &Value) -> Result<Va
                 .await,
             )
         })?;
+        // Archiving or moving the whole conversation takes it out of its
+        // Meron folder once the server move succeeded.
+        let meron_entry = crate::meron_folders::entry_before_action(
+            &conn,
+            &parsed.account,
+            &parsed.folder,
+            &parsed.thread_key,
+            parsed.uid,
+            true,
+        );
+        // A whole conversation archived goes into the built-in Archive too.
+        let archive_keys = crate::meron_folders::archive_filing_keys(
+            &conn,
+            &parsed.account,
+            &parsed.folder,
+            &parsed.thread_key,
+            &uids,
+            true,
+        );
+        if archive_keys.is_some() {
+            crate::meron_folders::prepare_archive_marks_blocking(
+                &engine,
+                &parsed.account,
+                &meron_entry,
+                &parsed.folder,
+                &uids,
+            );
+        } else {
+            crate::meron_folders::unmark_before_action_blocking(&engine, &parsed.account, &meron_entry);
+        }
         let op_folder = parsed.folder.clone();
         let op_target = target_folder.clone();
         let op_uids = uids.clone();
-        let uid_next_before = crate::ffi::engine_block_on(engine.with_write_session(
+        let moved_on_server = crate::ffi::engine_block_on(engine.with_write_session(
             &parsed.account,
             move |session| {
                 let source = op_folder.clone();
@@ -1465,7 +1726,24 @@ pub(crate) fn archive_mobile_thread(data_dir: &str, params: &Value) -> Result<Va
                     async move { imap::move_to_folder(session, &source, &target, &uids).await },
                 )
             },
-        ))?;
+        ));
+        let uid_next_before = match moved_on_server {
+            Ok(uid_next_before) => uid_next_before,
+            Err(err) => {
+                if archive_keys.is_some() {
+                    crate::meron_folders::restore_marks_after_failed_archive(
+                        &engine,
+                        &conn,
+                        &parsed.account,
+                        &meron_entry,
+                        &parsed.folder,
+                        &uids,
+                    );
+                }
+                return Err(err);
+            }
+        };
+        let meron_released = crate::meron_folders::release_after_action(&conn, meron_entry);
         let copies = crate::ffi::engine_block_on(async {
             anyhow::Ok(
                 crate::engine::refresh_moved_copies(
@@ -1479,29 +1757,44 @@ pub(crate) fn archive_mobile_thread(data_dir: &str, params: &Value) -> Result<Va
                 .await,
             )
         })?;
-        copies
-            .store(&conn, &parsed.account, &target_folder)
-            .map_err(|err| err.to_string())?;
-        store::move_messages_by_uid(
+        let cache_ok = cache_server_move(
+            data_dir,
             &conn,
+            "archive",
             &parsed.account,
             &parsed.folder,
             &target_folder,
             &uids,
-        )
-        .map_err(|err| err.to_string())?;
+            &copies,
+        );
+        if let Some(keys) = &archive_keys {
+            crate::meron_folders::file_after_archive(
+                &conn,
+                &parsed.account,
+                &target_folder,
+                &copies.uids,
+                keys,
+            );
+        }
+        crate::meron_marks::flush_archive_unmarks(&engine);
         // The server MOVE succeeded for all resolved UIDs. A concurrent sync
         // can remove a source cache row before this local reconciliation runs.
         let moved = uids.len();
         let moved_thread_id = format_thread_id(&parsed.account, &target_folder, &parsed.thread_key);
+        let mut result = json!({
+            "ok": true,
+            "moved": moved,
+            "folder": target_folder,
+            "thread_id": moved_thread_id,
+            "target_uids": copies.uids,
+        });
+        crate::meron_folders::ReleasedCard::annotate(&meron_released, &mut result);
+        // A cache that missed the move would report wrong unread counts.
+        if !cache_ok {
+            return Ok(result);
+        }
         crate::mail_model::mutation_result(
-            json!({
-                "ok": true,
-                "moved": moved,
-                "folder": target_folder,
-                "thread_id": moved_thread_id,
-                "target_uids": copies.uids,
-            }),
+            result,
             &conn,
             &parsed.account,
             &thread_id,
@@ -1519,6 +1812,16 @@ pub(crate) fn move_mobile_thread(data_dir: &str, params: &Value) -> Result<Value
     let thread_id = req_str(params, "thread_id")?;
     let target_folder = canon_folder(&req_str(params, "target_folder_id")?);
     let parsed = parse_thread_id(&thread_id).ok_or_else(|| "invalid thread_id".to_string())?;
+    // An Undo moves back exactly the copies the action made. Without them it
+    // would fall back to the thread id, which in Archive or Trash names other
+    // mail (a `uid:` id is another message there; a real thread takes the
+    // whole conversation out): refuse instead of guessing.
+    let undo = crate::meron_folders::UndoRestore::from_params(params);
+    if (undo.is_some() || requests_empty_message_ids(params))
+        && !has_requested_mobile_message_ids(params)
+    {
+        return Err("undo unavailable: the moved copies are unknown".to_string());
+    }
     let target_account = params
         .get("target_account_id")
         .and_then(Value::as_str)
@@ -1535,7 +1838,16 @@ pub(crate) fn move_mobile_thread(data_dir: &str, params: &Value) -> Result<Value
                     }
                 }
             }
-            crate::ffi::engine_block_on(crate::engine::move_between_accounts(
+            let meron_entry = crate::meron_folders::entry_before_action(
+                &conn,
+                &parsed.account,
+                &parsed.folder,
+                &parsed.thread_key,
+                parsed.uid,
+                !has_requested_mobile_message_ids(params),
+            );
+            crate::meron_folders::unmark_before_action_blocking(&engine, &parsed.account, &meron_entry);
+            let mut result = crate::ffi::engine_block_on(crate::engine::move_between_accounts(
                 &engine,
                 &parsed.account,
                 &parsed.folder,
@@ -1543,7 +1855,10 @@ pub(crate) fn move_mobile_thread(data_dir: &str, params: &Value) -> Result<Value
                 target_account,
                 &target_folder,
                 &uids,
-            ))
+            ))?;
+            let meron_released = crate::meron_folders::release_after_action(&conn, meron_entry);
+            crate::meron_folders::ReleasedCard::annotate(&meron_released, &mut result);
+            Ok(result)
         });
     }
     if parsed.folder == target_folder {
@@ -1577,10 +1892,55 @@ pub(crate) fn move_mobile_thread(data_dir: &str, params: &Value) -> Result<Value
                 .await,
             )
         })?;
+        // Archiving or moving the whole conversation takes it out of its
+        // Meron folder once the server move succeeded.
+        let whole = !has_requested_mobile_message_ids(params);
+        let mut meron_entry = crate::meron_folders::entry_before_action(
+            &conn,
+            &parsed.account,
+            &parsed.folder,
+            &parsed.thread_key,
+            parsed.uid,
+            whole,
+        );
+        // Exactly these copies out of the archive mailbox (an Undo of an
+        // archive, say): they leave the built-in Archive.
+        if meron_entry.is_none() && !whole {
+            meron_entry = crate::meron_folders::archive_card_of_copies(
+                &conn,
+                &parsed.account,
+                &parsed.folder,
+                &uids,
+            );
+        }
+        // Moved into the archive mailbox as a whole: filed into Archive too.
+        let archive_keys = if crate::meron_folders::is_archive_target(&conn, &parsed.account, &target_folder) {
+            crate::meron_folders::archive_filing_keys(
+                &conn,
+                &parsed.account,
+                &parsed.folder,
+                &parsed.thread_key,
+                &uids,
+                whole,
+            )
+        } else {
+            None
+        };
+        if archive_keys.is_some() {
+            crate::meron_folders::prepare_archive_marks_blocking(
+                &engine,
+                &parsed.account,
+                &meron_entry,
+                &parsed.folder,
+                &uids,
+            );
+        } else {
+            crate::meron_folders::unmark_before_action_blocking(&engine, &parsed.account, &meron_entry);
+        }
         let op_folder = parsed.folder.clone();
         let op_target = target_folder.clone();
         let op_uids = uids.clone();
-        let uid_next_before = crate::ffi::engine_block_on(engine.with_write_session(
+        let moved_on_server = crate::ffi::engine_block_on(engine.with_write_session(
             &parsed.account,
             move |session| {
                 let source = op_folder.clone();
@@ -1590,7 +1950,28 @@ pub(crate) fn move_mobile_thread(data_dir: &str, params: &Value) -> Result<Value
                     async move { imap::move_to_folder(session, &source, &target, &uids).await },
                 )
             },
-        ))?;
+        ));
+        let uid_next_before = match moved_on_server {
+            Ok(uid_next_before) => uid_next_before,
+            Err(err) => {
+                if archive_keys.is_some() {
+                    crate::meron_folders::restore_marks_after_failed_archive(
+                        &engine,
+                        &conn,
+                        &parsed.account,
+                        &meron_entry,
+                        &parsed.folder,
+                        &uids,
+                    );
+                } else {
+                    // Out of the archive mailbox: the Archive card keeps its
+                    // place, so its marks come back.
+                    crate::meron_folders::restore_archive_card_marks(&engine, &conn, &meron_entry);
+                }
+                return Err(err);
+            }
+        };
+        let meron_released = crate::meron_folders::release_after_action(&conn, meron_entry);
         let copies = crate::ffi::engine_block_on(async {
             anyhow::Ok(
                 crate::engine::refresh_moved_copies(
@@ -1604,28 +1985,51 @@ pub(crate) fn move_mobile_thread(data_dir: &str, params: &Value) -> Result<Value
                 .await,
             )
         })?;
-        copies
-            .store(&conn, &parsed.account, &target_folder)
-            .map_err(|err| err.to_string())?;
-        store::move_messages_by_uid(
+        let cache_ok = cache_server_move(
+            data_dir,
             &conn,
+            "move",
             &parsed.account,
             &parsed.folder,
             &target_folder,
             &uids,
-        )
-        .map_err(|err| err.to_string())?;
+            &copies,
+        );
+        if let Some(keys) = &archive_keys {
+            crate::meron_folders::file_after_archive(
+                &conn,
+                &parsed.account,
+                &target_folder,
+                &copies.uids,
+                keys,
+            );
+        }
+        crate::meron_marks::flush_archive_unmarks(&engine);
+        if let Some(undo) = &undo {
+            let jobs = undo.apply(&conn, &parsed.account, &parsed.thread_key, &target_folder, &copies.uids);
+            crate::meron_marks::spawn_writes(&engine, jobs);
+            // An Undo of a delete: the replies it left out come back.
+            if store::bring_replies_back_after_undo(&conn, &parsed.account, &parsed.folder, &uids) {
+                crate::ffi::spawn_tag_push(data_dir, &parsed.account);
+            }
+        }
         // Report the successful server operation, not the racy local row count.
         let moved = uids.len();
         let moved_thread_id = format_thread_id(&parsed.account, &target_folder, &parsed.thread_key);
+        let mut result = json!({
+            "ok": true,
+            "moved": moved,
+            "folder": target_folder,
+            "thread_id": moved_thread_id,
+            "target_uids": copies.uids,
+        });
+        crate::meron_folders::ReleasedCard::annotate(&meron_released, &mut result);
+        // A cache that missed the move would report wrong unread counts.
+        if !cache_ok {
+            return Ok(result);
+        }
         crate::mail_model::mutation_result(
-            json!({
-                "ok": true,
-                "moved": moved,
-                "folder": target_folder,
-                "thread_id": moved_thread_id,
-                "target_uids": copies.uids,
-            }),
+            result,
             &conn,
             &parsed.account,
             &thread_id,
@@ -1714,7 +2118,7 @@ pub(crate) fn copy_mobile_thread(data_dir: &str, params: &Value) -> Result<Value
         let batch = &refresh.batch;
         store::ensure_folder(&conn, &target_account, &target_folder)
             .map_err(|err| err.to_string())?;
-        store::upsert_messages(&conn, &target_account, &target_folder, &batch.messages)
+        store::upsert_window_messages(&conn, &target_account, &target_folder, batch)
             .map_err(|err| err.to_string())?;
         store::set_folder_state(
             &conn,
@@ -1913,8 +2317,9 @@ pub(crate) fn mark_mobile_folder_all_read(data_dir: &str, params: &Value) -> Res
         if is_rss_account(&conn, &account_id)? {
             return Ok(json!({ "ok": true, "updated": 0, "rss": true }));
         }
-        let uids =
-            store::get_unseen_uids(&conn, &account_id, &folder).map_err(|err| err.to_string())?;
+        // Mail in Meron folders stays unread: each has its own Mark all read.
+        let uids = store::get_visible_unseen_uids(&conn, &account_id, &folder)
+            .map_err(|err| err.to_string())?;
         let updated = uids.len();
         if !uids.is_empty() {
             let creds = load_mobile_account_creds(&conn, &account_id)?;
@@ -1937,8 +2342,36 @@ pub(crate) fn mark_mobile_folder_all_read(data_dir: &str, params: &Value) -> Res
                 },
             ))?;
         }
-        store::mark_folder_seen(&conn, &account_id, &folder, true)
+        store::mark_visible_folder_seen(&conn, &account_id, &folder)
             .map_err(|err| err.to_string())?;
+        // The Inbox also lists mail the AI left in other folders: mark it read
+        // where each message really is.
+        let mut updated = updated;
+        if folder.eq_ignore_ascii_case("INBOX") {
+            let shown = store::ai_sort_inbox_unseen(&conn, &account_id)
+                .map_err(|err| err.to_string())?;
+            for (shown_folder, shown_uids) in shown {
+                let select_folder = shown_folder.clone();
+                let seen_uids = shown_uids.clone();
+                crate::ffi::engine_block_on(engine.with_flag_write_session(
+                    &account_id,
+                    move |session| {
+                        let folder = select_folder.clone();
+                        Box::pin(async move { imap::prepare_flag_update(session, &folder).await })
+                    },
+                    move |session| {
+                        let uids = seen_uids.clone();
+                        Box::pin(async move {
+                            imap::store_seen(session, &uids, true).await?;
+                            anyhow::Ok(())
+                        })
+                    },
+                ))?;
+                store::meron_mark_seen(&conn, &account_id, &shown_folder, &shown_uids)
+                    .map_err(|err| err.to_string())?;
+                updated += shown_uids.len();
+            }
+        }
         crate::mail_model::mutation_result(
             json!({ "ok": true, "updated": updated, "folder": folder }),
             &conn,
@@ -2163,6 +2596,65 @@ pub(crate) fn stop_mobile_rule(data_dir: &str, params: &Value) -> Result<Value, 
     })
 }
 
+/// The phone's AI sorting commands, through the engine (it holds the keys and
+/// the verified Tinfoil client).
+pub(crate) fn mobile_ai_sort(
+    data_dir: &str,
+    command: &str,
+    params: &Value,
+) -> Result<Value, String> {
+    let engine = crate::ffi::engine_for(data_dir)?;
+    crate::ffi::engine_block_on(crate::ai_sort::dispatch(&engine, command, params))
+}
+
+/// "Copy setup to another device" on the phone, through the engine (it holds
+/// the keys); its network work goes on in the engine's runtime.
+pub(crate) fn mobile_setup_copy(
+    data_dir: &str,
+    command: &str,
+    params: &Value,
+) -> Result<Value, String> {
+    let engine = crate::ffi::engine_for(data_dir)?;
+    crate::ffi::engine_block_on(crate::setup_copy::dispatch(
+        &engine, command, params, "phone",
+    ))
+}
+
+/// The Meron folder commands on the phone: store only, except Mark all read,
+/// which needs the engine for the servers.
+pub(crate) fn mobile_meron_folders(
+    data_dir: &str,
+    command: &str,
+    params: &Value,
+) -> Result<Value, String> {
+    if command == "markAllRead" {
+        let engine = crate::ffi::engine_for(data_dir)?;
+        return crate::ffi::engine_block_on(crate::meron_folders::mark_all_read(&engine, params));
+    }
+    // Out of the built-in Archive (and the Undo of that) moves mail on the
+    // server.
+    if matches!(command, "moveIn" | "moveOut") {
+        let engine = crate::ffi::engine_for(data_dir)?;
+        return crate::ffi::engine_block_on(crate::meron_folders::move_with_server(
+            &engine, command, params,
+        ));
+    }
+    let mut jobs = Vec::new();
+    let result = with_mobile_db(data_dir, |conn| {
+        let (result, wanted) = crate::meron_folders::dispatch_with_marks(&conn, command, params)
+            .map_err(|err| format!("{err:#}"))?;
+        jobs = wanted;
+        Ok(result)
+    })?;
+    // Filing changed: the marks other devices follow, in the background.
+    if !jobs.is_empty()
+        && let Ok(engine) = crate::ffi::engine_for(data_dir)
+    {
+        crate::meron_marks::spawn_writes(&engine, jobs);
+    }
+    Ok(result)
+}
+
 pub(crate) fn run_mobile_rule(data_dir: &str, params: &Value) -> Result<Value, String> {
     let id = req_str(params, "id")?;
     let engine = crate::ffi::engine_for(data_dir)?;
@@ -2190,6 +2682,14 @@ pub(crate) fn cached_thread_uids(
         &[],
     )
     .map_err(|err| err.to_string())
+}
+
+/// `message_ids` sent but empty: "exactly these messages", none of them.
+fn requests_empty_message_ids(params: &Value) -> bool {
+    params
+        .get("message_ids")
+        .and_then(Value::as_array)
+        .is_some_and(|items| items.is_empty())
 }
 
 pub(crate) fn has_requested_mobile_message_ids(params: &Value) -> bool {

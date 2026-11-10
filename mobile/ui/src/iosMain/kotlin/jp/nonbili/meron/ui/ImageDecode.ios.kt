@@ -4,4 +4,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import org.jetbrains.skia.Image
 
-actual fun decodeImageBitmap(bytes: ByteArray): ImageBitmap? = runCatching { Image.makeFromEncoded(bytes).toComposeImageBitmap() }.getOrNull()
+// maxSide is not applied on iOS yet: Skia decodes at full size.
+actual fun decodeImageBitmap(bytes: ByteArray, maxSide: Int): ImageBitmap? = runCatching { Image.makeFromEncoded(bytes).toComposeImageBitmap() }.getOrNull()
+
+actual fun decodeThumbnailBitmap(bytes: ByteArray, side: Int): ImageBitmap? = decodeImageBitmap(bytes, 0)

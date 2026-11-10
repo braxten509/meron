@@ -74,6 +74,81 @@ impl EngineHost for DesktopHost {
     ) -> anyhow::Result<()> {
         secrets::store(account, secrets)
     }
+
+    /// An AI sorting key, kept in the keychain like an account password: the
+    /// value rides in a blank account's password field.
+    fn load_named_secret(
+        &self,
+        _db: &std::sync::Mutex<rusqlite::Connection>,
+        name: &str,
+    ) -> anyhow::Result<Option<String>> {
+        let stored = secrets::load(name).map_err(|err| anyhow::anyhow!("{err:#}"))?;
+        if stored.is_empty() {
+            return Ok(None);
+        }
+        let mut creds = blank_creds();
+        stored.apply_to(&mut creds);
+        Ok(Some(creds.password).filter(|value| !value.is_empty()))
+    }
+
+    fn load_account_secret(
+        &self,
+        _db: &std::sync::Mutex<rusqlite::Connection>,
+        account: &str,
+    ) -> anyhow::Result<secrets::Secrets> {
+        secrets::load(account).map_err(|err| anyhow::anyhow!("{err:#}"))
+    }
+
+    fn delete_account_secret(&self, account: &str) {
+        let _ = secrets::delete(account);
+    }
+
+    fn store_named_secret(
+        &self,
+        _db: &std::sync::Mutex<rusqlite::Connection>,
+        name: &str,
+        value: Option<&str>,
+    ) -> anyhow::Result<()> {
+        match value {
+            Some(value) => {
+                let mut creds = blank_creds();
+                creds.password = value.to_string();
+                secrets::store(name, &secrets::Secrets::from_creds(&creds))
+            }
+            None => secrets::delete(name)
+                .map(|_| ())
+                .map_err(|err| anyhow::anyhow!("{err:#}")),
+        }
+    }
+}
+
+/// Credentials with nothing in them, to carry a lone value through the
+/// keychain's account-shaped records.
+fn blank_creds() -> imap::Creds {
+    imap::Creds {
+        host: String::new(),
+        port: 0,
+        user: String::new(),
+        password: String::new(),
+        tls: false,
+        starttls: false,
+        smtp_host: String::new(),
+        smtp_port: 0,
+        smtp_tls: false,
+        smtp_starttls: false,
+        auth_type: "password".to_string(),
+        access_token: None,
+        refresh_token: None,
+        token_expires_at: 0,
+        oauth_client_id: String::new(),
+        oauth_client_secret: String::new(),
+        oauth_token_url: String::new(),
+        oauth_scope: String::new(),
+        proxy: Default::default(),
+        cert_pin: None,
+        smtp_cert_pin: None,
+        rejected_grant: None,
+    }
 }
 
 /// Tell the bridge the store is being upgraded, so it holds request timeouts and
@@ -101,6 +176,12 @@ async fn main() {
                 let writer = writer.clone();
                 let detail = json!({ "account": account, "folder": folder });
                 tokio::spawn(async move { emit(&writer, "mail.synced", detail).await });
+            }));
+            let writer = out.clone();
+            let _ = engine.account_changed.set(Arc::new(move |account| {
+                let writer = writer.clone();
+                let detail = json!({ "account": account });
+                tokio::spawn(async move { emit(&writer, "account.photoChanged", detail).await });
             }));
             Arc::new(engine)
         }
@@ -137,6 +218,14 @@ async fn main() {
     }
 
     tokio::spawn(poll_notify_folders(engine.clone(), out.clone()));
+    // Gmail/Outlook photos this computer lacks (one copied from the phone
+    // names a file only the phone has) come again from the provider.
+    {
+        let engine = engine.clone();
+        tokio::spawn(async move {
+            meron_core::account_photos::fetch_missing(&engine).await;
+        });
+    }
 
     emit(&out, "ready", ready_event()).await;
 

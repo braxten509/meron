@@ -1897,10 +1897,16 @@ fn is_autolink(inner: &str) -> bool {
 }
 
 pub(crate) fn preview_of(body: &str) -> String {
+    text_start(body, 200)
+}
+
+/// The start of a body as plain words: markup and links stripped, whitespace
+/// squeezed, at most `max` characters (and an ellipsis when cut).
+pub(crate) fn text_start(body: &str, max: usize) -> String {
     let stripped = strip_preview_markup(body);
     let collapsed = stripped.split_whitespace().collect::<Vec<_>>().join(" ");
-    let mut preview: String = collapsed.chars().take(200).collect();
-    if collapsed.chars().count() > 200 {
+    let mut preview: String = collapsed.chars().take(max).collect();
+    if collapsed.chars().count() > max {
         preview.push('…');
     }
     preview

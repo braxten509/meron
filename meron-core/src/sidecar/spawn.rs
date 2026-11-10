@@ -26,7 +26,8 @@ pub(crate) fn maybe_spawn_fill_thread_gaps(
 ) {
     // Synthetic `uid:` keys (drafts / headerless messages) have no References to
     // chase.
-    if thread_key.starts_with("uid:") {
+    // Sender rows are not threads: there is no root or ancestry to fill.
+    if thread_key.starts_with("uid:") || thread_key.starts_with(store::SENDER_KEY_PREFIX) {
         return;
     }
 
@@ -122,7 +123,8 @@ pub(crate) fn spawn_message_sync(
         let result = sync_background_messages(&engine, &account, &folder, limit).await;
         drop(claim);
         match result {
-            Ok(synced) => {
+            Ok(mut synced) => {
+                let meron_arrivals = std::mem::take(&mut synced.meron_arrivals);
                 // Warm full bodies for the unread/recent set now that envelopes
                 // are fresh. Deduped, and a no-op once everything is cached.
                 spawn_body_prefetch(engine.clone(), account.clone(), folder.clone());
@@ -136,19 +138,31 @@ pub(crate) fn spawn_message_sync(
                     }
                 }
                 let arrivals = (!synced.arrivals.is_empty()).then_some(synced.arrivals);
+                let mut announced = false;
                 if let Some(headers) = arrivals
                     && let Some(detail) =
                         new_messages_detail(&engine, &account, &folder, &headers).await
                 {
                     emit(&out, "mail.newMessages", detail).await;
-                    return;
+                    announced = true;
                 }
-                emit(
-                    &out,
-                    "mail.synced",
-                    json!({ "account": account, "folder": folder, "synced": synced.count }),
-                )
-                .await
+                emit_meron_arrivals(&engine, &out, &account, meron_arrivals).await;
+                if !announced {
+                    emit(
+                        &out,
+                        "mail.synced",
+                        json!({ "account": account, "folder": folder, "synced": synced.count }),
+                    )
+                    .await;
+                }
+                // After the emit, so it never holds up the Inbox's refresh: new
+                // mail server filters delivered into other folders goes through
+                // AI sorting too (a no-op unless sorting is set up).
+                if folder.eq_ignore_ascii_case("INBOX") {
+                    let filed =
+                        meron_core::engine::ai_sort::check_watched_folders(&engine, &account).await;
+                    emit_meron_arrivals(&engine, &out, &account, filed).await;
+                }
             }
             Err(e) if e.is::<BackgroundSyncCancelled>() => {}
             Err(e) => {

@@ -160,6 +160,35 @@ pub(crate) async fn dispatch(
 
         "watch.start" | "watch.stop" | "system.resumed" => watch::dispatch(engine, req, out).await,
 
+        // AI sorting: aiSort.get, .set, .setKey, .checkKey, .models, .estimate,
+        // .run, .stop, .status, .moveBack.
+        method if method.starts_with("aiSort.") => {
+            meron_core::ai_sort::dispatch(engine, &method["aiSort.".len()..], p).await
+        }
+
+        // Copy setup to another device: setupCopy.host, .join, .status,
+        // .setKeep, .copy, .cancel, .safetyInfo, .restoreSafety.
+        method if method.starts_with("setupCopy.") => {
+            meron_core::setup_copy::dispatch(engine, &method["setupCopy.".len()..], p, "computer").await
+        }
+
+        // Meron folders (this device only): meronFolders.list, .create,
+        // .rename, .delete, .moveIn, .moveOut, .threads (store only), and
+        // .markAllRead (sets \Seen on the servers).
+        "meronFolders.markAllRead" => meron_core::meron_folders::mark_all_read(engine, p).await,
+        // Out of the built-in Archive (and the Undo of that) moves mail on
+        // the server; everything else stays store-only.
+        "meronFolders.moveIn" | "meronFolders.moveOut" => {
+            meron_core::meron_folders::move_with_server(engine, &req.method["meronFolders.".len()..], p)
+                .await
+        }
+        method if method.starts_with("meronFolders.") => meron_core::meron_folders::dispatch_marked(
+            engine,
+            &engine.db.lock().unwrap(),
+            &method["meronFolders.".len()..],
+            p,
+        ),
+
         other => Err(anyhow::anyhow!("unknown method: {other}")),
     }
 }

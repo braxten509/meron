@@ -1,5 +1,5 @@
 import { attachmentSaveFilename } from '../lib/attachmentFilename'
-import type { Folder, Message } from '../types'
+import type { Folder, Message, MessageTab } from '../types'
 import { invoke } from '../lib/bridge'
 import { t } from '../lib/i18n'
 import { ui$, showToast, type BulkSelectionItem } from './ui'
@@ -7,7 +7,8 @@ import { accounts$, unifiedAccounts } from './accounts'
 import { kanban$, getKanbanColumns, kanbanColumnKey } from './kanban'
 import { columnSearchActive, loadKanbanColumn } from '../lib/kanbanData'
 import { filterThreads, isRssAccount } from '../lib/threadActions'
-import { isUnifiedStarred, unifiedFolderRole } from '../lib/unifiedFolders'
+import { isMeronView, isUnifiedStarred, unifiedFolderRole } from '../lib/unifiedFolders'
+import { setMeronFolderUnread } from './meronFolders'
 import { isLocalSendId } from './pendingSends'
 import { CONVERSATION_PAGE_SIZE } from '../lib/pagination'
 import { bareAddr, splitAddressList } from '../lib/address'
@@ -302,10 +303,36 @@ export function getActiveThread() {
     const match = threads.find((thread) => thread.thread_id === selected)
     if (match) return match
   }
+  // A conversation open in its own tab renders outside the list on the left
+  // (a Meron folder, another account): the tab itself says what it is.
+  // Without this the reply box found no conversation, and Send did nothing.
+  const tab = compose$.tabs.get().find((candidate) => candidate.id === compose$.activeTab.get())
+  if (tab?.kind === 'thread' && tab.threadId === selected) return threadFromTab(tab, null)
   // The selected thread's row hasn't landed yet (a notification or kanban jump
   // that outran the list load). Wait for it rather than showing an unrelated
   // conversation from the list we happen to have.
   return null
+}
+
+/** A thread tab as a thread row, for a conversation not in the list on the left. */
+export function threadFromTab(tab: MessageTab, fallback: Message | null): Message {
+  if (fallback?.thread_id === tab.threadId) return fallback
+  return {
+    id: tab.messageId || tab.threadId,
+    account_id: tab.accountId ?? '',
+    folder_id: tab.folderId ?? 'inbox',
+    thread_id: tab.threadId,
+    from_name: '',
+    from_addr: tab.from,
+    to: '',
+    subject: tab.subject || '(no subject)',
+    preview: '',
+    body: '',
+    date: tab.date ?? 0,
+    unread: false,
+    starred: false,
+    has_attachments: false,
+  }
 }
 
 // Guards against a slow load repainting the list after a newer one already did.
@@ -354,10 +381,23 @@ export function threadListViewKey(account: string, folder: string, query: string
   return [account, folder, query, filter].join('\n')
 }
 
-/** The list's filter inputs as one comparable value — the read-state filter
- * plus the attachments toggle — for view keys and staleness checks. */
-export function listFilterKey(mode = ui$.filterMode.get(), attachments = ui$.attachmentsOnly.get()) {
-  return attachments ? `${mode}+attachments` : mode
+/** The list's filter inputs as one comparable value — the read-state filter,
+ * the attachments toggle and the sender grouping — for view keys and staleness
+ * checks. Sender rows and thread rows are different lists, so the grouping is
+ * part of the key: a view's rows never answer for the other mode. */
+export function listFilterKey(
+  mode = ui$.filterMode.get(),
+  attachments = ui$.attachmentsOnly.get(),
+  groupBySender = ui$.groupBySender.get(),
+) {
+  const key = attachments ? `${mode}+attachments` : mode
+  return groupBySender ? `${key}+sender` : key
+}
+
+/** The `group_by` the list asks the core for. The core applies it to the plain
+ * list only; search, Starred and Drafts stay threaded whatever is sent. */
+export function listGroupBy(groupBySender = ui$.groupBySender.get()): 'sender' | 'thread' {
+  return groupBySender ? 'sender' : 'thread'
 }
 
 // Suppress removals only while the backend mutation is pending. Each list read
@@ -497,8 +537,10 @@ async function loadThreadsWithRead(refresh: boolean, searchStage: ThreadSearchSt
   const initialFilter = listFilterKey()
   const activeAccount = accounts$.get().find((account) => account.id === initialAccount)
   // Starred is answered from the local cache, so there is no live stage to run.
+  // So is a Meron folder: it exists only on this device.
   const canSearchLive =
     !isUnifiedStarred(initialAccount, initialFolder) &&
+    !isMeronView(initialAccount) &&
     (initialAccount === 'unified' || !isRssAccount(activeAccount, initialAccount))
 
   // Paint results from the local FTS index before starting the live IMAP
@@ -523,7 +565,9 @@ async function loadThreadsWithRead(refresh: boolean, searchStage: ThreadSearchSt
   const q = ui$.query.get()
   const filter = ui$.filterMode.get()
   const attachments = ui$.attachmentsOnly.get()
-  const filterKey = listFilterKey(filter, attachments)
+  const groupBySender = ui$.groupBySender.get()
+  const groupBy = listGroupBy(groupBySender)
+  const filterKey = listFilterKey(filter, attachments, groupBySender)
   const viewKey = threadListViewKey(selectedAcc, selectedFol, q, filterKey)
 
   // A background refresh steps aside for a server-bound load already running for
@@ -589,7 +633,8 @@ async function loadThreadsWithRead(refresh: boolean, searchStage: ThreadSearchSt
   // merge the fresh page into the list we already have instead.
   const backgroundRefresh = !refresh && searchStage !== 'cache' && previousThreads.length > 0
   const unifiedStarred = isUnifiedStarred(selectedAcc, selectedFol)
-  const mergeBackground = backgroundRefresh && !unifiedStarred
+  const meronView = isMeronView(selectedAcc)
+  const mergeBackground = backgroundRefresh && !unifiedStarred && !meronView
 
   let allThreads: Message[] = []
   let readFailed = false
@@ -598,7 +643,36 @@ async function loadThreadsWithRead(refresh: boolean, searchStage: ThreadSearchSt
   // Starred spans every account and every folder, so it is answered by a
   // cross-account cache query rather than the per-account folder fan-out. Its
   // rows are ordinary thread cards, so only the fetch is special-cased.
-  if (isUnifiedStarred(selectedAcc, selectedFol)) {
+  if (meronView) {
+    // A Meron folder spans every account and is answered from the local cache.
+    // Like Starred, a background refresh re-reads every loaded row: a
+    // conversation can leave (moved out, archived) from anywhere in the list.
+    try {
+      const res = await invoke<{ threads: Message[]; next_cursor?: string; folder_unread?: number }>(
+        'mail.meronFolderThreads',
+        {
+          folder_id: selectedFol,
+          query: q,
+          filter,
+          attachments,
+          limit: backgroundRefresh ? Math.max(THREAD_LIST_PAGE_SIZE, previousThreads.length) : THREAD_LIST_PAGE_SIZE,
+        },
+      )
+      if (superseded()) return
+      allThreads = res.threads ?? []
+      if (typeof res.folder_unread === 'number') setMeronFolderUnread(selectedFol, res.folder_unread)
+      mail$.threadsCursor.set(res.next_cursor ?? '')
+      mail$.threadAccountCursors.set({})
+    } catch (err) {
+      if (superseded()) return
+      console.error('Failed to load Meron folder:', err)
+      readFailed = true
+      if (userInitiated) {
+        mail$.threadsCursor.set('')
+        mail$.threadAccountCursors.set({})
+      }
+    }
+  } else if (isUnifiedStarred(selectedAcc, selectedFol)) {
     try {
       const res = await invoke<{ items: Message[]; next_cursor?: string }>('mail.starredItems', {
         query: q,
@@ -641,6 +715,7 @@ async function loadThreadsWithRead(refresh: boolean, searchStage: ThreadSearchSt
         query: q,
         filter,
         attachments,
+        group_by: groupBy,
         refresh,
       })
       if (superseded()) return
@@ -691,6 +766,7 @@ async function loadThreadsWithRead(refresh: boolean, searchStage: ThreadSearchSt
         query: q,
         filter,
         attachments,
+        group_by: groupBy,
         refresh,
       })
       if (superseded()) return
@@ -867,7 +943,9 @@ export async function loadMoreThreads() {
   const q = ui$.query.get()
   const filter = ui$.filterMode.get()
   const attachments = ui$.attachmentsOnly.get()
-  const filterKey = listFilterKey(filter, attachments)
+  const groupBySender = ui$.groupBySender.get()
+  const groupBy = listGroupBy(groupBySender)
+  const filterKey = listFilterKey(filter, attachments, groupBySender)
   const version = threadLoadVersion
   const stillCurrent = (cursor: string) =>
     threadLoadVersion === version &&
@@ -876,15 +954,28 @@ export async function loadMoreThreads() {
     ui$.query.get() === q &&
     listFilterKey() === filterKey &&
     mail$.threadsCursor.get() === cursor
-  // The starred filter is one unpaginated page; a search over it is paged like
-  // any other, and every other view stops on an empty cursor below.
-  if (!q.trim() && filter === 'starred') return
+  // The unified starred filter is one unpaginated page; a search over it is
+  // paged like any other, and every other view stops on an empty cursor below.
+  // A single folder's starred filter pages on the core's cursor, and a Meron
+  // folder pages every filter.
+  if (!q.trim() && filter === 'starred' && selectedAcc === 'unified') return
 
   const read = beginThreadListRead()
   mail$.threadsLoadingMore.set(true)
   try {
     let moreThreads: Message[] = []
-    if (isUnifiedStarred(selectedAcc, selectedFol)) {
+    if (isMeronView(selectedAcc)) {
+      const cursor = mail$.threadsCursor.get()
+      if (!cursor) return
+      const res = await invoke<{ threads: Message[]; next_cursor?: string; folder_unread?: number }>(
+        'mail.meronFolderThreads',
+        { folder_id: selectedFol, query: q, filter, attachments, limit: THREAD_LIST_PAGE_SIZE, before_cursor: cursor },
+      )
+      if (!stillCurrent(cursor)) return
+      if (typeof res.folder_unread === 'number') setMeronFolderUnread(selectedFol, res.folder_unread)
+      moreThreads = res.threads || []
+      mail$.threadsCursor.set(res.next_cursor ?? '')
+    } else if (isUnifiedStarred(selectedAcc, selectedFol)) {
       const cursor = mail$.threadsCursor.get()
       if (!cursor) return
       const res = await invoke<{ items: Message[]; next_cursor?: string }>('mail.starredItems', {
@@ -917,6 +1008,7 @@ export async function loadMoreThreads() {
         query: q,
         filter,
         attachments,
+        group_by: groupBy,
         before_cursor: cursor,
         refresh: false,
       })
@@ -944,6 +1036,7 @@ export async function loadMoreThreads() {
         query: q,
         filter,
         attachments,
+        group_by: groupBy,
         before_cursor: cursor,
         refresh: false,
       })

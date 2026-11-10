@@ -269,6 +269,7 @@ func (a *App) threadList(payload map[string]any) (any, error) {
 		"query":         req.Query,
 		"filter":        req.Filter,
 		"attachments":   req.Attachments,
+		"group_by":      req.GroupBy,
 		"before_cursor": req.BeforeCursor,
 		"limit":         limit,
 		"refresh":       req.Refresh,
@@ -403,6 +404,11 @@ func (a *App) mailDelete(payload map[string]any) (any, error) {
 		// Branch-compound thread keys pass through untouched; the sidecar
 		// splits them and scopes the delete to the subject branch.
 		params := map[string]any{"account": ids.Account, "folder": sourceFolder, "thread_key": ids.ThreadKey}
+		// One of a bulk run with more to come: the core re-reads Trash once,
+		// on the run's last delete.
+		if more, _ := payload["more_coming"].(bool); more {
+			params["more_coming"] = true
+		}
 		if uids := imapUIDsFromPayload(threadID, payload); len(uids) > 0 {
 			params["uids"] = uids
 			delete(params, "thread_key")
@@ -413,7 +419,8 @@ func (a *App) mailDelete(payload map[string]any) (any, error) {
 			return withMovedThreadLocation(res, ids, "trash"), nil
 		}
 		if ids.ThreadKey == "" && ids.UID > 0 {
-			params = map[string]any{"account": ids.Account, "folder": sourceFolder, "uid": ids.UID}
+			delete(params, "thread_key")
+			params["uid"] = ids.UID
 		}
 		res, err := a.sidecar.Call("messages.delete", params)
 		if err != nil {
@@ -446,6 +453,15 @@ func (a *App) mailMove(payload map[string]any) (any, error) {
 		params := map[string]any{"account": ids.Account, "folder": ids.Folder, "target_folder": targetFolder, "thread_key": ids.ThreadKey}
 		if targetAccount != "" {
 			params["target_account"] = targetAccount
+		}
+		// An Undo says what it puts back besides the mail (the Inbox view,
+		// a Meron folder); the core applies it after the move. A bulk run
+		// says when more moves are coming (the core then re-reads the target
+		// once, on the last one).
+		for _, key := range []string{"undo", "show_in_inbox", "meron_folder_id", "meron_source", "more_coming"} {
+			if value, ok := payload[key]; ok && value != nil {
+				params[key] = value
+			}
 		}
 		if uids := imapUIDsFromPayload(threadID, payload); len(uids) > 0 {
 			params["uids"] = uids
@@ -529,14 +545,34 @@ func (a *App) mailArchive(payload map[string]any) (any, error) {
 	if !ok {
 		return map[string]any{"ok": true}, nil
 	}
-	res, err := a.sidecar.Call("folders.archive", map[string]any{"account": ids.Account})
+	res, err := a.sidecar.Call("folders.archive", map[string]any{"account": ids.Account, "allow_missing": true})
 	if err != nil {
 		return nil, err
 	}
 	obj, _ := res.(map[string]any)
 	targetFolder, _ := obj["folder"].(string)
 	if targetFolder == "" {
-		return nil, errors.New("Archive folder not found for this account")
+		// No archive mailbox: a whole conversation is archived Meron-only,
+		// filed into the built-in Archive with no server move. A single
+		// email keeps the "no archive folder" answer.
+		if ids.ThreadKey == "" || len(imapUIDsFromPayload(threadID, payload)) > 0 {
+			return nil, errors.New("Archive folder not found for this account")
+		}
+		filed, err := a.sidecar.Call("meronFolders.moveIn", map[string]any{
+			"folder_id":  "mf_archive",
+			"thread_ids": []string{threadID},
+		})
+		if err != nil {
+			return nil, err
+		}
+		out, _ := filed.(map[string]any)
+		if out == nil {
+			out = map[string]any{"ok": true}
+		}
+		out["meron_only"] = true
+		out["folder"] = ids.Folder
+		out["thread_id"] = threadID
+		return out, nil
 	}
 	payload["target_folder_id"] = targetFolder
 	moveRes, err := a.mailMove(payload)
@@ -714,6 +750,60 @@ func (a *App) stopRule(payload map[string]any) (any, error) {
 		return nil, fmt.Errorf("mail core is not running")
 	}
 	return a.sidecar.Call("rules.stop", map[string]any{"id": payload["id"]})
+}
+
+// aiSortMethods maps the UI's AI sorting commands to the core's aiSort.* methods.
+// The payload goes through as it is: the core checks and cleans what it keeps.
+var aiSortMethods = map[string]string{
+	"mail.aiSortConfig":    "aiSort.get",
+	"mail.setAiSortConfig": "aiSort.set",
+	"mail.setAiSortKey":    "aiSort.setKey",
+	"mail.checkAiSortKey":  "aiSort.checkKey",
+	"mail.aiSortModels":    "aiSort.models",
+	"mail.aiSortEstimate":  "aiSort.estimate",
+	"mail.runAiSort":       "aiSort.run",
+	"mail.stopAiSort":      "aiSort.stop",
+	"mail.aiSortStatus":    "aiSort.status",
+	"mail.aiSortMoveBack":  "aiSort.moveBack",
+}
+
+// aiSort passes one AI sorting command to the core. Nothing here logs the
+// payload, which for aiSort.setKey holds the API key.
+func (a *App) aiSort(command string, payload map[string]any) (any, error) {
+	if a.sidecar == nil || !a.sidecar.Started() {
+		return nil, fmt.Errorf("mail core is not running")
+	}
+	return a.sidecar.Call(aiSortMethods[command], payload)
+}
+
+// meronFolderMethods maps the UI's Meron folder commands (folders that exist
+// only in Meron, on this device) to the core's meronFolders.* methods.
+var meronFolderMethods = map[string]string{
+	"mail.meronFolders":         "meronFolders.list",
+	"mail.createMeronFolder":    "meronFolders.create",
+	"mail.renameMeronFolder":    "meronFolders.rename",
+	"mail.setMeronFolderNotify": "meronFolders.setNotify",
+	"mail.deleteMeronFolder":    "meronFolders.delete",
+	"mail.moveToMeronFolder":    "meronFolders.moveIn",
+	"mail.moveOutOfMeronFolder": "meronFolders.moveOut",
+	"mail.meronFolderThreads":   "meronFolders.threads",
+	"mail.markMeronFolderRead":  "meronFolders.markAllRead",
+}
+
+// meronFolders passes one Meron folder command to the core. A folder's page
+// of cards is decoded into Message like every other thread list, so the
+// typed transport keeps meron_folder_id and drops nothing else it knows.
+func (a *App) meronFolders(command string, payload map[string]any) (any, error) {
+	// An error, not an empty list, while the core is down: the UI must not
+	// take "not started yet" for "every Meron folder is gone".
+	if a.sidecar == nil || !a.sidecar.Started() {
+		return nil, a.engineUnavailable()
+	}
+	res, err := a.sidecar.Call(meronFolderMethods[command], payload)
+	if err != nil || command != "mail.meronFolderThreads" {
+		return res, err
+	}
+	return threadsJSON("", "", res), nil
 }
 
 // markAllRead marks every message in one mail folder as read. An RSS account has

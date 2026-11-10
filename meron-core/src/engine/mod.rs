@@ -10,6 +10,7 @@ use tokio::sync::{Mutex, Notify};
 
 use crate::{imap, secrets, store};
 
+pub mod ai_sort;
 mod append;
 mod background_sync;
 mod folders;
@@ -138,6 +139,9 @@ pub struct Engine {
     /// Hears the account and folder when rules changed mail with no sync around
     /// to say so. Set once by the host, which knows how to tell its clients.
     pub rule_progress: std::sync::OnceLock<Arc<dyn Fn(&str, &str) + Send + Sync>>,
+    /// Hears an account whose photo changed in the background (fetched again
+    /// from the provider). Set once by the host, which tells its clients.
+    pub account_changed: std::sync::OnceLock<Arc<dyn Fn(&str) + Send + Sync>>,
     /// Pulsed when an account is paused so live IDLE watchers wake and re-check
     /// their paused state (and stop) instead of blocking up to the IDLE timeout.
     pub pause_signal: Notify,
@@ -162,6 +166,8 @@ pub struct Engine {
     /// Platform integration: opens the SQLite store and loads/stores per-account
     /// secrets (OS keychain on desktop, the keyed DB on mobile).
     pub host: Arc<dyn EngineHost>,
+    /// AI sorting: its keys, verified Tinfoil client, model lists and job.
+    pub ai_sort: crate::ai_sort::State,
 }
 
 /// Platform hooks the [`Engine`] needs but that differ between the desktop
@@ -181,6 +187,55 @@ pub trait EngineHost: Send + Sync {
         account: &str,
         secrets: &secrets::Secrets,
     ) -> anyhow::Result<()>;
+    /// Load a secret that belongs to no account (an AI sorting API key) from
+    /// the same store as account secrets. Takes the store's lock only if the
+    /// host keeps secrets there: a keychain call can hang, and must not hold it.
+    fn load_named_secret(
+        &self,
+        db: &std::sync::Mutex<rusqlite::Connection>,
+        name: &str,
+    ) -> anyhow::Result<Option<String>> {
+        let _ = (db, name);
+        Ok(None)
+    }
+    /// Save (`Some`) or remove (`None`) a secret named as for
+    /// [`load_named_secret`](Self::load_named_secret). Never in `settings` or
+    /// backups.
+    fn store_named_secret(
+        &self,
+        db: &std::sync::Mutex<rusqlite::Connection>,
+        name: &str,
+        value: Option<&str>,
+    ) -> anyhow::Result<()> {
+        let _ = (db, name, value);
+        anyhow::bail!("this app can't keep keys")
+    }
+    /// An account's stored secret, for "Copy setup to another device". Takes
+    /// the store's lock only if the host keeps secrets there. Empty when the
+    /// account has none; an error when the store couldn't be read.
+    fn load_account_secret(
+        &self,
+        db: &std::sync::Mutex<rusqlite::Connection>,
+        account: &str,
+    ) -> anyhow::Result<secrets::Secrets> {
+        let _ = (db, account);
+        Ok(secrets::Secrets::default())
+    }
+    /// Forget an account's secret kept outside the store (the desktop
+    /// keychain). Hosts that keep it in the store's own table do nothing:
+    /// deleting the account removed it.
+    fn delete_account_secret(&self, account: &str) {
+        let _ = account;
+    }
+    /// Where message bodies' attachments are written.
+    fn media_root(&self) -> std::path::PathBuf {
+        crate::parse::media_root()
+    }
+    /// Where account photos (`/media/avatars/...`) live: the attachment root on
+    /// the desktop, a folder of its own on the phone.
+    fn account_media_root(&self) -> std::path::PathBuf {
+        self.media_root()
+    }
 }
 
 /// One idle, reusable session plus when it was last returned to the pool, so
@@ -325,6 +380,17 @@ impl Engine {
         let (error, at) = self.body_fetch_failures.lock().unwrap().remove(key)?;
         (at.elapsed() < BODY_FAILURE_TTL).then_some(error)
     }
+
+    /// Whether `key` has a recent failure waiting for its read, without taking
+    /// it: for a download started on the reader's behalf ahead of time, which
+    /// must neither retry it nor keep that read from showing it.
+    pub(crate) fn body_failure_pending(&self, key: &str) -> bool {
+        self.body_fetch_failures
+            .lock()
+            .unwrap()
+            .get(key)
+            .is_some_and(|(_, at)| at.elapsed() < BODY_FAILURE_TTL)
+    }
 }
 
 /// The key the engine's per-message bookkeeping files a message under.
@@ -389,6 +455,7 @@ impl Engine {
         if let Err(err) = crate::proxy::load_global(&conn) {
             eprintln!("meron-core: could not load the proxy setting: {err:#}");
         }
+        store::tidy_at_start(&conn);
         let mut accounts: HashMap<String, imap::Creds> = HashMap::new();
         for (id, mut creds) in store::load_accounts(&conn)? {
             host.apply_secret(&conn, &id, &mut creds);
@@ -429,11 +496,13 @@ impl Engine {
             tag_pushes: std::sync::Mutex::new(HashMap::new()),
             rule_workers: std::sync::Mutex::new(Default::default()),
             rule_progress: std::sync::OnceLock::new(),
+            account_changed: std::sync::OnceLock::new(),
             pause_signal: Notify::new(),
             resume_signal: Notify::new(),
             pool: std::sync::Mutex::new(HashMap::new()),
             connect_locks: std::sync::Mutex::new(HashMap::new()),
             host: Arc::from(host),
+            ai_sort: Default::default(),
         }
     }
 
@@ -524,8 +593,11 @@ impl Engine {
                 // anywhere is valid too: mobile's native Google clients are public
                 // (installed-app) clients that refresh with client_id only, and
                 // `refresh_oauth_token` omits the empty field.
+                // Only with the app's own client id too: an account copied from
+                // the phone keeps the phone's public client id, and Google
+                // rejects it with another client's secret ("invalid_client").
                 let client_secret = own(&creds.oauth_client_secret).unwrap_or_else(|| {
-                    if token_url == app.token_url() {
+                    if token_url == app.token_url() && client_id == app.client_id.trim() {
                         app.client_secret.clone()
                     } else {
                         String::new()

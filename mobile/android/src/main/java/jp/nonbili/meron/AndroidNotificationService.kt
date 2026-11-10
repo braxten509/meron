@@ -30,6 +30,9 @@ data class NewMailItem(
     /** A feed entry's stable key, empty for mail (which has a uid instead).
      *  A feed is one thread, so this is all that tells its entries apart. */
     val itemKey: String = "",
+    /** The sender's exact address, lowercase; blank for a feed or an older
+     *  core. A tap opens their chat in group-by-sender mode. */
+    val fromAddr: String = "",
 )
 
 /** A batch of arrivals for one account: one notification per item, under a
@@ -75,6 +78,7 @@ object AndroidNotificationService {
     const val EXTRA_ACCOUNT_ID = "jp.nonbili.meron.extra.ACCOUNT_ID"
     const val EXTRA_FOLDER = "jp.nonbili.meron.extra.FOLDER"
     const val EXTRA_THREAD_KEY = "jp.nonbili.meron.extra.THREAD_KEY"
+    const val EXTRA_FROM_ADDR = "jp.nonbili.meron.extra.FROM_ADDR"
 
     fun refreshChannelIdForTesting(): String = CHANNEL_ID
 
@@ -231,7 +235,7 @@ object AndroidNotificationService {
                     .BigTextStyle()
                     .bigText(newMailChildBigText(item.subject, item.preview, fallback))
                     .setSummaryText(batch.accountName),
-            ).setContentIntent(openAppIntent(context, batch.accountId, batch.folder, item.threadKey))
+            ).setContentIntent(openAppIntent(context, batch.accountId, batch.folder, item.threadKey, item.fromAddr))
             // Archive and mark-as-read only; a reply needs a send queue that
             // survives being offline, which does not exist yet. Both address the
             // thread by id, so a payload missing any part of it gets no buttons
@@ -663,6 +667,7 @@ object AndroidNotificationService {
         accountId: String = "",
         folder: String = "",
         threadKey: String = "",
+        fromAddr: String = "",
     ): PendingIntent {
         val intent =
             Intent(context, ComposeMainActivity::class.java).apply {
@@ -673,11 +678,15 @@ object AndroidNotificationService {
                     putExtra(EXTRA_ACCOUNT_ID, accountId)
                     putExtra(EXTRA_FOLDER, folder)
                     putExtra(EXTRA_THREAD_KEY, threadKey)
+                    if (fromAddr.isNotBlank()) putExtra(EXTRA_FROM_ADDR, fromAddr)
                 }
             }
+        // The sender is part of the request code, so two people's mail in one
+        // thread keep separate intents instead of the newer overwriting both.
+        val requestKey = listOf(accountId, folder, threadKey) + listOfNotNull(fromAddr.ifBlank { null })
         return PendingIntent.getActivity(
             context,
-            listOf(accountId, folder, threadKey).joinToString("|").hashCode(),
+            requestKey.joinToString("|").hashCode(),
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
@@ -708,6 +717,7 @@ fun parseNewMailBatch(detail: JSONObject): NewMailBatch {
                         preview = entry.optString("preview"),
                         threadKey = entry.optString("threadKey"),
                         date = entry.optLong("date"),
+                        fromAddr = entry.optString("from_addr"),
                     )
                 }
             }
@@ -720,6 +730,7 @@ fun parseNewMailBatch(detail: JSONObject): NewMailBatch {
                     preview = detail.optString("preview"),
                     threadKey = detail.optString("threadKey"),
                     date = 0,
+                    fromAddr = detail.optString("from_addr"),
                 ),
             )
         }

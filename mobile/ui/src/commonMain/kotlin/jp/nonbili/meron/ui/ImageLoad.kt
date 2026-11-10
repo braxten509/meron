@@ -13,11 +13,26 @@ expect suspend fun loadImageBytes(ref: String): ByteArray?
 // Remote actions require a loader that enforces the size limit while reading.
 internal expect val boundedRemoteImageActions: Boolean
 
-internal suspend fun loadImageBitmapRef(ref: String): ImageBitmap? =
-    loadCachedImageBitmap(ref) {
+internal suspend fun loadImageBitmapRef(ref: String, maxSide: Int = 0): ImageBitmap? =
+    loadCachedImageBitmap(if (maxSide > 0) "$ref#$maxSide" else ref) {
         loadImageBytes(ref)?.let { bytes ->
-            withContext(ioDispatcher) { decodeImageBitmap(bytes) }
+            withContext(ioDispatcher) { decodeImageBitmap(bytes, maxSide) }
         }
+    }
+
+/** A picture for a small box `side` px across (see [decodeThumbnailBitmap]). */
+internal suspend fun loadThumbnailBitmapRef(ref: String, side: Int): ImageBitmap? =
+    loadCachedImageBitmap("$ref#thumb$side") {
+        loadImageBytes(ref)?.let { bytes ->
+            withContext(ioDispatcher) { decodeThumbnailBitmap(bytes, side) }
+        }
+    }
+
+/** A picture for the full-screen viewer. Not kept in the cache: one full-size
+ *  photo would push out every smaller picture the mail shows. */
+internal suspend fun loadFullImageBitmapRef(ref: String): ImageBitmap? =
+    loadImageBytes(ref)?.let { bytes ->
+        withContext(ioDispatcher) { decodeImageBitmap(bytes, FULL_IMAGE_MAX_SIDE) }
     }
 
 private const val IMAGE_BITMAP_CACHE_MAX_BYTES = 64L * 1024L * 1024L

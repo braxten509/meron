@@ -4,9 +4,11 @@ import { t } from '../lib/i18n'
 import { clearBulkSelection, ui$, showToast, showUndoToast, type BulkSelectionItem } from './ui'
 import { accounts$, unifiedAccounts } from './accounts'
 import { kanban$ } from './kanban'
+import { markMeronFolderRead, scheduleMeronFoldersRefresh } from './meronFolders'
 import { isRssAccount } from '../lib/threadActions'
 import {
   accountFolderForRole,
+  isMeronView,
   isUnifiedStarred,
   unifiedFolderRole,
   type UnifiedFolderRole,
@@ -52,6 +54,9 @@ function refreshFoldersAfterFlagChange(accountId: string | undefined) {
   if (accountId && accountId !== selectedAcc) {
     void refreshAccountFoldersCache(accountId, false)
   }
+  // The thread may sit in a Meron folder (a search shows those too), whose
+  // badge no account's folder list carries.
+  if (!isMeronView(selectedAcc)) scheduleMeronFoldersRefresh()
 }
 
 export async function markThreadRead(threadId: string) {
@@ -223,7 +228,8 @@ async function setThreadStar(threadId: string, starred: boolean, options: { refr
 export function toggleStarWithUndo(threadId: string) {
   if (!threadId) return
   const thread = findLocalThread(threadId)
-  if (!thread) return
+  // A sender row is a person: stars go on single emails inside its chat.
+  if (!thread || thread.group === 'sender') return
   const next = !thread.starred
   void starThread(threadId, next).then((success) => {
     if (success) showUndoToast(next ? 'Starred' : 'Unstarred', () => void starThread(threadId, !next))
@@ -278,6 +284,8 @@ export async function bulkStarSelected(items: BulkSelectionItem[], starred: bool
 // per visible thread because they do not have an IMAP-style folder flag, and so
 // is unified Starred, which is a flag rather than a mailbox.
 export async function markAllRead() {
+  // A Meron folder spans accounts and folders; the core finds its unread mail.
+  if (isMeronView(ui$.selectedAccount.get())) return markMeronFolderRead(ui$.selectedFolder.get())
   const threads = mail$.threads.get()
   const unread = threads.filter((thread) => thread.unread)
 

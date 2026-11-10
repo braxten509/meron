@@ -2,6 +2,8 @@ import { useMemo } from 'react'
 import {
   Archive,
   Columns3,
+  Folder,
+  FolderPlus,
   Inbox,
   List,
   Mail,
@@ -30,6 +32,8 @@ import { ui$, closeCommandPalette, focusGlobalSearch, focusQuickReply } from '..
 import { selectTheme, settings$ } from '../../states/settings'
 import { useChosenThemeIds } from '../../lib/useThemeChoice'
 import { accounts$ } from '../../states/accounts'
+import { meronFolderName, meronFolders$, openMeronFolder, promptCreateMeronFolder } from '../../states/meronFolders'
+import { isMeronView } from '../../lib/unifiedFolders'
 import { leaveNarrowContacts } from '../../states/contacts'
 import { BUILTIN_THEMES } from '../../lib/themes'
 import {
@@ -47,7 +51,7 @@ import { thread$ } from '../../states/thread'
 import { mail$, syncMail } from '../../states/mail'
 import { markAllRead, toggleStarWithUndo, markUnreadWithUndo } from '../../states/mailFlags'
 import { archiveThread, deleteThread } from '../../states/mailMoves'
-import { openComposeTab, openReplyInFullEditor, closeMessageTab } from '../../states/compose'
+import { openComposeTab, openReplyInFullEditor, closeMessageTabKeepingDraft } from '../../states/compose'
 import { compose$ } from '../../states/composeState'
 import { RAIL_SHORTCUT_IDS, type ShortcutId } from '../../lib/shortcuts'
 import type { Command } from './paletteCommands'
@@ -68,6 +72,7 @@ export function useCommandList(): Command[] {
   const selectedFolder = useValue(ui$.selectedFolder)
   const selectedThread = useValue(ui$.selectedThread)
   const accounts = useValue(accounts$)
+  const meronFolders = useValue(meronFolders$.list)
   const folders = useValue(mail$.folders)
   const activeTab = useValue(compose$.activeTab)
 
@@ -284,7 +289,7 @@ export function useCommandList(): Command[] {
         icon: icon(X),
         keywords: 'dismiss editor reader',
         shortcut: 'tab.close',
-        run: run(() => void closeMessageTab(activeTab)),
+        run: run(() => void closeMessageTabKeepingDraft(activeTab)),
       })
     }
 
@@ -311,6 +316,31 @@ export function useCommandList(): Command[] {
         run: run(() => openMailAccount(account.id)),
       })
     }
+
+    // Meron folders (this device only). The side navigation lists them, but it
+    // is hidden on a narrow window, where this is the way in, as for accounts.
+    for (const folder of meronFolders) {
+      list.push({
+        id: `meron.${folder.id}`,
+        label: `Go to: ${meronFolderName(folder.id) || folder.name}`,
+        icon: icon(Folder),
+        keywords: 'meron folder local device',
+        active: !activeBoardId && isMeronView(selectedAccount) && selectedFolder === folder.id,
+        run: run(() => openMeronFolder(folder.id)),
+      })
+    }
+    list.push({
+      id: 'meron.create',
+      label: 'New Meron folder',
+      icon: icon(FolderPlus),
+      keywords: 'create meron folder local device',
+      run: run(
+        () =>
+          void promptCreateMeronFolder().then((folder) => {
+            if (folder) openMeronFolder(folder.id)
+          }),
+      ),
+    })
 
     // Jump to a folder in the current account.
     for (const folder of folders) {
@@ -341,6 +371,7 @@ export function useCommandList(): Command[] {
     selectedFolder,
     selectedThread,
     accounts,
+    meronFolders,
     folders,
     activeTab,
   ])

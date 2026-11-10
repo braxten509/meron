@@ -379,6 +379,10 @@ pub fn running_rules(conn: &Connection) -> Result<BTreeMap<String, i64>> {
     for row in rows {
         let (ids, count) = row?;
         for id in serde_json::from_str::<Vec<String>>(&ids).unwrap_or_default() {
+            // AI sorting's queued moves are not rules; its status says how far it is.
+            if super::is_ai_rule_id(&id) {
+                continue;
+            }
             *running.entry(id).or_insert(0) += count;
         }
     }
@@ -482,7 +486,7 @@ fn add_rule_effects(
     Ok(())
 }
 
-fn queue_rule_actions(
+pub(super) fn queue_rule_actions(
     conn: &Connection,
     account: &str,
     actions: &BTreeMap<u32, RuleAction>,
@@ -660,6 +664,11 @@ pub fn pending_rule_actions(
 pub fn log_rule_lost_moves(conn: &Connection, account: &str, lost: &[RuleAction]) -> Result<()> {
     for action in lost {
         for rule_id in &action.rule_ids {
+            if super::is_ai_rule_id(rule_id) {
+                let reason = "a rule moved it first";
+                super::ai_sort::ai_sort_log_failed(conn, account, &action.folder, action, reason, false)?;
+                continue;
+            }
             let reason = "another rule had already moved this message";
             log_rule(conn, rule_id, account, "", 1, Some(reason))?;
         }
@@ -717,6 +726,13 @@ pub fn retry_rule_actions(
             .iter()
             .find(|action| action.uid == *uid && action.run == run);
         for rule_id in action.iter().flat_map(|action| &action.rule_ids) {
+            // The AI's own log says its move failed; new mail alerts now.
+            if super::is_ai_rule_id(rule_id)
+                && let Some(action) = action
+            {
+                super::ai_sort::ai_sort_log_failed(conn, account, folder, action, reason, true)?;
+                continue;
+            }
             log_rule(conn, rule_id, account, &subject, 1, Some(reason))?;
         }
     }

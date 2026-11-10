@@ -147,7 +147,7 @@ pub(super) fn store_folder_tail(
         store::clear_folder_messages(db, account, folder)?;
         store::set_folder_modseq(db, account, folder, 0)?;
     }
-    store::upsert_messages(db, account, folder, &batch.messages)?;
+    store::upsert_window_messages(db, account, folder, batch)?;
     store::set_folder_state(db, account, folder, batch.uidvalidity, batch.uid_next)?;
     Ok(())
 }
