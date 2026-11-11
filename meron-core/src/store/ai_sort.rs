@@ -807,6 +807,56 @@ pub fn ai_sort_skip_meron_foldered(
     Ok(kept)
 }
 
+/// `meta` row with this device's id for AI sorting claims.
+const CLAIM_ID_KEY: &str = "ai_sort_claim_id";
+
+/// This device's id for its AI sorting claims (see `imap::claim_for_ai_sort`):
+/// eight letters and digits, made once. Kept in `meta`, which no backup and no
+/// setup copy carries: two devices must never share one.
+pub fn ai_sort_claim_id(conn: &Connection) -> Result<String> {
+    let known: Option<String> = conn
+        .query_row("SELECT value FROM meta WHERE key = ?1", params![CLAIM_ID_KEY], |row| row.get(0))
+        .optional()?;
+    if let Some(id) = known.filter(|id| !id.is_empty()) {
+        return Ok(id);
+    }
+    let id: String = uuid::Uuid::new_v4().simple().to_string().chars().take(8).collect();
+    conn.execute(
+        "INSERT INTO meta(key, value) VALUES(?1, ?2)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        params![CLAIM_ID_KEY, id],
+    )?;
+    Ok(id)
+}
+
+/// Held-back mail another of the reader's devices sorts (it has the claim):
+/// not counted against today's cap here. `shown` shows again; `gone`, which
+/// that device moved away, stays hidden until a sync drops its row.
+pub fn ai_sort_left_to_other(
+    conn: &Connection,
+    account: &str,
+    folder: &str,
+    shown: &[u32],
+    gone: &[u32],
+) -> Result<()> {
+    ai_sort_release(conn, account, folder, shown)?;
+    let until = super::now_unix() + AI_SORT_MOVE_HOLD_SECS;
+    for uid in gone {
+        conn.execute(
+            "UPDATE ai_sort_hidden SET hide_until = ?4
+             WHERE account = ?1 AND folder = ?2 AND uid = ?3",
+            params![account, folder, uid, until],
+        )?;
+    }
+    refund_usage(conn, shown.len() + gone.len())
+}
+
+/// Mail taken over from a device that never finished sorting it: counted
+/// against today's cap again.
+pub fn ai_sort_count_taken_over(conn: &Connection, count: usize) -> Result<()> {
+    add_usage(conn, count)
+}
+
 fn refund_usage(conn: &Connection, count: usize) -> Result<()> {
     if count == 0 {
         return Ok(());
@@ -1738,6 +1788,23 @@ mod tests {
         let conn = Connection::open_in_memory().unwrap();
         super::super::run_migrations(&conn).unwrap();
         conn
+    }
+
+    #[test]
+    fn a_device_keeps_one_claim_id_of_its_own() {
+        let conn = test_conn();
+        let id = ai_sort_claim_id(&conn).unwrap();
+        assert_eq!(id.len(), 8);
+        assert!(id.chars().all(|c| c.is_ascii_alphanumeric()));
+        // Made once: the same on every later ask.
+        assert_eq!(ai_sort_claim_id(&conn).unwrap(), id);
+        // Another device makes its own.
+        assert_ne!(ai_sort_claim_id(&test_conn()).unwrap(), id);
+        // Not a setting: settings travel with backups and setup copies.
+        let settings: i64 = conn
+            .query_row("SELECT COUNT(*) FROM settings WHERE value LIKE ?1", [format!("%{id}%")], |row| row.get(0))
+            .unwrap();
+        assert_eq!(settings, 0);
     }
 
     fn insert_unread(conn: &Connection, uid: u32) {

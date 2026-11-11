@@ -22,6 +22,16 @@ const KEY_LOAD_WAIT: Duration = Duration::from_secs(2);
 const BODY_WAIT: Duration = Duration::from_secs(6);
 /// How long writing the `$MeronSorted` mark may take.
 const MARK_WAIT: Duration = Duration::from_secs(5);
+/// How long claiming mail for this device may take (see [`claim_mail`]).
+const CLAIM_WAIT: Duration = Duration::from_secs(8);
+/// How often a device that didn't get the claim looks what the other did.
+const CLAIM_POLL: Duration = Duration::from_secs(1);
+/// How long mail the other device marked decided may take to move away
+/// before it counts as left in the Inbox.
+const CLAIM_MOVE_WAIT: Duration = Duration::from_secs(3);
+/// How long another device's claim stands before this one takes the mail
+/// over: that device never finished (closed, or lost its connection).
+const CLAIM_STALE: Duration = Duration::from_secs(120);
 /// One batch of the "sort Inbox now" job, retry included.
 const JOB_BATCH_BUDGET: Duration = Duration::from_secs(40);
 /// Bodies for one batch of that job.
@@ -714,9 +724,16 @@ async fn record(
     }
 }
 
-/// Put `$MeronSorted` on mail the AI decided on. Best effort: a mailbox that
-/// refuses new keywords leaves only this device's memory.
-async fn mark_sorted(engine: &Arc<Engine>, account: &str, folder: &str, uids: Vec<u32>) {
+/// Put `$MeronSorted` on mail the AI decided on, and take this device's claim
+/// (`claim`, see [`claim_mail`]) off it. Best effort: a mailbox that refuses
+/// new keywords leaves only this device's memory.
+async fn mark_sorted(
+    engine: &Arc<Engine>,
+    account: &str,
+    folder: &str,
+    uids: Vec<u32>,
+    claim: Option<&str>,
+) {
     if uids.is_empty() {
         return;
     }
@@ -725,7 +742,10 @@ async fn mark_sorted(engine: &Arc<Engine>, account: &str, folder: &str, uids: Ve
         engine.with_write_session(account, |session| {
             let folder = folder.to_string();
             let uids = uids.clone();
-            Box::pin(async move { imap::mark_ai_sorted(session, &folder, &uids).await })
+            let claim = claim.map(str::to_string);
+            Box::pin(async move {
+                imap::mark_ai_sorted(session, &folder, &uids, claim.as_deref()).await
+            })
         }),
     )
     .await;
@@ -787,6 +807,390 @@ async fn give_up(
         }
     })
     .await;
+}
+
+// ---- Claims: one device sorts each email --------------------------------------
+//
+// Two of the reader's devices see the same new email at the same moment.
+// Before a device asks the AI, it claims the email on the server (see
+// `imap::claim_for_ai_sort`); only the device that got the claim asks and
+// moves. The other waits to see what became of the email, so it neither
+// shows nor announces mail that is about to be moved away, and takes the
+// email over when the claim just stands there (that device never finished).
+
+/// [`CLAIM_STALE`]; `MERON_AI_CLAIM_STALE_SECS` shortens it for checks.
+fn claim_stale() -> Duration {
+    std::env::var("MERON_AI_CLAIM_STALE_SECS")
+        .ok()
+        .and_then(|secs| secs.trim().parse().ok())
+        .map(Duration::from_secs)
+        .unwrap_or(CLAIM_STALE)
+}
+
+/// This device's claim id; `None` (no claiming) when the store can't say.
+fn claim_id(engine: &Engine) -> Option<String> {
+    match store::ai_sort_claim_id(&engine.db.lock().unwrap()) {
+        Ok(id) => Some(id),
+        Err(err) => {
+            warn(format_args!("no claim id, sorting without claims: {err:#}"));
+            None
+        }
+    }
+}
+
+/// The mail this device is to sort, after [`claim_mail`].
+struct Claimed {
+    mine: BTreeSet<u32>,
+    /// No other device can think the same (see `imap::AiClaims::exact`).
+    /// Otherwise the claim is asked for once more before the mail is acted
+    /// on ([`confirm_claims`]).
+    exact: bool,
+}
+
+/// Claim `uids` of `folder` for this device (`id`) and answer the ones it is
+/// to sort. Mail another device claimed or decided on is not among them. All
+/// of them when claiming isn't possible (a mailbox without keywords, a
+/// server that doesn't answer in time): sorting then goes on as without
+/// claims.
+async fn claim_mail(
+    engine: &Arc<Engine>,
+    account: &str,
+    folder: &str,
+    uids: &[u32],
+    id: &str,
+    wait: Duration,
+) -> Claimed {
+    let all = || Claimed {
+        mine: uids.iter().copied().collect(),
+        exact: true,
+    };
+    if uids.is_empty() {
+        return all();
+    }
+    let claimed = tokio::time::timeout(
+        wait,
+        engine.with_write_session(account, |session| {
+            let folder = folder.to_string();
+            let uids = uids.to_vec();
+            let id = id.to_string();
+            Box::pin(async move { imap::claim_for_ai_sort(session, &folder, &uids, &id).await })
+        }),
+    )
+    .await;
+    match claimed {
+        Ok(Ok(Some(claims))) => Claimed {
+            mine: claims
+                .states
+                .iter()
+                .filter(|state| state.won_by(id))
+                .map(|state| state.uid)
+                .collect(),
+            exact: claims.exact,
+        },
+        Ok(Ok(None)) => all(),
+        Ok(Err(err)) => {
+            warn(format_args!("account={account}: claiming mail failed: {err:#}"));
+            all()
+        }
+        Err(_) => {
+            warn(format_args!("account={account}: claiming mail timed out"));
+            all()
+        }
+    }
+}
+
+/// Of the decisions the AI just made, the ones for mail this device still
+/// holds the claim on. Only asked where a claim isn't exact: there another
+/// device with a smaller id may have claimed the mail after this one read its
+/// own claim back, and that one sorts it. All of them when the server can't
+/// be asked.
+async fn confirm_claims(
+    engine: &Arc<Engine>,
+    account: &str,
+    folder: &str,
+    decisions: Vec<AiSortDecision>,
+    id: &str,
+) -> (Vec<AiSortDecision>, Vec<u32>) {
+    let uids: Vec<u32> = decisions.iter().map(|decision| decision.candidate.uid).collect();
+    let read = tokio::time::timeout(
+        MARK_WAIT,
+        engine.with_read_session(account, |session| {
+            let folder = folder.to_string();
+            let uids = uids.clone();
+            Box::pin(async move { imap::ai_claim_states(session, &folder, &uids).await })
+        }),
+    )
+    .await;
+    let Ok(Ok(states)) = read else {
+        warn(format_args!("account={account}: claims not confirmed, sorting on"));
+        return (decisions, Vec::new());
+    };
+    let held: BTreeSet<u32> = states
+        .iter()
+        .filter(|state| state.won_by(id))
+        .map(|state| state.uid)
+        .collect();
+    let (kept, lost): (Vec<_>, Vec<_>) = decisions
+        .into_iter()
+        .partition(|decision| held.contains(&decision.candidate.uid));
+    (kept, lost.into_iter().map(|decision| decision.candidate.uid).collect())
+}
+
+/// Take the claims of the devices `ids` off `uids`. Best effort.
+async fn unclaim_mail(
+    engine: &Arc<Engine>,
+    account: &str,
+    folder: &str,
+    uids: Vec<u32>,
+    ids: Vec<String>,
+) {
+    if uids.is_empty() || ids.is_empty() {
+        return;
+    }
+    let done = tokio::time::timeout(
+        MARK_WAIT,
+        engine.with_write_session(account, |session| {
+            let folder = folder.to_string();
+            let uids = uids.clone();
+            let ids = ids.clone();
+            Box::pin(async move { imap::unclaim_for_ai_sort(session, &folder, &uids, &ids).await })
+        }),
+    )
+    .await;
+    match done {
+        Ok(Ok(())) => {}
+        Ok(Err(err)) => warn(format_args!("account={account}: taking a claim off failed: {err:#}")),
+        Err(_) => warn(format_args!("account={account}: taking a claim off timed out")),
+    }
+}
+
+/// What became of mail another device has the claim on.
+#[derive(Default)]
+struct OtherDevice {
+    /// Moved away: no longer in the folder.
+    gone: Vec<u32>,
+    /// Neither decided nor gone by the time limit, or given up on by that
+    /// device: this one takes it over once the claim is stale. With the
+    /// claims last seen on it.
+    open: Vec<(u32, Vec<String>)>,
+}
+
+/// Watch `uids`, which another device sorts, until each is moved away,
+/// decided and left in the folder, or given up on; at most until `deadline`.
+async fn await_other_device(
+    engine: &Arc<Engine>,
+    account: &str,
+    folder: &str,
+    uids: &[u32],
+    deadline: Instant,
+) -> OtherDevice {
+    let mut waiting: BTreeSet<u32> = uids.iter().copied().collect();
+    let mut decided: HashMap<u32, Instant> = HashMap::new();
+    let mut claims: HashMap<u32, Vec<String>> = HashMap::new();
+    let mut out = OtherDevice::default();
+    while !waiting.is_empty() {
+        let left = deadline.saturating_duration_since(Instant::now());
+        let read = tokio::time::timeout(
+            left,
+            engine.with_read_session(account, |session| {
+                let folder = folder.to_string();
+                let uids: Vec<u32> = waiting.iter().copied().collect();
+                Box::pin(async move { imap::ai_claim_states(session, &folder, &uids).await })
+            }),
+        )
+        .await;
+        let states = match read {
+            Ok(Ok(states)) => states,
+            Ok(Err(err)) => {
+                warn(format_args!("account={account}: reading claims failed: {err:#}"));
+                break;
+            }
+            Err(_) => break,
+        };
+        for uid in waiting.clone() {
+            match states.iter().find(|state| state.uid == uid) {
+                None => {
+                    out.gone.push(uid);
+                    waiting.remove(&uid);
+                }
+                // The mark comes just before the move: gone soon, or left.
+                Some(state) if state.sorted => {
+                    let since = decided.entry(uid).or_insert_with(Instant::now);
+                    if since.elapsed() >= CLAIM_MOVE_WAIT {
+                        waiting.remove(&uid);
+                    }
+                }
+                Some(state) if state.claims.is_empty() => {
+                    out.open.push((uid, Vec::new()));
+                    waiting.remove(&uid);
+                }
+                Some(state) => {
+                    claims.insert(uid, state.claims.clone());
+                }
+            }
+        }
+        if waiting.is_empty() || Instant::now() + CLAIM_POLL >= deadline {
+            break;
+        }
+        tokio::time::sleep(CLAIM_POLL).await;
+    }
+    out.open.extend(
+        waiting
+            .into_iter()
+            .filter(|uid| !decided.contains_key(uid))
+            .map(|uid| (uid, claims.remove(&uid).unwrap_or_default())),
+    );
+    out
+}
+
+/// Inbox mail another device claimed and didn't finish, per account: what
+/// this device takes over once the claim is [`claim_stale`].
+struct Watched {
+    candidate: AiSortCandidate,
+    uidvalidity: u32,
+    /// The claims seen on it at `since`: the ones that are stale later. A
+    /// claim that came after is another device taking the mail over.
+    claims: Vec<String>,
+    since: Instant,
+}
+
+static CLAIM_WATCH: std::sync::Mutex<Option<HashMap<String, Vec<Watched>>>> =
+    std::sync::Mutex::new(None);
+
+/// Remember `candidates` (seen at `since` with these claims of other
+/// devices) and look at them again once the claims are stale.
+fn watch_claims(
+    engine: &Arc<Engine>,
+    account: &str,
+    uidvalidity: u32,
+    candidates: Vec<(AiSortCandidate, Vec<String>)>,
+    since: Instant,
+) {
+    if candidates.is_empty() {
+        return;
+    }
+    CLAIM_WATCH
+        .lock()
+        .unwrap()
+        .get_or_insert_with(HashMap::new)
+        .entry(account.to_string())
+        .or_default()
+        .extend(candidates.into_iter().map(|(candidate, claims)| Watched {
+            candidate,
+            uidvalidity,
+            claims,
+            since,
+        }));
+    let engine = engine.clone();
+    let account = account.to_string();
+    let after = claim_stale().saturating_sub(since.elapsed()) + Duration::from_secs(1);
+    tokio::spawn(async move {
+        tokio::time::sleep(after).await;
+        take_over_stuck(&engine, &account).await;
+    });
+}
+
+/// Sort the Inbox mail of `account` another device claimed long enough ago
+/// and never finished: still in the Inbox, still not decided, still with the
+/// claim it had then. That claim goes, and the mail is sorted as new mail is
+/// (this device claims it first, so of several devices taking over, again
+/// only one sorts). Mail with a newer claim on it is being taken over by
+/// another device: watched on, from now. Run when a claim turns stale, and
+/// with every check of the account's other folders.
+pub async fn take_over_stuck(engine: &Arc<Engine>, account: &str) {
+    let folder = store::EXISTING_RULE_FOLDER;
+    let stale = claim_stale();
+    let due: Vec<Watched> = {
+        let mut watch = CLAIM_WATCH.lock().unwrap();
+        let Some(watched) = watch.as_mut().and_then(|watch| watch.get_mut(account)) else {
+            return;
+        };
+        let (due, rest) = std::mem::take(watched)
+            .into_iter()
+            .partition(|watched| watched.since.elapsed() >= stale);
+        *watched = rest;
+        due
+    };
+    if due.is_empty() || engine.is_paused(account) {
+        return;
+    }
+    // Sorting was turned off meanwhile: nothing to take over.
+    let Some(plan) = plan_for(engine, account, folder).await else {
+        return;
+    };
+    let Some(id) = claim_id(engine) else {
+        return;
+    };
+    let uids: Vec<u32> = due.iter().map(|watched| watched.candidate.uid).collect();
+    let read = tokio::time::timeout(
+        MARK_WAIT,
+        engine.with_read_session(account, |session| {
+            let uids = uids.clone();
+            Box::pin(async move { imap::ai_claim_states(session, folder, &uids).await })
+        }),
+    )
+    .await;
+    let states = match read {
+        Ok(Ok(states)) => states,
+        // Asked again with the next check.
+        _ => {
+            CLAIM_WATCH
+                .lock()
+                .unwrap()
+                .get_or_insert_with(HashMap::new)
+                .entry(account.to_string())
+                .or_default()
+                .extend(due);
+            return;
+        }
+    };
+    let validity = store::get_folder_state(&engine.db.lock().unwrap(), account, folder)
+        .ok()
+        .flatten()
+        .map(|(validity, _)| validity);
+    let mut others: BTreeSet<String> = BTreeSet::new();
+    let mut take: Vec<AiSortCandidate> = Vec::new();
+    let mut again: Vec<(AiSortCandidate, Vec<String>)> = Vec::new();
+    for watched in due {
+        let state = states.iter().find(|state| state.uid == watched.candidate.uid);
+        // Moved away, decided, or the mailbox started over: no longer open.
+        let Some(state) = state.filter(|state| !state.sorted) else {
+            continue;
+        };
+        if validity != Some(watched.uidvalidity) {
+            continue;
+        }
+        let theirs: Vec<String> = state
+            .claims
+            .iter()
+            .filter(|claim| !claim.eq_ignore_ascii_case(&id))
+            .cloned()
+            .collect();
+        if theirs.iter().any(|claim| !watched.claims.contains(claim)) {
+            again.push((watched.candidate, theirs));
+            continue;
+        }
+        others.extend(theirs);
+        take.push(watched.candidate);
+    }
+    if let Some(validity) = validity {
+        watch_claims(engine, account, validity, again, Instant::now());
+    }
+    // What this device decided on or filed itself meanwhile stays as it is.
+    let take = store::ai_sort_still_open(&engine.db.lock().unwrap(), account, folder, &take)
+        .unwrap_or_default();
+    let Some(validity) = validity.filter(|_| !take.is_empty()) else {
+        return;
+    };
+    let uids: Vec<u32> = take.iter().map(|candidate| candidate.uid).collect();
+    unclaim_mail(engine, account, folder, uids, others.into_iter().collect()).await;
+    if let Err(err) = store::ai_sort_count_taken_over(&engine.db.lock().unwrap(), take.len()) {
+        warn(format_args!("taken-over mail not counted: {err:#}"));
+    }
+    let sorted = sort_new_mail(engine, account, folder, validity, plan, take).await;
+    if !sorted.silenced.is_empty() {
+        spawn_rule_worker(engine, account, folder);
+    }
 }
 
 // ---- New mail ----------------------------------------------------------------
@@ -934,13 +1338,35 @@ pub async fn sort_new_mail(
         folder,
         Duration::from_secs(store::AI_SORT_HOLD_SECS as u64 + 1),
     );
-    let deadline = Instant::now() + AI_SORT_BUDGET;
+    let started = Instant::now();
+    let deadline = started + AI_SORT_BUDGET;
     let inbox = folder.eq_ignore_ascii_case("INBOX");
+    // Only one of the reader's devices sorts each email: the one that gets
+    // the claim (see "Claims" above). Only in the Inbox: sorting elsewhere is
+    // this device's view and writes nothing to the server.
+    let claim = if inbox { claim_id(engine) } else { None };
+    let mut exact = true;
+    let (candidates, others) = match &claim {
+        Some(id) => {
+            let uids: Vec<u32> = candidates.iter().map(|candidate| candidate.uid).collect();
+            let claimed = claim_mail(engine, account, folder, &uids, id, CLAIM_WAIT).await;
+            exact = claimed.exact;
+            candidates
+                .into_iter()
+                .partition(|candidate| claimed.mine.contains(&candidate.uid))
+        }
+        None => (candidates, Vec::new()),
+    };
+    // Mail whose claim went to another device after all (see `confirm_claims`).
+    let yielded: std::sync::Mutex<Vec<u32>> = Default::default();
+    let other_uids: Vec<u32> = others.iter().map(|candidate| candidate.uid).collect();
     // Set by the timeout path, so a recording still waiting for the store gives up.
     let cancelled = Arc::new(AtomicBool::new(false));
     let settled: std::sync::Mutex<BTreeSet<u32>> = Default::default();
     let moving: std::sync::Mutex<Vec<u32>> = Default::default();
     let filed: std::sync::Mutex<Vec<(u32, String)>> = Default::default();
+    // What got the `$MeronSorted` mark: its claim went with that.
+    let marked: std::sync::Mutex<BTreeSet<u32>> = Default::default();
     // One answer per conversation; a conversation with rule work queued is
     // shown again and left to the rules.
     let groups = group_conversations(engine, account, folder, candidates.clone());
@@ -978,6 +1404,17 @@ pub async fn sort_new_mail(
             .map_err(Some)?;
             let decisions =
                 expand_decisions(chunk, decisions, spam_folder(engine, account).as_deref());
+            let decisions = match &claim {
+                Some(id) if !exact => {
+                    let (kept, lost) = confirm_claims(engine, account, folder, decisions, id).await;
+                    // At once, before the device that sorts it moves it away.
+                    unclaim_mail(engine, account, folder, lost.clone(), vec![id.clone()]).await;
+                    settled.lock().unwrap().extend(lost.iter().copied());
+                    yielded.lock().unwrap().extend(lost);
+                    kept
+                }
+                _ => decisions,
+            };
             let decided: Vec<u32> = decisions.iter().map(|it| it.candidate.uid).collect();
             let cutoff = Some((deadline, cancelled.clone()));
             let Some(recorded) =
@@ -997,15 +1434,36 @@ pub async fn sort_new_mail(
             // only on what the store took on. Not outside the Inbox: sorting
             // there is this device's view only and writes nothing to the server.
             if inbox {
-                mark_sorted(engine, account, folder, recorded.accepted).await;
+                marked.lock().unwrap().extend(recorded.accepted.iter().copied());
+                mark_sorted(engine, account, folder, recorded.accepted, claim.as_deref()).await;
                 mark_filed(engine, account, &recorded.filed_to).await;
             }
             engine.ai_sort.clear_error();
         }
         Ok::<(), Option<AiError>>(())
     };
-    let outcome = tokio::time::timeout(AI_SORT_BUDGET, work).await;
+    // Meanwhile, what the other device does with the mail it claimed.
+    let waiting = async {
+        if other_uids.is_empty() {
+            return OtherDevice::default();
+        }
+        await_other_device(engine, account, folder, &other_uids, deadline).await
+    };
+    // The claim came out of the same budget: the mail shows when it is over.
+    let left = deadline.saturating_duration_since(Instant::now());
+    let (outcome, other) = tokio::join!(tokio::time::timeout(left, work), waiting);
     cancelled.store(true, Ordering::SeqCst);
+    // This device's claim on what it didn't decide after all (the AI failed
+    // or was too slow, a rule took the mail): another device may try.
+    if let Some(id) = &claim {
+        let marked = marked.into_inner().unwrap();
+        let undecided: Vec<u32> = candidates
+            .iter()
+            .map(|candidate| candidate.uid)
+            .filter(|uid| !marked.contains(uid))
+            .collect();
+        unclaim_mail(engine, account, folder, undecided, vec![id.clone()]).await;
+    }
     let settled = settled.into_inner().unwrap();
     let rest: Vec<AiSortCandidate> = candidates
         .into_iter()
@@ -1027,6 +1485,47 @@ pub async fn sort_new_mail(
         }
     }
     let mut moving = moving.into_inner().unwrap();
+    let yielded = yielded.into_inner().unwrap();
+    if !yielded.is_empty() {
+        let left = store::ai_sort_left_to_other(
+            &engine.db.lock().unwrap(),
+            account,
+            folder,
+            &yielded,
+            &[],
+        );
+        if let Err(err) = left {
+            warn(format_args!("could not show mail another device sorts: {err:#}"));
+        }
+    }
+    // Mail another device sorts: what it moved away isn't shown or announced
+    // here, the rest shows; what it never finished is taken over later.
+    if !others.is_empty() {
+        let shown: Vec<u32> = other_uids
+            .iter()
+            .copied()
+            .filter(|uid| !other.gone.contains(uid))
+            .collect();
+        if let Err(err) = store::ai_sort_left_to_other(
+            &engine.db.lock().unwrap(),
+            account,
+            folder,
+            &shown,
+            &other.gone,
+        ) {
+            warn(format_args!("could not show mail another device sorts: {err:#}"));
+        }
+        moving.extend(other.gone.iter().copied());
+        let mut open = other.open;
+        let open: Vec<(AiSortCandidate, Vec<String>)> = others
+            .into_iter()
+            .filter_map(|candidate| {
+                let at = open.iter().position(|(uid, _)| *uid == candidate.uid)?;
+                Some((candidate, open.swap_remove(at).1))
+            })
+            .collect();
+        watch_claims(engine, account, uidvalidity, open, started);
+    }
     // A recording that got the store just before the flag was set stands: its
     // moves are queued, so they don't alert either.
     if !rest_uids.is_empty() {
@@ -1232,6 +1731,13 @@ pub async fn check_watched_folders(engine: &Arc<Engine>, account: &str) -> Vec<M
     let _claim = Claim(engine, key);
 
     check_taught_spam(engine, account).await;
+    // Mail another device claimed and never finished (see "Claims"). On its
+    // own: it may ask the AI, which this check doesn't wait for.
+    {
+        let engine = engine.clone();
+        let account = account.to_string();
+        tokio::spawn(async move { take_over_stuck(&engine, &account).await });
+    }
 
     let folders = {
         let db = engine.db.lock().unwrap();
@@ -1565,11 +2071,42 @@ async fn run_job(engine: &Arc<Engine>, config: &AiSortConfig, key: &str, work: W
                 })
                 .filter(|group| !group.is_empty())
                 .collect();
+            // Only one of the reader's devices sorts each email: what another
+            // one claimed or decided on is not this batch's (see "Claims").
+            let claim = claim_id(engine);
+            let mut exact = true;
+            let chunk: Vec<Vec<AiSortCandidate>> = match &claim {
+                Some(id) => {
+                    let uids: Vec<u32> = chunk.iter().flatten().map(|it| it.uid).collect();
+                    let claimed =
+                        claim_mail(engine, &account, folder, &uids, id, CLAIM_WAIT).await;
+                    exact = claimed.exact;
+                    chunk
+                        .into_iter()
+                        .map(|group| {
+                            group
+                                .into_iter()
+                                .filter(|candidate| claimed.mine.contains(&candidate.uid))
+                                .collect::<Vec<_>>()
+                        })
+                        .filter(|group| !group.is_empty())
+                        .collect()
+                }
+                None => chunk,
+            };
             if chunk.is_empty() {
                 add_done(engine, count);
                 report(engine, &account, folder);
                 continue;
             }
+            // This device's claim goes off whatever it doesn't decide here.
+            let claimed: Vec<u32> = chunk.iter().flatten().map(|it| it.uid).collect();
+            let unclaim = |decided: Vec<u32>| {
+                let open: Vec<u32> =
+                    claimed.iter().copied().filter(|uid| !decided.contains(uid)).collect();
+                let ids: Vec<String> = claim.iter().cloned().collect();
+                unclaim_mail(engine, &account, folder, open, ids)
+            };
             let batch = representatives(&chunk);
             let batch = batch.as_slice();
             if config.reads == "start" {
@@ -1593,8 +2130,15 @@ async fn run_job(engine: &Arc<Engine>, config: &AiSortConfig, key: &str, work: W
                         spam_folder(engine, &account).as_deref(),
                     );
                     if engine.ai_sort.stop.load(Ordering::SeqCst) {
+                        unclaim(Vec::new()).await;
                         break 'accounts;
                     }
+                    let decisions = match &claim {
+                        Some(id) if !exact => {
+                            confirm_claims(engine, &account, folder, decisions, id).await.0
+                        }
+                        _ => decisions,
+                    };
                     // Record first, then mark only what the store took on. The
                     // account's rule turn is held meanwhile, so a running rule
                     // worker can't move the new entries before their mark lands.
@@ -1611,10 +2155,12 @@ async fn run_job(engine: &Arc<Engine>, config: &AiSortConfig, key: &str, work: W
                             record(engine, &account, folder, uidvalidity, decisions, run, None)
                                 .await
                                 .unwrap_or_default();
-                        mark_sorted(engine, &account, folder, recorded.accepted.clone()).await;
+                        let accepted = recorded.accepted.clone();
+                        mark_sorted(engine, &account, folder, accepted, claim.as_deref()).await;
                         mark_filed(engine, &account, &recorded.filed_to).await;
                         recorded
                     };
+                    unclaim(recorded.accepted.clone()).await;
                     if !recorded.moving.is_empty() {
                         spawn_rule_worker(engine, &account, folder);
                     }
@@ -1627,6 +2173,7 @@ async fn run_job(engine: &Arc<Engine>, config: &AiSortConfig, key: &str, work: W
                     let members: Vec<AiSortCandidate> = chunk.iter().flatten().cloned().collect();
                     give_up(engine, &account, folder, uidvalidity, members, "failed", detail)
                         .await;
+                    unclaim(Vec::new()).await;
                     if matches!(err.kind, ErrorKind::Key | ErrorKind::Credit | ErrorKind::Verify) {
                         break 'accounts;
                     }
