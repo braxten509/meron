@@ -369,7 +369,11 @@ private fun MeronMobileState.undoMeronMove(
                     .map { (previous, group) ->
                         val ids = group.map { it.threadId }
                         requireCoreOk(
-                            if (previous == null) client.moveOutOfMeronFolder(ids) else client.moveToMeronFolder(previous, ids),
+                            if (previous == null) {
+                                client.moveOutOfMeronFolder(ids, undo = true)
+                            } else {
+                                client.moveToMeronFolder(previous, ids, undo = true)
+                            },
                         )
                     }
             }

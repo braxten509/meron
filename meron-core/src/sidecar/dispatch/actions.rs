@@ -535,6 +535,16 @@ pub(crate) async fn dispatch(
             let reread_target = !p.get("more_coming").and_then(Value::as_bool).unwrap_or(false)
                 || archive_keys.is_some()
                 || undo.is_some();
+            // What this move teaches AI sorting (into Spam, back to the
+            // Inbox), read while the mail is still cached here.
+            let lesson = store::ai_lesson_before_move(
+                &engine.db.lock().unwrap(),
+                &account,
+                &folder,
+                &target_folder,
+                &uids,
+                undo.is_some(),
+            );
             let copies = match move_within_account_with(
                 engine,
                 &account,
@@ -572,6 +582,9 @@ pub(crate) async fn dispatch(
                 &engine.db.lock().unwrap(),
                 meron_entry,
             );
+            if lesson.learn(&engine.db.lock().unwrap()) {
+                meron_core::engine::ai_sort::push_lesson_tags(engine);
+            }
             {
                 let db = engine.db.lock().unwrap();
                 if let Some(keys) = &archive_keys {

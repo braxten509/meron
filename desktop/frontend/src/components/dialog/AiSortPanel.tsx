@@ -7,9 +7,11 @@ import {
   costPer1000,
   EMPTY_AI_SORT_CONFIG,
   estimateAiSort,
+  forgetAiSortLesson,
   formatUsd,
   loadAiModels,
   loadAiSort,
+  loadAiSortLessons,
   loadAiSortStatus,
   runAiSort,
   saveAiSort,
@@ -21,6 +23,7 @@ import {
   type AiReads,
   type AiSortConfig,
   type AiSortFolder,
+  type AiSortLesson,
   type AiSortLogEntry,
   type AiSortSettings,
   type AiSortStatus,
@@ -89,6 +92,11 @@ export function AiSortPanel() {
   const [modelInput, setModelInput] = useState<string | null>(null)
   const [logOpen, setLogOpen] = useState(false)
   const [logShown, setLogShown] = useState(LOG_PAGE)
+  // What the reader taught by moving mail by hand.
+  const [lessons, setLessons] = useState<AiSortLesson[]>([])
+  const [lessonsOpen, setLessonsOpen] = useState(false)
+  const [lessonsShown, setLessonsShown] = useState(LOG_PAGE)
+  const [forgetting, setForgetting] = useState<number | null>(null)
   const saving = useRef(false)
   const queued = useRef<AiSortConfig | null>(null)
 
@@ -107,6 +115,10 @@ export function AiSortPanel() {
   const refreshStatus = () => void loadAiSortStatus().then(setStatus, () => {})
 
   useEffect(refreshStatus, [])
+
+  const refreshLessons = () => void loadAiSortLessons().then(setLessons, () => {})
+
+  useEffect(refreshLessons, [])
 
   const running = status.running
   useEffect(() => {
@@ -351,6 +363,88 @@ export function AiSortPanel() {
       default:
         return t('aiSort.tagFailed')
     }
+  }
+
+  const forgetLesson = async (lesson: AiSortLesson) => {
+    setForgetting(lesson.id)
+    try {
+      setLessons(await forgetAiSortLesson(lesson.id))
+    } catch {
+      showToast(t('aiSort.lessonForgetFailed'), 'error')
+      refreshLessons()
+    } finally {
+      setForgetting(null)
+    }
+  }
+
+  const lessonPlace = (lesson: AiSortLesson) => {
+    if (lesson.place === 'spam') return t('aiSort.lessonSpam')
+    if (lesson.place === 'inbox') return t('aiSort.lessonInbox')
+    return lesson.place_name
+  }
+
+  const lessonUnused = (lesson: AiSortLesson) => {
+    if (lesson.used) return ''
+    return lesson.place === 'spam' ? t('aiSort.lessonUnusedSpam') : t('aiSort.lessonUnusedMeron')
+  }
+
+  if (lessonsOpen) {
+    return (
+      <div className="flex flex-col gap-3">
+        <div className="flex items-center gap-2">
+          <IconButton icon={ChevronLeft} iconSize={14} label={t('buttons.back')} size="sm" onClick={() => setLessonsOpen(false)} />
+          <h3 className="text-sm font-semibold text-primary">{t('aiSort.lessons')}</h3>
+        </div>
+        <p className="px-1 text-xs text-secondary">{t('aiSort.lessonsHint')}</p>
+        <div className="divide-y divide-border/40 overflow-hidden rounded-2xl border border-border/60 bg-raised/80 shadow-sm shadow-black/[0.03] dark:shadow-black/10">
+          {lessons.length === 0 && <p className="px-3.5 py-2.5 text-xs text-secondary">{t('aiSort.lessonsEmpty')}</p>}
+          {lessons.slice(0, lessonsShown).map((lesson) => {
+            const name = lessonSenderName(lesson.sender)
+            const tagClass = !lesson.used
+              ? 'bg-secondary/10 text-secondary'
+              : lesson.place === 'spam'
+                ? 'bg-rose-500/10 text-rose-500'
+                : lesson.place === 'inbox'
+                  ? 'bg-secondary/10 text-secondary'
+                  : 'bg-accent/10 text-accent'
+            return (
+              <div
+                key={lesson.id}
+                className="flex min-h-10 items-center gap-2 py-1 pr-1.5 pl-3.5 text-xs"
+                title={[lessonUnused(lesson), lesson.sender, lesson.subject, new Date(lesson.at * 1000).toLocaleString()]
+                  .filter(Boolean)
+                  .join(' · ')}
+              >
+                <span className={`min-w-0 flex-1 truncate ${lesson.used ? 'text-primary' : 'text-secondary'}`}>
+                  {name}
+                  {name && lesson.subject && <span className="text-secondary">{' · '}</span>}
+                  <span className="text-secondary">{lesson.subject}</span>
+                </span>
+                <span className={`max-w-40 shrink-0 truncate rounded-full px-2 text-[0.625rem] font-medium leading-5 ${tagClass}`}>
+                  {lessonPlace(lesson)}
+                </span>
+                {/* The same room on every line, so the tags line up. */}
+                <span className="flex w-7 shrink-0 justify-center">
+                  <IconButton
+                    icon={X}
+                    iconSize={13}
+                    label={t('aiSort.lessonForget')}
+                    size="sm"
+                    disabled={forgetting !== null}
+                    onClick={() => void forgetLesson(lesson)}
+                  />
+                </span>
+              </div>
+            )
+          })}
+        </div>
+        {lessons.length > lessonsShown && (
+          <Button variant="ghost" size="sm" onClick={() => setLessonsShown(lessonsShown + LOG_PAGE)}>
+            {t('aiSort.viewMore')}
+          </Button>
+        )}
+      </div>
+    )
   }
 
   if (logOpen) {
@@ -672,8 +766,32 @@ export function AiSortPanel() {
           <ChevronRight size={14} />
         </span>
       </button>
+
+      {/* What the reader taught by moving mail by hand: a view of its own too. */}
+      <button
+        type="button"
+        onClick={() => {
+          setLessonsShown(LOG_PAGE)
+          refreshLessons()
+          setLessonsOpen(true)
+        }}
+        className="flex min-h-11 w-full cursor-pointer items-center justify-between gap-3 rounded-2xl border border-border/60 bg-raised/80 px-3.5 py-2 text-left text-xs text-primary shadow-sm shadow-black/[0.03] hover:bg-hover dark:shadow-black/10"
+      >
+        <span className="truncate font-medium">{t('aiSort.lessons')}</span>
+        <span className="flex shrink-0 items-center gap-1.5 text-secondary">
+          {lessons.length > 0 && lessons.length}
+          <ChevronRight size={14} />
+        </span>
+      </button>
     </div>
   )
+}
+
+/** The name of a "Name <address>" sender, or the address when it has none. */
+function lessonSenderName(sender: string): string {
+  const at = sender.lastIndexOf('<')
+  const name = at > 0 ? sender.slice(0, at).trim() : ''
+  return name || sender.replace(/[<>]/g, '').trim()
 }
 
 function ModelFacts({ model, className }: { model: AiModel; className: string }) {

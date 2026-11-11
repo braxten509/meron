@@ -649,7 +649,7 @@ fn config_dir() -> PathBuf {
 // ---- Migrations -------------------------------------------------------------
 
 /// The `user_version` [`run_migrations`] leaves behind.
-pub(super) const SCHEMA_VERSION: i64 = 30;
+pub(super) const SCHEMA_VERSION: i64 = 31;
 
 /// Whether opening this store will rewrite existing data: a schema behind
 /// [`SCHEMA_VERSION`], or bodies rendered by an older version. Only decides
@@ -775,6 +775,9 @@ pub(super) fn run_migrations(conn: &Connection) -> Result<()> {
     }
     if version < 30 {
         migrate_v30(&tx)?;
+    }
+    if version < 31 {
+        migrate_v31(&tx)?;
     }
     tx.commit()?;
     Ok(())
@@ -1968,6 +1971,26 @@ fn migrate_v30(conn: &Connection) -> Result<()> {
            PRIMARY KEY (account, folder, uid)
          ) WITHOUT ROWID;
          PRAGMA user_version = 30;",
+    )?;
+    Ok(())
+}
+
+/// What the reader taught AI sorting by moving mail by hand (see
+/// `store::ai_lessons`): one row per email, keyed like its tags.
+fn migrate_v31(conn: &Connection) -> Result<()> {
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS ai_sort_lessons (
+           id        INTEGER PRIMARY KEY AUTOINCREMENT,
+           account   TEXT NOT NULL,
+           tag_key   TEXT NOT NULL,
+           from_name TEXT NOT NULL DEFAULT '',
+           from_addr TEXT NOT NULL DEFAULT '',
+           subject   TEXT NOT NULL DEFAULT '',
+           place     TEXT NOT NULL,
+           at        INTEGER NOT NULL,
+           UNIQUE (account, tag_key)
+         );
+         PRAGMA user_version = 31;",
     )?;
     Ok(())
 }

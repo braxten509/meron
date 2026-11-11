@@ -61,6 +61,7 @@ import jp.nonbili.meron.shared.AiSortError
 import jp.nonbili.meron.shared.AiSortEstimate
 import jp.nonbili.meron.shared.AiSortFolder
 import jp.nonbili.meron.shared.AiSortKeyState
+import jp.nonbili.meron.shared.AiSortLesson
 import jp.nonbili.meron.shared.AiSortLogEntry
 import jp.nonbili.meron.shared.AiSortStatus
 import jp.nonbili.meron.shared.accountSummaryIsRss
@@ -189,6 +190,10 @@ internal fun MeronMobileState.AiSortPage(
     var keys by remember { mutableStateOf(emptyMap<String, AiSortKeyState>()) }
     var setupError by remember { mutableStateOf<AiSortError?>(null) }
     var status by remember { mutableStateOf(AiSortStatus()) }
+    // Null until loaded: what the AI learned from mail moved by hand.
+    var lessons by remember { mutableStateOf<List<AiSortLesson>?>(null) }
+    var forgetFailed by remember { mutableStateOf(false) }
+    var lessonsShown by remember { mutableIntStateOf(AI_LOG_PAGE) }
     var models by remember { mutableStateOf(emptyMap<String, AiModelList>()) }
     var modelsFailed by remember { mutableStateOf(false) }
     var picking by remember { mutableStateOf(false) }
@@ -214,6 +219,8 @@ internal fun MeronMobileState.AiSortPage(
             setupError = setup.lastError
         }
         loadAiSortStatus()?.let { status = it }
+        // A failed read shows as nothing learned rather than loading forever.
+        lessons = loadAiSortLessons() ?: emptyList()
         refreshMeronFolders()
     }
     val polling = status.running != null || status.log.any { it.state == "moving" }
@@ -643,6 +650,37 @@ internal fun MeronMobileState.AiSortPage(
                 }
             },
         )
+
+        SectionTitle(tr("aiSort.lessons"))
+        SmallNote(tr("aiSort.lessonsHint"))
+        if (forgetFailed) SmallNote(tr("aiSort.lessonForgetFailed"), MaterialTheme.colorScheme.error)
+        val learned = lessons
+        if (learned == null) {
+            SmallNote(tr("common.loading"))
+        } else if (learned.isEmpty()) {
+            SmallNote(tr("aiSort.lessonsEmpty"))
+        } else {
+            Column {
+                learned.take(lessonsShown).forEach { lesson ->
+                    AiSortLessonRow(
+                        lesson = lesson,
+                        onForget = {
+                            coroutines.launch {
+                                val fresh = aiSortForgetLesson(lesson.id)
+                                forgetFailed = fresh == null
+                                fresh?.let { lessons = it }
+                            }
+                        },
+                    )
+                    HorizontalDivider()
+                }
+                if (learned.size > lessonsShown) {
+                    TextButton(onClick = { lessonsShown += AI_LOG_PAGE }, modifier = Modifier.fillMaxWidth()) {
+                        Text(tr("aiSort.viewMore"))
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -759,6 +797,64 @@ private fun AiSortLogRow(
                 IconButton(onClick = onMoveBack) {
                     Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = tr("aiSort.moveBack"), tint = colors.primary)
                 }
+            }
+        }
+    }
+}
+
+/**
+ * One thing the AI learned from mail moved by hand: the sender, the subject, a
+ * tag with where it went, and a button to forget it. Dimmed, with a note,
+ * while the AI can't follow it.
+ */
+@Composable
+private fun AiSortLessonRow(
+    lesson: AiSortLesson,
+    onForget: () -> Unit,
+) {
+    val tag =
+        when (lesson.place) {
+            "spam" -> tr("aiSort.lessonSpam")
+            "inbox" -> tr("aiSort.lessonInbox")
+            else -> lesson.placeName
+        }
+    val colors = MaterialTheme.colorScheme
+    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f).padding(vertical = 4.dp)) {
+            Text(
+                lesson.sender,
+                fontSize = 14.sp,
+                color = if (lesson.used) Color.Unspecified else colors.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (lesson.subject.isNotBlank()) {
+                Text(lesson.subject, fontSize = 12.sp, color = colors.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            if (!lesson.used) {
+                when (lesson.place) {
+                    "meron" -> SmallNote(tr("aiSort.lessonUnusedMeron"))
+                    "spam" -> SmallNote(tr("aiSort.lessonUnusedSpam"))
+                }
+            }
+        }
+        Surface(
+            color = if (lesson.used) colors.secondaryContainer else colors.surfaceVariant,
+            shape = RoundedCornerShape(50),
+            modifier = Modifier.padding(start = 8.dp).widthIn(max = 140.dp),
+        ) {
+            Text(
+                tag,
+                Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                fontSize = 11.sp,
+                color = if (lesson.used) colors.onSecondaryContainer else colors.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+            IconButton(onClick = onForget) {
+                Icon(Icons.Filled.Close, contentDescription = tr("aiSort.lessonForget"), tint = colors.onSurfaceVariant)
             }
         }
     }

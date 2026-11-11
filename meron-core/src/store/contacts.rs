@@ -392,7 +392,7 @@ pub fn list_contacts(
 }
 
 /// Every account's address and send-as aliases, lowercased.
-fn own_addresses(conn: &Connection) -> Result<std::collections::HashSet<String>> {
+pub(super) fn own_addresses(conn: &Connection) -> Result<std::collections::HashSet<String>> {
     let accounts: Vec<(String, String)> = conn
         .prepare("SELECT id, email FROM accounts")?
         .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?

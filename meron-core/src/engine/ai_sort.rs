@@ -281,6 +281,7 @@ async fn decide_batch_by_decision(
     folders: &[PromptFolder],
     batch: &[AiSortCandidate],
     emails: &[PromptEmail],
+    spam: Option<&ai::SpamChoice>,
     deadline: Instant,
 ) -> Result<Vec<AiSortDecision>, AiError> {
     use futures::StreamExt;
@@ -289,18 +290,20 @@ async fn decide_batch_by_decision(
     let requests: Vec<_> = emails
         .iter()
         .map(|email| {
-            let body = ai::decision_body(&config.model, folders, email);
+            let body = ai::decision_body_taught(&config.model, folders, email, spam);
             let key = key.clone();
             Box::pin(async move { decide_with_retry(&key, body, deadline).await })
         })
         .collect();
     let mut answers = futures::stream::iter(requests).buffered(ai::DECISION_PARALLEL);
     let mut picks = Vec::with_capacity(emails.len());
-    let mut flagged = emails.iter().map(|email| email.automated.is_some());
+    let mut asked = emails.iter();
     while let Some(answer) = answers.next().await {
         // Dropping the stream drops the requests not yet answered.
-        let automated = flagged.next().unwrap_or(false);
-        picks.push(ai::parse_decision_for(&answer?, folders, automated));
+        let email = asked.next();
+        let automated = email.is_some_and(|email| email.automated.is_some());
+        let spam = spam.filter(|_| email.is_some_and(|email| email.spam_backed));
+        picks.push(ai::parse_decision_taught(&answer?, folders, automated, spam));
     }
     Ok(batch
         .iter()
@@ -358,6 +361,120 @@ async fn bulk_signals(
     }
 }
 
+/// Push the lesson tags that changed since the last call (see
+/// [`store::ai_lessons_take_unpushed`]) to their servers in the background,
+/// from the desktop's runtime or the phone's.
+pub fn push_lesson_tags(engine: &Arc<Engine>) {
+    for account in store::ai_lessons_take_unpushed() {
+        let engine = engine.clone();
+        let work = async move {
+            if let Err(err) = push_pending_tags(&engine, &account).await {
+                warn(format_args!("account={account}: lesson tag push failed: {err:#}"));
+            }
+        };
+        match tokio::runtime::Handle::try_current() {
+            Ok(handle) => {
+                handle.spawn(work);
+            }
+            Err(_) => {
+                crate::ffi::spawn_engine_task(work);
+            }
+        }
+    }
+}
+
+/// The reader's lessons for a batch: for each email the lessons most like it
+/// under the names the AI sees, whether one backs a Spam answer, and the
+/// batch's Spam choice when any email is backed for it. A lesson into a
+/// Meron folder that isn't one of `folders`, or into Spam on an account
+/// without a Spam folder, isn't shown (it still counts as the reader's
+/// latest word when it is). Lessons from every account count: the
+/// same sender writes to more than one of the reader's addresses.
+struct Taught {
+    earlier: Vec<Vec<ai::lessons::PromptLesson>>,
+    backed: Vec<bool>,
+    spam: Option<ai::SpamChoice>,
+}
+
+fn taught_for(
+    engine: &Engine,
+    account: &str,
+    folders: &[PromptFolder],
+    batch: &[AiSortCandidate],
+) -> Taught {
+    use ai::lessons::{Lesson, PromptLesson};
+    let none = || Taught {
+        earlier: vec![Vec::new(); batch.len()],
+        backed: vec![false; batch.len()],
+        spam: None,
+    };
+    let (rows, junk) = {
+        let db = engine.db.lock().unwrap();
+        let rows = match store::ai_lessons(&db) {
+            Ok(rows) => rows,
+            Err(err) => {
+                warn(format_args!("lessons not read: {err:#}"));
+                return none();
+            }
+        };
+        let junk = store::folder_for_role(&db, account, "junk").ok().flatten();
+        (rows, junk)
+    };
+    if rows.is_empty() {
+        return none();
+    }
+    let spam = junk.and_then(|folder| ai::SpamChoice::new(folders, &folder));
+    // Each usable lesson with the name the AI sees for its place.
+    let mut names = Vec::new();
+    let mut lessons = Vec::new();
+    for row in rows {
+        let Some(place) = store::LessonPlace::from_code(&row.place) else {
+            continue;
+        };
+        let name = match &place {
+            store::LessonPlace::Spam => spam.as_ref().map(|spam| spam.name.clone()),
+            store::LessonPlace::Inbox => Some("Inbox".to_string()),
+            store::LessonPlace::Meron(id) => folders
+                .iter()
+                .find(|folder| folder.target == ai::SortTarget::Meron(id.clone()))
+                .map(|folder| folder.name.clone()),
+        };
+        names.push(name);
+        lessons.push(Lesson {
+            from_name: row.from_name,
+            from_addr: row.from_addr,
+            subject: row.subject,
+            place,
+            at: row.at,
+        });
+    }
+    let mut out = none();
+    for (at, candidate) in batch.iter().enumerate() {
+        for lesson in ai::lessons::alike(&lessons, &candidate.from_addr, &candidate.subject) {
+            // `alike` answers with borrows of `lessons`: find its name by place in the list.
+            let index = lessons
+                .iter()
+                .position(|known| std::ptr::eq(known, lesson))
+                .unwrap_or_default();
+            let Some(name) = &names[index] else {
+                continue;
+            };
+            if lesson.place == store::LessonPlace::Spam {
+                out.backed[at] = true;
+            }
+            out.earlier[at].push(PromptLesson {
+                from: lesson.sender(),
+                subject: lesson.subject.clone(),
+                moved_to: name.clone(),
+            });
+        }
+    }
+    if out.backed.iter().any(|backed| *backed) {
+        out.spam = spam;
+    }
+    out
+}
+
 /// The emails as the AI sees them: sender, subject, when chosen the start of
 /// the cached body, and whether it looks like bulk or automated mail (from
 /// `signals`, the sender address, or "unsubscribe" in a cached body's start).
@@ -369,6 +486,7 @@ fn prompt_emails(
     candidates: &[AiSortCandidate],
     with_start: bool,
     signals: &HashMap<u32, &'static str>,
+    taught: &Taught,
 ) -> Vec<PromptEmail> {
     let db = engine.db.lock().unwrap();
     candidates
@@ -391,6 +509,8 @@ fn prompt_emails(
                 subject: candidate.subject.clone(),
                 start: start.filter(|_| with_start),
                 automated,
+                earlier: taught.earlier.get(at).cloned().unwrap_or_default(),
+                spam_backed: taught.backed.get(at).copied().unwrap_or(false),
             }
         })
         .collect()
@@ -409,6 +529,7 @@ async fn decide_batch(
     deadline: Instant,
 ) -> Result<Vec<AiSortDecision>, AiError> {
     let signals = bulk_signals(engine, account, folder, batch, deadline).await;
+    let taught = taught_for(engine, account, folders, batch);
     let emails = prompt_emails(
         engine,
         account,
@@ -416,21 +537,35 @@ async fn decide_batch(
         batch,
         config.reads == "start",
         &signals,
+        &taught,
     );
+    let spam = taught.spam.as_ref();
     if model_decision(engine, &config.provider, &config.model).await? {
-        return decide_batch_by_decision(config, key, folders, batch, &emails, deadline).await;
+        return decide_batch_by_decision(config, key, folders, batch, &emails, spam, deadline)
+            .await;
     }
     let ids: Vec<String> = emails.iter().map(|email| email.id.clone()).collect();
+    let backed: std::collections::HashSet<String> = emails
+        .iter()
+        .filter(|email| email.spam_backed)
+        .map(|email| email.id.clone())
+        .collect();
     let automated: std::collections::HashSet<String> = emails
         .iter()
         .filter(|email| email.automated.is_some())
         .map(|email| email.id.clone())
         .collect();
-    let body = ai::chat_body(&config.model, folders, &emails);
+    let body = ai::chat_body_taught(&config.model, folders, &emails, spam);
     let structured = model_structured(engine, &config.provider, &config.model);
     let text =
         request_with_retry(engine, &config.provider, key, structured, body, deadline).await?;
-    let mut picks = ai::parse_answer_flagged(&text, &ids, folders, &automated);
+    let mut picks = ai::parse_answer_taught(
+        &text,
+        &ids,
+        folders,
+        &automated,
+        spam.map(|spam| (spam, &backed)),
+    );
     Ok(batch
         .iter()
         .zip(ids)
@@ -446,18 +581,40 @@ async fn decide_batch(
 }
 
 /// One answer per conversation: the AI is asked about each group's newest
-/// email (its first) and the answer stands for every email of the group.
+/// email (its first) and the answer stands for every email of the group (see
+/// [`expand_decisions`]).
 fn representatives(groups: &[Vec<AiSortCandidate>]) -> Vec<AiSortCandidate> {
     groups.iter().filter_map(|group| group.first().cloned()).collect()
 }
 
+/// Give each group's answer to every email of the group.
+///
+/// Except Spam (`spam`: the account's Spam folder), the careful answer: it was
+/// backed by a lesson about the asked email's sender, so it only stands for
+/// the group's emails from that same sender. Another person's email in the
+/// same conversation stays in the Inbox.
 fn expand_decisions(
     groups: &[Vec<AiSortCandidate>],
     decisions: Vec<AiSortDecision>,
+    spam: Option<&str>,
 ) -> Vec<AiSortDecision> {
     let mut out = Vec::new();
     for (group, decision) in groups.iter().zip(decisions) {
+        let to_spam = matches!(
+            (&decision.target, spam),
+            (Some(ai::SortTarget::Server(target)), Some(spam)) if target == spam
+        );
+        let asked = decision.candidate.from_addr.trim().to_lowercase();
         for member in group {
+            let other_sender = member.from_addr.trim().to_lowercase() != asked;
+            if to_spam && other_sender {
+                out.push(AiSortDecision {
+                    candidate: member.clone(),
+                    target: None,
+                    why: String::new(),
+                });
+                continue;
+            }
             out.push(AiSortDecision {
                 candidate: member.clone(),
                 target: decision.target.clone(),
@@ -466,6 +623,13 @@ fn expand_decisions(
         }
     }
     out
+}
+
+/// The account's Spam folder, which only a lesson-backed answer can name.
+fn spam_folder(engine: &Engine, account: &str) -> Option<String> {
+    store::folder_for_role(&engine.db.lock().unwrap(), account, "junk")
+        .ok()
+        .flatten()
 }
 
 /// Group `candidates` by conversation (see
@@ -812,7 +976,8 @@ pub async fn sort_new_mail(
             )
             .await
             .map_err(Some)?;
-            let decisions = expand_decisions(chunk, decisions);
+            let decisions =
+                expand_decisions(chunk, decisions, spam_folder(engine, account).as_deref());
             let decided: Vec<u32> = decisions.iter().map(|it| it.candidate.uid).collect();
             let cutoff = Some((deadline, cancelled.clone()));
             let Some(recorded) =
@@ -922,6 +1087,109 @@ const FOLDER_CARRY_MAX: usize = 100;
 static FOLDER_CHECK_FAILED: std::sync::Mutex<BTreeSet<(String, String)>> =
     std::sync::Mutex::new(BTreeSet::new());
 
+/// Spam mail already looked at for another device's lesson, per account, so
+/// mail a sync can't reach doesn't start one every check: mail found with the
+/// lesson's tag, and (`1`) mail found to have lost it.
+static SPAM_LESSONS_SEEN: std::sync::Mutex<Option<HashMap<String, (BTreeSet<u32>, BTreeSet<u32>)>>> =
+    std::sync::Mutex::new(None);
+
+/// Most Spam mail one check reads for its lesson tag; the rest waits for the
+/// next check.
+const SPAM_LESSON_READ_MAX: usize = 200;
+
+/// Learn the Spam lessons the reader's other devices taught: mail in the
+/// account's Spam folder carries the lesson's tag (see `store::ai_lessons`),
+/// but nothing syncs that folder in the background, so the tag would only be
+/// read once the reader opens it. One SEARCH for the tag; then just the mail
+/// it names whose tag this device hasn't read, and the mail it no longer
+/// names that this device read the tag on (the lesson was forgotten
+/// elsewhere), is read, headers only. Inbox and Meron folder lessons need
+/// none of this: their mail is in the Inbox, which every sync reads.
+async fn check_taught_spam(engine: &Arc<Engine>, account: &str) {
+    let Some(junk) = store::folder_for_role(&engine.db.lock().unwrap(), account, "junk")
+        .ok()
+        .flatten()
+    else {
+        return;
+    };
+    let tag = store::LessonPlace::Spam.tag();
+    let keyword = crate::tags::tag_to_keyword(&tag);
+    let found = engine
+        .with_read_session(account, |session| {
+            let junk = junk.clone();
+            let keyword = keyword.clone();
+            Box::pin(async move { imap::uids_with_keyword(session, &junk, &keyword).await })
+        })
+        .await;
+    let uids = match found {
+        Ok(uids) => uids,
+        Err(err) => {
+            warn(format_args!("account={account}: Spam lesson check: {err:#}"));
+            return;
+        }
+    };
+    let found: BTreeSet<u32> = uids.iter().copied().collect();
+    // Mail this device read the tag on that the server no longer names.
+    let had = store::ai_lesson_tagged_uids(&engine.db.lock().unwrap(), account, &junk, &tag)
+        .unwrap_or_default();
+    let (fresh, lost): (Vec<u32>, Vec<u32>) = {
+        let mut seen = SPAM_LESSONS_SEEN.lock().unwrap();
+        let (tagged, untagged) = seen
+            .get_or_insert_with(HashMap::new)
+            .entry(account.to_string())
+            .or_default();
+        // Tagged again later counts as new again, and the other way round.
+        tagged.retain(|uid| found.contains(uid));
+        untagged.retain(|uid| !found.contains(uid));
+        (
+            uids.into_iter().filter(|uid| tagged.insert(*uid)).collect(),
+            had.into_iter()
+                .filter(|uid| !found.contains(uid) && untagged.insert(*uid))
+                .collect(),
+        )
+    };
+    let unread = !fresh.is_empty()
+        && store::ai_lesson_tag_unread(&engine.db.lock().unwrap(), account, &junk, &fresh, &tag)
+            .unwrap_or(false);
+    let mut wanted: Vec<u32> = lost.clone();
+    if unread {
+        wanted.extend(&fresh);
+    }
+    if wanted.is_empty() {
+        return;
+    }
+    wanted.sort_unstable_by(|a, b| b.cmp(a));
+    let later = wanted.split_off(wanted.len().min(SPAM_LESSON_READ_MAX));
+    // Mail not read this time is looked at again at the next check.
+    let look_again = |uids: &[u32]| {
+        let mut seen = SPAM_LESSONS_SEEN.lock().unwrap();
+        if let Some((tagged, untagged)) = seen.as_mut().and_then(|seen| seen.get_mut(account)) {
+            for uid in uids {
+                tagged.remove(uid);
+                untagged.remove(uid);
+            }
+        }
+    };
+    look_again(&later);
+    let fetched = engine
+        .with_read_session(account, |session| {
+            let junk = junk.clone();
+            let wanted = wanted.clone();
+            Box::pin(async move { imap::fetch_headers_by_uid(session, &junk, &wanted).await })
+        })
+        .await;
+    let stored = fetched.and_then(|mut headers| {
+        for header in &mut headers {
+            header.folder = junk.clone();
+        }
+        store::upsert_read_messages(&engine.db.lock().unwrap(), account, &junk, &headers)
+    });
+    if let Err(err) = stored {
+        warn(format_args!("account={account}: Spam lessons not read: {err:#}"));
+        look_again(&wanted);
+    }
+}
+
 /// Check the folders AI sorting watches besides the Inbox (mail a server filter
 /// delivered straight there) for new mail, and sync the ones that got some, so
 /// their new mail is sorted like the Inbox's. Run after a refresh or background
@@ -962,6 +1230,8 @@ pub async fn check_watched_folders(engine: &Arc<Engine>, account: &str) -> Vec<M
         }
     }
     let _claim = Claim(engine, key);
+
+    check_taught_spam(engine, account).await;
 
     let folders = {
         let db = engine.db.lock().unwrap();
@@ -1317,7 +1587,11 @@ async fn run_job(engine: &Arc<Engine>, config: &AiSortConfig, key: &str, work: W
             .unwrap_or_else(|_| Err(AiError::network("The AI took too long.")));
             match decided {
                 Ok(decisions) => {
-                    let decisions = expand_decisions(&chunk, decisions);
+                    let decisions = expand_decisions(
+                        &chunk,
+                        decisions,
+                        spam_folder(engine, &account).as_deref(),
+                    );
                     if engine.ai_sort.stop.load(Ordering::SeqCst) {
                         break 'accounts;
                     }
@@ -1419,7 +1693,13 @@ pub async fn move_back(engine: &Arc<Engine>, id: i64) -> anyhow::Result<()> {
     };
     let uid = uid.ok_or_else(not_found)?;
     move_within_account(engine, &entry.account, &target, "INBOX", &[uid]).await?;
-    store::ai_sort_set_log_state(&engine.db.lock().unwrap(), id, "moved_back", "")?;
+    {
+        let db = engine.db.lock().unwrap();
+        store::ai_sort_set_log_state(&db, id, "moved_back", "")?;
+        // The AI was wrong here: mail like this stays in the Inbox from now on.
+        store::ai_lesson_from_log(&db, &entry);
+    }
+    push_lesson_tags(engine);
     report(engine, &entry.account, "INBOX");
     Ok(())
 }
@@ -1462,7 +1742,10 @@ fn move_back_from_meron(
     // this device; the server copy stays where it is.
     store::ai_sort_inbox_show_again(&db, &entry.account, from, entry.uid, entry.uidvalidity)?;
     store::ai_sort_set_log_state(&db, id, "moved_back", "")?;
+    // The AI was wrong here: mail like this stays in the Inbox from now on.
+    store::ai_lesson_from_log(&db, entry);
     drop(db);
+    push_lesson_tags(engine);
     crate::meron_marks::spawn_writes(engine, unmark);
     report(engine, &entry.account, "INBOX");
     Ok(())

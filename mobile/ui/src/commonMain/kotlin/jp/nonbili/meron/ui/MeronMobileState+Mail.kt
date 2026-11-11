@@ -14,6 +14,7 @@ import jp.nonbili.meron.shared.AiSortConfig
 import jp.nonbili.meron.shared.AiSortEstimate
 import jp.nonbili.meron.shared.AiSortKeyCheck
 import jp.nonbili.meron.shared.AiSortKeyState
+import jp.nonbili.meron.shared.AiSortLesson
 import jp.nonbili.meron.shared.AiSortSetup
 import jp.nonbili.meron.shared.AiSortStatus
 import jp.nonbili.meron.shared.EmptyFolderParams
@@ -49,6 +50,7 @@ import jp.nonbili.meron.shared.parseAiSortKeyResponse
 import jp.nonbili.meron.shared.parseAiSortOkResponse
 import jp.nonbili.meron.shared.parseAiSortRunResponse
 import jp.nonbili.meron.shared.parseAiSortSetupResponse
+import jp.nonbili.meron.shared.parseAiSortLessonsResponse
 import jp.nonbili.meron.shared.parseAiSortStatusResponse
 import jp.nonbili.meron.shared.parseFolderDeleteResponse
 import jp.nonbili.meron.shared.parseFolderListResponse
@@ -488,8 +490,8 @@ internal fun MeronMobileState.restoreThread(
                 withContext(ioDispatcher) {
                     val client = MobileMailCommandClient(core)
                     requireCoreOk(
-                        location.meronFolderId.ifBlank { null }?.let { client.moveToMeronFolder(it, ids) }
-                            ?: client.moveOutOfMeronFolder(ids),
+                        location.meronFolderId.ifBlank { null }?.let { client.moveToMeronFolder(it, ids, undo = true) }
+                            ?: client.moveOutOfMeronFolder(ids, undo = true),
                     )
                 }
             }.onSuccess {
@@ -792,6 +794,18 @@ internal suspend fun MeronMobileState.aiSortMoveBack(id: Long): Boolean =
     runCatching {
         parseAiSortOkResponse(requireCoreOk(withContext(ioDispatcher) { MobileMailCommandClient(core).aiSortMoveBack(id) }))
     }.getOrDefault(false)
+
+/** What AI sorting learned from mail moved by hand, newest first; null if it couldn't be read. */
+internal suspend fun MeronMobileState.loadAiSortLessons(): List<AiSortLesson>? =
+    runCatching {
+        parseAiSortLessonsResponse(requireCoreOk(withContext(ioDispatcher) { MobileMailCommandClient(core).aiSortLessons() }))
+    }.getOrNull()
+
+/** Forgets one lesson; the fresh list, or null if it failed. */
+internal suspend fun MeronMobileState.aiSortForgetLesson(id: Long): List<AiSortLesson>? =
+    runCatching {
+        parseAiSortLessonsResponse(requireCoreOk(withContext(ioDispatcher) { MobileMailCommandClient(core).aiSortForgetLesson(id) }))
+    }.getOrNull()
 
 internal suspend fun MeronMobileState.loadKnownTags(): List<String> =
     runCatching {

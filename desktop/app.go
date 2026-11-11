@@ -461,7 +461,7 @@ func (a *App) invoke(command string, payload map[string]any) (any, error) {
 		return a.stopRule(payload)
 	case "mail.aiSortConfig", "mail.setAiSortConfig", "mail.setAiSortKey", "mail.checkAiSortKey",
 		"mail.aiSortModels", "mail.aiSortEstimate", "mail.runAiSort", "mail.stopAiSort",
-		"mail.aiSortStatus", "mail.aiSortMoveBack":
+		"mail.aiSortStatus", "mail.aiSortMoveBack", "mail.aiSortLessons", "mail.aiSortForgetLesson":
 		return a.aiSort(command, payload)
 	case "mail.meronFolders", "mail.createMeronFolder", "mail.renameMeronFolder", "mail.setMeronFolderNotify", "mail.deleteMeronFolder",
 		"mail.moveToMeronFolder", "mail.moveOutOfMeronFolder", "mail.meronFolderThreads",

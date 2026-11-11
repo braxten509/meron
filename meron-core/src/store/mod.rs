@@ -45,6 +45,7 @@ use crate::imap::MessageHeader;
 pub const DEFAULT_RSS_SYNC_INTERVAL_MINUTES: u64 = 60;
 
 mod accounts;
+mod ai_lessons;
 mod ai_sort;
 mod ai_sort_inbox;
 mod archive;
@@ -66,6 +67,7 @@ mod threads;
 mod updates;
 
 pub use accounts::*;
+pub use ai_lessons::*;
 pub use ai_sort::*;
 pub use ai_sort_inbox::*;
 pub use archive::*;

@@ -198,6 +198,7 @@ pub fn dispatch_marked(
 ) -> Result<Value> {
     let (result, jobs) = dispatch_with_marks(conn, command, params)?;
     crate::meron_marks::spawn_writes(engine, jobs);
+    crate::engine::ai_sort::push_lesson_tags(engine);
     Ok(result)
 }
 
@@ -326,12 +327,31 @@ fn expand_sender_rows(conn: &Connection, ids: Vec<String>) -> Result<Vec<String>
     Ok(out)
 }
 
+/// Whether the params say the move is an Undo of an earlier one (`"undo":
+/// true`): it then teaches AI sorting nothing.
+fn is_undo(params: &Value) -> bool {
+    params.get("undo").and_then(Value::as_bool).unwrap_or(false)
+}
+
+/// Record what filing `entry` by hand teaches AI sorting (see
+/// [`store::ai_lesson_of_entry_in`]). Never fails the filing.
+fn teach_filing(conn: &Connection, entry: &str, place: &store::LessonPlace, undo: bool) {
+    if let Err(err) = store::ai_lesson_of_entry_in(conn, entry, place, undo) {
+        crate::mlog!(
+            crate::log::Level::Warn,
+            "mail.aiSort",
+            "could not record a filing's lesson: {err:#}"
+        );
+    }
+}
+
 /// Move whole conversations into a Meron folder (or from one to another), in
 /// one transaction. Each change says where the conversation was, so Undo can
 /// put it back: `previous_folder_id` null means "out of Meron folders".
 fn move_in(conn: &Connection, params: &Value) -> Result<(Value, Vec<MarkJob>)> {
     let folder_id = required(params, "folder_id")?;
     anyhow::ensure!(store::meron_folder_exists(conn, folder_id)?, "That Meron folder is gone.");
+    let undo = is_undo(params);
     let tx = Transaction::new_unchecked(conn, TransactionBehavior::Immediate)?;
     let mut moved = 0;
     let mut skipped = Vec::new();
@@ -362,6 +382,13 @@ fn move_in(conn: &Connection, params: &Value) -> Result<(Value, Vec<MarkJob>)> {
         let result =
             store::meron_move_in_in(&tx, &parsed.account, &key, folder_id, store::MeronFiling::User)?;
         filed_entries.insert(result.entry_id.clone());
+        // Filed by hand: AI sorting learns where this kind of mail goes (an
+        // Undo forgets what the undone action taught). Not for the built-in
+        // Archive, which is no sorting target.
+        if first && !store::meron_is_builtin(folder_id) {
+            let place = store::LessonPlace::Meron(folder_id.to_string());
+            teach_filing(&tx, &result.entry_id, &place, undo);
+        }
         touched.insert((parsed.account.clone(), parsed.folder.clone()));
         for folder in result.touched {
             touched.insert((parsed.account.clone(), folder));
@@ -401,6 +428,7 @@ fn move_in(conn: &Connection, params: &Value) -> Result<(Value, Vec<MarkJob>)> {
 /// Take whole conversations out of their Meron folders: they show where their
 /// mail is again.
 fn move_out(conn: &Connection, params: &Value) -> Result<(Value, Vec<MarkJob>)> {
+    let undo = is_undo(params);
     let tx = Transaction::new_unchecked(conn, TransactionBehavior::Immediate)?;
     let mut released = 0;
     let mut jobs = Vec::new();
@@ -410,13 +438,18 @@ fn move_out(conn: &Connection, params: &Value) -> Result<(Value, Vec<MarkJob>)> 
             continue;
         };
         touched.insert((parsed.account.clone(), parsed.folder.clone()));
-        if let Some((entry, _)) = store::meron_entry_of_thread(
+        if let Some((entry, entry_folder)) = store::meron_entry_of_thread(
             &tx,
             &parsed.account,
             &parsed.folder,
             &parsed.thread_key,
             parsed.uid,
         )? {
+            // Taken out by hand: AI sorting learns to keep this kind of mail
+            // in the Inbox (an Undo forgets what the undone filing taught).
+            if !store::meron_is_builtin(&entry_folder) {
+                teach_filing(&tx, &entry, &store::LessonPlace::Inbox, undo);
+            }
             jobs.extend(crate::meron_marks::job_for_released_entry(&tx, &entry));
             let result = store::meron_release_entry_in(&tx, &entry)?;
             released += result.released;
@@ -626,7 +659,7 @@ pub fn archive_card_of_copies(
 ///
 /// The store lock is only held between the server steps.
 pub async fn move_with_server(engine: &Arc<Engine>, command: &str, params: &Value) -> Result<Value> {
-    match command {
+    let result = match command {
         "moveOut" => move_out_with_server(engine, params).await,
         "moveIn" if str_param(params, "folder_id") == store::MERON_ARCHIVE_FOLDER_ID => {
             archive_again(engine, params).await
@@ -636,7 +669,10 @@ pub async fn move_with_server(engine: &Arc<Engine>, command: &str, params: &Valu
             crate::meron_marks::spawn_writes(engine, jobs);
             Ok(result)
         }
-    }
+    };
+    // What the filing taught AI sorting travels to the reader's other devices.
+    crate::engine::ai_sort::push_lesson_tags(engine);
+    result
 }
 
 /// Archive of a whole conversation on an account with no archive mailbox:

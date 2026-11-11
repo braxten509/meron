@@ -198,6 +198,11 @@ pub fn carried_tags(
     let keys = message_tag_keys(conn, account, copies)?;
     let mut tags = all_tags_by_key(conn, account, &keys)?;
     tags.retain(|key, _| !key.starts_with("uid:"));
+    // A lesson is about the account it was taught on.
+    for of_message in tags.values_mut() {
+        of_message.retain(|tag| !tag.starts_with(super::LESSON_TAG_PREFIX));
+    }
+    tags.retain(|_, of_message| !of_message.is_empty());
     Ok(tags)
 }
 

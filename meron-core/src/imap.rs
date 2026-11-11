@@ -2041,6 +2041,23 @@ pub async fn mark_ai_sorted(session: &mut Session, folder: &str, uids: &[u32]) -
     Ok(true)
 }
 
+/// The UIDs of `folder` that carry `keyword`, ascending: the folder opened
+/// read-only and one SEARCH, nothing fetched.
+pub async fn uids_with_keyword(
+    session: &mut Session,
+    folder: &str,
+    keyword: &str,
+) -> Result<Vec<u32>> {
+    session.examine(folder).await.context("EXAMINE")?;
+    let found: HashSet<u32> = session
+        .uid_search(format!("KEYWORD {keyword}"))
+        .await
+        .context("UID SEARCH KEYWORD")?;
+    let mut uids: Vec<u32> = found.into_iter().collect();
+    uids.sort_unstable();
+    Ok(uids)
+}
+
 /// The Meron folder id a FETCH response's `$MeronF_<id>` keyword names
 /// (`Some(None)`: no mark). Two devices writing at once can leave two: the
 /// smallest id wins on every device, so they agree. `None` when the response

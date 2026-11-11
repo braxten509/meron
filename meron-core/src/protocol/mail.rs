@@ -1959,6 +1959,16 @@ pub(crate) fn move_mobile_thread(data_dir: &str, params: &Value) -> Result<Value
         } else {
             crate::meron_folders::unmark_before_action_blocking(&engine, &parsed.account, &meron_entry);
         }
+        // What this move teaches AI sorting (into Spam, back to the Inbox),
+        // read while the mail is still cached here.
+        let lesson = store::ai_lesson_before_move(
+            &conn,
+            &parsed.account,
+            &parsed.folder,
+            &target_folder,
+            &uids,
+            undo.is_some(),
+        );
         let op_folder = parsed.folder.clone();
         let op_target = target_folder.clone();
         let op_uids = uids.clone();
@@ -2027,6 +2037,9 @@ pub(crate) fn move_mobile_thread(data_dir: &str, params: &Value) -> Result<Value
             );
         }
         crate::meron_marks::flush_archive_unmarks(&engine);
+        if lesson.learn(&conn) {
+            crate::engine::ai_sort::push_lesson_tags(&engine);
+        }
         if let Some(undo) = &undo {
             let jobs = undo.apply(&conn, &parsed.account, &parsed.thread_key, &target_folder, &copies.uids);
             crate::meron_marks::spawn_writes(&engine, jobs);

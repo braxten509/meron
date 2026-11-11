@@ -105,6 +105,8 @@ object MobileCommand {
     const val StopAiSort = "mail.stopAiSort"
     const val AiSortStatus = "mail.aiSortStatus"
     const val AiSortMoveBack = "mail.aiSortMoveBack"
+    const val AiSortLessons = "mail.aiSortLessons"
+    const val AiSortForgetLesson = "mail.aiSortForgetLesson"
 
     // Meron folders: kept on this device only, never on a mail server.
     const val MeronFolders = "mail.meronFolders"
@@ -1394,6 +1396,22 @@ data class AiSortStatus(
     val lastError: AiSortError? = null,
 )
 
+/**
+ * One thing AI sorting learned from mail the reader moved by hand. [place] is
+ * `spam`, `inbox` or `meron` ([placeName] is then the Meron folder's name).
+ * [used] is false when the AI can't follow it right now.
+ */
+data class AiSortLesson(
+    val id: Long,
+    val at: Long = 0,
+    val account: String = "",
+    val sender: String = "",
+    val subject: String = "",
+    val place: String = "",
+    val placeName: String = "",
+    val used: Boolean = true,
+)
+
 data class RssMarkReadParams(
     val threadId: String,
     val seen: Boolean = true,
@@ -1684,6 +1702,10 @@ class MobileMailCommandClient(
 
     suspend fun aiSortMoveBack(id: Long): String = core.invoke(MobileCommand.AiSortMoveBack, jsonObject("id" to id.toString()))
 
+    suspend fun aiSortLessons(): String = core.invoke(MobileCommand.AiSortLessons, "{}")
+
+    suspend fun aiSortForgetLesson(id: Long): String = core.invoke(MobileCommand.AiSortForgetLesson, jsonObject("id" to id.toString().jsonString()))
+
     suspend fun meronFolders(): String = core.invoke(MobileCommand.MeronFolders, "{}")
 
     suspend fun createMeronFolder(name: String): String = core.invoke(MobileCommand.CreateMeronFolder, jsonObject("name" to name.jsonString()))
@@ -1704,17 +1726,30 @@ class MobileMailCommandClient(
 
     suspend fun deleteMeronFolder(id: String): String = core.invoke(MobileCommand.DeleteMeronFolder, jsonObject("id" to id.jsonString()))
 
+    /** [undo]: this move undoes an earlier one, so AI sorting learns nothing from it. */
     suspend fun moveToMeronFolder(
         folderId: String,
         threadIds: List<String>,
+        undo: Boolean = false,
     ): String =
         core.invoke(
             MobileCommand.MoveToMeronFolder,
-            jsonObject("folder_id" to folderId.jsonString(), "thread_ids" to threadIds.jsonStringArray()),
+            jsonObject(
+                "folder_id" to folderId.jsonString(),
+                "thread_ids" to threadIds.jsonStringArray(),
+                "undo" to "true".takeIf { undo },
+            ),
         )
 
-    suspend fun moveOutOfMeronFolder(threadIds: List<String>): String =
-        core.invoke(MobileCommand.MoveOutOfMeronFolder, jsonObject("thread_ids" to threadIds.jsonStringArray()))
+    /** [undo]: this move undoes an earlier one, so AI sorting learns nothing from it. */
+    suspend fun moveOutOfMeronFolder(
+        threadIds: List<String>,
+        undo: Boolean = false,
+    ): String =
+        core.invoke(
+            MobileCommand.MoveOutOfMeronFolder,
+            jsonObject("thread_ids" to threadIds.jsonStringArray(), "undo" to "true".takeIf { undo }),
+        )
 
     suspend fun meronFolderThreads(params: MeronFolderThreadsParams): String = core.invoke(MobileCommand.MeronFolderThreads, params.toJson())
 

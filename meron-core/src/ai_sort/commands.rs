@@ -40,7 +40,7 @@ fn check_result(result: Result<(), AiError>) -> Value {
 }
 
 /// Run one command: `get`, `set`, `setKey`, `checkKey`, `models`, `estimate`,
-/// `run`, `stop`, `status` or `moveBack`.
+/// `run`, `stop`, `status`, `moveBack`, `lessons` or `forgetLesson`.
 pub async fn dispatch(engine: &Arc<Engine>, command: &str, params: &Value) -> anyhow::Result<Value> {
     match command {
         "get" => {
@@ -154,8 +154,66 @@ pub async fn dispatch(engine: &Arc<Engine>, command: &str, params: &Value) -> an
             pipeline::move_back(engine, id).await?;
             Ok(json!({ "ok": true }))
         }
+        "lessons" => lessons(engine),
+        "forgetLesson" => {
+            let id = params
+                .get("id")
+                .and_then(|id| id.as_i64().or_else(|| id.as_str()?.parse().ok()))
+                .ok_or_else(|| anyhow::anyhow!("missing id"))?;
+            store::ai_lesson_forget(&engine.db.lock().unwrap(), id)?;
+            // The email loses its lesson tag on the server too, so the
+            // reader's other devices forget it as well.
+            pipeline::push_lesson_tags(engine);
+            lessons(engine)
+        }
         other => Err(anyhow::anyhow!("unknown AI sorting command: {other}")),
     }
+}
+
+/// What the reader taught by moving mail by hand, newest first. Each lesson:
+/// `sender`, `subject`, `place` (`spam`, `inbox` or `meron`), the Meron
+/// folder's current name in `place_name`, and `used`: false while the AI
+/// can't follow it (its Meron folder isn't on the AI's list, or the account
+/// has no Spam folder).
+fn lessons(engine: &Arc<Engine>) -> anyhow::Result<Value> {
+    let db = engine.db.lock().unwrap();
+    let config = store::ai_sort_config(&db)?;
+    let listed = config.meron_ids();
+    let mut out = Vec::new();
+    for lesson in store::ai_lessons(&db)? {
+        let Some(place) = store::LessonPlace::from_code(&lesson.place) else {
+            continue;
+        };
+        let (kind, place_name, used) = match &place {
+            store::LessonPlace::Spam => (
+                "spam",
+                String::new(),
+                store::folder_for_role(&db, &lesson.account, "junk")?.is_some(),
+            ),
+            store::LessonPlace::Inbox => ("inbox", String::new(), true),
+            store::LessonPlace::Meron(id) => {
+                let name = store::meron_folder_name(&db, id)?;
+                let used = name.is_some() && listed.contains(id);
+                ("meron", name.unwrap_or_default(), used)
+            }
+        };
+        let sender = match (lesson.from_name.trim(), lesson.from_addr.trim()) {
+            ("", addr) => addr.to_string(),
+            (name, "") => name.to_string(),
+            (name, addr) => format!("{name} <{addr}>"),
+        };
+        out.push(json!({
+            "id": lesson.id,
+            "account": lesson.account,
+            "sender": sender,
+            "subject": lesson.subject,
+            "place": kind,
+            "place_name": place_name,
+            "used": used,
+            "at": lesson.at,
+        }));
+    }
+    Ok(json!({ "lessons": out }))
 }
 
 /// Verify the enclave, then spend one token through it.

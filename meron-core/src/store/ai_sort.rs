@@ -1673,6 +1673,7 @@ pub fn ai_sort_forget_account(conn: &Connection, id: &str) -> Result<()> {
     conn.execute("DELETE FROM ai_sort_hidden WHERE account = ?1", params![id])?;
     conn.execute("DELETE FROM ai_sort_done WHERE account = ?1", params![id])?;
     conn.execute("DELETE FROM ai_sort_log WHERE account = ?1", params![id])?;
+    super::ai_lessons_forget_account(conn, id)?;
     super::ai_sort_inbox::ai_sort_inbox_forget_account(conn, id)?;
     let mut config = ai_sort_config(conn)?;
     if config.folders.iter().any(|folder| folder.account == id) {
@@ -1694,6 +1695,7 @@ pub fn ai_sort_forget_meron_folder(conn: &Connection, id: &str) -> Result<()> {
           WHERE meron_folder_id = ?1 AND state = 'moved'",
         params![id],
     )?;
+    super::ai_lessons_forget_meron_folder(conn, id)?;
     let mut config = ai_sort_config(conn)?;
     if config.folders.iter().any(|folder| folder.meron_folder_id == id) {
         config.folders.retain(|folder| folder.meron_folder_id != id);
@@ -1711,6 +1713,7 @@ pub fn ai_sort_remap_meron_ids(
     conn: &Connection,
     map: &std::collections::HashMap<String, String>,
 ) -> Result<()> {
+    super::ai_lessons_remap_meron_ids(conn, map)?;
     let mut config = ai_sort_config(conn)?;
     let mut changed = false;
     for folder in &mut config.folders {

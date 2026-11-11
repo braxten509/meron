@@ -866,6 +866,9 @@ var aiSortMethods = map[string]string{
 	"mail.stopAiSort":      "aiSort.stop",
 	"mail.aiSortStatus":    "aiSort.status",
 	"mail.aiSortMoveBack":  "aiSort.moveBack",
+	// What the reader taught AI sorting by moving mail by hand.
+	"mail.aiSortLessons":      "aiSort.lessons",
+	"mail.aiSortForgetLesson": "aiSort.forgetLesson",
 }
 
 // aiSort passes one AI sorting command to the core. Nothing here logs the

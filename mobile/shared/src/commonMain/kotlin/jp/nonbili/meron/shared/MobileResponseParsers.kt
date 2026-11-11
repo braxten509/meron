@@ -1055,6 +1055,22 @@ fun parseAiSortStatusResponse(responseJson: String): AiSortStatus {
     )
 }
 
+/** The `lessons` answering `mail.aiSortLessons` and `mail.aiSortForgetLesson`, newest first. */
+fun parseAiSortLessonsResponse(responseJson: String): List<AiSortLesson> =
+    responseJson.responseFields().list("lessons").mapNotNull { item ->
+        val lesson = item.fields()
+        AiSortLesson(
+            id = lesson.number("id")?.toLong() ?: return@mapNotNull null,
+            at = lesson.number("at")?.toLong() ?: 0,
+            account = lesson.str("account").orEmpty(),
+            sender = lesson.str("sender").orEmpty(),
+            subject = lesson.str("subject").orEmpty(),
+            place = lesson.str("place").orEmpty(),
+            placeName = lesson.str("place_name").orEmpty(),
+            used = lesson.bool("used") ?: true,
+        )
+    }
+
 /** The `count` answering `mail.runAiSort`. */
 fun parseAiSortRunResponse(responseJson: String): Int = responseJson.responseFields().int("count") ?: 0
 

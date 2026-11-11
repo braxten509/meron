@@ -159,6 +159,34 @@ export async function aiSortMoveBack(id: number): Promise<void> {
   if (!ok) throw new Error('move back failed')
 }
 
+/** An email the reader moved by hand, which AI sorting follows for mail like it. */
+export type AiSortLesson = {
+  id: number
+  /** Unix seconds. */
+  at: number
+  account: string
+  sender: string
+  subject: string
+  place: 'spam' | 'inbox' | 'meron'
+  /** The Meron folder's current name, for `place: 'meron'`. */
+  place_name: string
+  /** False while the AI can't follow it: its Meron folder isn't on the AI's
+   * list, or the account has no Spam folder. */
+  used: boolean
+}
+
+export async function loadAiSortLessons(): Promise<AiSortLesson[]> {
+  const res = await invoke<{ lessons?: AiSortLesson[] }>('mail.aiSortLessons', {})
+  return res.lessons ?? []
+}
+
+/** Removes one lesson, here and (through its mark on the email) on the
+ * reader's other devices. Answers with the list as it is now. */
+export async function forgetAiSortLesson(id: number): Promise<AiSortLesson[]> {
+  const res = await invoke<{ lessons?: AiSortLesson[] }>('mail.aiSortForgetLesson', { id })
+  return res.lessons ?? []
+}
+
 /**
  * About what 1,000 new emails cost, one email per request (~300 tokens in, 30
  * out). A decision model reads the email and folder list (~150 tokens) and

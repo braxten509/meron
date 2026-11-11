@@ -99,8 +99,8 @@ async function undoMeronOnlyArchive(threadId: string, accountId: string | undefi
   releaseRemovedThread(threadId)
   const previous = res.changes?.[0]?.previous_folder_id
   try {
-    if (previous) await invoke('mail.moveToMeronFolder', { folder_id: previous, thread_ids: [threadId] })
-    else await invoke('mail.moveOutOfMeronFolder', { thread_ids: [threadId] })
+    if (previous) await invoke('mail.moveToMeronFolder', { folder_id: previous, thread_ids: [threadId], undo: true })
+    else await invoke('mail.moveOutOfMeronFolder', { thread_ids: [threadId], undo: true })
   } catch (error) {
     showToast(error instanceof Error ? error.message : t('notification.undoFailed'), 'error')
   }
@@ -1003,6 +1003,7 @@ export async function moveMessage(
         void invoke('mail.move', {
           thread_id: `${accountId}#${landedFolder}#${copyUid}`,
           target_folder_id: sourceFolder,
+          undo: true,
         })
           .then(async () => {
             await reloadThreadCards(kanbanKeysWithThread(threadId))
