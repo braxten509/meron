@@ -1,3 +1,7 @@
+// Builds folder choices for nested desktop menus. Structural path segments and
+// actual mailbox destinations need distinct selection behavior.
+// Callers include BulkActionBar.tsx and RuleFolderPicker.tsx.
+
 import { folderIcon } from '../../lib/folderIcon'
 import { clsx } from '../../lib/utils'
 import { buildFolderTree, type TreeNode } from '../../lib/folderTree'

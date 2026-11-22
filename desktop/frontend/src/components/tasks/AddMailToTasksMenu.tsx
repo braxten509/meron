@@ -1,3 +1,7 @@
+// Lets a mail action create a task in a selected list. The menu consults the
+// available task lists when the reader opens it.
+// Imported by ThreadContextMenu.tsx.
+
 import { useEffect, useRef, useState } from 'react'
 import { useValue } from '@legendapp/state/react'
 import { Check, ChevronRight, ListPlus } from 'lucide-react'

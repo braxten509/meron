@@ -1,3 +1,7 @@
+// Edits a query bound to the active desktop thread list. Its search state follows
+// the current mailbox context.
+// Imported by ThreadList.tsx and TitleBar.tsx.
+
 import { useEffect, useRef } from 'react'
 import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'

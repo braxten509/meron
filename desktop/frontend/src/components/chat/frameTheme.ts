@@ -1,3 +1,8 @@
+// Applies desktop appearance choices to an embedded message document. The reader
+// needs to preserve the distinction between authored email styling and its
+// surrounding theme.
+// Callers include BubbleHtmlFrame.tsx and MessageBubbleBody.tsx.
+
 import { formatColor, luminance, mix, parseColor, type Rgba } from '../../lib/color'
 import type { Appearance, ThemeTokens } from '../../lib/themes'
 
@@ -171,15 +176,15 @@ export const FRAME_STYLE_MARKER = 'data-meron-frame-style'
  * styling. The marker carries the document's variable prefix, which is how it
  * survives a frame whose HTML is serialised and parsed again.
  */
-export function ownStyleElement(el: Element) {
-  ownedStyles.add(el)
-  el.setAttribute(FRAME_STYLE_MARKER, frameVarPrefix(el.ownerDocument))
+export function ownStyleElement(element: Element) {
+  ownedStyles.add(element)
+  element.setAttribute(FRAME_STYLE_MARKER, frameVarPrefix(element.ownerDocument))
 }
 
 /** Drop the marker from anything that arrived carrying it. */
 export function disownStyleElements(doc: Document) {
-  for (const el of doc.querySelectorAll(`[${FRAME_STYLE_MARKER}]`)) {
-    if (!ownedStyles.has(el)) el.removeAttribute(FRAME_STYLE_MARKER)
+  for (const element of doc.querySelectorAll(`[${FRAME_STYLE_MARKER}]`)) {
+    if (!ownedStyles.has(element)) element.removeAttribute(FRAME_STYLE_MARKER)
   }
 }
 
@@ -215,8 +220,8 @@ export function frameVar(prefix: string, name: string): string {
 }
 
 /** Whether this element is one the frame injected itself. */
-export function isOwnStyleElement(el: Element | null): boolean {
-  return !!el && (ownedStyles.has(el) || el.hasAttribute(FRAME_STYLE_MARKER))
+export function isOwnStyleElement(element: Element | null): boolean {
+  return !!element && (ownedStyles.has(element) || element.hasAttribute(FRAME_STYLE_MARKER))
 }
 // Enough of the CSS named colors to judge the ones mail actually writes out.
 // A keyword outside this table classifies as unknown, which is a safe answer:
@@ -338,13 +343,13 @@ export function messageIsSelfStyled(doc: Document): boolean {
   if (canvas.text) return true
   if (canvas.background && colorTone(canvas.background)) return true
 
-  for (const el of doc.querySelectorAll<HTMLElement>('[style], [bgcolor], [color], font')) {
-    if (el.hasAttribute('bgcolor') || el.hasAttribute('color')) return true
-    const bg = el.style.backgroundColor.trim()
+  for (const element of doc.querySelectorAll<HTMLElement>('[style], [bgcolor], [color], font')) {
+    if (element.hasAttribute('bgcolor') || element.hasAttribute('color')) return true
+    const bg = element.style.backgroundColor.trim()
     if (bg && colorTone(bg)) return true
-    const color = el.style.color.trim().toLowerCase()
+    const color = element.style.color.trim().toLowerCase()
     if (color && !INHERITED_COLOR.has(color)) return true
-    const image = el.style.backgroundImage.trim().toLowerCase()
+    const image = element.style.backgroundImage.trim().toLowerCase()
     if (image && !TRANSPARENT_BG.has(image)) return true
   }
 
@@ -494,13 +499,13 @@ function* textToneWalk(doc: Document): Generator<void, 'light' | 'dark' | null> 
   let dark = 0
   const pending: Element[] = [doc.body]
   while (pending.length) {
-    const el = pending.pop()!
+    const element = pending.pop()!
     yield
-    if (SKIPPED_TAGS.has(el.tagName)) continue
-    const style = win.getComputedStyle(el)
+    if (SKIPPED_TAGS.has(element.tagName)) continue
+    const style = win.getComputedStyle(element)
     if (isHidden(style)) continue
     const tone = colorTone(style.color)
-    for (const node of el.childNodes) {
+    for (const node of element.childNodes) {
       if (node.nodeType === Node.ELEMENT_NODE) pending.push(node as Element)
       else if (node.nodeType === Node.TEXT_NODE && tone) {
         const length = node.textContent?.trim().length ?? 0
@@ -664,13 +669,13 @@ export function darkensCanvas(appearance: Appearance, darkenStyled: boolean, can
  * turns back the text in it, which would then read as sent — dark — on a canvas
  * that is now dark too. `background-image: none` is no picture at all.
  */
-function isBackgroundPicture(el: HTMLElement): boolean {
-  if (el.textContent?.trim()) return false
-  const win = el.ownerDocument.defaultView
+function isBackgroundPicture(element: HTMLElement): boolean {
+  if (element.textContent?.trim()) return false
+  const win = element.ownerDocument.defaultView
   // A document that was only parsed has no engine to resolve stylesheets; its
   // inline declaration and the legacy attribute are all there is to go on.
-  const image = win ? win.getComputedStyle(el).backgroundImage : el.style.backgroundImage
-  return /url\(/i.test(image) || (!win && !!el.getAttribute('background')?.trim())
+  const image = win ? win.getComputedStyle(element).backgroundImage : element.style.backgroundImage
+  return /url\(/i.test(image) || (!win && !!element.getAttribute('background')?.trim())
 }
 
 /**
@@ -688,12 +693,12 @@ const UNCAPPED_SELECTOR = `img, video, mark.meron-search-hit, [${PICTURE_ATTR}],
  * flow, but a positioned box paints above that layer, and so does everything
  * inside one: its white would invert to black, not to the surface.
  */
-function cappedBackground(el: HTMLElement, floor: Rgba): string | null {
-  if (el.matches(UNCAPPED_SELECTOR)) return null
-  const win = el.ownerDocument.defaultView
+function cappedBackground(element: HTMLElement, floor: Rgba): string | null {
+  if (element.matches(UNCAPPED_SELECTOR)) return null
+  const win = element.ownerDocument.defaultView
   const declared = win
-    ? win.getComputedStyle(el).backgroundColor
-    : el.style.backgroundColor || el.getAttribute('bgcolor') || ''
+    ? win.getComputedStyle(element).backgroundColor
+    : element.style.backgroundColor || element.getAttribute('bgcolor') || ''
   const color = parseColor(declared)
   if (!color || color.a === 0) return null
   if (color.r <= floor.r && color.g <= floor.g && color.b <= floor.b) return null
@@ -706,24 +711,24 @@ function cappedBackground(el: HTMLElement, floor: Rgba): string | null {
 }
 
 /** Put back the inline background an element had before it was capped. */
-function uncapBackground(el: HTMLElement) {
-  const saved = el.getAttribute(CAPPED_ATTR) ?? ''
+function uncapBackground(element: HTMLElement) {
+  const saved = element.getAttribute(CAPPED_ATTR) ?? ''
   const bar = saved.indexOf('|')
   const value = saved.slice(bar + 1)
-  if (value) el.style.setProperty('background-color', value, saved.slice(0, bar))
-  else el.style.removeProperty('background-color')
-  el.removeAttribute(CAPPED_ATTR)
+  if (value) element.style.setProperty('background-color', value, saved.slice(0, bar))
+  else element.style.removeProperty('background-color')
+  element.removeAttribute(CAPPED_ATTR)
 }
 
 /** Mark or unmark a frame's document as darkened (see `darkenedCss`). */
 function* darkenedWalk(doc: Document, darkened: boolean, floor: string): Generator<void, void> {
   doc.documentElement.toggleAttribute(DARKENED_ATTR, darkened)
-  for (const el of doc.querySelectorAll(`[${PICTURE_ATTR}]`)) {
-    el.removeAttribute(PICTURE_ATTR)
+  for (const element of doc.querySelectorAll(`[${PICTURE_ATTR}]`)) {
+    element.removeAttribute(PICTURE_ATTR)
     yield
   }
-  for (const el of doc.querySelectorAll<HTMLElement>(`[${CAPPED_ATTR}]`)) {
-    uncapBackground(el)
+  for (const element of doc.querySelectorAll<HTMLElement>(`[${CAPPED_ATTR}]`)) {
+    uncapBackground(element)
     yield
   }
   if (!darkened || !doc.body) return
@@ -731,15 +736,15 @@ function* darkenedWalk(doc: Document, darkened: boolean, floor: string): Generat
   // Written once the walk has read every element: a write in between would
   // have the engine resolve the document's styles again for the next read.
   const capped: Array<[HTMLElement, string]> = []
-  for (const el of doc.body.querySelectorAll<HTMLElement>('*')) {
-    if (isBackgroundPicture(el)) el.setAttribute(PICTURE_ATTR, '')
-    const background = cap && cappedBackground(el, cap)
-    if (background) capped.push([el, background])
+  for (const element of doc.body.querySelectorAll<HTMLElement>('*')) {
+    if (isBackgroundPicture(element)) element.setAttribute(PICTURE_ATTR, '')
+    const background = cap && cappedBackground(element, cap)
+    if (background) capped.push([element, background])
     yield
   }
-  for (const [el, background] of capped) {
-    const { style } = el
-    el.setAttribute(
+  for (const [element, background] of capped) {
+    const { style } = element
+    element.setAttribute(
       CAPPED_ATTR,
       `${style.getPropertyPriority('background-color')}|${style.getPropertyValue('background-color')}`,
     )

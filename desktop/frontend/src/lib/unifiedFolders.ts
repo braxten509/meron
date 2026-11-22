@@ -1,3 +1,7 @@
+// Resolves shared mailbox roles across accounts for unified views. Provider folder
+// names stay local to each account.
+// Callers include boardUnread.ts and kanbanData.ts.
+
 import type { Folder } from '../types'
 
 /** The pseudo-account id the unified view selects. */

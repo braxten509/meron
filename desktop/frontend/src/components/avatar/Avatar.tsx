@@ -1,3 +1,7 @@
+// Displays a correspondent using a resolved sender image or generated initials.
+// Sender preferences can change while the image lookup is still pending.
+// Callers include AccountAvatar.tsx and ContactsView.tsx.
+
 import { useState, useEffect, type ReactNode } from 'react'
 import { useValue } from '@legendapp/state/react'
 import { invoke } from '../../lib/bridge'
@@ -93,7 +97,7 @@ interface AvatarProps {
 export function Avatar({ name, email, src, size = 40, className = '', fallback }: AvatarProps) {
   const showRealAvatars = useValue(settings$.showRealAvatars)
   const initialImage = showRealAvatars && email && !src ? cachedAvatar(avatarKey(email, size)) : undefined
-  const [resolvedSrc, setResolvedSrc] = useState<string | undefined>(src || initialImage?.src)
+  const [resolvedSource, setResolvedSource] = useState<string | undefined>(src || initialImage?.src)
   const [sourceKind, setSourceKind] = useState<SourceKind>(src ? 'manual' : (initialImage?.kind ?? 'none'))
   // Resolution waits until the avatar is near the viewport, so a long list
   // (hundreds of contacts) doesn't look up pictures nobody has scrolled to.
@@ -113,13 +117,13 @@ export function Avatar({ name, email, src, size = 40, className = '', fallback }
 
   useEffect(() => {
     if (src) {
-      setResolvedSrc(src)
+      setResolvedSource(src)
       setSourceKind('manual')
       return
     }
 
     if (!showRealAvatars || !email) {
-      setResolvedSrc(undefined)
+      setResolvedSource(undefined)
       setSourceKind('none')
       return
     }
@@ -127,12 +131,12 @@ export function Avatar({ name, email, src, size = 40, className = '', fallback }
     const key = avatarKey(email, size)
     const cached = cachedAvatar(key)
     if (cached) {
-      setResolvedSrc(cached.src)
+      setResolvedSource(cached.src)
       setSourceKind(cached.kind)
       return
     }
 
-    setResolvedSrc(undefined)
+    setResolvedSource(undefined)
     setSourceKind('none')
     if (!nearView) return
     let cancelled = false
@@ -141,7 +145,7 @@ export function Avatar({ name, email, src, size = 40, className = '', fallback }
         .then((image) => {
           rememberAvatar(key, image)
           if (cancelled) return
-          setResolvedSrc(image.src || undefined)
+          setResolvedSource(image.src || undefined)
           setSourceKind(image.src ? image.kind : 'none')
         })
         .catch(() => {
@@ -155,19 +159,19 @@ export function Avatar({ name, email, src, size = 40, className = '', fallback }
   }, [src, email, showRealAvatars, size, nearView])
 
   const faviconSide = Math.round(size * 0.58)
-  const sharpSrc = useSharpSrc(
-    resolvedSrc && sourceKind !== 'none' ? resolvedSrc : undefined,
+  const sharpSource = useSharpSrc(
+    resolvedSource && sourceKind !== 'none' ? resolvedSource : undefined,
     sourceKind === 'favicon' ? faviconSide : size,
     sourceKind === 'favicon' ? 'contain' : 'cover',
   )
 
   const handleImageError = () => {
     if (email && !src) avatarCache.delete(avatarKey(email, size))
-    setResolvedSrc(undefined)
+    setResolvedSource(undefined)
     setSourceKind('none')
   }
 
-  if (resolvedSrc && sourceKind === 'favicon') {
+  if (resolvedSource && sourceKind === 'favicon') {
     return (
       <span
         ref={setNode}
@@ -175,7 +179,7 @@ export function Avatar({ name, email, src, size = 40, className = '', fallback }
         className={`flex shrink-0 items-center justify-center rounded-full bg-white ring-1 ring-black/5 dark:ring-white/10 ${className}`}
       >
         <img
-          src={sharpSrc}
+          src={sharpSource}
           alt={name}
           onError={handleImageError}
           referrerPolicy="no-referrer"
@@ -188,11 +192,11 @@ export function Avatar({ name, email, src, size = 40, className = '', fallback }
     )
   }
 
-  if (resolvedSrc && sourceKind !== 'none') {
+  if (resolvedSource && sourceKind !== 'none') {
     return (
       <img
         ref={setNode}
-        src={sharpSrc}
+        src={sharpSource}
         alt={name}
         onError={handleImageError}
         referrerPolicy="no-referrer"

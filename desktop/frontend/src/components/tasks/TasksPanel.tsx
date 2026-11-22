@@ -1,3 +1,7 @@
+// Displays the active task list alongside mail. Selection and mutations are
+// coordinated through desktop task state.
+// Imported by App.tsx.
+
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { DndContext, closestCenter } from '@dnd-kit/core'
 import { restrictToVerticalAxis } from '@dnd-kit/modifiers'

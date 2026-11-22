@@ -1,3 +1,7 @@
+// Filters mailbox conversations and applies read actions to the resulting
+// selection. RSS entries and ordinary mail can require different targets.
+// Callers include ColumnLabel.tsx and ConversationHeader.tsx.
+
 import { invoke } from './bridge'
 import type { Account, Message } from '../types'
 import type { FilterMode } from '../states/ui'

@@ -1,3 +1,7 @@
+// Coordinates sending an inline reply and the visible result of delivery. Draft
+// ownership and pending message state are reconciled when the request settles.
+// Callers include MessageBubble.tsx and MessageRow.tsx.
+
 import { t } from '../lib/i18n'
 import type { Attachment, ComposerAttachment, Message } from '../types'
 import { invoke } from '../lib/bridge'

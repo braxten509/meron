@@ -205,8 +205,8 @@ export function MessageBubbleBody({
                 <a
                   key={index}
                   href={part.content}
-                  onClick={(e) => {
-                    e.preventDefault()
+                  onClick={(event) => {
+                    event.preventDefault()
                     openExternal(part.content)
                   }}
                   onMouseEnter={() => setHoveredLink(part.content)}

@@ -1,3 +1,7 @@
+// Coordinates the desktop setup-copy workflow with the core. The settings UI uses
+// the returned state to present configuration transfer progress.
+// Imported by SettingsDialog.tsx and SetupCopyDialog.tsx.
+
 import { invoke } from '../lib/bridge'
 import { boot } from '../boot'
 import { ui$ } from './ui'

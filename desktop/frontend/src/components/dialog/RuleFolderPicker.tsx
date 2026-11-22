@@ -1,3 +1,7 @@
+// Selects a destination folder when editing an inbox rule. Folder choices retain
+// their account and wire identity.
+// Imported by AiSortPanel.tsx and RulesPanel.tsx.
+
 import { useRef, useState, type ReactNode } from 'react'
 import { useValue } from '@legendapp/state/react'
 import { ChevronDown, Folder as FolderIcon } from 'lucide-react'

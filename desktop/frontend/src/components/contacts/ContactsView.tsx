@@ -72,8 +72,8 @@ export function ContactsView() {
     setContactsError(false)
     const timer = setTimeout(() => {
       void invoke<{ contacts: Contact[] }>('mail.suggestContacts', { account: '', query, limit, sort, directory: true })
-        .then((res) => {
-          if (!cancelled) setContacts(res.contacts)
+        .then((response) => {
+          if (!cancelled) setContacts(response.contacts)
         })
         .catch(() => {
           if (!cancelled) setContactsError(true)
@@ -108,17 +108,17 @@ export function ContactsView() {
       before_cursor: page.startsWith(`${selected.addr}\n`) ? page.slice(selected.addr.length + 1) : '',
       limit: 50,
     })
-      .then((res) => {
+      .then((response) => {
         if (cancelled) return
         setThreads((old) => [
           ...new Map(
-            (page.startsWith(`${selected.addr}\n`) ? [...old, ...res.threads] : res.threads).map((thread) => [
+            (page.startsWith(`${selected.addr}\n`) ? [...old, ...response.threads] : response.threads).map((thread) => [
               thread.thread_id,
               thread,
             ]),
           ).values(),
         ])
-        setCursor(res.next_cursor ?? '')
+        setCursor(response.next_cursor ?? '')
         setLoadedAddr(selected.addr)
       })
       .catch(() => {

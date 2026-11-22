@@ -1,3 +1,7 @@
+// Renders the minimize, maximize and close actions exposed by the desktop host.
+// Their order follows the native decoration preferences.
+// Imported by TitleBar.tsx.
+
 import { Copy, Minus, Square, X, type LucideIcon } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'

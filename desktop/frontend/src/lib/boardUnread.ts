@@ -1,3 +1,7 @@
+// Calculates a board's unread total and the accounts that contribute to its badge.
+// The same account selection determines which folders need a refresh.
+// Imported by SortableRailItems.tsx and useAppEffects.ts.
+
 import { folderMatches } from '../states/mailFolders'
 import type { KanbanBoard, KanbanBoardColumn } from '../states/settings'
 import type { Account, Folder } from '../types'

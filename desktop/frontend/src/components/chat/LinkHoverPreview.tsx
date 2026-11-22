@@ -1,3 +1,7 @@
+// Shows the destination of a link under the pointer in a message. The preview
+// belongs to the surrounding conversation rather than the embedded document.
+// Imported by ConversationMessageList.tsx and HtmlMessageView.tsx.
+
 export function LinkHoverPreview({ url }: { url: string | null }) {
   if (!url) return null
 

@@ -1,3 +1,7 @@
+// Defines the labeled rows, switches and inputs reused across account preferences.
+// Callers provide the current value and decide when a change should be saved.
+// Callers include AccountAliasesCard.tsx and AccountProfileGroup.tsx.
+
 import type { ReactNode } from 'react'
 import { RotateCcw } from 'lucide-react'
 import { InfoTip } from '../tooltip/InfoTip'

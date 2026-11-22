@@ -1,3 +1,7 @@
+// Collects media displayed by the conversation details panel and gallery. Each
+// item carries the message and attachment identity needed for later actions.
+// Imported by MessagePane.tsx.
+
 import type { Account, Message } from '../../types'
 import type { GalleryItem } from './Gallery'
 import type { ConversationMediaItem, ConversationFileItem, Participant } from './ConversationDetailsPanel'

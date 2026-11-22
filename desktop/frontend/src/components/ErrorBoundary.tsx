@@ -1,3 +1,7 @@
+// Catches rendering errors from the wrapped desktop view and exposes its fallback.
+// Other application surfaces can remain available when that view fails.
+// Imported by App.tsx and main.tsx.
+
 import { Component, type ErrorInfo, type ReactNode } from 'react'
 
 interface Props {

@@ -84,21 +84,21 @@ describe('message paging', () => {
 })
 
 describe('spaceActivatesTarget', () => {
-  const el = (html: string) => {
+  const element = (html: string) => {
     const host = document.createElement('div')
     host.innerHTML = html
     return host.firstElementChild!
   }
 
   it('leaves Space to a focused control, but not to a plain thread row', () => {
-    expect(spaceActivatesTarget(' ', el('<button>ok</button>'))).toBe(true)
-    expect(spaceActivatesTarget(' ', el('<button data-thread-row>row</button>'))).toBe(false)
-    expect(spaceActivatesTarget(' ', el('<p>text</p>'))).toBe(false)
-    expect(spaceActivatesTarget('Enter', el('<button>ok</button>'))).toBe(false)
+    expect(spaceActivatesTarget(' ', element('<button>ok</button>'))).toBe(true)
+    expect(spaceActivatesTarget(' ', element('<button data-thread-row>row</button>'))).toBe(false)
+    expect(spaceActivatesTarget(' ', element('<p>text</p>'))).toBe(false)
+    expect(spaceActivatesTarget('Enter', element('<button>ok</button>'))).toBe(false)
   })
 
   it('leaves Space to a thread row while bulk selection toggles it', () => {
-    expect(spaceActivatesTarget(' ', el('<button data-thread-row data-bulk-selectable>row</button>'))).toBe(true)
+    expect(spaceActivatesTarget(' ', element('<button data-thread-row data-bulk-selectable>row</button>'))).toBe(true)
   })
 })
 

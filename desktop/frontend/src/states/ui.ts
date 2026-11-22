@@ -1,3 +1,8 @@
+// Stores desktop navigation, active panels and notifications alongside the
+// selected mailbox. Components use the shared state when opening or dismissing a
+// surface.
+// Callers include accounts.ts and backup.ts.
+
 import { observable } from '@legendapp/state'
 import type { Account, SystemCheck } from '../types'
 import { invoke } from '../lib/bridge'

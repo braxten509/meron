@@ -1,3 +1,7 @@
+// Maintains the query and selected result inside the open conversation. Message
+// counts and navigation stay synchronized with the displayed search controls.
+// Imported by MessagePane.tsx.
+
 import { useEffect, useLayoutEffect, useMemo } from 'react'
 import { useValue } from '@legendapp/state/react'
 import { accounts$ } from '../../states/accounts'

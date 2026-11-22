@@ -1,3 +1,7 @@
+// Renders a desktop compose tab with its recipients, editor, attachments and send
+// actions. The tab's draft identity connects it to autosave and session state.
+// Imported by ReaderTabView.tsx.
+
 import { useRef } from 'react'
 import { EditorContent } from '@tiptap/react'
 import { useValue } from '@legendapp/state/react'

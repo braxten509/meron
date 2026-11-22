@@ -1,3 +1,7 @@
+// Owns the desktop account list and account-specific writes. Updates must preserve
+// the identity of the selected account and the ordering of pending changes.
+// Callers include certificateTrust.ts and compose.ts.
+
 import { observable } from '@legendapp/state'
 import { t } from '../lib/i18n'
 import { invoke } from '../lib/bridge'
@@ -162,13 +166,13 @@ export async function writeAccountChatWallpaperFile(
   accountId: string,
   file: { name: string; mime: string; data: string },
 ) {
-  const res = await invoke<{ url: string }>('account.writeChatWallpaperFile', {
+  const response = await invoke<{ url: string }>('account.writeChatWallpaperFile', {
     id: accountId,
     filename: file.name,
     mime: file.mime,
     data: file.data,
   })
-  return res.url
+  return response.url
 }
 
 export async function deleteAccount(accountId: string) {
@@ -257,13 +261,13 @@ export async function setAccountSenderName(accountId: string, name: string) {
 }
 
 export async function writeAccountAvatarFile(accountId: string, file: { name: string; mime: string; data: string }) {
-  const res = await invoke<{ url: string }>('account.writeAvatarFile', {
+  const response = await invoke<{ url: string }>('account.writeAvatarFile', {
     id: accountId,
     filename: file.name,
     mime: file.mime,
     data: file.data,
   })
-  return res.url
+  return response.url
 }
 
 export async function setAccountAvatar(accountId: string, avatarUrl: string) {

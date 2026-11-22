@@ -1,3 +1,7 @@
+// Renders the account and board navigation rail for the desktop window. Selection,
+// unread badges and contextual actions follow shared application state.
+// Imported by App.tsx.
+
 import { useEffect, useState } from 'react'
 import type { DragEvent, KeyboardEvent, MouseEvent } from 'react'
 import {

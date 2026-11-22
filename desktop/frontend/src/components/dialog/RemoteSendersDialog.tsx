@@ -1,3 +1,7 @@
+// Manages the senders whose remote email content may be loaded. Changes update the
+// sender list used by the message reader.
+// Imported by SettingsDialog.tsx.
+
 import { useState } from 'react'
 import { Image as ImageIcon, Trash2, X } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
@@ -43,7 +47,7 @@ export function RemoteSendersDialog({ onClose }: { onClose: () => void }) {
           <TextInput
             type="search"
             value={filter}
-            onChange={(e) => setFilter(e.target.value)}
+            onChange={(event) => setFilter(event.target.value)}
             placeholder={t('settings.privacy.filterSenders')}
             className="w-full"
           />

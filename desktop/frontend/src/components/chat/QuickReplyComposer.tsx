@@ -1,3 +1,7 @@
+// Presents the editor below an open conversation. Draft text, attachments and
+// sending identity are supplied by the quick-reply state.
+// Imported by MessagePane.tsx.
+
 import { Loader2, Maximize2, Paperclip, Send } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'

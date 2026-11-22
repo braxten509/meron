@@ -1,3 +1,7 @@
+// Shared conversions used by the desktop compose editor and draft actions. They
+// keep editor content and the draft representation usable across saves.
+// Callers include useComposer.ts and SignatureSettingsCard.tsx.
+
 import type { ComposerAttachment } from '../../types'
 import { invoke } from '../../lib/bridge'
 
@@ -32,10 +36,10 @@ export function inlineRichStyles(html: string): string {
   const parser = new DOMParser()
   const doc = parser.parseFromString(html, 'text/html')
   for (const [selector, style] of Object.entries(RICH_INLINE_STYLES)) {
-    for (const el of Array.from(doc.querySelectorAll(selector))) {
+    for (const element of Array.from(doc.querySelectorAll(selector))) {
       // Preserve any existing inline styles; only prepend our defaults.
-      const existing = el.getAttribute('style')
-      el.setAttribute('style', existing ? `${style} ${existing}` : style)
+      const existing = element.getAttribute('style')
+      element.setAttribute('style', existing ? `${style} ${existing}` : style)
     }
   }
   return doc.body.innerHTML
@@ -67,17 +71,17 @@ export async function prepareInlineImages(html: string, initialAttachments: Comp
   const attachments = [...initialAttachments]
   const usedInlineIds = new Set<string>()
 
-  for (const img of imgs) {
-    const src = img.getAttribute('src')
-    if (!src) continue
+  for (const image of imgs) {
+    const source = image.getAttribute('src')
+    if (!source) continue
 
-    if (src.startsWith('cid:')) {
-      const cid = src.slice(4)
+    if (source.startsWith('cid:')) {
+      const cid = source.slice(4)
       usedInlineIds.add(cid)
       continue
     }
 
-    if (src.startsWith('http://') || src.startsWith('https://')) {
+    if (source.startsWith('http://') || source.startsWith('https://')) {
       continue
     }
 
@@ -85,8 +89,8 @@ export async function prepareInlineImages(html: string, initialAttachments: Comp
     let base64Data = ''
     let size = 0
 
-    if (src.startsWith('data:')) {
-      const parts = src.split(',')
+    if (source.startsWith('data:')) {
+      const parts = source.split(',')
       if (parts.length >= 2) {
         const meta = parts[0]
         base64Data = parts[1]
@@ -94,19 +98,19 @@ export async function prepareInlineImages(html: string, initialAttachments: Comp
         size = Math.floor((base64Data.length * 3) / 4)
       }
     } else if (
-      !src.startsWith('http://') &&
-      !src.startsWith('https://') &&
-      !src.startsWith('cid:') &&
-      !src.startsWith('data:')
+      !source.startsWith('http://') &&
+      !source.startsWith('https://') &&
+      !source.startsWith('cid:') &&
+      !source.startsWith('data:')
     ) {
       try {
-        const response = await fetch(src)
+        const response = await fetch(source)
         const blob = await response.blob()
         mime = blob.type
         size = blob.size
         base64Data = await blobToBase64(blob)
       } catch (e) {
-        console.error('Failed to fetch inline image from URL:', src, e)
+        console.error('Failed to fetch inline image from URL:', source, e)
         continue
       }
     }
@@ -117,7 +121,7 @@ export async function prepareInlineImages(html: string, initialAttachments: Comp
         if (!existing.inlineId) {
           existing.inlineId = createInlineId()
         }
-        img.setAttribute('src', `cid:${existing.inlineId}`)
+        image.setAttribute('src', `cid:${existing.inlineId}`)
         usedInlineIds.add(existing.inlineId)
       } else {
         const ext = mime.startsWith('image/') ? mime.slice(6) : 'png'
@@ -132,7 +136,7 @@ export async function prepareInlineImages(html: string, initialAttachments: Comp
           inlineId,
         }
         attachments.push(newAtt)
-        img.setAttribute('src', `cid:${inlineId}`)
+        image.setAttribute('src', `cid:${inlineId}`)
         usedInlineIds.add(inlineId)
       }
     }
@@ -182,11 +186,11 @@ export async function readClipboardImages(): Promise<File[]> {
   const items = await navigator.clipboard.read()
   const images: File[] = []
   for (const item of items) {
-    const imgType = item.types.find((type) => type.toLowerCase().startsWith('image/'))
-    if (!imgType) continue
-    const blob = await item.getType(imgType)
-    const ext = imgType.split('/')[1] || 'png'
-    images.push(new File([blob], `pasted-image-${Date.now()}.${ext}`, { type: imgType }))
+    const imageType = item.types.find((type) => type.toLowerCase().startsWith('image/'))
+    if (!imageType) continue
+    const blob = await item.getType(imageType)
+    const ext = imageType.split('/')[1] || 'png'
+    images.push(new File([blob], `pasted-image-${Date.now()}.${ext}`, { type: imageType }))
   }
   return images
 }

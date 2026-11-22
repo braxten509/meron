@@ -1,3 +1,7 @@
+// Edits inherited and account-specific email signatures. A pending write stays
+// associated with the account selected when editing began.
+// Imported by SettingsDialog.tsx.
+
 import { useEffect, useRef, useState } from 'react'
 import { CodeXml, PenLine } from 'lucide-react'
 import { EditorContent, useEditor } from '@tiptap/react'
@@ -129,8 +133,8 @@ function SignatureEditor({
 
   const setLink = () => {
     if (!editor) return
-    const prev = editor.getAttributes('link').href as string | undefined
-    const url = window.prompt('Link URL', prev ?? 'https://')
+    const previous = editor.getAttributes('link').href as string | undefined
+    const url = window.prompt('Link URL', previous ?? 'https://')
     if (url === null) return
     if (url === '') {
       editor.chain().focus().extendMarkRange('link').unsetLink().run()

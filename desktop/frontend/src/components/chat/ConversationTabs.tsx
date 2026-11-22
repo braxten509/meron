@@ -95,7 +95,7 @@ export function ConversationTabs() {
     const updateOverflow = () => {
       const left = strip.scrollLeft > 1
       const right = strip.scrollLeft + strip.clientWidth < strip.scrollWidth - 1
-      setOverflow((prev) => (prev.left === left && prev.right === right ? prev : { left, right }))
+      setOverflow((previous) => (previous.left === left && previous.right === right ? previous : { left, right }))
     }
     const onWheel = (event: WheelEvent) => {
       if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return

@@ -1,3 +1,7 @@
+// Provides text, selection and labeled field controls used by settings forms. The
+// parent form supplies values, validation and change handlers.
+// Callers include AccountAliasesCard.tsx and AccountDialog.tsx.
+
 import { forwardRef } from 'react'
 import type { InputHTMLAttributes, SelectHTMLAttributes } from 'react'
 import { ChevronDown } from 'lucide-react'

@@ -1,3 +1,7 @@
+// Controls the width transition of the task or calendar panel beside mail. Its
+// content remains mounted during the exit animation.
+// Callers include App.tsx and AppToast.tsx.
+
 import { useRef, type ReactNode } from 'react'
 import { usePresence } from '../../lib/usePresence'
 import { PANE_ANIMATION_MS } from '../kanban/KanbanConversationPane'

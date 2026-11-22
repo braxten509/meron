@@ -1,3 +1,7 @@
+// Maintains the desktop state for subscriptions in RSS accounts. Feed mutations
+// update the visible mailbox after the core processes the change.
+// Callers include AddFeedDialog.tsx and FeedEditDialog.tsx.
+
 import { invoke } from '../lib/bridge'
 import { t } from '../lib/i18n'
 import { isRssAccount } from '../lib/threadActions'
@@ -99,8 +103,8 @@ export async function moveFeed(threadId: string, targetAccountId: string) {
 // dialog. The bridge gathers the feeds and writes the file; we surface the result.
 export async function exportOpml(account: string) {
   try {
-    const res = await invoke<{ saved: boolean; path?: string }>('rss.exportOpml', { account })
-    if (res?.saved) showToast(t('feeds.toast.feedsExported'))
+    const response = await invoke<{ saved: boolean; path?: string }>('rss.exportOpml', { account })
+    if (response?.saved) showToast(t('feeds.toast.feedsExported'))
   } catch (error) {
     showToast(error instanceof Error ? error.message : t('feeds.toast.exportFailed'), 'error')
   }
@@ -111,9 +115,9 @@ export async function exportOpml(account: string) {
 // a sync so the new feeds populate.
 export async function importOpml(account: string) {
   try {
-    const res = await invoke<{ imported: number; cancelled?: boolean }>('rss.importOpml', { account })
-    if (res?.cancelled) return
-    const count = res?.imported ?? 0
+    const response = await invoke<{ imported: number; cancelled?: boolean }>('rss.importOpml', { account })
+    if (response?.cancelled) return
+    const count = response?.imported ?? 0
     if (count === 0) {
       showToast(t('feeds.toast.noNewFeedsToImport'))
       return

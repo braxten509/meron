@@ -19,9 +19,9 @@ const PAGE_FRACTION = 0.85
 const LINE_PX = 40
 
 function visibleMessageScroller(): HTMLElement | null {
-  for (const el of document.querySelectorAll<HTMLElement>('[data-message-scroller]')) {
-    if (el.closest('[aria-hidden="true"]') || el.getClientRects().length === 0) continue
-    return el
+  for (const element of document.querySelectorAll<HTMLElement>('[data-message-scroller]')) {
+    if (element.closest('[aria-hidden="true"]') || element.getClientRects().length === 0) continue
+    return element
   }
   return null
 }
@@ -34,22 +34,22 @@ export function inMessageScroller(target: EventTarget | null): boolean {
 
 /** Scroll the open message by a page. False when no message is on screen. */
 export function pageOpenMessage(direction: 1 | -1): boolean {
-  const el = visibleMessageScroller()
-  if (!el) return false
-  el.dispatchEvent(new Event(MESSAGE_PAGE_EVENT))
+  const element = visibleMessageScroller()
+  if (!element) return false
+  element.dispatchEvent(new Event(MESSAGE_PAGE_EVENT))
   // The quick-reply composer floats over the bottom of the conversation.
-  const overlap = parseFloat(getComputedStyle(el).getPropertyValue(COMPOSER_OVERLAP_VAR)) || 0
-  const page = Math.max(el.clientHeight - overlap, 0) * PAGE_FRACTION
-  el.scrollBy({ top: direction * page, behavior: 'smooth' })
+  const overlap = parseFloat(getComputedStyle(element).getPropertyValue(COMPOSER_OVERLAP_VAR)) || 0
+  const page = Math.max(element.clientHeight - overlap, 0) * PAGE_FRACTION
+  element.scrollBy({ top: direction * page, behavior: 'smooth' })
   return true
 }
 
 /** Scroll the open message by an arrow-key step. False when no message is on
  *  screen. Not smoothed, so a held key scrolls evenly. */
 export function stepOpenMessage(direction: 1 | -1): boolean {
-  const el = visibleMessageScroller()
-  if (!el) return false
-  el.dispatchEvent(new Event(MESSAGE_PAGE_EVENT))
-  el.scrollBy({ top: direction * LINE_PX })
+  const element = visibleMessageScroller()
+  if (!element) return false
+  element.dispatchEvent(new Event(MESSAGE_PAGE_EVENT))
+  element.scrollBy({ top: direction * LINE_PX })
   return true
 }

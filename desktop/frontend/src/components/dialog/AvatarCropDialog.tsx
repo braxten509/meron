@@ -1,3 +1,7 @@
+// Lets the reader crop an image before it becomes an avatar. The caller decides
+// where the resulting image will be stored.
+// Imported by BoardSettingsPanel.tsx and SettingsDialog.tsx.
+
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Image as ImageIcon, Minus, Plus, RotateCcw, X } from 'lucide-react'
 import { useTranslation } from '../../lib/i18n'
@@ -138,8 +142,8 @@ export function AvatarCropDialog({
       const canvas = document.createElement('canvas')
       canvas.width = OUTPUT_SIZE
       canvas.height = OUTPUT_SIZE
-      const ctx = canvas.getContext('2d')
-      if (!ctx) throw new Error(t('avatar.renderFailed'))
+      const context = canvas.getContext('2d')
+      if (!context) throw new Error(t('avatar.renderFailed'))
 
       const scale = coverScale(imageSize) * zoom
       const sourceSize = CROP_SIZE / scale
@@ -148,8 +152,8 @@ export function AvatarCropDialog({
       const sourceX = clamp(centerX - sourceSize / 2, 0, imageSize.width - sourceSize)
       const sourceY = clamp(centerY - sourceSize / 2, 0, imageSize.height - sourceSize)
 
-      ctx.imageSmoothingQuality = 'high'
-      ctx.drawImage(image, sourceX, sourceY, sourceSize, sourceSize, 0, 0, OUTPUT_SIZE, OUTPUT_SIZE)
+      context.imageSmoothingQuality = 'high'
+      context.drawImage(image, sourceX, sourceY, sourceSize, sourceSize, 0, 0, OUTPUT_SIZE, OUTPUT_SIZE)
 
       const croppedFile = await canvasToPngFile(canvas, file.name)
       await onSave(croppedFile)

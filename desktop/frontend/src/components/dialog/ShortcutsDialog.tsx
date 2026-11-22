@@ -1,3 +1,7 @@
+// Displays the keyboard shortcuts available in the desktop application. Labels
+// follow the key conventions of the current platform.
+// Imported by App.tsx.
+
 import { useEffect, useState } from 'react'
 import { RotateCcw, X } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'

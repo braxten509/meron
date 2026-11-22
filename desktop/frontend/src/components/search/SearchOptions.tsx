@@ -1,3 +1,7 @@
+// Edits structured search fields for the desktop mailbox. The core's query
+// representation is used to construct or recover the corresponding search text.
+// Callers include SearchBox.tsx and KanbanBoardColumn.tsx.
+
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode, RefObject } from 'react'
 import { createPortal } from 'react-dom'

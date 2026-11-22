@@ -1,3 +1,7 @@
+// Registers Escape handling for a desktop interaction while it is active.
+// Components use it to close their own surface and release the handler on cleanup.
+// Callers include AttachmentImagePreview.tsx and CalendarView.tsx.
+
 import { useEffect, useRef } from 'react'
 
 // Escape handlers form a stack so only the topmost layer closes: a submenu

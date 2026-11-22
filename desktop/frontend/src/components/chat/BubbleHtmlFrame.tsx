@@ -145,24 +145,28 @@ export function BubbleHtmlFrame({
         !mediaKeyFromSrc(img.currentSrc || img.src)
       )
         return
-      const imgs = Array.from(doc.querySelectorAll<HTMLImageElement>('img')).filter((el) => {
-        if (!el.currentSrc && !el.src) return false
-        if (!allowRemote && /^https?:\/\//i.test(el.currentSrc || el.src) && !mediaKeyFromSrc(el.currentSrc || el.src))
+      const images = Array.from(doc.querySelectorAll<HTMLImageElement>('img')).filter((element) => {
+        if (!element.currentSrc && !element.src) return false
+        if (
+          !allowRemote &&
+          /^https?:\/\//i.test(element.currentSrc || element.src) &&
+          !mediaKeyFromSrc(element.currentSrc || element.src)
+        )
           return false
-        const w = el.getAttribute('width') || ''
-        const h = el.getAttribute('height') || ''
+        const w = element.getAttribute('width') || ''
+        const h = element.getAttribute('height') || ''
         if ((w === '1' || w === '0') && (h === '1' || h === '0')) return false
-        if (el.naturalWidth === 1 || el.naturalHeight === 1) return false
+        if (element.naturalWidth === 1 || element.naturalHeight === 1) return false
         return true
       })
       setGalleryItems(
-        imgs.map((el) => ({
-          src: el.currentSrc || el.src,
-          filename: el.alt || el.title || 'image',
-          mime: attachments?.find((att) => att.key === mediaKeyFromSrc(el.currentSrc || el.src))?.mime,
+        images.map((element) => ({
+          src: element.currentSrc || element.src,
+          filename: element.alt || element.title || 'image',
+          mime: attachments?.find((att) => att.key === mediaKeyFromSrc(element.currentSrc || element.src))?.mime,
         })),
       )
-      setGalleryIndex(Math.max(0, imgs.indexOf(img)))
+      setGalleryIndex(Math.max(0, images.indexOf(img)))
     },
     [attachments, allowRemote],
   )
@@ -242,8 +246,8 @@ export function BubbleHtmlFrame({
       let themed = false
       // Per document: what its out-of-flow content was last seen to need.
       let overflowExtent = 0
-      const cleanupFns: Array<() => void> = []
-      cleanupFns.push(() => {
+      const cleanupFunctions: Array<() => void> = []
+      cleanupFunctions.push(() => {
         if (foldQuoteRef.current === foldQuote) foldQuoteRef.current = null
       })
 
@@ -402,22 +406,27 @@ export function BubbleHtmlFrame({
 
       for (const video of doc.querySelectorAll<HTMLVideoElement>('video')) {
         reserveImageBox(video)
-        cleanupFns.push(fitMediaBox(video, '320px'))
+        cleanupFunctions.push(fitMediaBox(video, '320px'))
       }
       for (const image of doc.querySelectorAll<HTMLImageElement>('img')) {
         reserveImageBox(image)
-        cleanupFns.push(fitMediaBox(image, '320px'))
+        cleanupFunctions.push(fitMediaBox(image, '320px'))
         const onError = () => {
           // A blocked remote picture is an intentional placeholder, not a
           // failed attachment. Keep the sender's layout until it is revealed.
-          const src = image.getAttribute('src') ?? ''
-          if (allowRemote || !/^(?:https?:)?\/\//i.test(src)) releaseFailedImageBox(image)
+          const source = image.getAttribute('src') ?? ''
+          if (allowRemote || !/^(?:https?:)?\/\//i.test(source)) releaseFailedImageBox(image)
           scheduleMeasure()
         }
         // Zero intrinsic width is valid for SVGs. Preserve those and intentional
         // remote placeholders; other completed zero-width requests have failed.
-        const src = image.getAttribute('src') ?? ''
-        if (image.complete && image.naturalWidth === 0 && src && !/\.svg(?:[?#]|$)|^data:image\/svg\+xml/i.test(src)) {
+        const source = image.getAttribute('src') ?? ''
+        if (
+          image.complete &&
+          image.naturalWidth === 0 &&
+          source &&
+          !/\.svg(?:[?#]|$)|^data:image\/svg\+xml/i.test(source)
+        ) {
           onError()
         }
         const onLoad = () => {
@@ -426,7 +435,7 @@ export function BubbleHtmlFrame({
         }
         image.addEventListener('load', onLoad)
         image.addEventListener('error', onError)
-        cleanupFns.push(() => {
+        cleanupFunctions.push(() => {
           image.removeEventListener('load', onLoad)
           image.removeEventListener('error', onError)
         })
@@ -435,7 +444,7 @@ export function BubbleHtmlFrame({
       const frameWindow = doc.defaultView
       frameWindow?.addEventListener('load', scheduleMeasure)
       frameWindow?.addEventListener('resize', scheduleMeasure)
-      cleanupFns.push(() => {
+      cleanupFunctions.push(() => {
         frameWindow?.removeEventListener('load', scheduleMeasure)
         frameWindow?.removeEventListener('resize', scheduleMeasure)
       })
@@ -475,7 +484,7 @@ export function BubbleHtmlFrame({
       // Batched even for a remount: the walk over a large newsletter would
       // otherwise block scrolling once per frame that comes back into view.
       void applyBubbleThemeAsync(doc, initialTheme, () => disposed).then(finishTheme, themeFailed)
-      cleanupFns.push(() => setFrameDoc((current) => (current === doc ? null : current)))
+      cleanupFunctions.push(() => setFrameDoc((current) => (current === doc ? null : current)))
 
       return () => {
         disposed = true
@@ -483,7 +492,7 @@ export function BubbleHtmlFrame({
         observer.disconnect()
         window.clearTimeout(shortTimer)
         window.clearTimeout(longTimer)
-        cleanupFns.forEach((cleanup) => cleanup())
+        cleanupFunctions.forEach((cleanup) => cleanup())
       }
     },
     [documentKey, generation, quoteKey],

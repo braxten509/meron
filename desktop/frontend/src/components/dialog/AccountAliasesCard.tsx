@@ -12,16 +12,16 @@ import { SettingRow, SettingsGroup } from './AccountSettingsRows'
 
 export function AccountAliasesCard({ account }: { account: Account }) {
   const { t } = useTranslation()
-  const [aliasesVal, setAliasesVal] = useState<Alias[]>([])
+  const [aliasesValue, setAliasesValue] = useState<Alias[]>([])
 
   // Seed when switching accounts only — not on every persist, so a half-typed
   // row isn't wiped by the normalized list coming back.
   useEffect(() => {
-    setAliasesVal(account.aliases ?? [])
+    setAliasesValue(account.aliases ?? [])
   }, [account.id])
 
   const updateAliases = (next: Alias[]) => {
-    setAliasesVal(next)
+    setAliasesValue(next)
     void setAccountAliases(
       account.id,
       next.filter((a) => a.email.trim()),
@@ -35,31 +35,35 @@ export function AccountAliasesCard({ account }: { account: Account }) {
         hint={t('settings.account.aliasesHint')}
         control={
           <button
-            onClick={() => updateAliases([...aliasesVal, { email: '', name: '' }])}
+            onClick={() => updateAliases([...aliasesValue, { email: '', name: '' }])}
             className="flex items-center gap-1 text-xs font-semibold text-accent hover:underline cursor-pointer"
           >
             <Plus size={12} /> {t('settings.account.addAlias')}
           </button>
         }
       />
-      {aliasesVal.map((alias, i) => (
+      {aliasesValue.map((alias, i) => (
         <div key={i} className="flex items-center gap-2 px-3.5 py-2">
           <TextInput
             type="email"
             value={alias.email}
-            onChange={(e) => updateAliases(aliasesVal.map((a, j) => (j === i ? { ...a, email: e.target.value } : a)))}
+            onChange={(event) =>
+              updateAliases(aliasesValue.map((a, j) => (j === i ? { ...a, email: event.target.value } : a)))
+            }
             className="flex-1 font-semibold"
             placeholder="alias@example.com"
           />
           <TextInput
             type="text"
             value={alias.name ?? ''}
-            onChange={(e) => updateAliases(aliasesVal.map((a, j) => (j === i ? { ...a, name: e.target.value } : a)))}
+            onChange={(event) =>
+              updateAliases(aliasesValue.map((a, j) => (j === i ? { ...a, name: event.target.value } : a)))
+            }
             className="w-28 shrink-0 font-semibold"
             placeholder={t('settings.account.aliasNamePlaceholder')}
           />
           <button
-            onClick={() => updateAliases(aliasesVal.filter((_, j) => j !== i))}
+            onClick={() => updateAliases(aliasesValue.filter((_, j) => j !== i))}
             className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full hover:bg-active text-secondary transition-colors cursor-pointer"
             aria-label={t('settings.account.removeAlias')}
           >

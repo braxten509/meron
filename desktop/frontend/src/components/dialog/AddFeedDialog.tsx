@@ -1,3 +1,7 @@
+// Collects the feed URL and target account needed to add an RSS subscription. The
+// feed state owns the resulting mailbox update.
+// Imported by App.tsx.
+
 import { useState } from 'react'
 import { X, Rss, RefreshCw } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'

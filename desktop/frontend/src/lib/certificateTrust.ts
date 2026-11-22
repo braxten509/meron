@@ -1,3 +1,8 @@
+// Builds a certificate probe for the account and protocol named by a connection
+// failure. The trust prompt uses the returned server identity and certificate
+// details.
+// Callers include CertificateTrustPanel.tsx and certificateTrust.ts.
+
 import type { AccountProxy } from '../types'
 
 // Trust-on-first-use for mail servers whose certificate cannot be validated

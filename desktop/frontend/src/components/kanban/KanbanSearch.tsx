@@ -1,3 +1,7 @@
+// Edits a search within the board and resolves the selected scope. Column queries
+// and account boundaries determine which results can be displayed.
+// Imported by KanbanView.tsx and TitleBar.tsx.
+
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Search, X } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'

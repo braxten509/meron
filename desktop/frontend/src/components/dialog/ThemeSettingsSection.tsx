@@ -1,3 +1,7 @@
+// Connects the desktop theme preferences to appearance selection and editing.
+// Light and dark choices are stored separately.
+// Imported by SettingsDialog.tsx.
+
 import { useState } from 'react'
 import { Palette } from 'lucide-react'
 import { useTranslation } from '../../lib/i18n'

@@ -1,3 +1,8 @@
+// Reads selected files into a draft while enforcing individual and total
+// attachment size limits. The resulting state records files that were skipped or
+// could not be read.
+// Callers include useFileDrop.ts and useComposer.ts.
+
 import type { ComposerAttachment } from '../types'
 import { showToast } from '../states/ui'
 import { t } from './i18n'

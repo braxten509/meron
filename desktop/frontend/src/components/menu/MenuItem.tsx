@@ -1,3 +1,7 @@
+// Provides the shared action row used in desktop menus. The caller supplies the
+// icon, label, enabled state and selection callback.
+// Callers include FolderSwitcher.tsx and AddMailToTasksMenu.tsx.
+
 import type { ReactNode } from 'react'
 import { menuItemClass, menuItemDangerClass } from './menuStyles'
 

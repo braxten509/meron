@@ -1,3 +1,7 @@
+// Presents the font and size choices available to the desktop interface. The
+// renderer and settings view share the same font definitions.
+// Imported by SettingsDialog.tsx.
+
 import { useState, type ReactNode } from 'react'
 import { ALargeSmall, CaseSensitive, MessagesSquare } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'

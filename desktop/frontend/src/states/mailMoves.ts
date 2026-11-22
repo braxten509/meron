@@ -1,3 +1,8 @@
+// Coordinates mail transfers, deletion, archive and undo from desktop views.
+// Message and folder identities from the core determine how local state is
+// reconciled.
+// Callers include meronFolders.ts and quickReply.ts.
+
 import type { Message } from '../types'
 import { rememberThreadTransfer } from './recentThreadTransfers'
 import { isLocalAccountId } from './accounts'
@@ -61,17 +66,17 @@ function threadStillListed(threadId: string): boolean {
   return mail$.threads.get().some((item) => item.thread_id === threadId)
 }
 
-function assertDeleteAffected(res: unknown) {
-  if (!res || typeof res !== 'object') return
-  const deleted = (res as { deleted?: unknown }).deleted
+function assertDeleteAffected(response: unknown) {
+  if (!response || typeof response !== 'object') return
+  const deleted = (response as { deleted?: unknown }).deleted
   if (typeof deleted === 'number' && deleted <= 0) {
     throw new Error('Delete failed: no matching messages found')
   }
 }
 
-function assertMoveAffected(res: unknown, label = 'Move') {
-  if (!res || typeof res !== 'object') return
-  const moved = (res as { moved?: unknown }).moved
+function assertMoveAffected(response: unknown, label = 'Move') {
+  if (!response || typeof response !== 'object') return
+  const moved = (response as { moved?: unknown }).moved
   if (typeof moved === 'number' && moved <= 0) {
     throw new Error(`${label} failed: no matching messages found`)
   }
@@ -95,9 +100,9 @@ type MeronOnlyArchive = {
 
 /** Undo of a Meron-only archive: back into the Meron folder it came from, or
  *  out of Meron folders (it never left its mailbox). */
-async function undoMeronOnlyArchive(threadId: string, accountId: string | undefined, res: MeronOnlyArchive) {
+async function undoMeronOnlyArchive(threadId: string, accountId: string | undefined, response: MeronOnlyArchive) {
   releaseRemovedThread(threadId)
-  const previous = res.changes?.[0]?.previous_folder_id
+  const previous = response.changes?.[0]?.previous_folder_id
   try {
     if (previous) await invoke('mail.moveToMeronFolder', { folder_id: previous, thread_ids: [threadId], undo: true })
     else await invoke('mail.moveOutOfMeronFolder', { thread_ids: [threadId], undo: true })
@@ -108,9 +113,9 @@ async function undoMeronOnlyArchive(threadId: string, accountId: string | undefi
   await refreshThreadLocation(accountId, false)
 }
 
-function assertCopyAffected(res: unknown) {
-  if (!res || typeof res !== 'object') return
-  const copied = (res as { copied?: unknown }).copied
+function assertCopyAffected(response: unknown) {
+  if (!response || typeof response !== 'object') return
+  const copied = (response as { copied?: unknown }).copied
   if (typeof copied === 'number' && copied <= 0) {
     throw new Error('Copy failed: no matching messages found')
   }
@@ -124,8 +129,8 @@ function assertCopyAffected(res: unknown) {
 // could move mail the action never touched.
 type MovedCopiesResult = { target_uids?: number[]; meron_folder_id?: string; meron_source?: string }
 
-function movedCopyIds(res: MovedCopiesResult): string[] | undefined {
-  return res.target_uids?.length ? res.target_uids.map(String) : undefined
+function movedCopyIds(response: MovedCopiesResult): string[] | undefined {
+  return response.target_uids?.length ? response.target_uids.map(String) : undefined
 }
 
 // What an Undo hands the core besides the copies to move back: show them in
@@ -133,10 +138,12 @@ function movedCopyIds(res: MovedCopiesResult): string[] | undefined {
 // back in the Meron folder the action took the card out of.
 type UndoRestore = { showInInbox?: boolean; meronFolderId?: string; meronSource?: string }
 
-function undoRestore(thread: Message | undefined, res: MovedCopiesResult): UndoRestore {
+function undoRestore(thread: Message | undefined, response: MovedCopiesResult): UndoRestore {
   return {
     showInInbox: !!thread?.shown_in_inbox,
-    ...(res.meron_folder_id ? { meronFolderId: res.meron_folder_id, meronSource: res.meron_source } : {}),
+    ...(response.meron_folder_id
+      ? { meronFolderId: response.meron_folder_id, meronSource: response.meron_source }
+      : {}),
   }
 }
 
@@ -316,7 +323,7 @@ export async function moveThreadToFolder(
 
   const { rollback, complete } = removeThreadLocally(threadId)
   try {
-    const res = await invoke<MovedCopiesResult & MutationResult>('mail.move', {
+    const response = await invoke<MovedCopiesResult & MutationResult>('mail.move', {
       thread_id: threadId,
       target_folder_id: targetFolderId,
       ...(options.targetAccountId ? { target_account_id: options.targetAccountId } : {}),
@@ -332,10 +339,10 @@ export async function moveThreadToFolder(
           }
         : {}),
     })
-    assertMoveAffected(res)
+    assertMoveAffected(response)
     complete()
-    applyMutationFolderUnreads(res)
-    const copyIds = movedCopyIds(res)
+    applyMutationFolderUnreads(response)
+    const copyIds = movedCopyIds(response)
     // The move already updated the cache. Reloading the first page in place
     // keeps the threads the reader had scrolled to; replacing the whole list
     // would drop them and can close the conversation that just became selected.
@@ -354,7 +361,7 @@ export async function moveThreadToFolder(
         })
       }
       if (!crossAccount && options.undo !== false && sourceFolder && copyIds) {
-        const restore = undoRestore(sourceThread, res)
+        const restore = undoRestore(sourceThread, response)
         showUndoToast(t('mail.toast.threadMoved'), () => {
           releaseRemovedThread(threadId)
           void moveThreadToFolder(targetThreadId, sourceFolder, { undo: false, messageIds: copyIds, restore })
@@ -377,12 +384,12 @@ export async function copyThreadToFolder(threadId: string, targetAccountId: stri
   const sourceThread = findLocalThread(threadId)
   const sourceAccountId = sourceThread?.account_id || threadAccountId(threadId)
   try {
-    const res = await invoke('mail.copy', {
+    const response = await invoke('mail.copy', {
       thread_id: threadId,
       target_account_id: targetAccountId,
       target_folder_id: targetFolderId,
     })
-    assertCopyAffected(res)
+    assertCopyAffected(response)
     if (sourceAccountId) {
       rememberThreadTransfer({
         action: 'copy',
@@ -418,11 +425,11 @@ async function invokeGroup<T extends BulkSelectionItem>(
   command: 'mail.deleteMany' | 'mail.moveMany',
   group: T[],
   payload: (item: T) => Record<string, unknown>,
-  settle: (item: T, res: unknown) => void,
+  settle: (item: T, response: unknown) => void,
   done: (item: T) => void,
 ) {
-  const res = await invoke<{ results?: unknown[] }>(command, { items: group.map(payload) })
-  const results = Array.isArray(res?.results) ? res.results : []
+  const response = await invoke<{ results?: unknown[] }>(command, { items: group.map(payload) })
+  const results = Array.isArray(response?.results) ? response.results : []
   let failure: unknown
   group.forEach((item, index) => {
     try {
@@ -475,10 +482,10 @@ export async function bulkArchiveSelected(items: BulkSelectionItem[]) {
   // stay in the list (greyed), so a stop or a failure has nothing to put back.
   const result = await runBulkJob('archive', targets, async ([item], done) => {
     const sourceThread = findLocalThread(item.threadId)
-    const res = await invoke('mail.archive', { thread_id: item.threadId })
-    assertMoveAffected(res, 'Archive')
+    const response = await invoke('mail.archive', { thread_id: item.threadId })
+    assertMoveAffected(response, 'Archive')
     removeThreadLocally(item.threadId).complete()
-    applyMutationFolderUnreads(res as MutationResult)
+    applyMutationFolderUnreads(response as MutationResult)
     if (sourceThread?.account_id) void refreshAccountFoldersCache(sourceThread.account_id, false)
     done(item)
   })
@@ -516,8 +523,8 @@ export async function bulkMoveSelectedToFolder(
           target_folder_id: targetFolderId,
           ...(targetAccountId ? { target_account_id: targetAccountId } : {}),
         }),
-        (item, res) => {
-          assertMoveAffected(res)
+        (item, response) => {
+          assertMoveAffected(response)
           removeThreadLocally(item.threadId).complete()
           rememberThreadTransfer({
             action: 'move',
@@ -525,7 +532,7 @@ export async function bulkMoveSelectedToFolder(
             targetAccountId: targetAccountId || item.accountId,
             targetFolderId,
           })
-          applyMutationFolderUnreads(res as MutationResult)
+          applyMutationFolderUnreads(response as MutationResult)
         },
         done,
       ),
@@ -552,12 +559,12 @@ export async function bulkCopySelectedToFolder(
   let completed = 0
   try {
     for (const item of targets) {
-      const res = await invoke('mail.copy', {
+      const response = await invoke('mail.copy', {
         thread_id: item.threadId,
         target_account_id: targetAccountId,
         target_folder_id: targetFolderId,
       })
-      assertCopyAffected(res)
+      assertCopyAffected(response)
       completed++
       rememberThreadTransfer({ action: 'copy', sourceAccountId: item.accountId, targetAccountId, targetFolderId })
     }
@@ -603,10 +610,10 @@ export async function bulkDeleteSelected(items: BulkSelectionItem[]) {
         'mail.deleteMany',
         group,
         (item) => ({ thread_id: item.threadId, ...(item.folderId ? { folder: item.folderId } : {}) }),
-        (item, res) => {
-          assertDeleteAffected(res)
+        (item, response) => {
+          assertDeleteAffected(response)
           removeThreadLocally(item.threadId).complete()
-          applyMutationFolderUnreads(res as MutationResult)
+          applyMutationFolderUnreads(response as MutationResult)
         },
         done,
       ),
@@ -629,23 +636,23 @@ export async function archiveThread(threadId: string) {
   const sourceFolder = sourceThread?.folder_id ?? ''
   const { rollback, complete } = removeThreadLocally(threadId)
   try {
-    const res = await invoke<
+    const response = await invoke<
       { folder?: string; thread_id?: string } & MovedCopiesResult & MutationResult & MeronOnlyArchive
     >('mail.archive', {
       thread_id: threadId,
     })
-    assertMoveAffected(res, 'Archive')
+    assertMoveAffected(response, 'Archive')
     complete()
-    applyMutationFolderUnreads(res)
-    const archivedThreadId = res.thread_id ?? threadIdInFolder(threadId, sourceThread?.account_id, res.folder)
-    const copyIds = movedCopyIds(res)
+    applyMutationFolderUnreads(response)
+    const archivedThreadId = response.thread_id ?? threadIdInFolder(threadId, sourceThread?.account_id, response.folder)
+    const copyIds = movedCopyIds(response)
     await refreshThreadLocation(sourceThread?.account_id, false)
     // Filed in the built-in Archive folder too: its row follows.
     scheduleMeronFoldersRefresh()
-    if (res.meron_only) {
+    if (response.meron_only) {
       // Filed into the built-in Archive only; the mail stayed on the server.
       showUndoToast(t('mail.toast.archivedCount', { count: 1 }), () => {
-        void undoMeronOnlyArchive(threadId, sourceThread?.account_id, res)
+        void undoMeronOnlyArchive(threadId, sourceThread?.account_id, response)
       })
     } else if (threadStillListed(threadId)) {
       showToast(t('mail.toast.archiveFailedInSameFolder'), 'error')
@@ -653,7 +660,7 @@ export async function archiveThread(threadId: string) {
       // Offer to move it back where it came from. Falls back to a plain toast
       // when the origin folder or the archived copies are unknown (nothing
       // reliable to restore to, or from).
-      const restore = undoRestore(sourceThread, res)
+      const restore = undoRestore(sourceThread, response)
       showUndoToast(t('mail.toast.archivedCount', { count: 1 }), () => {
         releaseRemovedThread(threadId)
         void moveThreadToFolder(archivedThreadId, sourceFolder, { undo: false, messageIds: copyIds, restore })
@@ -698,23 +705,23 @@ export async function deleteThread(threadId: string, options: { permanent?: bool
   const { rollback, complete } = removeThreadLocally(threadId)
 
   try {
-    const res = await invoke<
+    const response = await invoke<
       { deleted?: number; permanent?: boolean; trash?: string; thread_id?: string } & MovedCopiesResult & MutationResult
     >('mail.delete', {
       thread_id: threadId,
       ...(sourceFolder ? { folder: sourceFolder } : {}),
     })
-    assertDeleteAffected(res)
+    assertDeleteAffected(response)
     complete()
-    applyMutationFolderUnreads(res)
-    const trashedThreadId = res.thread_id ?? threadIdInFolder(threadId, sourceThread?.account_id, res.trash)
-    const copyIds = movedCopyIds(res)
-    const canUndoTrashMove = !!(res.thread_id || res.trash) && !!copyIds
+    applyMutationFolderUnreads(response)
+    const trashedThreadId = response.thread_id ?? threadIdInFolder(threadId, sourceThread?.account_id, response.trash)
+    const copyIds = movedCopyIds(response)
+    const canUndoTrashMove = !!(response.thread_id || response.trash) && !!copyIds
     await refreshThreadLocation(undefined, false)
     if (threadStillListed(threadId)) {
       showToast(t('mail.toast.deleteFailedInSameFolder'), 'error')
-    } else if (!isDraft && !permanent && !res.permanent && sourceFolder && canUndoTrashMove) {
-      const restore = undoRestore(sourceThread, res)
+    } else if (!isDraft && !permanent && !response.permanent && sourceFolder && canUndoTrashMove) {
+      const restore = undoRestore(sourceThread, response)
       showUndoToast(t('mail.toast.threadMovedToTrash'), () => {
         releaseRemovedThread(threadId)
         void moveThreadToFolder(trashedThreadId, sourceFolder, { undo: false, messageIds: copyIds, restore })
@@ -808,13 +815,13 @@ export async function discardSavedDraftCopy(
         thread_id: draft.threadId,
       })
     } else {
-      const res = await invoke('mail.delete', {
+      const response = await invoke('mail.delete', {
         thread_id: draft.threadId,
         message_ids: [draft.messageId],
         folder: draft.folderId,
       })
-      if (!isDraftFolder(draft.folderId, draft.accountId)) assertDeleteAffected(res)
-      applyMutationFolderUnreads(res as MutationResult)
+      if (!isDraftFolder(draft.folderId, draft.accountId)) assertDeleteAffected(response)
+      applyMutationFolderUnreads(response as MutationResult)
     }
   } catch (error) {
     // Put back what this discard took and nothing else. The tab closes before
@@ -925,13 +932,13 @@ export async function deleteMessage(message: Message): Promise<boolean> {
   mail$.messages.set(nextMessages)
 
   try {
-    const res = await invoke('mail.delete', {
+    const response = await invoke('mail.delete', {
       thread_id: threadId,
       message_ids: [message.id],
       folder: message.folder_id,
     })
-    if (!isDraft) assertDeleteAffected(res)
-    applyMutationFolderUnreads(res as MutationResult)
+    if (!isDraft) assertDeleteAffected(response)
+    applyMutationFolderUnreads(response as MutationResult)
     showToast(
       isDraft
         ? t('mail.toast.draftDiscarded')
@@ -984,7 +991,7 @@ export async function moveMessage(
   mail$.messages.set(nextMessages)
 
   try {
-    const res = options.archive
+    const response = options.archive
       ? await invoke<{ folder?: string } & MovedCopiesResult & MutationResult>('mail.archive', {
           thread_id: message.id,
         })
@@ -993,10 +1000,10 @@ export async function moveMessage(
           target_folder_id: targetFolderId,
           ...(crossAccount ? { target_account_id: targetAccountId } : {}),
         })
-    assertMoveAffected(res, options.archive ? 'Archive' : 'Move')
-    applyMutationFolderUnreads(res)
-    const landedFolder = options.archive ? ((res as { folder?: string }).folder ?? '') : targetFolderId
-    const copyUid = movedCopyIds(res)?.[0]
+    assertMoveAffected(response, options.archive ? 'Archive' : 'Move')
+    applyMutationFolderUnreads(response)
+    const landedFolder = options.archive ? ((response as { folder?: string }).folder ?? '') : targetFolderId
+    const copyUid = movedCopyIds(response)?.[0]
     const done = options.archive ? t('mail.toast.messageArchived') : t('mail.toast.messageMoved')
     if (!crossAccount && landedFolder && sourceFolder && copyUid) {
       showUndoToast(done, () => {

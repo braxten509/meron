@@ -1,3 +1,7 @@
+// Connects an account's wallpaper preference to the settings card. The selected
+// image or preset belongs to the account being edited.
+// Imported by SettingsDialog.tsx.
+
 import { useState } from 'react'
 import { Image as ImageIcon } from 'lucide-react'
 import { useTranslation } from '../../lib/i18n'

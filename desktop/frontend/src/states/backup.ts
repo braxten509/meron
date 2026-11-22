@@ -1,3 +1,7 @@
+// Coordinates exporting and restoring a backup through the desktop bridge. The
+// selected options include whether secrets are included and the passphrase to use.
+// Imported by SettingsDialog.tsx.
+
 import { invoke } from '../lib/bridge'
 import { boot } from '../boot'
 import { ui$ } from './ui'
@@ -33,11 +37,11 @@ type ImportResult = Partial<BackupSummary> & { cancelled?: boolean; needsPassphr
  * one. Returns whether a file was actually written (false = cancelled).
  */
 export async function exportBackup(includeSecrets: boolean, passphrase: string): Promise<boolean> {
-  const res = await invoke<ExportResult>('backup.export', {
+  const response = await invoke<ExportResult>('backup.export', {
     include_secrets: includeSecrets,
     passphrase,
   })
-  return res?.saved === true
+  return response?.saved === true
 }
 
 /**
@@ -58,16 +62,16 @@ export type ImportOutcome =
  * change essentially every piece of loaded state.
  */
 export async function importBackup(path?: string, passphrase = ''): Promise<ImportOutcome> {
-  const res = await invoke<ImportResult>('backup.import', { path: path ?? '', passphrase })
-  if (res?.cancelled) return { status: 'cancelled' }
-  if (res?.needsPassphrase) return { status: 'needs-passphrase', path: res.path ?? path ?? '' }
+  const response = await invoke<ImportResult>('backup.import', { path: path ?? '', passphrase })
+  if (response?.cancelled) return { status: 'cancelled' }
+  if (response?.needsPassphrase) return { status: 'needs-passphrase', path: response.path ?? path ?? '' }
 
   const summary: BackupSummary = {
-    accounts: res?.accounts ?? 0,
-    skipped: res?.skipped ?? 0,
-    feeds: res?.feeds ?? 0,
-    settings: res?.settings ?? 0,
-    secrets: res?.secrets ?? 0,
+    accounts: response?.accounts ?? 0,
+    skipped: response?.skipped ?? 0,
+    feeds: response?.feeds ?? 0,
+    settings: response?.settings ?? 0,
+    secrets: response?.secrets ?? 0,
   }
   // Restored rows land straight in the DB, so every cached view is stale:
   // re-bootstrap for accounts + settings, then refresh the open mail panes.

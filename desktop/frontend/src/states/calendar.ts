@@ -1,3 +1,7 @@
+// Coordinates the optional calendar panel, selected date and stored events. The
+// frontend requests data for the visible date range.
+// Callers include AppHotkeys.tsx and CalendarPanel.tsx.
+
 import { observable } from '@legendapp/state'
 import { invoke } from '../lib/bridge'
 import { firstDayOfWeek, gridRange, monthGrid } from '../lib/calendarGrid'

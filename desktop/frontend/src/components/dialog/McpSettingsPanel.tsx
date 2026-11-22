@@ -1,3 +1,7 @@
+// Edits the desktop tool server's connection and account settings. The panel
+// separates a draft configuration from the values persisted by the host.
+// Imported by SettingsDialog.tsx.
+
 import { useEffect, useRef, useState } from 'react'
 import { useValue } from '@legendapp/state/react'
 import { ArrowLeft, Check, Copy, KeyRound, Pencil, Plus, Trash2 } from 'lucide-react'

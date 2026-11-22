@@ -1,3 +1,7 @@
+// Renders the calendar side panel and formats the span occupied by an event. The
+// panel follows the selected date and calendar state.
+// Imported by App.tsx.
+
 import { useValue } from '@legendapp/state/react'
 import { CalendarDays, Check, ChevronLeft, ChevronRight, Maximize2, Plus, Repeat, X } from 'lucide-react'
 import { useMemo } from 'react'

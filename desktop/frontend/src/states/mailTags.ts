@@ -1,3 +1,7 @@
+// Coordinates mailbox tag commands and local tag state. Views share updates when a
+// tag is applied, removed or renamed.
+// Callers include TagDialog.tsx and TagInput.tsx.
+
 import type { Rule } from './mailRules'
 import { invoke } from '../lib/bridge'
 import { columnReadsTags, loadKanbanColumn } from '../lib/kanbanData'

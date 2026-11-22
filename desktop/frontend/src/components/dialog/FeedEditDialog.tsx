@@ -1,3 +1,7 @@
+// Edits an existing RSS subscription within the desktop account interface. The
+// feed's identity is retained while its settings are changed.
+// Imported by App.tsx.
+
 import { useState } from 'react'
 import { X, Rss, Trash2, Copy, Check } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'

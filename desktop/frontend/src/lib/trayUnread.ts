@@ -1,3 +1,7 @@
+// Keeps the native unread indicator synchronized with frontend mailbox state.
+// Updates received during an in-flight call can be coalesced.
+// Imported by useAppEffects.ts.
+
 import { invoke } from './bridge'
 import { createLatestBooleanUpdater } from './latestBooleanUpdater'
 

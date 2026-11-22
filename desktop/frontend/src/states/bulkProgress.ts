@@ -1,3 +1,7 @@
+// Tracks progress during operations over a mailbox selection. The desktop can show
+// how far a batch has advanced while individual writes are outstanding.
+// Callers include mailMoves.ts and BulkProgressStrip.tsx.
+
 import { observable } from '@legendapp/state'
 import { getFilteredThreads } from './mail'
 import { clearBulkSelection, ui$ } from './ui'

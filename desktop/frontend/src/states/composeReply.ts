@@ -1,3 +1,7 @@
+// Derives the recipient list for a reply from the core's decision and the selected
+// message. Compose controls use it for reply and reply-all.
+// Callers include compose.ts and quickReply.ts.
+
 import type { Account, Alias, Message } from '../types'
 import { ui$ } from './ui'
 import { accounts$, isSendableAccount, accountIdentities } from './accounts'

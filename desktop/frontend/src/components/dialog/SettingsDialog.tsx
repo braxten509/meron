@@ -1,3 +1,7 @@
+// Routes the desktop settings dialog between application, account and feature
+// panels. Each subpanel owns the controls for its settings area.
+// Imported by App.tsx.
+
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslation } from '../../lib/i18n'
@@ -1138,15 +1142,15 @@ function LogViewerDialog({ onClose }: { onClose: () => void }) {
 
   // The newest entries are at the end; start there.
   useEffect(() => {
-    const el = scrollRef.current
-    if (el && log) el.scrollTop = el.scrollHeight
+    const element = scrollRef.current
+    if (element && log) element.scrollTop = element.scrollHeight
   }, [log])
 
   useEffect(() => {
     let alive = true
     invoke<{ log: string }>('log.read')
-      .then((res) => {
-        if (alive) setLog(res?.log ?? '')
+      .then((response) => {
+        if (alive) setLog(response?.log ?? '')
       })
       .catch((error) => {
         showToast(error instanceof Error ? error.message : String(error), 'error')
@@ -1159,8 +1163,8 @@ function LogViewerDialog({ onClose }: { onClose: () => void }) {
 
   const exportLog = async () => {
     try {
-      const res = await invoke<{ saved: boolean; path?: string }>('log.export')
-      if (res?.saved) showToast(t('settings.toast.logExported'), 'success')
+      const response = await invoke<{ saved: boolean; path?: string }>('log.export')
+      if (response?.saved) showToast(t('settings.toast.logExported'), 'success')
     } catch (error) {
       showToast(error instanceof Error ? error.message : String(error), 'error')
     }

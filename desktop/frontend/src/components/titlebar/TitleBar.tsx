@@ -1,3 +1,7 @@
+// Coordinates the desktop titlebar, including draggable regions and window
+// actions. Host capabilities determine which native controls must be shown.
+// Callers include App.tsx and KanbanView.tsx.
+
 import { useState, type Dispatch, type SetStateAction } from 'react'
 import { createPortal } from 'react-dom'
 import { CalendarClock, Menu, SquareCheckBig, Users } from 'lucide-react'

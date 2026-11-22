@@ -1,3 +1,7 @@
+// Defines desktop theme tokens and their CSS variables. The theme editor, built-in
+// palettes and persisted selections share those token names.
+// Callers include useThemeChoice.ts and ThemeDialog.tsx.
+
 import type { CSSProperties } from 'react'
 import {
   darken,
@@ -726,10 +730,10 @@ export function accentLabelVars(tokens: ThemeTokens): Record<string, string> {
 
 function sanitizeTokens(raw: unknown): ThemeTokens | null {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
-  const obj = raw as Record<string, unknown>
+  const record = raw as Record<string, unknown>
   const out = {} as Record<keyof ThemeTokens, string>
   for (const key of THEME_TOKEN_KEYS) {
-    const value = obj[key]
+    const value = record[key]
     if (typeof value !== 'string' || !value) return null
     out[key] = value
   }
@@ -749,12 +753,12 @@ const SOURCE_COLOR_KEYS = ['bgApp', 'surface', 'sideNav', 'accent', 'text'] as c
 
 function sanitizeSource(raw: unknown): CustomThemeInput | null {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
-  const obj = raw as Record<string, unknown>
-  const appearance = obj.appearance
+  const record = raw as Record<string, unknown>
+  const appearance = record.appearance
   if (appearance !== 'light' && appearance !== 'dark') return null
   const colors = {} as Record<(typeof SOURCE_COLOR_KEYS)[number], string>
   for (const key of SOURCE_COLOR_KEYS) {
-    const value = obj[key]
+    const value = record[key]
     if (typeof value !== 'string' || !isValidColor(value)) return null
     colors[key] = value
   }
@@ -799,15 +803,15 @@ export function sanitizeCustomThemes(raw: unknown): CustomTheme[] | null {
   const seen = new Set<string>()
   for (const item of raw) {
     if (!item || typeof item !== 'object' || Array.isArray(item)) continue
-    const obj = item as Record<string, unknown>
-    if (typeof obj.id !== 'string' || !isCustomThemeId(obj.id) || seen.has(obj.id)) continue
-    const source = sanitizeSource(obj.source)
+    const record = item as Record<string, unknown>
+    if (typeof record.id !== 'string' || !isCustomThemeId(record.id) || seen.has(record.id)) continue
+    const source = sanitizeSource(record.source)
     if (!source) continue
-    const name = typeof obj.name === 'string' && obj.name.trim() ? obj.name.trim() : 'Custom theme'
-    const flattened = source.surface !== (obj.source as Record<string, unknown>).surface
-    const tokens = (flattened ? null : sanitizeTokens(obj.tokens)) ?? deriveThemeTokens(source)
-    seen.add(obj.id)
-    out.push({ id: obj.id, name, appearance: source.appearance, tokens, source })
+    const name = typeof record.name === 'string' && record.name.trim() ? record.name.trim() : 'Custom theme'
+    const flattened = source.surface !== (record.source as Record<string, unknown>).surface
+    const tokens = (flattened ? null : sanitizeTokens(record.tokens)) ?? deriveThemeTokens(source)
+    seen.add(record.id)
+    out.push({ id: record.id, name, appearance: source.appearance, tokens, source })
   }
   return out
 }

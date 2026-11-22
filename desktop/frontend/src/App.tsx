@@ -1,3 +1,7 @@
+// Selects the desktop surfaces for mailbox, boards, calendar and settings. Startup
+// effects and navigation state determine which views share the current window.
+// Imported by main.tsx.
+
 import { useValue } from '@legendapp/state/react'
 import { useEffect, useRef } from 'react'
 import { useTranslation } from './lib/i18n'

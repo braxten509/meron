@@ -1,3 +1,7 @@
+// Edits a recipient list with address suggestions and keyboard selection.
+// Accepting a suggestion must cooperate with ordinary Tab navigation.
+// Callers include ComposerHeaderFields.tsx and RulesPanel.tsx.
+
 import { useEffect, useRef, useState } from 'react'
 import type { Contact } from '../../types'
 import { suggestContacts, formatContact } from '../../lib/contacts'
@@ -21,14 +25,14 @@ type RecipientInputProps = {
 // quoted name like `"Lee, Ann"` holds one. Returns the leading portion
 // (including that comma) plus the active token being typed.
 function splitTail(value: string): { head: string; tail: string } {
-  let idx = -1
+  let index = -1
   let quoted = false
   for (let i = 0; i < value.length; i++) {
     if (value[i] === '"') quoted = !quoted
-    else if (value[i] === ',' && !quoted) idx = i
+    else if (value[i] === ',' && !quoted) index = i
   }
-  if (idx === -1) return { head: '', tail: value }
-  return { head: value.slice(0, idx + 1), tail: value.slice(idx + 1) }
+  if (index === -1) return { head: '', tail: value }
+  return { head: value.slice(0, index + 1), tail: value.slice(index + 1) }
 }
 
 const inputClass = 'w-full bg-transparent text-[0.8125rem] text-primary placeholder-secondary outline-none'
@@ -97,30 +101,30 @@ export function RecipientInput({
     suggestionsKeyRef.current = ''
   }
 
-  function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    const plainTab = e.key === 'Tab' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey
-    if (e.key === 'Tab' && (!plainTab || !(open && suggestions.length > 0))) {
+  function onKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+    const plainTab = event.key === 'Tab' && !event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey
+    if (event.key === 'Tab' && (!plainTab || !(open && suggestions.length > 0))) {
       suggestionsEnabledRef.current = false
       setOpen(false)
       if (onTab && plainTab) {
-        e.preventDefault()
+        event.preventDefault()
         onTab()
       }
       return
     }
     if (open && suggestions.length > 0) {
-      if (e.key === 'ArrowDown') {
-        e.preventDefault()
+      if (event.key === 'ArrowDown') {
+        event.preventDefault()
         setActive((i) => (i + 1) % suggestions.length)
         return
       }
-      if (e.key === 'ArrowUp') {
-        e.preventDefault()
+      if (event.key === 'ArrowUp') {
+        event.preventDefault()
         setActive((i) => (i - 1 + suggestions.length) % suggestions.length)
         return
       }
-      if (e.key === 'Enter' || e.key === 'Tab') {
-        e.preventDefault()
+      if (event.key === 'Enter' || event.key === 'Tab') {
+        event.preventDefault()
         accept(suggestions[active])
         return
       }
@@ -136,9 +140,9 @@ export function RecipientInput({
         placeholder={placeholder}
         spellCheck={false}
         className={className}
-        onChange={(e) => {
+        onChange={(event) => {
           suggestionsEnabledRef.current = true
-          onChange(e.target.value)
+          onChange(event.target.value)
         }}
         onKeyDown={onKeyDown}
         onFocus={() => {
@@ -166,8 +170,8 @@ export function RecipientInput({
             <li
               key={c.addr}
               // mousedown (not click) so it fires before the input's blur.
-              onMouseDown={(e) => {
-                e.preventDefault()
+              onMouseDown={(event) => {
+                event.preventDefault()
                 accept(c)
               }}
               onMouseEnter={() => setActive(i)}

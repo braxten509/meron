@@ -1,3 +1,7 @@
+// Coordinates the selected desktop conversation and the panels that share its
+// space. The message list and reply editor follow the active thread.
+// Imported by App.tsx.
+
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'

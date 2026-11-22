@@ -1,3 +1,8 @@
+// Chooses the suggested save name for an attachment using the message metadata and
+// available filename. Native save dialogs use the result as their initial
+// suggestion.
+// Imported by mail.ts.
+
 const imageExtension = /\.(?:a?png|jpe?g|jpe|jfif|gif|webp|bmp|tiff?|heic|heif|avif|svg|ico|jxl|jp2|jpx)$/i
 const mimeExtensions: Record<string, string> = {
   'image/png': '.png',

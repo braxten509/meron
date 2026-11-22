@@ -93,9 +93,9 @@ export function mailHtmlToText(source: string): string {
   const html = new DOMParser().parseFromString(source, 'text/html')
   html
     .querySelectorAll('script, style, img, iframe, object, embed, link, video, audio, source')
-    .forEach((el) => el.remove())
-  html.querySelectorAll('*').forEach((el) => {
-    for (const attribute of Array.from(el.attributes)) el.removeAttribute(attribute.name)
+    .forEach((element) => element.remove())
+  html.querySelectorAll('*').forEach((element) => {
+    for (const attribute of Array.from(element.attributes)) element.removeAttribute(attribute.name)
   })
   return htmlToText(html.body.innerHTML)
 }

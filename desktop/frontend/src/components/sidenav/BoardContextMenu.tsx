@@ -1,3 +1,7 @@
+// Provides navigation-rail actions for a board. Board selection is retained while
+// its menu dispatches editing and organization actions.
+// Imported by SideNav.tsx.
+
 import { Settings, Trash2 } from 'lucide-react'
 import { useTranslation } from '../../lib/i18n'
 import { removeKanbanBoard } from '../../states/kanban'

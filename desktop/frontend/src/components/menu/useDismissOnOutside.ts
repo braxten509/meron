@@ -1,3 +1,7 @@
+// Closes a desktop surface when input lands outside its owned elements. The effect
+// is scoped to the surface's open state.
+// Callers include ComposerToolbar.tsx and ContactsView.tsx.
+
 import { useEffect, useRef } from 'react'
 import { useEscapeKey } from '../../lib/useEscapeKey'
 

@@ -1,3 +1,7 @@
+// Edits one board's identity and presentation, including its custom media. Changes
+// target the selected board in desktop settings.
+// Imported by SettingsDialog.tsx.
+
 import { useEffect, useState } from 'react'
 import { Camera, Columns3, Image as ImageIcon, Inbox, Trash2 } from 'lucide-react'
 import { useTranslation } from '../../lib/i18n'

@@ -1,3 +1,7 @@
+// Determines which desktop platforms offer a monochrome tray icon. Settings use
+// this capability before presenting a style choice.
+// Imported by SettingsDialog.tsx.
+
 import { isLinuxPlatform, isMacPlatform } from './platform'
 
 /**

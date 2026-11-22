@@ -1,3 +1,7 @@
+// Defines reminder choices for calendar events. Timed events use minute offsets
+// while all-day entries offer day-based choices.
+// Callers include EventEditorDialog.tsx and SettingsDialog.tsx.
+
 import { t } from './i18n'
 
 // Event alerts, Apple Calendar style: app-wide defaults for timed and all-day

@@ -1,3 +1,8 @@
+// Installs application-wide keyboard handlers and routes keys to the active
+// surface. A covered or hidden mailbox must not receive actions meant for another
+// view.
+// Imported by App.tsx.
+
 import { useEffect } from 'react'
 import { leaveNarrowContacts } from '../../states/contacts'
 import {
@@ -141,13 +146,13 @@ function focusActiveThreadRow(): boolean {
 
 let threadListDeleteScope = false
 
-function inThreadList(el: Element | null): boolean {
-  return !!el?.closest('[data-thread-list]')
+function inThreadList(element: Element | null): boolean {
+  return !!element?.closest('[data-thread-list]')
 }
 
 function bodyFocused(): boolean {
-  const el = document.activeElement
-  return !el || el === document.body || el === document.documentElement
+  const element = document.activeElement
+  return !element || element === document.body || element === document.documentElement
 }
 
 function clearThreadListDeleteScope(event: Event) {
@@ -185,8 +190,8 @@ function handleMessageArrowStep(key: string): boolean {
 // drop focus to body; keep allowing repeated Delete only until the user focuses
 // or clicks outside the thread list.
 function deleteKeyFocusAllowed(): boolean {
-  const el = document.activeElement
-  if (inThreadList(el)) {
+  const element = document.activeElement
+  if (inThreadList(element)) {
     threadListDeleteScope = true
     return true
   }

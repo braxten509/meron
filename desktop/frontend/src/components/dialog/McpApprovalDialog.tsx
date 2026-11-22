@@ -1,3 +1,7 @@
+// Displays a pending tool operation and records approval or rejection through the
+// host. The preview keeps the operation and its selected targets visible.
+// Imported by App.tsx.
+
 import { useEffect, useRef, useState } from 'react'
 import { useValue } from '@legendapp/state/react'
 import { accounts$ } from '../../states/accounts'

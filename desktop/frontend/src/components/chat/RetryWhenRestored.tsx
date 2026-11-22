@@ -1,3 +1,7 @@
+// Remounts media after a previously missing attachment file becomes available. The
+// reader can recover its image without reopening the entire conversation.
+// Imported by MessageContent.tsx.
+
 import { Fragment, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 

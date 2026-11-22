@@ -10,6 +10,6 @@ export interface ChangelogRelease {
 }
 
 export async function fetchChangelog(): Promise<ChangelogRelease[]> {
-  const res = await invoke<{ releases?: ChangelogRelease[] }>('changelog.fetch')
-  return res?.releases ?? []
+  const response = await invoke<{ releases?: ChangelogRelease[] }>('changelog.fetch')
+  return response?.releases ?? []
 }

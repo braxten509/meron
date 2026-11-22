@@ -1,3 +1,7 @@
+// Stores recent move and copy destinations for the desktop picker. Entries keep
+// account and action identity while repeated destinations move to the front.
+// Callers include mailFolders.ts and mailMoves.ts.
+
 import { observable } from '@legendapp/state'
 
 export type RecentThreadTransfer = {

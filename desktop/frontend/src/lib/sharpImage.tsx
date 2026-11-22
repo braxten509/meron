@@ -1,3 +1,7 @@
+// Supplies a sharp image source and component for desktop rendering. Callers
+// provide the original image and use the resolved source in the visible UI.
+// Callers include AboutDialog.tsx and AccountDialog.tsx.
+
 import { useEffect, useState, type ImgHTMLAttributes } from 'react'
 
 // WebKit shrinks a picture to its box in one bilinear step, which turns a
@@ -23,21 +27,21 @@ function remember(key: string, url: string | null) {
 }
 
 async function shrink(src: string, px: number, fit: Fit): Promise<string | null> {
-  const img = new Image()
+  const image = new Image()
   // Remote pictures without CORS can't be read back; they fail here and the
   // original is used, so nothing is lost.
-  if (/^https?:/i.test(src) && !src.startsWith(window.location.origin)) img.crossOrigin = 'anonymous'
-  img.decoding = 'async'
-  img.src = src
-  await img.decode()
-  const { naturalWidth: w, naturalHeight: h } = img
+  if (/^https?:/i.test(src) && !src.startsWith(window.location.origin)) image.crossOrigin = 'anonymous'
+  image.decoding = 'async'
+  image.src = src
+  await image.decode()
+  const { naturalWidth: w, naturalHeight: h } = image
   if (!w || !h) return null
   const scale = fit === 'cover' ? px / Math.min(w, h) : px / Math.max(w, h)
   // Up to 2x is smooth enough already.
   if (scale >= 0.5) return null
   const tw = Math.max(1, Math.round(w * scale))
   const th = Math.max(1, Math.round(h * scale))
-  let source: CanvasImageSource = img
+  let source: CanvasImageSource = image
   let cw = w
   let ch = h
   while (cw / 2 >= tw && ch / 2 >= th) {
@@ -54,10 +58,10 @@ function draw(source: CanvasImageSource, width: number, height: number): HTMLCan
   const canvas = document.createElement('canvas')
   canvas.width = width
   canvas.height = height
-  const ctx = canvas.getContext('2d')!
-  ctx.imageSmoothingEnabled = true
-  ctx.imageSmoothingQuality = 'high'
-  ctx.drawImage(source, 0, 0, width, height)
+  const context = canvas.getContext('2d')!
+  context.imageSmoothingEnabled = true
+  context.imageSmoothingQuality = 'high'
+  context.drawImage(source, 0, 0, width, height)
   return canvas
 }
 

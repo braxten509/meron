@@ -1,3 +1,7 @@
+// Presents searchable desktop commands and keyboard selection. Matching and
+// execution operate on the command list available in the current context.
+// Imported by App.tsx.
+
 import { useEffect, useMemo, useRef } from 'react'
 import { Check, SquareChevronRight } from 'lucide-react'
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react'

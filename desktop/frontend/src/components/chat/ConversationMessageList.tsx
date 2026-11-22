@@ -180,16 +180,16 @@ export function ConversationMessageList({
   const loadEarlier = useCallback(() => {
     if (!messagesCursor || messagesLoadingMore || autoLoadInFlightRef.current) return
     const container = scrollRef.current
-    const prevHeight = container?.scrollHeight ?? 0
-    const prevTop = container?.scrollTop ?? 0
+    const previousHeight = container?.scrollHeight ?? 0
+    const previousTop = container?.scrollTop ?? 0
     const loadingThreadId = activeThreadId
     autoLoadInFlightRef.current = true
 
     const restoreScrollPosition = () => {
       requestAnimationFrame(() => {
-        const el = scrollRef.current
-        if (el && activeThreadIdRef.current === loadingThreadId) {
-          onSetScrollTop(prevTop + (el.scrollHeight - prevHeight))
+        const element = scrollRef.current
+        if (element && activeThreadIdRef.current === loadingThreadId) {
+          onSetScrollTop(previousTop + (element.scrollHeight - previousHeight))
         }
         autoLoadInFlightRef.current = false
       })
@@ -342,14 +342,14 @@ export function ConversationMessageList({
                       }
                     }
                     const target = event.target as Element | null
-                    const imageEl =
+                    const imageElement =
                       target && typeof target.closest === 'function'
                         ? (target.closest('[data-media-key]') as HTMLElement | null)
                         : null
                     // A picture inside the email's frame, forwarded by HtmlFrame.
                     const frameImageKey: string | undefined = (event.nativeEvent as any)?.meronImageKey
-                    const image = imageEl
-                      ? { key: imageEl.dataset.mediaKey!, filename: imageEl.dataset.mediaFilename ?? '' }
+                    const image = imageElement
+                      ? { key: imageElement.dataset.mediaKey!, filename: imageElement.dataset.mediaFilename ?? '' }
                       : frameImageKey
                         ? { key: frameImageKey, filename: mediaFilename(frameImageKey, message.attachments) }
                         : ((event.nativeEvent as any)?.meronImage ?? remoteContextImage(target))

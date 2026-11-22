@@ -1,3 +1,7 @@
+// Owns transient state for the open desktop conversation. Reader state, search and
+// per-message choices follow the selected thread.
+// Callers include compose.ts and kanban.ts.
+
 import { observable } from '@legendapp/state'
 import type { Account, Message } from '../types'
 

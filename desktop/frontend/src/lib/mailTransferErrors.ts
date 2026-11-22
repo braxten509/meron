@@ -1,3 +1,7 @@
+// Turns move and copy failures into messages for the mailbox. Known server limits
+// can report progress already confirmed by the backend.
+// Imported by mailMoves.ts and useKanbanBoard.ts.
+
 import { errorMessage } from './errors'
 import { t } from './i18n'
 

@@ -1,3 +1,7 @@
+// Keeps a panel mounted during its entry and exit transitions. The caller receives
+// the presence phase needed to render and eventually unmount it.
+// Callers include KanbanConversationPane.tsx and MessagePane.tsx.
+
 import { useEffect, useState } from 'react'
 
 export type PresencePhase = 'closed' | 'entering' | 'open' | 'exiting'

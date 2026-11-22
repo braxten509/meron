@@ -1,3 +1,7 @@
+// Previews desktop theme colors in the chooser. The component reads the theme's
+// token values to render the swatch.
+// Imported by ThemeDialog.tsx.
+
 import type { LucideIcon } from 'lucide-react'
 import { Check, Forward, Pencil, Trash2 } from 'lucide-react'
 import { useTranslation } from '../../lib/i18n'

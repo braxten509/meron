@@ -1,3 +1,7 @@
+// Provides editing and formatting actions above the compose body. Toolbar buttons
+// operate on the editor associated with the active draft.
+// Imported by Composer.tsx and SignatureSettingsCard.tsx.
+
 import {
   Bold,
   Italic,

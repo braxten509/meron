@@ -1,3 +1,7 @@
+// Coordinates a desktop settings refresh after configuration changes. The affected
+// views can reload from the updated configuration through a common entry point.
+// Imported by useAppEffects.ts.
+
 import { invoke } from './bridge'
 import { accounts$ } from '../states/accounts'
 import { hydrateSettings } from '../states/settings'

@@ -1,3 +1,7 @@
+// Resolves preset and custom backgrounds to desktop CSS. Saved selections pass
+// through validation before they are applied to a conversation or board.
+// Callers include AccountWallpaperCard.tsx and BoardSettingsPanel.tsx.
+
 import type { CSSProperties } from 'react'
 import type { ChatWallpaper } from '../types'
 
@@ -125,17 +129,17 @@ export const WALLPAPER_PRESETS: WallpaperPreset[] = [
 
 export function sanitizeChatWallpaper(raw: unknown): ChatWallpaper | null {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
-  const obj = raw as Record<string, unknown>
-  if (obj.kind === 'preset') {
-    let presetId = typeof obj.presetId === 'string' ? obj.presetId : ''
+  const record = raw as Record<string, unknown>
+  if (record.kind === 'preset') {
+    let presetId = typeof record.presetId === 'string' ? record.presetId : ''
     // Migrate old preset IDs to new premium designs
     if (presetId === 'meron-lines') presetId = 'aurora'
     if (presetId === 'soft-waves') presetId = 'topography'
 
     return WALLPAPER_PRESETS.some((preset) => preset.id === presetId) ? { kind: 'preset', presetId } : null
   }
-  if (obj.kind === 'custom') {
-    const url = typeof obj.url === 'string' ? obj.url.trim() : ''
+  if (record.kind === 'custom') {
+    const url = typeof record.url === 'string' ? record.url.trim() : ''
     return url.startsWith('/media/wallpapers/') ? { kind: 'custom', url } : null
   }
   return null

@@ -1,3 +1,7 @@
+// Edits the tags attached to a selected conversation. Tag state applies the change
+// to the thread identified by the caller.
+// Imported by App.tsx.
+
 import { useEffect, useState } from 'react'
 import { Tag, X } from 'lucide-react'
 import { useTranslation } from '../../lib/i18n'

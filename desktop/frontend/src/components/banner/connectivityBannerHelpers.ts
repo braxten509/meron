@@ -1,3 +1,7 @@
+// Builds the labels shown for accounts with connectivity problems. Accounts
+// sharing a display name need additional identifying information in the banner.
+// Imported by ConnectivityBanner.tsx and useAppEffects.ts.
+
 type AccountLabelSource = {
   id: string
   email: string

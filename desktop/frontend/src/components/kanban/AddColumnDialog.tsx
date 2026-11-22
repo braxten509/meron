@@ -1,3 +1,7 @@
+// Creates a board column from an account, folder or saved query. Board state
+// records the selected scope after the reader confirms.
+// Imported by KanbanView.tsx.
+
 import { useMemo, useState } from 'react'
 import { Inbox, Star, X } from 'lucide-react'
 import { useTranslation } from '../../lib/i18n'
@@ -35,8 +39,8 @@ export function AddColumnDialog({
   const [selected, setSelected] = useState<Set<string>>(() => new Set(initialSelected))
 
   function toggle(keys: string[], next: boolean) {
-    setSelected((prev) => {
-      const updated = new Set(prev)
+    setSelected((previous) => {
+      const updated = new Set(previous)
       for (const key of keys) {
         if (next) updated.add(key)
         else updated.delete(key)

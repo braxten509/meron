@@ -1,3 +1,7 @@
+// Applies the user's tray style through the native bridge. Writes made by quick
+// successive changes must settle in the order the reader chose.
+// Imported by settings.ts.
+
 import { invoke } from './bridge'
 import { createLatestBooleanUpdater } from './latestBooleanUpdater'
 

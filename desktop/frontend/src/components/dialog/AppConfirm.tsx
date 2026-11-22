@@ -1,3 +1,7 @@
+// Presents the active application confirmation request and returns the reader's
+// decision. Individual operations supply their own wording and follow-up actions.
+// Imported by App.tsx.
+
 import { AlertTriangle, Pencil } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
 import { Dialog } from './Dialog'

@@ -90,8 +90,9 @@ export function ReaderTabView({ tab }: { tab: MessageTab }) {
         if (!tab.message || window.getSelection()?.toString().trim()) return
         // A cached picture: one in the email's frame (forwarded by HtmlFrame)
         // or an attachment's in the grid.
-        const imageEl = (event.target as Element | null)?.closest?.('[data-media-key]') as HTMLElement | null
-        const imageKey = (event.nativeEvent as { meronImageKey?: string }).meronImageKey ?? imageEl?.dataset.mediaKey
+        const imageElement = (event.target as Element | null)?.closest?.('[data-media-key]') as HTMLElement | null
+        const imageKey =
+          (event.nativeEvent as { meronImageKey?: string }).meronImageKey ?? imageElement?.dataset.mediaKey
         const img = (event.target as Element | null)?.closest?.('img') as HTMLImageElement | null
         const frameImage =
           (event.nativeEvent as { meronImage?: MessageContextMenuState['image'] }).meronImage ??

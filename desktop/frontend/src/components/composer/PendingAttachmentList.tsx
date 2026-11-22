@@ -1,3 +1,7 @@
+// Displays draft attachments before delivery and resolves their preview sources.
+// The underlying files stay associated with their compose draft.
+// Callers include AttachmentImagePreview.tsx and ComposerAttachments.tsx.
+
 import { X } from 'lucide-react'
 import { useTranslation } from '../../lib/i18n'
 import { invoke } from '../../lib/bridge'

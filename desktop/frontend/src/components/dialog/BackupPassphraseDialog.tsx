@@ -1,3 +1,7 @@
+// Collects a passphrase during backup export or restore. The surrounding backup
+// workflow decides which operation consumes the value.
+// Imported by SettingsDialog.tsx.
+
 import { useState } from 'react'
 import { X, ShieldCheck, RefreshCw } from 'lucide-react'
 import { useTranslation } from '../../lib/i18n'

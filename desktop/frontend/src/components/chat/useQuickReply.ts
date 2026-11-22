@@ -1,3 +1,7 @@
+// Connects the inline editor to its saved draft and the currently open
+// conversation. Edits, hydration and autosave can overlap during navigation.
+// Imported by MessagePane.tsx and QuickReplyComposer.tsx.
+
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'
@@ -230,11 +234,11 @@ export function useQuickReply() {
     })
   }
 
-  const handleComposerPaste = (e: React.ClipboardEvent) => {
+  const handleComposerPaste = (event: React.ClipboardEvent) => {
     logComposerPaste('paste event fired')
-    const images = extractClipboardImages(e.clipboardData)
+    const images = extractClipboardImages(event.clipboardData)
     if (images.length > 0) {
-      e.preventDefault()
+      event.preventDefault()
       lastImagePasteAtRef.current = Date.now()
       addAttachmentFiles(images)
     }
@@ -243,25 +247,25 @@ export function useQuickReply() {
 
   // WebKitGTK frequently leaves the synchronous paste event without image
   // data. Fall back to the async Clipboard API on Ctrl/Cmd+V.
-  const handleComposerKeyDown = async (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (isSendKey(e, sendShortcut)) {
-      e.preventDefault()
+  const handleComposerKeyDown = async (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (isSendKey(event, sendShortcut)) {
+      event.preventDefault()
       void handleSendReply()
       return
     }
     // Esc leaves the box, so single-key shortcuts (j/k, e, #) work again
     // instead of typing into the reply. The text stays as it was.
-    if (e.key === 'Escape' && !e.nativeEvent.isComposing && !e.ctrlKey && !e.metaKey && !e.altKey) {
-      e.currentTarget.blur()
+    if (event.key === 'Escape' && !event.nativeEvent.isComposing && !event.ctrlKey && !event.metaKey && !event.altKey) {
+      event.currentTarget.blur()
       return
     }
-    const isPaste = (e.ctrlKey || e.metaKey) && (e.key === 'v' || e.key === 'V')
+    const isPaste = (event.ctrlKey || event.metaKey) && (event.key === 'v' || event.key === 'V')
     if (isPaste) {
       logComposerPaste('paste shortcut keydown', {
-        key: e.key,
-        ctrlKey: e.ctrlKey,
-        metaKey: e.metaKey,
-        target: e.currentTarget.tagName,
+        key: event.key,
+        ctrlKey: event.ctrlKey,
+        metaKey: event.metaKey,
+        target: event.currentTarget.tagName,
       })
     }
     if (!isPaste) return

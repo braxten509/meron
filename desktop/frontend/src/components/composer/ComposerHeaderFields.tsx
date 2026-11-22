@@ -1,3 +1,7 @@
+// Presents the addressing, identity and subject fields for a desktop draft. Edits
+// feed the same draft model used by the message editor.
+// Imported by Composer.tsx.
+
 import { useValue } from '@legendapp/state/react'
 import { useRef } from 'react'
 import { useTranslation } from '../../lib/i18n'
@@ -40,10 +44,10 @@ export function ComposerHeaderFields({
           <span className={labelClass}>{t('composer.fields.from')}</span>
           <select
             value={`${draft.accountId}|${draft.fromEmail || fromAccount?.email || ''}`}
-            onChange={(e) => {
-              const sep = e.target.value.indexOf('|')
-              const accId = e.target.value.slice(0, sep)
-              const email = e.target.value.slice(sep + 1)
+            onChange={(event) => {
+              const sep = event.target.value.indexOf('|')
+              const accId = event.target.value.slice(0, sep)
+              const email = event.target.value.slice(sep + 1)
               update({ accountId: accId, fromEmail: email })
             }}
             className="flex-1 bg-transparent text-[0.8125rem] text-primary outline-none cursor-pointer"
@@ -106,10 +110,10 @@ export function ComposerHeaderFields({
         <input
           ref={subjectRef}
           value={draft.subject}
-          onChange={(e) => update({ subject: e.target.value })}
-          onKeyDown={(e) => {
-            if (e.key === 'Tab' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
-              if (onFocusBody()) e.preventDefault()
+          onChange={(event) => update({ subject: event.target.value })}
+          onKeyDown={(event) => {
+            if (event.key === 'Tab' && !event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey) {
+              if (onFocusBody()) event.preventDefault()
             }
           }}
           placeholder={t('composer.fields.subject')}

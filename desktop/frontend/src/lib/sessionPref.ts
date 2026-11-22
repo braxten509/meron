@@ -1,3 +1,7 @@
+// Connects a frontend state field to its persisted session preference. Reopening
+// the app can restore the corresponding value.
+// Callers include calendar.ts and contacts.ts.
+
 import type { ObservableParam } from '@legendapp/state'
 import { invoke } from './bridge'
 

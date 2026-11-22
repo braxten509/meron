@@ -1,3 +1,7 @@
+// Keeps a mounted email frame in sync with the current reader appearance. Changes
+// are applied after the document becomes available.
+// Imported by BubbleHtmlFrame.tsx and HtmlMessageView.tsx.
+
 import { useValue } from '@legendapp/state/react'
 import { useMemo } from 'react'
 import { useActiveTheme } from '../../lib/useThemeChoice'

@@ -1,3 +1,7 @@
+// Edits proxy settings for the target account or application scope. The core owns
+// the actual connection behavior after settings are saved.
+// Imported by SettingsDialog.tsx.
+
 import { useEffect, useState } from 'react'
 import { Network } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'

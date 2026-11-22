@@ -1,3 +1,7 @@
+// Resolves transport-security choices in the account editor after a port change.
+// Explicit user selections must survive changes to inferred defaults.
+// Imported by AccountDialogCustom.tsx and useAccountDialog.ts.
+
 export type MailSecurity = 'tls' | 'starttls' | 'none'
 
 export function securityForPort(port: number): MailSecurity {

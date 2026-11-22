@@ -1,3 +1,7 @@
+// Defines provider choices and their icons for desktop account setup. The picker
+// uses the same provider identities as the rest of the dialog.
+// Callers include AccountDialog.tsx and AccountDialogOAuth.tsx.
+
 import { KeyRound, Mail, Rss } from 'lucide-react'
 import type { ReactNode } from 'react'
 import type { SetupMode } from '../../states/ui'

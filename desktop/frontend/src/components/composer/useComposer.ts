@@ -1,3 +1,8 @@
+// Coordinates editor state, draft autosave and submission for the active desktop
+// compose tab. Async operations must use the same message identity as the open
+// session.
+// Imported by Composer.tsx.
+
 import { useEffect, useRef, useState } from 'react'
 import { Extension, useEditor } from '@tiptap/react'
 import { TextSelection } from '@tiptap/pm/state'
@@ -566,12 +571,14 @@ export function useComposer(tabId: string) {
   // the body may have been edited while its file was written.
   const addFiles = (files: ArrayLike<File>, options: { inline?: boolean; afterSelection?: boolean } = {}) => {
     const attachmentsNow = () => compose$.tabs.get().find((t) => t.id === tabId)?.compose?.attachments ?? []
-    const insertImage = (src: string, alt: string, attachmentId: string) => {
+    const insertImage = (source: string, alt: string, attachmentId: string) => {
       try {
         const chain = editor!.chain().focus()
         const placed = options.afterSelection
-          ? chain.insertContentAt(editor!.state.selection.to, { type: ResizableImage.name, attrs: { src, alt } }).run()
-          : chain.setImage({ src, alt }).run()
+          ? chain
+              .insertContentAt(editor!.state.selection.to, { type: ResizableImage.name, attrs: { src: source, alt } })
+              .run()
+          : chain.setImage({ src: source, alt }).run()
         if (placed) return
       } catch (err) {
         console.error('Failed to insert inline image:', err)
@@ -598,14 +605,14 @@ export function useComposer(tabId: string) {
         update({ attachments: [...attachmentsNow(), next] })
         settleAttachment(tabId, file)
         if (!shouldInline) return null
-        const src = await invoke<string>('composer.writeMediaFile', {
+        const source = await invoke<string>('composer.writeMediaFile', {
           data: next.data,
           filename: next.filename,
         }).catch((err) => {
           console.error('Failed to write media file:', err)
           return dataUrl
         })
-        return { src, next }
+        return { src: source, next }
       })
       // Reported when its turn comes below; until then a failure is not one
       // nobody handles. A file that never attached is settled here.

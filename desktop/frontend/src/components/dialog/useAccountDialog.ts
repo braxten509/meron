@@ -1,3 +1,7 @@
+// Coordinates account setup form state, server discovery and reconnect submission.
+// The existing account ID must follow edits through the request.
+// Callers include AccountDialog.tsx and AccountDialogCustom.tsx.
+
 import { useEffect, useRef, useState } from 'react'
 import { useValue } from '@legendapp/state/react'
 import { invoke } from '../../lib/bridge'
@@ -182,7 +186,7 @@ export function useAccountDialog() {
     const addCommand = provider === 'outlook' ? 'account.addOutlookOAuth' : 'account.addGmailOAuth'
     const providerLabel = provider === 'outlook' ? 'Microsoft' : 'Google'
     try {
-      const res = await invoke<{
+      const response = await invoke<{
         exchanged: boolean
         profile?: {
           email: string
@@ -195,14 +199,14 @@ export function useAccountDialog() {
         failed?: 'denied' | 'timeout' | 'failed'
       }>(`oauth.${provider}PollProfile`)
 
-      if (res.failed) {
+      if (response.failed) {
         stopOAuthPolling(intervalId)
         setWaitingForGoogle(false)
         setError(
           t(
-            res.failed === 'timeout'
+            response.failed === 'timeout'
               ? 'accounts.oauth.timedOut'
-              : res.failed === 'denied'
+              : response.failed === 'denied'
                 ? 'accounts.oauth.notCompleted'
                 : 'accounts.oauth.failed',
             { provider: providerLabel },
@@ -211,32 +215,32 @@ export function useAccountDialog() {
         return
       }
 
-      if (res.exchanged && res.profile) {
+      if (response.exchanged && response.profile) {
         const before = new Set(accounts$.peek().map((acc) => acc.id))
         stopOAuthPolling(intervalId)
         setWaitingForGoogle(false)
         setLoading(true)
         setForm((f) => ({
           ...f,
-          email: res.profile!.email,
-          display_name: res.profile!.display_name,
+          email: response.profile!.email,
+          display_name: response.profile!.display_name,
         }))
         setExchangedTokens({
-          avatar_url: res.profile!.avatar_url,
-          access_token: res.profile!.access_token,
-          refresh_token: res.profile!.refresh_token,
-          expires_in: res.profile!.expires_in,
+          avatar_url: response.profile!.avatar_url,
+          access_token: response.profile!.access_token,
+          refresh_token: response.profile!.refresh_token,
+          expires_in: response.profile!.expires_in,
         })
-        const reconnectId = reconnectIdFor(res.profile.email)
+        const reconnectId = reconnectIdFor(response.profile.email)
         const added = await invoke<AddAccountResult>(addCommand, {
           ...(reconnectId ? { id: reconnectId } : {}),
-          email: res.profile.email,
-          display_name: res.profile.display_name,
-          sender_name: res.profile.display_name,
-          avatar_url: res.profile.avatar_url,
-          access_token: res.profile.access_token,
-          refresh_token: res.profile.refresh_token,
-          expires_in: res.profile.expires_in,
+          email: response.profile.email,
+          display_name: response.profile.display_name,
+          sender_name: response.profile.display_name,
+          avatar_url: response.profile.avatar_url,
+          access_token: response.profile.access_token,
+          refresh_token: response.profile.refresh_token,
+          expires_in: response.profile.expires_in,
         })
         if (reconnectId) clearSyncErrorFor(added.account?.id ?? reconnectId)
         ui$.reconnectAccountId.set('')
@@ -273,8 +277,8 @@ export function useAccountDialog() {
   // "Open the page again": the browser tab got lost or never showed.
   async function reopenOAuth() {
     try {
-      const res = await invoke<{ ok: boolean }>('oauth.reopen')
-      if (!res.ok) {
+      const response = await invoke<{ ok: boolean }>('oauth.reopen')
+      if (!response.ok) {
         stopOAuthPolling()
         setWaitingForGoogle(false)
       }
@@ -289,11 +293,11 @@ export function useAccountDialog() {
       setError('')
       ui$.setupMode.set(provider)
       setWaitingForGoogle(true)
-      const res = await invoke<{ url: string; needs_external_browser?: boolean }>(`oauth.${provider}Begin`)
-      if (res.url && !res.needs_external_browser) {
-        window.location.href = res.url
+      const response = await invoke<{ url: string; needs_external_browser?: boolean }>(`oauth.${provider}Begin`)
+      if (response.url && !response.needs_external_browser) {
+        window.location.href = response.url
       }
-      if (res.url) {
+      if (response.url) {
         const id = setInterval(() => {
           void pollProfile(id, provider)
         }, 1000)
@@ -322,7 +326,7 @@ export function useAccountDialog() {
     setAppPasswordHint(null)
     setDiscovering(true)
     try {
-      const cfg = await invoke<{
+      const configuration = await invoke<{
         imap_host: string
         imap_port: number
         smtp_host: string
@@ -345,7 +349,7 @@ export function useAccountDialog() {
           f.imap_security_touched,
           f.imap_host_touched,
           f.imap_port_touched,
-          cfg.imap_host ? cfg.imap_port : 0,
+          configuration.imap_host ? configuration.imap_port : 0,
         )
         const smtp = serverSelectionAfterDiscovery(
           f.smtp_port,
@@ -353,25 +357,25 @@ export function useAccountDialog() {
           f.smtp_security_touched,
           f.smtp_host_touched,
           f.smtp_port_touched,
-          cfg.smtp_host ? cfg.smtp_port : 0,
+          configuration.smtp_host ? configuration.smtp_port : 0,
         )
         return {
           ...f,
-          imap_host: f.imap_host_touched || !cfg.imap_host ? f.imap_host : cfg.imap_host,
+          imap_host: f.imap_host_touched || !configuration.imap_host ? f.imap_host : configuration.imap_host,
           imap_port: imap.port,
           imap_security: imap.security,
-          smtp_host: f.smtp_host_touched || !cfg.smtp_host ? f.smtp_host : cfg.smtp_host,
+          smtp_host: f.smtp_host_touched || !configuration.smtp_host ? f.smtp_host : configuration.smtp_host,
           smtp_port: smtp.port,
           smtp_security: smtp.security,
-          username: f.username_touched || !cfg.username ? f.username : cfg.username,
+          username: f.username_touched || !configuration.username ? f.username : configuration.username,
         }
       })
-      setAppPasswordHint(cfg.app_password_hint ?? null)
-      if (cfg.source === 'guess') {
+      setAppPasswordHint(configuration.app_password_hint ?? null)
+      if (configuration.source === 'guess') {
         setAdvancedOpen(true)
         setDiscoverNote("Couldn't find settings automatically — please verify the servers below.")
       } else {
-        setDiscoverNote(`Settings found${cfg.provider_name ? ` for ${cfg.provider_name}` : ''}.`)
+        setDiscoverNote(`Settings found${configuration.provider_name ? ` for ${configuration.provider_name}` : ''}.`)
       }
     } catch {
       if (requestGeneration === discoveryGenerationRef.current) setDiscoverNote('')
@@ -402,12 +406,12 @@ export function useAccountDialog() {
   async function probeCertificate(protocol: CertificateProtocol): Promise<CertificatePrompt | null> {
     const target = serverTarget(protocol)
     try {
-      const res = await invoke<{ certificate: CertificateInfo }>(
+      const response = await invoke<{ certificate: CertificateInfo }>(
         'account.probeCert',
         certificateProbePayload({ ...target, protocol }, reconnectAccount?.proxy),
       )
-      if (!res?.certificate?.fingerprint) return null
-      return { host: target.host, port: target.port, protocol, certificate: res.certificate }
+      if (!response?.certificate?.fingerprint) return null
+      return { host: target.host, port: target.port, protocol, certificate: response.certificate }
     } catch {
       return null
     }

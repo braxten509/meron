@@ -110,10 +110,10 @@ export function AccountTogglesSection({
 }) {
   const { t } = useTranslation()
   const hiddenSideNavAccounts = useValue(settings$.hiddenSideNavAccounts)
-  const [rssIntervalVal, setRssIntervalVal] = useState('60')
+  const [rssIntervalValue, setRssIntervalValue] = useState('60')
 
   useEffect(() => {
-    setRssIntervalVal(String(account.rss_sync_interval_minutes ?? 60))
+    setRssIntervalValue(String(account.rss_sync_interval_minutes ?? 60))
   }, [account.id, account.rss_sync_interval_minutes])
 
   const inUnified = account.included_in_unified !== false
@@ -125,7 +125,7 @@ export function AccountTogglesSection({
   const saveSentCopy = account.save_sent_copy ?? sentCopyDefault(account)
 
   const updateRSSInterval = (value: string) => {
-    setRssIntervalVal(value)
+    setRssIntervalValue(value)
     if (!value.trim()) return
     const minutes = Number(value)
     if (!Number.isFinite(minutes)) return
@@ -173,7 +173,7 @@ export function AccountTogglesSection({
             <NumberRow
               icon={<Clock size={15} />}
               title={t('settings.account.syncInterval')}
-              value={rssIntervalVal}
+              value={rssIntervalValue}
               min={5}
               max={1440}
               step={5}

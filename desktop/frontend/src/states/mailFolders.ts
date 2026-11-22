@@ -1,3 +1,7 @@
+// Caches account folders and unread counts for navigation and message actions.
+// Folder changes must reconcile with mailbox reads already in flight.
+// Callers include backup.ts and compose.ts.
+
 import type { Folder } from '../types'
 import { invoke } from '../lib/bridge'
 import { t } from '../lib/i18n'
@@ -178,8 +182,8 @@ export async function emptyFolder(
   }
 
   try {
-    const res = await invoke<MutationResult>('mail.emptyFolder', { account_id: accountId, folder_id: folderId })
-    applyMutationFolderUnreads(res)
+    const response = await invoke<MutationResult>('mail.emptyFolder', { account_id: accountId, folder_id: folderId })
+    applyMutationFolderUnreads(response)
     // The open conversation may have just been deleted along with the folder.
     const openThread = findLocalThread(ui$.selectedThread.get())
     if (openThread?.account_id === accountId && openThread?.folder_id === folderId) ui$.selectedThread.set('')
@@ -227,12 +231,12 @@ export async function setFolderNotify(accountId: string, folderId: string, enabl
   if (!accountId || !folderId || accountId === 'unified') return
   const label = name || folderId
   try {
-    const res = await invoke<{ folders?: Folder[] }>('mail.folderSetNotify', {
+    const response = await invoke<{ folders?: Folder[] }>('mail.folderSetNotify', {
       account_id: accountId,
       folder_id: folderId,
       enabled,
     })
-    const folders = res?.folders
+    const folders = response?.folders
     if (folders) {
       mail$.foldersByAccount[accountId].set(folders)
       if (ui$.selectedAccount.get() === accountId) mail$.folders.set(folders)
@@ -268,14 +272,14 @@ export async function deleteFolder(accountId: string, folderId: string, name?: s
   }
 
   try {
-    const res = await invoke<{ folders?: Folder[]; removed?: string[]; warning?: string }>('mail.folderDelete', {
+    const response = await invoke<{ folders?: Folder[]; removed?: string[]; warning?: string }>('mail.folderDelete', {
       account_id: accountId,
       folder_id: folderId,
     })
     // Core reports the whole subtree it took down; fall back to the folder
     // itself if an older core answers without the list.
-    const removed = res?.removed?.length ? res.removed : [folderId]
-    const folders = res?.folders
+    const removed = response?.removed?.length ? response.removed : [folderId]
+    const folders = response?.folders
     if (folders) {
       mail$.foldersByAccount[accountId].set(folders)
       if (ui$.selectedAccount.get() === accountId) mail$.folders.set(folders)
@@ -298,8 +302,8 @@ export async function deleteFolder(accountId: string, folderId: string, name?: s
       // the same check.
       forgetDeletedMailViewFolder(removed)
     }
-    if (res?.warning) {
-      showToast(res.warning, 'error')
+    if (response?.warning) {
+      showToast(response.warning, 'error')
       return false
     }
     showToast(t('folders.delete.done', { folder: label }))
@@ -327,15 +331,15 @@ export async function renameFolder(accountId: string, folder: Folder): Promise<b
   if (!name || name === leaf) return false
 
   try {
-    const res = await invoke<{ folders?: Folder[]; renamed?: [string, string][] }>('mail.folderRename', {
+    const response = await invoke<{ folders?: Folder[]; renamed?: [string, string][] }>('mail.folderRename', {
       account_id: accountId,
       folder_id: folder.id,
       name: parent + name,
     })
-    const renames = new Map(res?.renamed ?? [])
-    if (res?.folders) {
-      mail$.foldersByAccount[accountId].set(res.folders)
-      if (ui$.selectedAccount.get() === accountId) mail$.folders.set(res.folders)
+    const renames = new Map(response?.renamed ?? [])
+    if (response?.folders) {
+      mail$.foldersByAccount[accountId].set(response.folders)
+      if (ui$.selectedAccount.get() === accountId) mail$.folders.set(response.folders)
     } else {
       void loadFolders(accountId, false)
     }
@@ -396,7 +400,7 @@ export async function loadFolders(accountId: string, refresh = true) {
         accounts.map(async (acc) => {
           try {
             const version = folderReadVersion
-            const res = await invoke<{ folders: Folder[] }>('mail.folderList', {
+            const response = await invoke<{ folders: Folder[] }>('mail.folderList', {
               account_id: acc.id,
               // Propagate the caller's refresh so sub-accounts get a real folder
               // LIST sync in the unified view. Without it a freshly added account
@@ -405,7 +409,7 @@ export async function loadFolders(accountId: string, refresh = true) {
               // mail.synced({folders:true}) it emits triggers a refresh:false reload.
               refresh,
             })
-            const folders = reconcileFolderCounts(acc.id, res.folders || [], version)
+            const folders = reconcileFolderCounts(acc.id, response.folders || [], version)
             mail$.foldersByAccount[acc.id].set(folders)
             return folders
           } catch {

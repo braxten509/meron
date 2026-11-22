@@ -1,3 +1,7 @@
+// Derives the sender, content and actions used by the desktop message layouts.
+// Incoming and outgoing messages can have different avatar behavior.
+// Callers include ConversationHeader.tsx and MessageBubble.tsx.
+
 import { useValue } from '@legendapp/state/react'
 import { accountIdentities, accounts$ } from '../../states/accounts'
 import { getActiveThread } from '../../states/mail'

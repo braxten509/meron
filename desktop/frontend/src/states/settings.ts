@@ -1,3 +1,7 @@
+// Loads, validates and persists frontend settings shared across desktop views.
+// Older saved board and theme preferences must remain readable.
+// Callers include calendar.ts and compose.ts.
+
 import { observable } from '@legendapp/state'
 import { invoke } from '../lib/bridge'
 import { ui$ } from './ui'
@@ -737,11 +741,11 @@ export function sanitizeKanbanBoards(raw: unknown): KanbanBoard[] | null {
   const seen = new Set<string>()
   for (const item of raw) {
     if (!item || typeof item !== 'object' || Array.isArray(item)) continue
-    const obj = item as Record<string, unknown>
-    if (typeof obj.id !== 'string' || !obj.id || seen.has(obj.id)) continue
-    const name = typeof obj.name === 'string' && obj.name.trim() ? obj.name.trim() : 'Kanban board'
-    const columns = Array.isArray(obj.columns)
-      ? obj.columns.flatMap((column): KanbanBoardColumn[] => {
+    const record = item as Record<string, unknown>
+    if (typeof record.id !== 'string' || !record.id || seen.has(record.id)) continue
+    const name = typeof record.name === 'string' && record.name.trim() ? record.name.trim() : 'Kanban board'
+    const columns = Array.isArray(record.columns)
+      ? record.columns.flatMap((column): KanbanBoardColumn[] => {
           if (!column || typeof column !== 'object' || Array.isArray(column)) return []
           const col = column as Record<string, unknown>
           if (typeof col.accountId !== 'string' || typeof col.folderId !== 'string') return []
@@ -754,16 +758,16 @@ export function sanitizeKanbanBoards(raw: unknown): KanbanBoard[] | null {
           ]
         })
       : []
-    seen.add(obj.id)
-    const board: KanbanBoard = { id: obj.id, name, columns }
+    seen.add(record.id)
+    const board: KanbanBoard = { id: record.id, name, columns }
     // Board images are app-managed uploads; only paths under /media/avatars/
     // (written by account.writeAvatarFile) are accepted.
-    if (typeof obj.avatarUrl === 'string' && obj.avatarUrl.startsWith('/media/avatars/')) {
-      board.avatarUrl = obj.avatarUrl
+    if (typeof record.avatarUrl === 'string' && record.avatarUrl.startsWith('/media/avatars/')) {
+      board.avatarUrl = record.avatarUrl
     }
-    const wallpaper = sanitizeChatWallpaper(obj.wallpaper)
+    const wallpaper = sanitizeChatWallpaper(record.wallpaper)
     if (wallpaper) board.wallpaper = wallpaper
-    if (obj.showUnreadBadge === true) board.showUnreadBadge = true
+    if (record.showUnreadBadge === true) board.showUnreadBadge = true
     out.push(board)
   }
   return out

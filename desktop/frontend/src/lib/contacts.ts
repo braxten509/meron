@@ -1,3 +1,8 @@
+// Queries suggested recipients and formats a contact for an address field. The
+// composer can keep its editable text separate from the contact records supplied
+// by the core.
+// Imported by ContactsView.tsx and RecipientInput.tsx.
+
 import { invoke } from './bridge'
 import type { Contact } from '../types'
 
@@ -6,12 +11,12 @@ import type { Contact } from '../types'
 // unified search across all accounts).
 export async function suggestContacts(accountId: string, query: string, limit = 8): Promise<Contact[]> {
   try {
-    const res = await invoke<{ contacts?: Contact[] }>('mail.suggestContacts', {
+    const response = await invoke<{ contacts?: Contact[] }>('mail.suggestContacts', {
       account: accountId,
       query,
       limit,
     })
-    return res.contacts ?? []
+    return response.contacts ?? []
   } catch {
     return []
   }

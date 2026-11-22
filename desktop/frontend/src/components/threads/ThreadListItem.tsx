@@ -1,3 +1,7 @@
+// Renders a conversation summary within a desktop folder. The supplied row
+// identity determines which thread opens or receives an action.
+// Callers include ThreadList.tsx and ContactsView.tsx.
+
 import type { DragEvent, MouseEvent, Ref } from 'react'
 import { Check, Star } from 'lucide-react'
 import type { Account, Message } from '../../types'

@@ -1,3 +1,7 @@
+// Prepares the HTML document used inside a conversation bubble. Frame sizing and
+// styling must work with markup originally designed for a full email reader.
+// Imported by BubbleHtmlFrame.tsx.
+
 import { BUBBLE_CODE_BASE_PX, BUBBLE_HTML_BASE_PX, type MessageFrameFont } from '../../lib/fonts'
 import { QUOTE_FOLDED_CLASS, QUOTE_TOGGLE_CLASS } from './quoteFold'
 import { allowRemoteContent, allowRemoteInCsp, blockRemoteContent, blockRemoteInCsp } from './remoteContentCsp'
@@ -111,11 +115,11 @@ export function reloadFailedImages(doc: Document) {
     const retry = () => {
       cleanup()
       if (image.naturalWidth > 0) return
-      const src = image.getAttribute('src')
-      if (!src) return
+      const source = image.getAttribute('src')
+      if (!source) return
       // An unchanged src is not a reason for the browser to load again.
       image.removeAttribute('src')
-      image.setAttribute('src', src)
+      image.setAttribute('src', source)
     }
     const cleanup = () => {
       image.removeEventListener('error', retry)
@@ -473,9 +477,9 @@ export function prepareBubbleHtml(
     // drops every `data-*` attribute, so sender markup can't carry one.
     parsed.documentElement.setAttribute(FRAME_GENERATION_MARKER, generation)
     parsed.head.appendChild(spliced ? parsed.importNode(style, true) : style)
-    for (const el of [parsed.documentElement, parsed.body]) {
-      el.style.setProperty('height', 'auto', 'important')
-      el.style.setProperty('min-height', '0', 'important')
+    for (const element of [parsed.documentElement, parsed.body]) {
+      element.style.setProperty('height', 'auto', 'important')
+      element.style.setProperty('min-height', '0', 'important')
     }
     return parsed.documentElement.outerHTML
   } catch {

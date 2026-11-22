@@ -36,7 +36,7 @@ export function MessageContent({
 }) {
   const { t } = useTranslation()
   const { attachmentImages, bubbleAttachmentImages, videos, files } = view
-  const onOpenImage = (idx: number) => thread$.galleryIndex.set(idx)
+  const onOpenImage = (index: number) => thread$.galleryIndex.set(index)
 
   return (
     <>
@@ -53,33 +53,33 @@ export function MessageContent({
         (() => {
           const count = bubbleAttachmentImages.length
           let gridClass = 'grid-cols-2 max-w-[320px]'
-          let btnClass = 'h-40'
+          let buttonClass = 'h-40'
 
           if (count === 1) {
             gridClass = 'grid-cols-1 max-w-[380px]'
-            btnClass = 'h-56'
+            buttonClass = 'h-56'
           } else if (count === 2) {
             gridClass = 'grid-cols-2 max-w-[480px]'
-            btnClass = 'h-40'
+            buttonClass = 'h-40'
           } else if (count === 3) {
             gridClass = 'grid-cols-3 max-w-[540px]'
-            btnClass = 'h-32'
+            buttonClass = 'h-32'
           } else if (count >= 4) {
             gridClass = 'grid-cols-4 max-w-[640px]'
-            btnClass = 'h-28'
+            buttonClass = 'h-28'
           }
 
           return (
             <div className={`mb-2 grid gap-1.5 rounded-lg overflow-hidden border border-border/20 ${gridClass}`}>
-              {bubbleAttachmentImages.map((image, idx) => (
+              {bubbleAttachmentImages.map((image, index) => (
                 <button
-                  key={idx}
+                  key={index}
                   type="button"
                   onClick={() => onOpenImage(galleryOffset + attachmentImages.indexOf(image))}
                   // Read by the message list's context menu to offer save/copy.
                   data-media-key={image.key ?? undefined}
                   data-media-filename={image.filename}
-                  className={`block w-full overflow-hidden hover:opacity-90 cursor-pointer ${btnClass}`}
+                  className={`block w-full overflow-hidden hover:opacity-90 cursor-pointer ${buttonClass}`}
                   title={image.filename}
                 >
                   <RetryWhenRestored mediaMissing={message.media_missing ?? 0}>
@@ -103,8 +103,8 @@ export function MessageContent({
           saves the clip when its bytes are on disk. */}
       {videos.length > 0 && (
         <div className="mb-2 flex flex-col gap-1.5">
-          {videos.map((video, idx) => (
-            <RetryWhenRestored key={idx} mediaMissing={message.media_missing ?? 0}>
+          {videos.map((video, index) => (
+            <RetryWhenRestored key={index} mediaMissing={message.media_missing ?? 0}>
               <VideoAttachment
                 src={mediaSrc(video)}
                 externalUrl={video.url ?? mediaSrc(video)}
@@ -134,12 +134,12 @@ export function MessageContent({
 
       {/* File attachments — click opens in the default app, the icon saves via
           the native dialog (both only when the bytes are on disk) */}
-      {files.map((file, idx) => {
+      {files.map((file, index) => {
         const downloadable = !!file.key
         const FileIcon = fileIconFor(file.filename, file.mime)
         return (
           <div
-            key={idx}
+            key={index}
             className={`group mt-2.5 flex w-full items-center rounded-xl bg-black/[0.03] dark:bg-white/[0.03] text-xs font-semibold border border-border/20 ${
               downloadable ? 'hover:bg-black/[0.06] dark:hover:bg-white/[0.06]' : ''
             }`}

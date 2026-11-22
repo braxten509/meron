@@ -1,3 +1,7 @@
+// Coordinates board column queries, paging and transfer destinations. A column's
+// account, folder, filters and search scope determine which data can be reused.
+// Callers include boardUnread.ts and ColumnLabel.tsx.
+
 import { useRef } from 'react'
 import { useValue } from '@legendapp/state/react'
 import { invoke } from './bridge'

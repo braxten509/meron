@@ -1,3 +1,8 @@
+// Mounts the desktop React application into the
+// host page and loads its global styles. This is
+// the entry point used by the production frontend
+// bundle.
+
 import { StrictMode, useEffect, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './lib/i18n'

@@ -1,3 +1,7 @@
+// Provides the account and folder flyouts for moving or copying selected mail.
+// Destinations retain the wire names required by the core command.
+// Callers include MeronFolderItems.tsx and ThreadContextMenu.tsx.
+
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
 import { useValue } from '@legendapp/state/react'
 import { ChevronRight, Copy, FolderInput, History } from 'lucide-react'

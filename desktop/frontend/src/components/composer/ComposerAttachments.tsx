@@ -1,3 +1,7 @@
+// Shows the files belonging to the open compose draft and exposes attachment
+// actions. The compose tab owns the pending files.
+// Imported by Composer.tsx.
+
 import { useState } from 'react'
 import type { ComposerAttachment } from '../../types'
 import { AttachmentImagePreview } from './AttachmentImagePreview'

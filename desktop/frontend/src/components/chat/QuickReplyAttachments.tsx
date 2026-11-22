@@ -1,3 +1,7 @@
+// Displays attachments belonging to the inline reply draft. Changes apply to that
+// draft while the conversation remains open.
+// Imported by QuickReplyComposer.tsx.
+
 import { useState } from 'react'
 import { compose$ } from '../../states/composeState'
 import type { ComposerAttachment } from '../../types'

@@ -1,3 +1,7 @@
+// Renders one message in the conversation's row layout. Its actions and message
+// identity are shared with the other reader presentation.
+// Imported by ConversationMessageList.tsx.
+
 import { useEffect, useRef, useState } from 'react'
 import type { MouseEvent } from 'react'
 import { useTranslation } from '../../lib/i18n'

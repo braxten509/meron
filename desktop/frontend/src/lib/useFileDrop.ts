@@ -1,3 +1,8 @@
+// Tracks native file drags entering and leaving the desktop UI. Internal
+// application drags and non-file payloads should not open an attachment drop
+// target.
+// Callers include Composer.tsx and HtmlFrame.tsx.
+
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { DragEvent } from 'react'
 import { invoke } from './bridge'

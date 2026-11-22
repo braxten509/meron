@@ -1,3 +1,7 @@
+// Defines the observable mailbox data shared by the desktop list and conversation
+// views. Loading and mutation modules update this common state.
+// Callers include calendar.ts and compose.ts.
+
 import { observable } from '@legendapp/state'
 import type { Folder, Message } from '../types'
 

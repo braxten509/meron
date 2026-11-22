@@ -56,9 +56,9 @@ export function isBareKeystroke(event: KeyboardEvent): boolean {
 /** Is the user currently typing into a field? Bare single-key shortcuts must
  * stand down so they don't clobber text entry. */
 export function isTyping(target: EventTarget | null): boolean {
-  const el = target as HTMLElement | null
-  if (!el) return false
-  return el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable
+  const element = target as HTMLElement | null
+  if (!element) return false
+  return element.tagName === 'INPUT' || element.tagName === 'TEXTAREA' || element.isContentEditable
 }
 
 /** Space presses a focused button and toggles a focused checkbox; paging the

@@ -1,3 +1,7 @@
+// Applies native updater events to the desktop UI and coordinates user actions.
+// Each complete status replaces the previous installation snapshot.
+// Callers include SettingsDialog.tsx and UpdateBanner.tsx.
+
 import { observable } from '@legendapp/state'
 import { checkForUpdate, downloadUpdate, fetchUpdateStatus, installUpdate, type UpdateStatus } from '../lib/update'
 import { settings$ } from './settings'

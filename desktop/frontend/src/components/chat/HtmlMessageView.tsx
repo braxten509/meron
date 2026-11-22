@@ -1,3 +1,7 @@
+// Renders an individual HTML email and its media for the desktop reader. The frame
+// uses the message's policy for remote resources.
+// Imported by ReaderTabView.tsx.
+
 import { type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { Attachment } from '../../types'
 import { Gallery, type GalleryItem } from './Gallery'

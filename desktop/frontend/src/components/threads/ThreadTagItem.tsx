@@ -1,3 +1,7 @@
+// Presents tag choices for a conversation in the thread action menu. Each
+// selection updates membership for the targeted mail.
+// Imported by ThreadContextMenu.tsx and ConversationHeader.tsx.
+
 import { useEffect, useRef, useState } from 'react'
 import { Check, ChevronRight, Plus, Tag } from 'lucide-react'
 import { useTranslation } from '../../lib/i18n'

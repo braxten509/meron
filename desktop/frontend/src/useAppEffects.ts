@@ -1,3 +1,8 @@
+// Connects the mounted desktop app to host events and startup state. The effect
+// handlers translate native updates into refreshes for the affected frontend
+// views.
+// Imported by App.tsx.
+
 import { useEffect, useRef } from 'react'
 import { useValue } from '@legendapp/state/react'
 import { boot } from './boot'
@@ -419,8 +424,8 @@ export function useAppEffects() {
       const flagged = accounts$.get().find((account) => account.id === detail?.account)
       if (!flagged || flagged.needs_reconnect === true) return
       void invoke<{ accounts: Account[] }>('account.list')
-        .then((res) => {
-          if (res.accounts.length) accounts$.set(res.accounts)
+        .then((response) => {
+          if (response.accounts.length) accounts$.set(response.accounts)
         })
         .catch(console.error)
     })
@@ -429,8 +434,8 @@ export function useAppEffects() {
     // a file only the phone has): re-read the list so the new photo shows.
     const offPhoto = eventsOn('account.photoChanged', () => {
       void invoke<{ accounts: Account[] }>('account.list')
-        .then((res) => {
-          if (res.accounts.length) accounts$.set(res.accounts)
+        .then((response) => {
+          if (response.accounts.length) accounts$.set(response.accounts)
         })
         .catch(console.error)
     })

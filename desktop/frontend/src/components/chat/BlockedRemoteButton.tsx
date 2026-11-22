@@ -1,3 +1,7 @@
+// Offers controls for remote content that was withheld from a message. The reader
+// can reveal the content for the current view or change how the sender is treated.
+// Callers include MessageBubble.tsx and MessageRow.tsx.
+
 import { useState } from 'react'
 import type { MouseEvent } from 'react'
 import { Image, ImageOff, UserCheck } from 'lucide-react'

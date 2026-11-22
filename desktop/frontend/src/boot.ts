@@ -1,3 +1,8 @@
+// Initializes the desktop frontend before the main application begins handling
+// user input. Startup code must be able to run while account and host state are
+// still loading.
+// Callers include useAppEffects.ts and accounts.ts.
+
 import type { Account, SystemCheck } from './types'
 import { invoke, invokeRetryingTimeout } from './lib/bridge'
 import { hydrateSettings, hydrateTrayStyle, SETTINGS_DB_KEYS, WRITE_SESSION } from './states/settings'

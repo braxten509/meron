@@ -1,3 +1,7 @@
+// Renders an account's configured picture or its fallback identity. The account
+// image is distinct from the sender avatars resolved for individual messages.
+// Callers include AccountSection.tsx and ColumnLabel.tsx.
+
 import type { ComponentProps } from 'react'
 import { HardDrive } from 'lucide-react'
 import { isLocalAccountId } from '../../states/accounts'

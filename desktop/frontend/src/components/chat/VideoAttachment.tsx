@@ -1,3 +1,7 @@
+// Presents a video associated with a message attachment. The source and available
+// playback actions depend on the attachment information supplied by the reader.
+// Callers include Gallery.tsx and HtmlMessageView.tsx.
+
 import { useLayoutEffect, useRef, useState } from 'react'
 import { Download, ExternalLink, Play } from 'lucide-react'
 import { clearMediaSession } from '../../lib/mediaSession'
@@ -40,12 +44,12 @@ export function VideoAttachment({
   // Pausing, detaching the source, and calling load() forces the session to be
   // released on teardown.
   useLayoutEffect(() => {
-    const el = videoRef.current
+    const element = videoRef.current
     return () => {
-      if (!el) return
-      el.pause()
-      el.removeAttribute('src')
-      el.load()
+      if (!element) return
+      element.pause()
+      element.removeAttribute('src')
+      element.load()
       clearMediaSession()
     }
   }, [active])

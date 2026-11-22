@@ -10,9 +10,9 @@ const clamp01 = (n: number) => Math.min(1, Math.max(0, n))
 
 /** Parse "#rgb(a)", "#rrggbb(aa)", "rgb()/rgba()" or "hsl()/hsla()". */
 export function parseColor(input: string): Rgba | null {
-  const str = input.trim()
+  const text = input.trim()
 
-  const hex = str.match(/^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i)?.[1]
+  const hex = text.match(/^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i)?.[1]
   if (hex) {
     if (hex.length <= 4) {
       return {
@@ -30,10 +30,10 @@ export function parseColor(input: string): Rgba | null {
     }
   }
 
-  const fn = str.match(/^(rgba?|hsla?)\(([^()]*)\)$/i)
-  if (fn) {
-    const isHsl = fn[1].toLowerCase().startsWith('hsl')
-    const args = colorArguments(fn[2], isHsl ? HSL_CHANNELS : RGB_CHANNELS)
+  const callback = text.match(/^(rgba?|hsla?)\(([^()]*)\)$/i)
+  if (callback) {
+    const isHsl = callback[1].toLowerCase().startsWith('hsl')
+    const args = colorArguments(callback[2], isHsl ? HSL_CHANNELS : RGB_CHANNELS)
     if (!args) return null
 
     const alpha = args[3] === undefined ? 1 : percentOrNumber(args[3], 1)

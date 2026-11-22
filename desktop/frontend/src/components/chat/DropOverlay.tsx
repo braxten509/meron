@@ -1,3 +1,7 @@
+// Marks the area accepting a file drop in a conversation. The visible drop target
+// is separate from the element tracking the drag across the pane.
+// Imported by MessagePane.tsx and Composer.tsx.
+
 import { ImagePlus, Paperclip } from 'lucide-react'
 import { useTranslation } from '../../lib/i18n'
 

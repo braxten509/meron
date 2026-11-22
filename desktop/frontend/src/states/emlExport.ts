@@ -1,3 +1,7 @@
+// Tracks an email export from the desktop mailbox. Progress and cancellation
+// remain available while the native host writes the selected messages.
+// Callers include BulkActionBar.tsx and ConversationHeader.tsx.
+
 import { observable } from '@legendapp/state'
 import { invoke } from '../lib/bridge'
 import { t } from '../lib/i18n'
@@ -25,12 +29,12 @@ async function runEmlExport(payload: Record<string, unknown>) {
     },
   )
   try {
-    const res = await invoke<ExportResult>('mail.exportEml', payload)
-    if (res?.cancelled) {
+    const response = await invoke<ExportResult>('mail.exportEml', payload)
+    if (response?.cancelled) {
       showToast(t('mail.toast.exportCancelled'))
-    } else if (res?.saved) {
-      const count = res.exported ?? 0
-      const failed = res.failed ?? 0
+    } else if (response?.saved) {
+      const count = response.exported ?? 0
+      const failed = response.failed ?? 0
       showToast(
         failed > 0 ? t('mail.toast.exportedWithSkipped', { count, failed }) : t('mail.toast.exportedCount', { count }),
         'success',

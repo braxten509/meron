@@ -1,3 +1,7 @@
+// Presents the desktop onboarding screen before the mailbox can be used. The
+// available actions lead into the account or configuration setup flow.
+// Imported by App.tsx.
+
 import { AccountDialog } from '../dialog/AccountDialog'
 
 export function SetupScreen() {

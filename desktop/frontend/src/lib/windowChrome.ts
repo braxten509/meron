@@ -1,3 +1,7 @@
+// Reads the native decoration layout and window capabilities. Desktop titlebar
+// controls use that state to place the available buttons.
+// Callers include SettingsDialog.tsx and TitleBar.tsx.
+
 import { observable } from '@legendapp/state'
 import { invoke } from './bridge'
 

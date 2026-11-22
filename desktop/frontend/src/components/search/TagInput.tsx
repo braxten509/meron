@@ -1,3 +1,7 @@
+// Completes tag names inside a search while preserving other terms. Suggestions
+// exclude tags already included in the current input.
+// Imported by SearchOptions.tsx and RulesPanel.tsx.
+
 import { useEffect, useRef, useState } from 'react'
 import { X } from 'lucide-react'
 import { useTranslation } from '../../lib/i18n'

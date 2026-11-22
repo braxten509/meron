@@ -1,3 +1,7 @@
+// Presents the desktop mailbox query and its search controls. Editing, focus and
+// submission follow the search state for the current mailbox.
+// Imported by KanbanSearch.tsx and ThreadSearchInput.tsx.
+
 import { useRef } from 'react'
 import type { KeyboardEvent, ReactNode, RefObject } from 'react'
 import { Search, X } from 'lucide-react'

@@ -1,3 +1,7 @@
+// Resolves saved preferences and browser locales to shipped catalogs. The
+// translation helpers supply desktop components with messages and ICU formatting.
+// Callers include attachFiles.ts and eventAlerts.ts.
+
 import {
   Fragment,
   cloneElement,
@@ -46,11 +50,11 @@ function formatMessage(language: SupportedI18nLanguage, key: string, values: Tra
   return formatter.format(values)
 }
 
-export const resolveI18nLanguageFromWebLocale = (localeStr?: string): SupportedI18nLanguage | undefined => {
-  if (!localeStr) {
+export const resolveI18nLanguageFromWebLocale = (localeTag?: string): SupportedI18nLanguage | undefined => {
+  if (!localeTag) {
     return undefined
   }
-  const language = localeStr.toLowerCase().split(/[-_]/, 1)[0]
+  const language = localeTag.toLowerCase().split(/[-_]/, 1)[0]
   if (language === 'pt') return 'pt_BR'
   return isSupportedLanguage(language) ? language : undefined
 }

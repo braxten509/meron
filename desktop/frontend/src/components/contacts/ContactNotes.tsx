@@ -1,3 +1,7 @@
+// Loads and saves markdown notes for the selected contact. A pending edit belongs
+// to its normalized address even if the reader chooses another contact.
+// Imported by ContactsView.tsx.
+
 import { useEffect, useState } from 'react'
 import { useValue } from '@legendapp/state/react'
 import Markdown from 'react-markdown'

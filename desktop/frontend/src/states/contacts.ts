@@ -1,3 +1,7 @@
+// Holds the desktop contact directory, selected contact and history state. Address
+// normalization keeps saved notes and navigation associated with the right person.
+// Callers include AddressList.tsx and AppHotkeys.tsx.
+
 import { observable } from '@legendapp/state'
 import type { Contact } from '../types'
 import { persistedField } from '../lib/sessionPref'

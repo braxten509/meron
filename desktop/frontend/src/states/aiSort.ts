@@ -1,3 +1,7 @@
+// Connects the desktop inbox-sorting settings and history to core commands. The
+// interface reads configuration, model choices and job progress from this state.
+// Imported by AiSortPanel.tsx.
+
 import { invoke } from '../lib/bridge'
 
 export type AiProvider = 'openrouter' | 'tinfoil'
@@ -105,24 +109,24 @@ export const EMPTY_AI_SORT_CONFIG: AiSortConfig = {
 }
 
 export async function loadAiSort(): Promise<AiSortSettings> {
-  const res = await invoke<Partial<AiSortSettings>>('mail.aiSortConfig', {})
+  const response = await invoke<Partial<AiSortSettings>>('mail.aiSortConfig', {})
   return {
-    config: { ...EMPTY_AI_SORT_CONFIG, ...res.config, folders: res.config?.folders ?? [] },
-    keys: { openrouter: res.keys?.openrouter ?? EMPTY_KEY, tinfoil: res.keys?.tinfoil ?? EMPTY_KEY },
-    last_error: res.last_error ?? null,
+    config: { ...EMPTY_AI_SORT_CONFIG, ...response.config, folders: response.config?.folders ?? [] },
+    keys: { openrouter: response.keys?.openrouter ?? EMPTY_KEY, tinfoil: response.keys?.tinfoil ?? EMPTY_KEY },
+    last_error: response.last_error ?? null,
   }
 }
 
 // The core cleans what it keeps (notes trimmed, bad folders dropped, at most 25).
 export async function saveAiSort(config: AiSortConfig): Promise<AiSortConfig> {
-  const res = await invoke<{ config: AiSortConfig }>('mail.setAiSortConfig', { config })
-  return { ...EMPTY_AI_SORT_CONFIG, ...res.config, folders: res.config?.folders ?? [] }
+  const response = await invoke<{ config: AiSortConfig }>('mail.setAiSortConfig', { config })
+  return { ...EMPTY_AI_SORT_CONFIG, ...response.config, folders: response.config?.folders ?? [] }
 }
 
 /** Saves a provider's key in the keychain; an empty key removes it. The key never comes back. */
 export async function setAiSortKey(provider: AiProvider, key: string): Promise<AiKeyState> {
-  const res = await invoke<Partial<AiKeyState>>('mail.setAiSortKey', { provider, key })
-  return { has_key: res.has_key ?? false, key_hint: res.key_hint ?? '' }
+  const response = await invoke<Partial<AiKeyState>>('mail.setAiSortKey', { provider, key })
+  return { has_key: response.has_key ?? false, key_hint: response.key_hint ?? '' }
 }
 
 export async function checkAiSortKey(provider: AiProvider): Promise<AiCheckResult> {
@@ -130,8 +134,8 @@ export async function checkAiSortKey(provider: AiProvider): Promise<AiCheckResul
 }
 
 export async function loadAiModels(provider: AiProvider): Promise<AiModel[]> {
-  const res = await invoke<{ models?: AiModel[] }>('mail.aiSortModels', { provider })
-  return res.models ?? []
+  const response = await invoke<{ models?: AiModel[] }>('mail.aiSortModels', { provider })
+  return response.models ?? []
 }
 
 export async function estimateAiSort(): Promise<AiSortEstimate> {
@@ -150,8 +154,8 @@ export async function stopAiSort(): Promise<void> {
 }
 
 export async function loadAiSortStatus(): Promise<AiSortStatus> {
-  const res = await invoke<Partial<AiSortStatus>>('mail.aiSortStatus', {})
-  return { log: res.log ?? [], running: res.running ?? null, last_error: res.last_error ?? null }
+  const response = await invoke<Partial<AiSortStatus>>('mail.aiSortStatus', {})
+  return { log: response.log ?? [], running: response.running ?? null, last_error: response.last_error ?? null }
 }
 
 export async function aiSortMoveBack(id: number): Promise<void> {
@@ -176,15 +180,15 @@ export type AiSortLesson = {
 }
 
 export async function loadAiSortLessons(): Promise<AiSortLesson[]> {
-  const res = await invoke<{ lessons?: AiSortLesson[] }>('mail.aiSortLessons', {})
-  return res.lessons ?? []
+  const response = await invoke<{ lessons?: AiSortLesson[] }>('mail.aiSortLessons', {})
+  return response.lessons ?? []
 }
 
 /** Removes one lesson, here and (through its mark on the email) on the
  * reader's other devices. Answers with the list as it is now. */
 export async function forgetAiSortLesson(id: number): Promise<AiSortLesson[]> {
-  const res = await invoke<{ lessons?: AiSortLesson[] }>('mail.aiSortForgetLesson', { id })
-  return res.lessons ?? []
+  const response = await invoke<{ lessons?: AiSortLesson[] }>('mail.aiSortForgetLesson', { id })
+  return response.lessons ?? []
 }
 
 /**

@@ -1,3 +1,7 @@
+// Presents actions for the current multi-thread selection. The mailbox supplies
+// the selected targets and the operations that apply to them.
+// Imported by ThreadList.tsx and KanbanBoardColumn.tsx.
+
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   Archive,

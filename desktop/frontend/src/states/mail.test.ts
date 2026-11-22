@@ -127,7 +127,7 @@ describe('thread message refresh reconciliation', () => {
     })
 
     // The first reply keeps its bubble; only the second one is resolved.
-    expect(mergeRefreshedThreadMessages([first, second], [secondCopy], 't1').map((m) => m.id)).toEqual([
+    expect(mergeRefreshedThreadMessages([first, second], [secondCopy], 't1').map((message) => message.id)).toEqual([
       'sent-1',
       'sent:b',
     ])
@@ -159,7 +159,9 @@ describe('thread message refresh reconciliation', () => {
       date: 1003,
     })
 
-    expect(mergeRefreshedThreadMessages([optimistic], [canonical], 't1').map((m) => m.id)).toEqual(['sent:1'])
+    expect(mergeRefreshedThreadMessages([optimistic], [canonical], 't1').map((message) => message.id)).toEqual([
+      'sent:1',
+    ])
   })
 
   it('does not let an earlier reply of ours claim a bubble still waiting on its Message-ID', () => {
@@ -191,7 +193,7 @@ describe('thread message refresh reconciliation', () => {
       date: 940,
     })
 
-    expect(mergeRefreshedThreadMessages([optimistic], [earlier], 't1').map((m) => m.id)).toEqual([
+    expect(mergeRefreshedThreadMessages([optimistic], [earlier], 't1').map((message) => message.id)).toEqual([
       'sent:1',
       'sent-local',
     ])
@@ -222,7 +224,7 @@ describe('thread message refresh reconciliation', () => {
       date: 1005,
     })
 
-    expect(mergeRefreshedThreadMessages([optimistic], [draft], 't1').map((m) => m.id)).toEqual([
+    expect(mergeRefreshedThreadMessages([optimistic], [draft], 't1').map((message) => message.id)).toEqual([
       'sent-local',
       'draft:1',
     ])

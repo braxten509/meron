@@ -1,3 +1,7 @@
+// Stores open compose and message tabs and the currently active tab. Startup and
+// navigation use that state to restore the desktop work area.
+// Callers include calendar.ts and compose.ts.
+
 import { observable } from '@legendapp/state'
 import { t } from '../lib/i18n'
 import type { ComposeDraft, ComposerAttachment, MessageTab } from '../types'

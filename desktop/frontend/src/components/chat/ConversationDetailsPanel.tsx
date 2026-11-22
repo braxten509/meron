@@ -1,3 +1,7 @@
+// Shows participants, attachments and media belonging to the open conversation.
+// Actions keep their connection to the message that supplied each item.
+// Imported by MessagePane.tsx and conversationMedia.ts.
+
 import { useEffect, useState, type MouseEvent } from 'react'
 import {
   ChevronLeft,
@@ -165,9 +169,9 @@ export function ConversationDetailsPanel({
               <EmptyHint text={t('chat.noMedia')} />
             ) : (
               <div className="grid grid-cols-3 gap-1.5 p-3">
-                {media.map((item, idx) => (
+                {media.map((item, index) => (
                   <div
-                    key={idx}
+                    key={index}
                     className="group relative aspect-square overflow-hidden rounded-md border border-border/30 bg-black/5 dark:bg-white/5 [content-visibility:auto] [contain-intrinsic-size:auto_none]"
                   >
                     <button
@@ -216,12 +220,12 @@ export function ConversationDetailsPanel({
             <EmptyHint text={t('chat.noFiles')} />
           ) : (
             <div className="flex flex-col gap-1.5 p-3">
-              {files.map((file, idx) => {
+              {files.map((file, index) => {
                 const downloadable = !!file.key
                 const FileIcon = fileIconFor(file.filename, file.mime)
                 return (
                   <div
-                    key={idx}
+                    key={index}
                     className="group flex items-center rounded-xl border border-border/30 bg-black/[0.02] dark:bg-white/[0.02]"
                   >
                     <button

@@ -1,3 +1,7 @@
+// Determines how message media fits the space available in the reader. The sizing
+// rules account for the dimensions provided by the sender.
+// Imported by BubbleHtmlFrame.tsx and readerHtml.ts.
+
 const fittedMedia = new WeakMap<HTMLImageElement | HTMLVideoElement, { senderMaxWidth: string; cleanup: () => void }>()
 
 /** Keep a height-capped picture's box as narrow as the picture it contains. */

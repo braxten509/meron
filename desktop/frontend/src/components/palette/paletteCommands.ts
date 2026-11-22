@@ -1,3 +1,7 @@
+// Defines desktop palette actions and the text used to find them. Search matching
+// takes command labels and additional keywords into account.
+// Imported by CommandPalette.tsx and useCommandList.ts.
+
 import type { ReactNode } from 'react'
 import type { ShortcutId } from '../../lib/shortcuts'
 

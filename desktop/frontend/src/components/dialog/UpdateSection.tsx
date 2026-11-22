@@ -1,3 +1,7 @@
+// Shows the status and actions available for desktop updates. A staged download
+// can remain available after an installation failure.
+// Imported by AboutDialog.tsx.
+
 import { AlertCircle, CheckCircle2, Download, ExternalLink, Loader2, RefreshCw, Sparkles } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'

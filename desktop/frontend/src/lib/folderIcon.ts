@@ -1,3 +1,7 @@
+// Selects the icon for a mailbox folder using the role and folder information
+// available to desktop navigation.
+// Callers include FolderMenuTree.tsx and FolderSwitcher.tsx.
+
 import {
   Archive,
   FileText,

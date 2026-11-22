@@ -1,3 +1,7 @@
+// Applies the message font preference to an embedded email document. The
+// surrounding React controls and the frame have separate rendering contexts.
+// Imported by BubbleHtmlFrame.tsx and HtmlMessageView.tsx.
+
 import { useMemo } from 'react'
 import { useValue } from '@legendapp/state/react'
 import { messageFrameFont, type MessageFrameFont } from '../../lib/fonts'

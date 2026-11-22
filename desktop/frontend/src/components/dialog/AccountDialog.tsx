@@ -1,3 +1,7 @@
+// Coordinates desktop account setup, editing and reconnect flows. Provider
+// selection determines which credentials and server fields are displayed.
+// Imported by App.tsx and SetupScreen.tsx.
+
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import { X, RefreshCw } from 'lucide-react'

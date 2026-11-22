@@ -1,3 +1,7 @@
+// Opens the native image or file selection dialog and converts its response into
+// frontend File objects for callers.
+// Callers include useFileDrop.ts and BoardSettingsPanel.tsx.
+
 import { invoke } from './bridge'
 
 export type PickedFile = {
@@ -20,20 +24,20 @@ export function pickedToFile(picked: PickedFile): File {
 }
 
 export async function pickImageFile(title = 'Choose image'): Promise<File | null> {
-  const res = await invoke<PickedFile | { cancelled: true }>('system.pickImageFile', { title })
-  if ('cancelled' in res && res.cancelled) return null
+  const response = await invoke<PickedFile | { cancelled: true }>('system.pickImageFile', { title })
+  if ('cancelled' in response && response.cancelled) return null
 
-  return pickedToFile(res as PickedFile)
+  return pickedToFile(response as PickedFile)
 }
 
 export async function pickFiles(title = 'Choose files'): Promise<File[]> {
-  const res = await invoke<{ files: PickedFile[] } | { cancelled: true }>('system.pickFiles', { title })
-  if (!('files' in res)) return []
-  return Promise.all(res.files.map(pickedToFile))
+  const response = await invoke<{ files: PickedFile[] } | { cancelled: true }>('system.pickFiles', { title })
+  if (!('files' in response)) return []
+  return Promise.all(response.files.map(pickedToFile))
 }
 
 export async function pickImageFiles(title = 'Choose images'): Promise<File[]> {
-  const res = await invoke<{ files: PickedFile[] } | { cancelled: true }>('system.pickImageFiles', { title })
-  if (!('files' in res)) return []
-  return Promise.all(res.files.map(pickedToFile))
+  const response = await invoke<{ files: PickedFile[] } | { cancelled: true }>('system.pickImageFiles', { title })
+  if (!('files' in response)) return []
+  return Promise.all(response.files.map(pickedToFile))
 }

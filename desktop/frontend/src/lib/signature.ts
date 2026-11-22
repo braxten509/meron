@@ -1,3 +1,7 @@
+// Resolves the sending account's signature and validates its saved HTML. Blank
+// rich-text markup and visible content have different meanings for compose.
+// Callers include SignatureSettingsCard.tsx and compose.ts.
+
 import { DOMParser as SchemaParser, type Schema } from '@tiptap/pm/model'
 import type { Account, AccountSignature } from '../types'
 

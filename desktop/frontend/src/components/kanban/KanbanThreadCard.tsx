@@ -1,3 +1,7 @@
+// Renders a conversation card and its drag preview. The originating column
+// identifies the appropriate selection, menu and transfer behavior.
+// Imported by KanbanBoardColumn.tsx and KanbanView.tsx.
+
 import { useEffect, useRef } from 'react'
 import { useDraggable } from '@dnd-kit/core'
 import { CSS } from '@dnd-kit/utilities'

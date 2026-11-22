@@ -1,3 +1,8 @@
+// Hosts an email document inside an iframe and coordinates document readiness with
+// the reader. Native links, input events and media need explicit handling across
+// the frame boundary.
+// Imported by BubbleHtmlFrame.tsx and HtmlMessageView.tsx.
+
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef } from 'react'
 import type { CSSProperties, Ref } from 'react'
 import { clearMediaSession } from '../../lib/mediaSession'
@@ -91,9 +96,9 @@ function stopFrameMedia(doc: Document | null | undefined) {
 }
 
 function isEditableFrameTarget(target: EventTarget | null): boolean {
-  const el = target as HTMLElement | null
-  if (!el) return false
-  return el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable
+  const element = target as HTMLElement | null
+  if (!element) return false
+  return element.tagName === 'INPUT' || element.tagName === 'TEXTAREA' || element.isContentEditable
 }
 
 function hasFrameSelection(doc: Document): boolean {

@@ -1,3 +1,7 @@
+// Offers filing choices for Meron's virtual folders in the thread action menu.
+// Each choice identifies the destination or removes existing membership.
+// Callers include BulkActionBar.tsx and ThreadContextMenu.tsx.
+
 import { useEffect, useRef, useState } from 'react'
 import { useValue } from '@legendapp/state/react'
 import { ChevronRight, Folder, FolderOutput, FolderSymlink, Plus } from 'lucide-react'

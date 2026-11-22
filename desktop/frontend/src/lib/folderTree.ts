@@ -1,3 +1,7 @@
+// Builds a navigable tree from flat mailbox paths and their account-specific
+// delimiters. Tree nodes can exist solely to group descendants.
+// Callers include kanbanData.ts and AccountSection.tsx.
+
 import type { Folder } from '../types'
 
 export type AccountGroup = {

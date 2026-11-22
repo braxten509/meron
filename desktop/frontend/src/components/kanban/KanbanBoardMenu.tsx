@@ -1,3 +1,7 @@
+// Presents board-level filters and display actions. The current board state
+// supplies each choice and receives the requested change.
+// Imported by KanbanView.tsx.
+
 import { useRef, useState } from 'react'
 import { MenuSurface } from '../menu/MenuSurface'
 import {

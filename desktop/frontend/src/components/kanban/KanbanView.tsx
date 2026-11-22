@@ -1,3 +1,7 @@
+// Coordinates the desktop board layout, sortable columns and conversation pane.
+// Board state supplies the active columns and their loaded mail.
+// Imported by App.tsx.
+
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   closestCenter,

@@ -1,3 +1,7 @@
+// Coordinates desktop mailbox loading and conversation refresh. Cached pages, live
+// syncs and optimistic sends must agree on which messages are visible.
+// Callers include backup.ts and bulkProgress.ts.
+
 import { attachmentSaveFilename } from '../lib/attachmentFilename'
 import type { Folder, Message, MessageTab } from '../types'
 import { invoke } from '../lib/bridge'
@@ -181,11 +185,11 @@ export function findLocalThread(threadId: string): Message | undefined {
 export async function openAttachment(att: { key: string | null; filename: string }) {
   if (!att.key) return
   try {
-    const res = await invoke<{ opened: boolean; path?: string }>('mail.openAttachment', {
+    const response = await invoke<{ opened: boolean; path?: string }>('mail.openAttachment', {
       key: att.key,
       filename: att.filename,
     })
-    if (!res?.opened) await downloadAttachment(att)
+    if (!response?.opened) await downloadAttachment(att)
   } catch {
     showToast(t('chat.couldNotOpenAttachment', { filename: att.filename }))
   }
@@ -219,11 +223,11 @@ export async function downloadAttachment(att: {
   try {
     const cached = att.key ? att : await cacheRemoteImage(att.url!)
     filename = attachmentSaveFilename(att.filename, cached.key!, cached.mime)
-    const res = await invoke<{ saved: boolean; path?: string }>('mail.saveAttachment', {
+    const response = await invoke<{ saved: boolean; path?: string }>('mail.saveAttachment', {
       key: cached.key,
       filename,
     })
-    if (res?.saved) showToast(t('chat.savedAttachment', { filename }))
+    if (response?.saved) showToast(t('chat.savedAttachment', { filename }))
   } catch {
     showToast(t('chat.couldNotSaveAttachment', { filename }))
   }
@@ -236,13 +240,13 @@ export async function downloadAttachment(att: {
 export async function saveMessageAsEml(message: Message) {
   if (!message?.id || isLocalSendId(message.id)) return
   try {
-    const res = await invoke<{ saved: boolean; path?: string }>('mail.saveEml', {
+    const response = await invoke<{ saved: boolean; path?: string }>('mail.saveEml', {
       thread_id: message.thread_id,
       message_ids: [message.id],
       folder: message.folder_id,
       subject: message.subject,
     })
-    if (res?.saved) showToast(t('chat.messageSaved'))
+    if (response?.saved) showToast(t('chat.messageSaved'))
   } catch {
     showToast(t('chat.couldNotSaveMessage'))
   }
@@ -648,7 +652,7 @@ async function loadThreadsWithRead(refresh: boolean, searchStage: ThreadSearchSt
     // Like Starred, a background refresh re-reads every loaded row: a
     // conversation can leave (moved out, archived) from anywhere in the list.
     try {
-      const res = await invoke<{ threads: Message[]; next_cursor?: string; folder_unread?: number }>(
+      const response = await invoke<{ threads: Message[]; next_cursor?: string; folder_unread?: number }>(
         'mail.meronFolderThreads',
         {
           folder_id: selectedFol,
@@ -659,9 +663,9 @@ async function loadThreadsWithRead(refresh: boolean, searchStage: ThreadSearchSt
         },
       )
       if (superseded()) return
-      allThreads = res.threads ?? []
-      if (typeof res.folder_unread === 'number') setMeronFolderUnread(selectedFol, res.folder_unread)
-      mail$.threadsCursor.set(res.next_cursor ?? '')
+      allThreads = response.threads ?? []
+      if (typeof response.folder_unread === 'number') setMeronFolderUnread(selectedFol, response.folder_unread)
+      mail$.threadsCursor.set(response.next_cursor ?? '')
       mail$.threadAccountCursors.set({})
     } catch (err) {
       if (superseded()) return
@@ -674,7 +678,7 @@ async function loadThreadsWithRead(refresh: boolean, searchStage: ThreadSearchSt
     }
   } else if (isUnifiedStarred(selectedAcc, selectedFol)) {
     try {
-      const res = await invoke<{ items: Message[]; next_cursor?: string }>('mail.starredItems', {
+      const response = await invoke<{ items: Message[]; next_cursor?: string }>('mail.starredItems', {
         query: q,
         filter,
         // Hidden in the starred view (no menu offers it), so a toggle left on
@@ -687,8 +691,8 @@ async function loadThreadsWithRead(refresh: boolean, searchStage: ThreadSearchSt
         limit: backgroundRefresh ? Math.max(50, previousThreads.length) : 50,
       })
       if (superseded()) return
-      allThreads = res.items ?? []
-      mail$.threadsCursor.set(res.next_cursor ?? '')
+      allThreads = response.items ?? []
+      mail$.threadsCursor.set(response.next_cursor ?? '')
       mail$.threadAccountCursors.set({})
     } catch (err) {
       if (superseded()) return
@@ -967,18 +971,18 @@ export async function loadMoreThreads() {
     if (isMeronView(selectedAcc)) {
       const cursor = mail$.threadsCursor.get()
       if (!cursor) return
-      const res = await invoke<{ threads: Message[]; next_cursor?: string; folder_unread?: number }>(
+      const response = await invoke<{ threads: Message[]; next_cursor?: string; folder_unread?: number }>(
         'mail.meronFolderThreads',
         { folder_id: selectedFol, query: q, filter, attachments, limit: THREAD_LIST_PAGE_SIZE, before_cursor: cursor },
       )
       if (!stillCurrent(cursor)) return
-      if (typeof res.folder_unread === 'number') setMeronFolderUnread(selectedFol, res.folder_unread)
-      moreThreads = res.threads || []
-      mail$.threadsCursor.set(res.next_cursor ?? '')
+      if (typeof response.folder_unread === 'number') setMeronFolderUnread(selectedFol, response.folder_unread)
+      moreThreads = response.threads || []
+      mail$.threadsCursor.set(response.next_cursor ?? '')
     } else if (isUnifiedStarred(selectedAcc, selectedFol)) {
       const cursor = mail$.threadsCursor.get()
       if (!cursor) return
-      const res = await invoke<{ items: Message[]; next_cursor?: string }>('mail.starredItems', {
+      const response = await invoke<{ items: Message[]; next_cursor?: string }>('mail.starredItems', {
         // The cursor walks the *filtered* set, so later pages must repeat the
         // query or they'd page through items the first page never showed.
         query: q,
@@ -990,13 +994,13 @@ export async function loadMoreThreads() {
         before_cursor: cursor,
       })
       if (!stillCurrent(cursor)) return
-      moreThreads = res.items || []
-      mail$.threadsCursor.set(res.next_cursor ?? '')
+      moreThreads = response.items || []
+      mail$.threadsCursor.set(response.next_cursor ?? '')
     } else if (selectedAcc === 'unified') {
       const cursor = mail$.threadsCursor.get()
       if (!cursor) return
       const role = unifiedFolderRole(selectedFol)
-      const res = await invoke<{
+      const response = await invoke<{
         threads: Message[]
         next_cursor?: string
         folder_unreads?: Record<string, number>
@@ -1014,18 +1018,18 @@ export async function loadMoreThreads() {
       })
       if (!stillCurrent(cursor)) return
       if (role === 'inbox') {
-        for (const [accountId, unread] of Object.entries(res.folder_unreads ?? {})) {
+        for (const [accountId, unread] of Object.entries(response.folder_unreads ?? {})) {
           updateCachedFolderUnread(accountId, 'inbox', unread)
         }
       }
-      moreThreads = res.threads || []
+      moreThreads = response.threads || []
       mail$.threadAccountCursors.set({})
-      mail$.threadsCursor.set(res.next_cursor ?? '')
-      if (res.search_incomplete) showToast(t('threads.searchServerUnavailable'))
+      mail$.threadsCursor.set(response.next_cursor ?? '')
+      if (response.search_incomplete) showToast(t('threads.searchServerUnavailable'))
     } else {
       const cursor = mail$.threadsCursor.get()
       if (!cursor) return
-      const res = await invoke<{
+      const response = await invoke<{
         threads: Message[]
         next_cursor?: string
         folder_unread?: number
@@ -1041,11 +1045,12 @@ export async function loadMoreThreads() {
         refresh: false,
       })
       if (!stillCurrent(cursor)) return
-      if (typeof res.folder_unread === 'number') updateCachedFolderUnread(selectedAcc, selectedFol, res.folder_unread)
-      moreThreads = res.threads || []
-      mail$.threadsCursor.set(res.next_cursor ?? '')
+      if (typeof response.folder_unread === 'number')
+        updateCachedFolderUnread(selectedAcc, selectedFol, response.folder_unread)
+      moreThreads = response.threads || []
+      mail$.threadsCursor.set(response.next_cursor ?? '')
       // Older server matches could not be fetched; the list ends at what is cached.
-      if (res.search_incomplete) showToast(t('threads.searchServerUnavailable'))
+      if (response.search_incomplete) showToast(t('threads.searchServerUnavailable'))
     }
 
     if (moreThreads.length > 0) {

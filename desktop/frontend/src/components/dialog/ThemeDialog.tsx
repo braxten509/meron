@@ -1,3 +1,7 @@
+// Presents the theme choices available for the desktop window. The selected
+// appearance determines which stored choice applies.
+// Imported by ThemeSettingsSection.tsx.
+
 import { useState } from 'react'
 import { Palette, Plus, X } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'

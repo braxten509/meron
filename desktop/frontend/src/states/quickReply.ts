@@ -1,3 +1,8 @@
+// Owns the draft state for a reply written inside a desktop conversation.
+// Navigation and asynchronous saves must retain the editor's association with its
+// thread.
+// Callers include compose.ts and quickReplySend.ts.
+
 import type { Message } from '../types'
 import { contextualErrorMessage } from '../lib/errors'
 import { t } from '../lib/i18n'

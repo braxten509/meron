@@ -1,3 +1,7 @@
+// Serializes writes for settings that may be toggled again during a host request.
+// A pending write should settle on the latest requested boolean value.
+// Imported by trayStyle.ts and trayUnread.ts.
+
 type SendBoolean = (value: boolean) => Promise<unknown>
 
 // Wails calls are asynchronous and may otherwise reach Go out of order. Keep

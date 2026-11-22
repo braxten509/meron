@@ -1,3 +1,7 @@
+// Hosts desktop modal content outside clipping ancestors and manages focus. Nested
+// and replacement dialogs share keyboard and opener behavior.
+// Callers include AboutDialog.tsx and AccountDialog.tsx.
+
 import { useEffect, useRef, type ComponentProps, type ReactNode, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import { useEscapeKey } from '../../lib/useEscapeKey'

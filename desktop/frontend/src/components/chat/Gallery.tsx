@@ -1,3 +1,7 @@
+// Displays conversation images and videos with the actions applicable to each
+// item. Media identity follows the originating attachment or external source.
+// Callers include BubbleHtmlFrame.tsx and HtmlMessageView.tsx.
+
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronLeft, ChevronRight, Copy, Download, X } from 'lucide-react'
@@ -40,7 +44,7 @@ interface GalleryProps {
 export function Gallery({ items, index, onIndexChange, onClose }: GalleryProps) {
   const { t } = useTranslation()
   const total = items.length
-  const hasPrev = index > 0
+  const hasPrevious = index > 0
   const hasNext = index < total - 1
 
   const stageRef = useRef<HTMLDivElement>(null)
@@ -66,7 +70,7 @@ export function Gallery({ items, index, onIndexChange, onClose }: GalleryProps) 
     setOffset({ x: 0, y: 0 })
   }, [])
 
-  const goPrev = useCallback(() => {
+  const goPrevious = useCallback(() => {
     if (index > 0) onIndexChange(index - 1)
   }, [index, onIndexChange])
 
@@ -84,12 +88,12 @@ export function Gallery({ items, index, onIndexChange, onClose }: GalleryProps) 
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'ArrowLeft') goPrev()
+      if (event.key === 'ArrowLeft') goPrevious()
       else if (event.key === 'ArrowRight') goNext()
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [goPrev, goNext])
+  }, [goPrevious, goNext])
 
   // Ctrl + wheel (and trackpad pinch, which browsers report as ctrl+wheel)
   // zooms toward the cursor. Attached natively so we can preventDefault the
@@ -106,18 +110,18 @@ export function Gallery({ items, index, onIndexChange, onClose }: GalleryProps) 
       const cx = event.clientX - (rect.left + rect.width / 2)
       const cy = event.clientY - (rect.top + rect.height / 2)
 
-      setScale((prevScale) => {
-        const next = Math.min(MAX_SCALE, Math.max(MIN_SCALE, prevScale * Math.exp(-event.deltaY * ZOOM_SPEED)))
-        if (next === prevScale) return prevScale
+      setScale((previousScale) => {
+        const next = Math.min(MAX_SCALE, Math.max(MIN_SCALE, previousScale * Math.exp(-event.deltaY * ZOOM_SPEED)))
+        if (next === previousScale) return previousScale
         if (next === MIN_SCALE) {
           setOffset({ x: 0, y: 0 })
           return next
         }
         // Keep the content point under the cursor fixed while scaling.
-        const ratio = next / prevScale
-        setOffset((prev) => ({
-          x: cx - (cx - prev.x) * ratio,
-          y: cy - (cy - prev.y) * ratio,
+        const ratio = next / previousScale
+        setOffset((previous) => ({
+          x: cx - (cx - previous.x) * ratio,
+          y: cy - (cy - previous.y) * ratio,
         }))
         return next
       })
@@ -223,11 +227,11 @@ export function Gallery({ items, index, onIndexChange, onClose }: GalleryProps) 
 
       {/* Image stage */}
       <div ref={stageRef} className="relative flex flex-1 items-center justify-center overflow-hidden px-4 pb-4">
-        {hasPrev && (
+        {hasPrevious && (
           <button
             onClick={(event) => {
               event.stopPropagation()
-              goPrev()
+              goPrevious()
             }}
             className="absolute left-3 z-10 flex h-11 w-11 items-center justify-center rounded-full bg-black/40 text-white/90 hover:bg-black/70 cursor-pointer transition-colors"
             title={t('chat.previousImage')}

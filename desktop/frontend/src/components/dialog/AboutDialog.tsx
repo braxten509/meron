@@ -1,3 +1,7 @@
+// Displays application information and release-related controls for the desktop
+// host. The dialog reads native version or update state when needed.
+// Imported by App.tsx.
+
 import { ExternalLink, Heart, ScrollText, X } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'

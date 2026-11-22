@@ -1,3 +1,7 @@
+// Maintains the desktop task panel, its lists and selected tasks. Actions from an
+// email thread can create a task in the chosen list.
+// Callers include calendar.ts and AddMailToTasksMenu.tsx.
+
 import { observable } from '@legendapp/state'
 
 import { invoke } from '../lib/bridge'
@@ -95,10 +99,10 @@ export function toggleTasksPanel() {
 }
 
 export async function loadTaskLists(): Promise<{ lists: TaskList[]; defaultListId: string }> {
-  const res = await invoke<{ lists?: TaskList[]; default_list_id?: string }>('tasks.lists')
-  const lists = res?.lists ?? []
+  const response = await invoke<{ lists?: TaskList[]; default_list_id?: string }>('tasks.lists')
+  const lists = response?.lists ?? []
   tasks$.lists.set(lists)
-  return { lists, defaultListId: res?.default_list_id ?? '' }
+  return { lists, defaultListId: response?.default_list_id ?? '' }
 }
 
 /** Re-read one list's items. The core decides the order; we never re-sort. */
@@ -106,13 +110,13 @@ export async function loadTasks(listId = ui$.activeTaskList.peek()) {
   if (!listId) return
   tasks$.loading.set(true)
   try {
-    const res = await invoke<{ tasks?: Task[] }>('tasks.items', {
+    const response = await invoke<{ tasks?: Task[] }>('tasks.items', {
       list_id: listId,
       include_completed: true,
     })
     // A list switch that landed while this was in flight owns the panel now.
     if (ui$.activeTaskList.peek() !== listId) return
-    tasks$.items.set(res?.tasks ?? [])
+    tasks$.items.set(response?.tasks ?? [])
   } finally {
     tasks$.loading.set(false)
   }
@@ -130,8 +134,8 @@ export async function addTask(title: string) {
  * count: filing the same mail again after closing its task is a new follow-up.
  */
 export async function threadHasOpenTask(threadId: string): Promise<boolean> {
-  const res = await invoke<{ tasks?: Task[] }>('tasks.forThread', { thread_id: threadId })
-  return (res?.tasks ?? []).some((task) => !task.done)
+  const response = await invoke<{ tasks?: Task[] }>('tasks.forThread', { thread_id: threadId })
+  return (response?.tasks ?? []).some((task) => !task.done)
 }
 
 /** Says so, rather than adding it twice, when the thread is already in Tasks. */
@@ -213,10 +217,10 @@ export async function updateTask(
 }
 
 export async function deleteTask(taskId: string) {
-  const res = await invoke<{ restore?: unknown }>('tasks.delete', { task_id: taskId })
+  const response = await invoke<{ restore?: unknown }>('tasks.delete', { task_id: taskId })
   if (tasks$.editingId.peek() === taskId) tasks$.editingId.set('')
   await loadTasks()
-  offerUndo(t('tasks.taskDeleted'), res?.restore)
+  offerUndo(t('tasks.taskDeleted'), response?.restore)
 }
 
 /**
@@ -262,17 +266,17 @@ export async function reorderTasks(orderedIds: string[]) {
 export async function clearCompletedTasks() {
   const listId = ui$.activeTaskList.peek()
   if (!listId) return
-  const res = await invoke<{ removed?: number; restore?: unknown }>('tasks.clearCompleted', {
+  const response = await invoke<{ removed?: number; restore?: unknown }>('tasks.clearCompleted', {
     list_id: listId,
   })
   await loadTasks(listId)
-  if (res?.removed) offerUndo(t('tasks.completedCleared'), res.restore)
+  if (response?.removed) offerUndo(t('tasks.completedCleared'), response.restore)
 }
 
 export async function createTaskList(title: string) {
-  const res = await invoke<{ list?: TaskList }>('tasks.listCreate', { title })
+  const response = await invoke<{ list?: TaskList }>('tasks.listCreate', { title })
   await loadTaskLists()
-  const id = res?.list?.id
+  const id = response?.list?.id
   if (id) {
     ui$.activeTaskList.set(id)
     await loadTasks(id)
@@ -295,11 +299,11 @@ export async function renameTaskList(listId: string, title: string) {
 export async function deleteTaskList(listId: string) {
   const list = tasks$.lists.peek().find((entry) => entry.id === listId)
   if (!list) return
-  const res = await invoke<{ restore?: unknown }>('tasks.listDelete', { list_id: listId })
+  const response = await invoke<{ restore?: unknown }>('tasks.listDelete', { list_id: listId })
   const remaining = (await loadTaskLists()).lists
   const next = remaining[0]?.id ?? ''
   ui$.activeTaskList.set(next)
   if (next) await loadTasks(next)
   else tasks$.items.set([])
-  offerUndo(t('tasks.listDeleted', { name: list.title }), res?.restore)
+  offerUndo(t('tasks.listDeleted', { name: list.title }), response?.restore)
 }

@@ -1,3 +1,7 @@
+// Resolves the account identity, folder label and avatar displayed for a board
+// column. Column headers and compact views use the same identity.
+// Imported by KanbanSearch.tsx and SearchOptions.tsx.
+
 import { useCallback, useMemo } from 'react'
 import { Rss } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'

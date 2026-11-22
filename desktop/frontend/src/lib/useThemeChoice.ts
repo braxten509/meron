@@ -1,3 +1,7 @@
+// Resolves the active theme and the user's light and dark selections. Theme
+// controls use these values when previewing or saving a choice.
+// Callers include ThemeDialog.tsx and ThemeSettingsSection.tsx.
+
 import { useMemo } from 'react'
 import { useValue } from '@legendapp/state/react'
 import { chosenThemeIds, resolveThemeDef, settings$, systemAppearance$ } from '../states/settings'

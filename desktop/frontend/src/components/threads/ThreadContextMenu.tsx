@@ -1,3 +1,7 @@
+// Opens the context menu for the targeted desktop conversations. The menu must
+// retain their identity independently of later pointer movement.
+// Callers include ThreadList.tsx and KanbanBoardColumn.tsx.
+
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from 'react'
 import { useValue } from '@legendapp/state/react'
 import {

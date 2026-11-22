@@ -1,3 +1,7 @@
+// Builds the command list available to the desktop palette. Current application
+// state determines which actions can be offered.
+// Imported by CommandPalette.tsx.
+
 import { useMemo } from 'react'
 import {
   Archive,

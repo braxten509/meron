@@ -1,3 +1,7 @@
+// Defines sortable account and board rows and their navigation indicators. The
+// rail owns the overall order and applies the chosen destination.
+// Imported by SideNav.tsx.
+
 import type { ReactNode } from 'react'
 import { Columns3, Pause, BellOff, KeyRound, Rss } from 'lucide-react'
 import { useSortable } from '@dnd-kit/sortable'

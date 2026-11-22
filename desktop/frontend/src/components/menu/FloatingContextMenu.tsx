@@ -1,3 +1,7 @@
+// Places a menu in a portal and keeps it within the viewport. Dismissal and event
+// propagation must cooperate with the originating React surface.
+// Callers include FolderSwitcher.tsx and AddMailToTasksMenu.tsx.
+
 import { useLayoutEffect, useRef, type MouseEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useEscapeKey } from '../../lib/useEscapeKey'
@@ -40,17 +44,17 @@ export function FloatingContextMenu({
   useEscapeKey(onClose ?? noop, Boolean(onClose))
 
   useLayoutEffect(() => {
-    const el = menuRef.current
-    if (!el) return
+    const element = menuRef.current
+    if (!element) return
 
-    const { width, height } = el.getBoundingClientRect()
+    const { width, height } = element.getBoundingClientRect()
     const desiredLeft = x + offset
     const desiredTop = placement === 'up' ? y - offset - height : y + offset
     const left = Math.max(margin, Math.min(desiredLeft, window.innerWidth - width - margin))
     const top = Math.max(margin, Math.min(desiredTop, window.innerHeight - height - margin))
 
-    el.style.left = `${left}px`
-    el.style.top = `${top}px`
+    element.style.left = `${left}px`
+    element.style.top = `${top}px`
   })
 
   const content = (

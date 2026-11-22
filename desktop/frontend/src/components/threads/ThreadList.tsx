@@ -1,3 +1,7 @@
+// Renders the desktop mailbox page and its selected conversations. Paging,
+// filtering and row actions depend on the active account and folder.
+// Imported by App.tsx.
+
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { CSSProperties, DragEvent, PointerEventHandler } from 'react'
 import { Plus, SquarePen, MoreHorizontal, Loader2 } from 'lucide-react'
@@ -561,8 +565,8 @@ export function ThreadList({ width, onResizeStart }: ThreadListProps = {}) {
         onScroll={(event) => {
           captureScrollAnchor()
           if (!canLoadMore || threadsLoadingMore) return
-          const el = event.currentTarget
-          if (el.scrollHeight - el.scrollTop - el.clientHeight < 240) {
+          const element = event.currentTarget
+          if (element.scrollHeight - element.scrollTop - element.clientHeight < 240) {
             void loadMoreThreads()
           }
         }}

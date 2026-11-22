@@ -1,3 +1,6 @@
+// Public entry points for interpreting responses from the shared core.
+// Desktop-compatible wire keys are decoded into Kotlin values for Android and iOS.
+// The detailed account, folder, conversation and organizer readers live beside this file.
 package jp.nonbili.meron.shared
 
 // The core reports failures as a {"error":{"message":...}} JSON payload rather
@@ -40,12 +43,10 @@ fun requireCoreAllOk(responseJson: String): String {
 }
 
 /**
- * True when a core failure message says the mail server rejected our OAuth
- * credentials — the shapes meron-core produces for an expired/revoked access
- * token: "oauth login failed: ... [AUTHENTICATIONFAILED] Invalid credentials"
- * from IMAP XOAUTH2, and "smtp auth: ..." from an SMTP AUTH rejection. Used to
- * decide whether re-minting a host-managed Google token and retrying once is
- * worthwhile.
+ * Recognizes IMAP and SMTP authentication failures reported by the core.
+ *
+ * Mobile uses this signal to refresh a host-managed Google token and retry once.
+ * The markers include XOAUTH2 invalid credentials and SMTP AUTH rejection.
  */
 fun isOAuthLoginFailure(message: String?): Boolean {
     val normalized = message?.lowercase() ?: return false
@@ -118,532 +119,36 @@ fun parseFolderUnreadChanges(responseJson: String): List<FolderUnreadChange> =
             if (accountId.isBlank() || folderId.isBlank()) null else FolderUnreadChange(accountId, folderId, unread)
         }.orEmpty()
 
-fun parseAccountListResponse(responseJson: String): List<AccountSummary> {
-    val accountsJson = responseJson.findJsonArrayProperty("accounts") ?: return emptyList()
-    return accountsJson.jsonArrayElements().mapNotNull { item ->
-        val id = item.findJsonStringProperty("id").orEmpty()
-        if (id.isBlank()) return@mapNotNull null
-        val wallpaperJson = item.findJsonPropertyValue("chat_wallpaper").orEmpty()
-        AccountSummary(
-            id = id,
-            email = item.findJsonStringProperty("email").orEmpty(),
-            displayName = item.findJsonStringProperty("display_name").orEmpty(),
-            senderName = item.findJsonStringProperty("sender_name").orEmpty(),
-            avatarUrl = item.findJsonStringProperty("avatar_url").orEmpty(),
-            needsReconnect = item.findJsonBooleanProperty("needs_reconnect") ?: false,
-            engine = item.findJsonStringProperty("engine").orEmpty(),
-            provider = item.findJsonStringProperty("provider").orEmpty(),
-            authType = item.findJsonStringProperty("auth_type").orEmpty(),
-            username = item.findJsonStringProperty("username").orEmpty(),
-            imapHost = item.findJsonStringProperty("imap_host").orEmpty(),
-            imapPort = item.findJsonLongProperty("imap_port")?.toInt() ?: 0,
-            smtpHost = item.findJsonStringProperty("smtp_host").orEmpty(),
-            smtpPort = item.findJsonLongProperty("smtp_port")?.toInt() ?: 0,
-            tls = item.findJsonBooleanProperty("tls") ?: true,
-            starttls = item.findJsonBooleanProperty("starttls") ?: false,
-            smtpTls = item.findJsonBooleanProperty("smtp_tls") ?: true,
-            smtpStarttls = item.findJsonBooleanProperty("smtp_starttls") ?: false,
-            loadRemoteImages = item.findJsonBooleanProperty("load_remote_images") ?: false,
-            includedInUnified = item.findJsonBooleanProperty("included_in_unified") ?: true,
-            muted = item.findJsonBooleanProperty("muted") ?: false,
-            paused = item.findJsonBooleanProperty("paused") ?: false,
-            conversationHtml = item.findJsonBooleanProperty("conversation_html") ?: true,
-            saveSentCopy = item.findJsonBooleanProperty("save_sent_copy"),
-            rssSyncIntervalMinutes = item.findJsonLongProperty("rss_sync_interval_minutes")?.toInt() ?: 60,
-            aliases =
-                item
-                    .findJsonArrayProperty("aliases")
-                    ?.jsonArrayElements()
-                    ?.mapNotNull { aliasJson ->
-                        val email = aliasJson.findJsonStringProperty("email").orEmpty()
-                        if (email.isBlank()) {
-                            null
-                        } else {
-                            AccountAlias(
-                                email = email,
-                                name = aliasJson.findJsonStringProperty("name").orEmpty(),
-                            )
-                        }
-                    }.orEmpty(),
-            proxy = parseProxySpec(item.findJsonPropertyValue("proxy"), ProxySpec.followApp),
-            signature = parseSignatureSpec(item.findJsonPropertyValue("signature")),
-            chatWallpaperKind = wallpaperJson.findJsonStringProperty("kind").orEmpty(),
-            chatWallpaperPresetId = wallpaperJson.findJsonStringProperty("presetId").orEmpty(),
-            chatWallpaperUrl = wallpaperJson.findJsonStringProperty("url").orEmpty(),
-        )
-    }
-}
-
-/**
- * Read an account's signature override. Absent (or a mode this build does not
- * know) means the account follows the app-wide signature.
- */
-private fun parseSignatureSpec(signatureJson: String?): SignatureSpec {
-    val json = signatureJson?.takeIf { it.isNotBlank() && it != "null" } ?: return SignatureSpec.followApp
-    val mode = json.findJsonStringProperty("mode").orEmpty()
-    if (mode != "global" && mode != "none" && mode != "custom") return SignatureSpec.followApp
-    return SignatureSpec(mode = mode, html = json.findJsonStringProperty("html").orEmpty())
-}
+fun parseAccountListResponse(responseJson: String): List<AccountSummary> = decodeAccountListResponse(responseJson)
 
 /** The app-wide proxy from an `app.proxyGet` response; missing means none. */
 fun parseProxyResponse(responseJson: String): ProxySpec = parseProxySpec(responseJson.findJsonPropertyValue("proxy"), ProxySpec.off)
 
-/**
- * Read a proxy object, falling back to [fallback] when it is absent or carries
- * a mode this build does not know. Accounts stored before proxy support have no
- * such object at all, which is why the fallback is the caller's business.
- */
-private fun parseProxySpec(
-    proxyJson: String?,
-    fallback: ProxySpec,
-): ProxySpec {
-    val json = proxyJson?.takeIf { it.isNotBlank() && it != "null" } ?: return fallback
-    val mode = json.findJsonStringProperty("mode").orEmpty()
-    if (mode.isBlank()) return fallback
-    return ProxySpec(
-        mode = mode,
-        host = json.findJsonStringProperty("host").orEmpty(),
-        port = json.findJsonLongProperty("port")?.toInt() ?: 0,
-        username = json.findJsonStringProperty("username").orEmpty(),
-        password = json.findJsonStringProperty("password").orEmpty(),
-    )
-}
+fun parseFolderListResponse(responseJson: String): List<FolderSummary> = decodeFolderListResponse(responseJson)
 
-fun parseFolderListResponse(responseJson: String): List<FolderSummary> {
-    val foldersJson = responseJson.findJsonArrayProperty("folders") ?: return emptyList()
-    return foldersJson.jsonArrayElements().mapNotNull { item ->
-        val name = item.findJsonStringProperty("name") ?: item.findJsonStringProperty("id").orEmpty()
-        if (name.isBlank()) return@mapNotNull null
-        FolderSummary(
-            accountId = item.findJsonStringProperty("account_id").orEmpty(),
-            name = name,
-            unread = item.findJsonLongProperty("unread")?.toInt() ?: 0,
-            role = item.findJsonStringProperty("role") ?: "folder",
-            // Absent for RSS folders and older cores; the wire name is then the
-            // best label available.
-            displayName = item.findJsonStringProperty("display_name")?.takeIf { it.isNotBlank() } ?: name,
-            delimiter = item.findJsonStringProperty("delimiter").orEmpty(),
-            notify = item.findJsonBooleanProperty("notify") ?: false,
-            notifyLive = item.findJsonBooleanProperty("notify_live") ?: false,
-        )
-    }
-}
-
-data class FolderDeleteResult(
-    val removed: Set<String>,
-    val warning: String?,
-)
-
-fun parseFolderDeleteResponse(responseJson: String): FolderDeleteResult {
-    val removed =
-        responseJson
-            .findJsonArrayProperty("removed")
-            ?.jsonArrayElements()
-            ?.mapNotNull { item ->
-                item
-                    .takeIf { it.startsWith('"') }
-                    ?.readJsonString(0)
-                    ?.value
-                    ?.takeIf { it.isNotBlank() }
-            }?.toSet()
-            .orEmpty()
-    return FolderDeleteResult(
-        removed = removed,
-        warning = responseJson.findJsonStringProperty("warning")?.takeIf { it.isNotBlank() },
-    )
-}
+fun parseFolderDeleteResponse(responseJson: String): FolderDeleteResult = decodeFolderDeleteResponse(responseJson)
 
 /** Every folder a rename moved, old name to new, the folder's subtree included. */
-fun parseFolderRenameResponse(responseJson: String): Map<String, String> =
-    responseJson
-        .findJsonArrayProperty("renamed")
-        ?.jsonArrayElements()
-        ?.mapNotNull { pair ->
-            val names =
-                pair.jsonArrayElements().mapNotNull { item ->
-                    item.takeIf { it.startsWith('"') }?.readJsonString(0)?.value
-                }
-            val from = names.getOrNull(0)?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
-            val to = names.getOrNull(1)?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
-            from to to
-        }?.toMap()
-        .orEmpty()
+fun parseFolderRenameResponse(responseJson: String): Map<String, String> = decodeFolderRenameResponse(responseJson)
 
-fun parseContactSuggestResponse(responseJson: String): List<ContactSuggestion> {
-    val contactsJson = responseJson.findJsonArrayProperty("contacts") ?: return emptyList()
-    return contactsJson.jsonArrayElements().mapNotNull { item ->
-        val addr = item.findJsonStringProperty("addr").orEmpty()
-        if (addr.isBlank()) return@mapNotNull null
-        ContactSuggestion(
-            name = item.findJsonStringProperty("name").orEmpty(),
-            addr = addr,
-        )
-    }
-}
+fun parseContactSuggestResponse(responseJson: String): List<ContactSuggestion> = decodeContactSuggestResponse(responseJson)
 
-data class DiscoveredAccountSettings(
-    val imapHost: String,
-    val imapPort: Int,
-    val smtpHost: String,
-    val smtpPort: Int,
-    val username: String,
-    val providerName: String,
-    val source: String,
-    val appPasswordProvider: String,
-    val appPasswordUrl: String,
-)
+fun parseAutodiscoverResponse(responseJson: String): DiscoveredAccountSettings = decodeAutodiscoverResponse(responseJson)
 
-fun parseAutodiscoverResponse(responseJson: String): DiscoveredAccountSettings {
-    val hintJson = responseJson.findJsonPropertyValue("app_password_hint").orEmpty()
-    return DiscoveredAccountSettings(
-        imapHost = responseJson.findJsonStringProperty("imap_host").orEmpty(),
-        imapPort = responseJson.findJsonLongProperty("imap_port")?.toInt() ?: 993,
-        smtpHost = responseJson.findJsonStringProperty("smtp_host").orEmpty(),
-        smtpPort = responseJson.findJsonLongProperty("smtp_port")?.toInt() ?: 465,
-        username = responseJson.findJsonStringProperty("username").orEmpty(),
-        providerName = responseJson.findJsonStringProperty("provider_name").orEmpty(),
-        source = responseJson.findJsonStringProperty("source").orEmpty(),
-        appPasswordProvider = hintJson.findJsonStringProperty("provider").orEmpty(),
-        appPasswordUrl = hintJson.findJsonStringProperty("url").orEmpty(),
-    )
-}
+fun parseProbeCertResponse(responseJson: String): ServerCertificate? = decodeProbeCertResponse(responseJson)
 
-/**
- * A server certificate the user is asked to trust. [fingerprint] is the hex
- * SHA-256 of the certificate, and the value pinned when they accept.
- */
-data class ServerCertificate(
-    val fingerprint: String,
-    val subject: String,
-    val issuer: String,
-    val notBefore: String,
-    val notAfter: String,
-    val selfSigned: Boolean,
-)
-
-fun parseProbeCertResponse(responseJson: String): ServerCertificate? {
-    val certJson = responseJson.findJsonObjectProperty("certificate") ?: return null
-    val fingerprint = certJson.findJsonStringProperty("fingerprint").orEmpty()
-    if (fingerprint.isBlank()) return null
-    return ServerCertificate(
-        fingerprint = fingerprint,
-        subject = certJson.findJsonStringProperty("subject").orEmpty(),
-        issuer = certJson.findJsonStringProperty("issuer").orEmpty(),
-        notBefore = certJson.findJsonStringProperty("not_before").orEmpty(),
-        notAfter = certJson.findJsonStringProperty("not_after").orEmpty(),
-        selfSigned = certJson.findJsonBooleanProperty("self_signed") ?: false,
-    )
-}
-
-data class ThreadListPage(
-    val threads: List<ThreadSummary>,
-    val nextCursor: String,
-    val folderUnread: Int? = null,
-    val folderSynced: Boolean? = null,
-    // The live server search failed, so these are only locally cached matches.
-    val searchIncomplete: Boolean = false,
-)
-
-fun parseThreadListPage(responseJson: String): ThreadListPage {
-    val threadsJson =
-        responseJson.findJsonArrayProperty("threads")
-            ?: return ThreadListPage(
-                threads = emptyList(),
-                nextCursor = "",
-                folderUnread = responseJson.findJsonLongProperty("folder_unread")?.toInt(),
-                folderSynced = responseJson.findJsonBooleanProperty("folder_synced"),
-                searchIncomplete = responseJson.findJsonBooleanProperty("search_incomplete") == true,
-            )
-    val threads =
-        threadsJson.jsonArrayElements().mapNotNull { item ->
-            val id = item.findJsonStringProperty("id").orEmpty()
-            if (id.isBlank()) return@mapNotNull null
-            ThreadSummary(
-                id = id,
-                accountId = item.findJsonStringProperty("account_id").orEmpty(),
-                folder = item.findJsonStringProperty("folder_id") ?: item.findJsonStringProperty("folder").orEmpty(),
-                folderRole = item.findJsonStringProperty("folder_role") ?: "folder",
-                subject = item.findJsonStringProperty("subject").orEmpty(),
-                // The envelope carries an empty from_name when the sender has
-                // no display name, so fall through blanks to the address rather
-                // than leaving the label empty for the row to fill in.
-                sender =
-                    item
-                        .findJsonStringProperty("from_name")
-                        .orEmpty()
-                        .ifBlank { item.findJsonStringProperty("from_addr").orEmpty() }
-                        .ifBlank { item.findJsonStringProperty("from").orEmpty() },
-                preview = item.findJsonStringProperty("preview").orEmpty(),
-                unread = item.findJsonBooleanProperty("unread") ?: false,
-                unreadCount =
-                    item.findJsonLongProperty("unread_count")?.toInt()
-                        ?: if (item.findJsonBooleanProperty("unread") == true) 1 else 0,
-                messageCount = item.findJsonLongProperty("message_count")?.toInt() ?: 0,
-                // Top-level key: the subject is sender-written text and precedes it.
-                senders =
-                    item
-                        .jsonObjectEntries()
-                        .firstOrNull { it.first == "senders" }
-                        ?.second
-                        ?.takeIf { it.startsWith("[") }
-                        ?.jsonArrayElements()
-                        ?.map { sender ->
-                            if (sender.findJsonBooleanProperty("me") == true) "" else sender.findJsonStringProperty("name").orEmpty()
-                        }.orEmpty(),
-                sendersTruncated =
-                    item.jsonObjectEntries().firstOrNull { it.first == "senders_truncated" }?.second == "true",
-                starred = item.findJsonBooleanProperty("starred") ?: false,
-                // Top-level key, like senders: subjects are sender-written text.
-                tags = item.topLevelStringArray("tags"),
-                hasStarredItems = item.findJsonBooleanProperty("has_starred_items") ?: false,
-                hasDraft = item.findJsonBooleanProperty("has_draft") ?: false,
-                hasAttachments = item.jsonObjectEntries().firstOrNull { it.first == "has_attachments" }?.second == "true",
-                // Top-level key, like senders: filenames are sender-written text.
-                files =
-                    item
-                        .jsonObjectEntries()
-                        .firstOrNull { it.first == "files" }
-                        ?.second
-                        ?.takeIf { it.startsWith("[") }
-                        ?.jsonArrayElements()
-                        ?.mapNotNull { file ->
-                            val filename = file.findJsonStringProperty("filename").orEmpty()
-                            if (filename.isBlank()) return@mapNotNull null
-                            MessageAttachment(filename = filename, mimeType = file.findJsonStringProperty("mime").orEmpty())
-                        }.orEmpty(),
-                dateEpochSeconds = item.findJsonLongProperty("date") ?: item.findJsonLongProperty("date_epoch_seconds") ?: 0,
-                feedUrl = item.findJsonStringProperty("feed_url").orEmpty(),
-                senderAddress = item.findJsonStringProperty("from_addr").orEmpty(),
-                // Top-level keys: a sender row (`group: "sender"`) and whether
-                // that person is a no-reply style address.
-                group =
-                    item
-                        .jsonObjectEntries()
-                        .firstOrNull { it.first == "group" }
-                        ?.second
-                        ?.let { "{\"value\":$it}".findJsonStringProperty("value") }
-                        .orEmpty(),
-                automated = item.jsonObjectEntries().firstOrNull { it.first == "automated" }?.second == "true",
-                // Top-level key: null when the conversation is in no Meron folder.
-                meronFolderId =
-                    item
-                        .jsonObjectEntries()
-                        .firstOrNull { it.first == "meron_folder_id" }
-                        ?.second
-                        ?.takeIf { it.startsWith("\"") }
-                        ?.let { "{\"value\":$it}".findJsonStringProperty("value") }
-                        ?.takeIf { it.isNotBlank() },
-            )
-        }
-    return ThreadListPage(
-        // Thread ids key the LazyColumn items; a duplicate id in one core
-        // response (e.g. unified or search listings) would crash composition.
-        threads = threads.distinctBy { it.id },
-        nextCursor = responseJson.findJsonStringProperty("next_cursor").orEmpty(),
-        folderUnread = responseJson.findJsonLongProperty("folder_unread")?.toInt(),
-        folderSynced = responseJson.findJsonBooleanProperty("folder_synced"),
-        searchIncomplete = responseJson.findJsonBooleanProperty("search_incomplete") == true,
-    )
-}
+fun parseThreadListPage(responseJson: String): ThreadListPage = decodeThreadListPage(responseJson)
 
 fun parseThreadListResponse(responseJson: String): List<ThreadSummary> = parseThreadListPage(responseJson).threads
 
 /** Contact history uses the mailbox card shape and an opaque paging cursor. */
 fun parseContactThreadsPage(responseJson: String): ThreadListPage = parseThreadListPage(responseJson)
 
-data class ThreadReadPage(
-    val messages: List<MessageBody>,
-    val nextCursor: String,
-)
+fun parseStarredItemsPage(responseJson: String): StarredItemsPage = decodeStarredItemsPage(responseJson)
 
-data class StarredItemsPage(
-    val items: List<StarredItemSummary>,
-    val nextCursor: String,
-)
+fun parseStarredItemsResponse(responseJson: String): List<StarredItemSummary> = decodeStarredItemsResponse(responseJson)
 
-fun parseStarredItemsPage(responseJson: String): StarredItemsPage =
-    StarredItemsPage(
-        items = parseStarredItemsResponse(responseJson),
-        nextCursor = responseJson.findJsonStringProperty("next_cursor").orEmpty(),
-    )
-
-fun parseStarredItemsResponse(responseJson: String): List<StarredItemSummary> {
-    val itemsJson = responseJson.findJsonArrayProperty("items") ?: return emptyList()
-    return itemsJson
-        .jsonArrayElements()
-        .mapNotNull { item ->
-            val id = item.findJsonStringProperty("id").orEmpty()
-            val threadId = item.findJsonStringProperty("thread_id").orEmpty()
-            if (id.isBlank() || threadId.isBlank()) return@mapNotNull null
-            StarredItemSummary(
-                id = id,
-                threadId = threadId,
-                accountId = item.findJsonStringProperty("account_id").orEmpty(),
-                folder = item.findJsonStringProperty("folder_id") ?: item.findJsonStringProperty("folder").orEmpty(),
-                folderRole = item.findJsonStringProperty("folder_role") ?: "folder",
-                subject = item.findJsonStringProperty("subject").orEmpty(),
-                // The envelope carries an empty from_name when the sender has
-                // no display name, so fall through blanks to the address rather
-                // than leaving the label empty for the row to fill in.
-                sender =
-                    item
-                        .findJsonStringProperty("from_name")
-                        .orEmpty()
-                        .ifBlank { item.findJsonStringProperty("from_addr").orEmpty() }
-                        .ifBlank { item.findJsonStringProperty("from").orEmpty() },
-                preview = item.findJsonStringProperty("preview").orEmpty(),
-                unread = item.findJsonBooleanProperty("unread") ?: false,
-                dateEpochSeconds = item.findJsonLongProperty("date") ?: item.findJsonLongProperty("date_epoch_seconds") ?: 0,
-            )
-        }.distinctBy { it.id }
-}
-
-fun parseThreadReadPage(responseJson: String): ThreadReadPage {
-    val messagesJson =
-        responseJson.findJsonArrayProperty("messages")
-            ?: return ThreadReadPage(messages = emptyList(), nextCursor = "")
-    val messages =
-        messagesJson.jsonArrayElements().mapNotNull { item ->
-            val id = item.findJsonStringProperty("id").orEmpty()
-            if (id.isBlank()) return@mapNotNull null
-            val fromName = item.findJsonStringProperty("from_name").orEmpty()
-            val fromAddr = item.findJsonStringProperty("from_addr").orEmpty()
-            // Read the reply recipients out of the message's *top-level* keys.
-            // The scanning helpers below match the first occurrence anywhere in
-            // the object, and the body — attacker-written text — is serialized
-            // ahead of this key, so a mail whose body contains its own
-            // "reply": {...} would otherwise choose who the user replies to.
-            val entries = item.jsonObjectEntries()
-            val replyObject = entries.firstOrNull { it.first == "reply" }?.second
-            // Top-level for the same reason: a forged offset in the body would
-            // fold away text of the sender's choosing.
-            val bodyQuoteStart = entries.firstOrNull { it.first == "body_quote_start" }?.second?.toIntOrNull()
-
-            // The core's keys arrive sorted, so "reply" (whose own "to"/"cc"
-            // address the sender) precedes the top-level recipients; a scan
-            // would show the sender as the message's To.
-            fun recipients(name: String): String =
-                entries
-                    .firstOrNull { it.first == name }
-                    ?.second
-                    ?.takeIf { it.startsWith('"') }
-                    ?.readJsonString(0)
-                    ?.value
-                    .orEmpty()
-            MessageBody(
-                id = id,
-                folderId = item.findJsonStringProperty("folder_id") ?: item.findJsonStringProperty("folder").orEmpty(),
-                from = fromName.ifBlank { fromAddr },
-                to = recipients("to"),
-                cc = recipients("cc"),
-                bcc = recipients("bcc"),
-                subject = item.findJsonStringProperty("subject").orEmpty(),
-                body = item.findJsonStringProperty("body").orEmpty(),
-                bodyHtml = item.findJsonStringProperty("body_html").orEmpty(),
-                mediaMissing = item.findJsonLongProperty("media_missing")?.toInt()?.coerceAtLeast(0) ?: 0,
-                bodyQuoteStart = bodyQuoteStart,
-                dateEpochSeconds = item.findJsonLongProperty("date") ?: item.findJsonLongProperty("date_epoch_seconds") ?: 0,
-                fromAddr = fromAddr,
-                replyTo = item.findJsonStringProperty("reply_to").orEmpty(),
-                messageId = item.findJsonStringProperty("message_id").orEmpty(),
-                inReplyTo = item.findJsonStringProperty("in_reply_to").orEmpty(),
-                references = item.findJsonStringProperty("references").orEmpty(),
-                unread = item.findJsonBooleanProperty("unread") ?: false,
-                outgoing = item.findJsonBooleanProperty("outgoing") ?: false,
-                starred = item.findJsonBooleanProperty("starred") ?: false,
-                hasAttachments = item.findJsonBooleanProperty("has_attachments") ?: false,
-                bodyMissing = item.findJsonBooleanProperty("body_missing") ?: false,
-                bodyLoading = item.findJsonBooleanProperty("body_loading") ?: false,
-                link = recipients("link"),
-                reply =
-                    replyObject?.takeIf { it.startsWith("{") }?.let { reply ->
-                        MessageReply(
-                            to = reply.findJsonStringProperty("to").orEmpty(),
-                            cc = reply.findJsonStringProperty("cc").orEmpty(),
-                            allTo = reply.findJsonStringProperty("all_to").orEmpty(),
-                            allCc = reply.findJsonStringProperty("all_cc").orEmpty(),
-                            allAddsRecipients = reply.findJsonBooleanProperty("all_adds_recipients") ?: false,
-                            acceptsReplies = reply.findJsonBooleanProperty("accepts_replies") ?: true,
-                        )
-                    },
-                invite = entries.firstOrNull { it.first == "invite" }?.second?.let(::parseMessageInvite),
-                attachments =
-                    item
-                        .findJsonArrayProperty("attachments")
-                        ?.jsonArrayElements()
-                        ?.mapNotNull { attachmentJson ->
-                            val filename = attachmentJson.findJsonStringProperty("filename").orEmpty()
-                            if (filename.isBlank()) return@mapNotNull null
-                            MessageAttachment(
-                                filename = filename,
-                                mimeType = attachmentJson.findJsonStringProperty("mime").orEmpty(),
-                                sizeBytes = attachmentJson.findJsonLongProperty("size") ?: 0,
-                                key = attachmentJson.findJsonStringProperty("key").orEmpty(),
-                                url = attachmentJson.findJsonStringProperty("url").orEmpty(),
-                            )
-                        }.orEmpty(),
-            )
-        }
-    return ThreadReadPage(
-        // Message ids key the conversation LazyColumn items; duplicates crash.
-        messages = messages.distinctBy { it.id },
-        nextCursor = responseJson.findJsonStringProperty("next_cursor").orEmpty(),
-    )
-}
-
-/**
- * A thread message's `invite` object. Read by its own top-level keys: the
- * summary, location and attendee names are the sender's text, so a scan could
- * be steered by them.
- */
-private fun parseMessageInvite(json: String): MessageInvite? {
-    if (!json.startsWith("{")) return null
-    val entries = json.jsonObjectEntries().toMap()
-
-    fun string(value: String?): String =
-        value
-            ?.takeIf { it.startsWith('"') }
-            ?.readJsonString(0)
-            ?.value
-            .orEmpty()
-
-    fun person(value: String?): Map<String, String> =
-        value
-            ?.takeIf { it.startsWith("{") }
-            ?.jsonObjectEntries()
-            ?.toMap()
-            .orEmpty()
-    val organizer = person(entries["organizer"])
-    return MessageInvite(
-        method = string(entries["method"]),
-        uid = string(entries["uid"]),
-        summary = string(entries["summary"]),
-        location = string(entries["location"]),
-        start = entries["start"]?.toLongOrNull() ?: 0,
-        end = entries["end"]?.toLongOrNull() ?: 0,
-        allDay = entries["all_day"] == "true",
-        recurring = entries["recurring"] == "true",
-        cancelled = entries["cancelled"] == "true",
-        organizerName = string(organizer["name"]),
-        organizerAddr = string(organizer["addr"]),
-        attendees =
-            entries["attendees"]
-                ?.takeIf { it.startsWith("[") }
-                ?.jsonArrayElements()
-                ?.map { element ->
-                    val attendee = person(element)
-                    InviteAttendee(
-                        name = string(attendee["name"]),
-                        addr = string(attendee["addr"]),
-                        partstat = string(attendee["partstat"]),
-                    )
-                }.orEmpty(),
-        canRespond = entries["can_respond"] == "true",
-        response = string(entries["response"]),
-        eventId = string(entries["event_id"]),
-        recurrenceId = entries["recurrence_id"]?.toLongOrNull() ?: 0,
-    )
-}
+fun parseThreadReadPage(responseJson: String): ThreadReadPage = decodeThreadReadPage(responseJson)
 
 fun parseThreadReadResponse(responseJson: String): List<MessageBody> = parseThreadReadPage(responseJson).messages
 
@@ -682,12 +187,10 @@ fun parseBackupImportResponse(responseJson: String): BackupImportResult {
 }
 
 /**
- * Settings read from the core store (`app.prefsGet`). Values are the JSON
- * primitives the mobile pref cache holds — `String`, `Boolean`, `Long`, or
- * `List<String>`; anything else is skipped rather than guessed at.
+ * Reads the stored mobile preferences from app.prefsGet.
  *
- * A key the store has never held is simply absent, which is what lets the host
- * keep its own cached value instead of resetting it to a type default.
+ * The cache accepts strings, booleans, long integers and string lists. Unsupported
+ * values are skipped. An absent key lets the host keep its cached value.
  */
 fun parseAppPrefsResponse(responseJson: String): Map<String, Any> {
     val objectJson = responseJson.findJsonObjectProperty("prefs") ?: return emptyMap()
@@ -696,7 +199,7 @@ fun parseAppPrefsResponse(responseJson: String): Map<String, Any> {
         val value: Any =
             when {
                 raw.startsWith('"') -> {
-                    raw.readJsonString(0).value
+                    raw.readResponseString(0).value
                 }
 
                 raw == "true" -> {
@@ -711,7 +214,7 @@ fun parseAppPrefsResponse(responseJson: String): Map<String, Any> {
                     raw
                         .jsonArrayElements()
                         .filter { it.startsWith('"') }
-                        .map { it.readJsonString(0).value }
+                        .map { it.readResponseString(0).value }
                 }
 
                 raw.toLongOrNull() != null -> {
@@ -791,7 +294,7 @@ fun parseChangelogResponse(responseJson: String): List<ChangelogRelease> {
             item
                 .findJsonArrayProperty("notes")
                 ?.jsonArrayElements()
-                ?.map { note -> if (note.startsWith('"')) note.readJsonString(0).value else note }
+                ?.map { note -> if (note.startsWith('"')) note.readResponseString(0).value else note }
                 ?.filter { it.isNotBlank() }
                 .orEmpty()
         ChangelogRelease(
@@ -899,177 +402,25 @@ fun parseRuleCountResponse(responseJson: String): Int = responseJson.findJsonLon
 // Read by top-level fields only: a log row's subject or a folder note may itself
 // contain text that looks like a field name.
 
-private fun String.fields(): Map<String, String> = if (trim().startsWith("{")) jsonObjectEntries().toMap() else emptyMap()
-
-/** A command's own fields. The core hands every answer back wrapped as
- *  `{"id":…,"result":{…}}`, so read inside `result` when it is there (and the
- *  object itself when a caller already unwrapped it). */
-private fun String.responseFields(): Map<String, String> {
-    val top = fields()
-    return top["result"]?.takeIf { it.startsWith('{') }?.fields() ?: top
-}
-
-private fun Map<String, String>.str(name: String): String? = this[name]?.takeIf { it.startsWith('"') }?.readJsonString(0)?.value
-
-private fun Map<String, String>.bool(name: String): Boolean? =
-    when (this[name]) {
-        "true" -> true
-        "false" -> false
-        else -> null
-    }
-
-private fun Map<String, String>.number(name: String): Double? = this[name]?.let { raw -> raw.toDoubleOrNull() ?: str(name)?.toDoubleOrNull() }
-
-private fun Map<String, String>.int(name: String): Int? = number(name)?.toInt()
-
-private fun Map<String, String>.obj(name: String): Map<String, String>? = this[name]?.takeIf { it.startsWith('{') }?.fields()
-
-private fun Map<String, String>.list(name: String): List<String> = this[name]?.takeIf { it.startsWith('[') }?.jsonArrayElements().orEmpty()
-
-private fun parseAiSortConfig(fields: Map<String, String>?): AiSortConfig {
-    if (fields == null) return AiSortConfig()
-    return AiSortConfig(
-        enabled = fields.bool("enabled") ?: false,
-        provider = fields.str("provider") ?: "openrouter",
-        model = fields.str("model").orEmpty(),
-        reads = fields.str("reads") ?: "headers",
-        folders =
-            fields.list("folders").map { item ->
-                val folder = item.fields()
-                AiSortFolder(
-                    account = folder.str("account").orEmpty(),
-                    folder = folder.str("folder").orEmpty(),
-                    note = folder.str("note").orEmpty(),
-                    // Kept, or saving the settings here would drop Meron entries.
-                    meronFolderId = folder.str("meron_folder_id").orEmpty(),
-                )
-            },
-        recentModels =
-            fields.obj("recent_models")?.mapValues { (_, ids) ->
-                ids.takeIf { it.startsWith('[') }?.jsonArrayElements().orEmpty().mapNotNull { id ->
-                    id.takeIf { it.startsWith('"') }?.readJsonString(0)?.value
-                }
-            }.orEmpty(),
-    )
-}
-
-private fun parseAiSortError(fields: Map<String, String>?): AiSortError? =
-    fields?.let {
-        AiSortError(
-            at = it.number("at")?.toLong() ?: 0,
-            message = it.str("message").orEmpty(),
-            kind = it.str("kind") ?: "other",
-        )
-    }
-
-private fun parseAiSortKeyState(fields: Map<String, String>?): AiSortKeyState =
-    AiSortKeyState(
-        hasKey = fields?.bool("has_key") ?: false,
-        hint = fields?.str("key_hint").orEmpty(),
-    )
-
 /** `mail.aiSortConfig`: the setup, which providers have a key, and the last error. */
-fun parseAiSortSetupResponse(responseJson: String): AiSortSetup {
-    val fields = responseJson.responseFields()
-    return AiSortSetup(
-        config = parseAiSortConfig(fields.obj("config")),
-        keys = fields.obj("keys")?.mapValues { (_, value) -> parseAiSortKeyState(value.fields()) }.orEmpty(),
-        lastError = parseAiSortError(fields.obj("last_error")),
-    )
-}
+fun parseAiSortSetupResponse(responseJson: String): AiSortSetup = decodeAiSortSetupResponse(responseJson)
 
 /** `mail.setAiSortConfig`: the setup as the core kept it. */
-fun parseAiSortConfigResponse(responseJson: String): AiSortConfig = parseAiSortConfig(responseJson.responseFields().obj("config"))
+fun parseAiSortConfigResponse(responseJson: String): AiSortConfig = parseAiSortConfig(responseJson.responseFields().objectField("config"))
 
 /** `mail.setAiSortKey`: whether a key is now saved, and its hint. */
 fun parseAiSortKeyResponse(responseJson: String): AiSortKeyState = parseAiSortKeyState(responseJson.responseFields())
 
-fun parseAiSortKeyCheckResponse(responseJson: String): AiSortKeyCheck {
-    val fields = responseJson.responseFields()
-    return AiSortKeyCheck(
-        ok = fields.bool("ok") ?: false,
-        kind = fields.str("kind").orEmpty(),
-        message = fields.str("message").orEmpty(),
-    )
-}
+fun parseAiSortKeyCheckResponse(responseJson: String): AiSortKeyCheck = decodeAiSortKeyCheckResponse(responseJson)
 
-fun parseAiModelsResponse(responseJson: String): AiModelList {
-    val fields = responseJson.responseFields()
-    return AiModelList(
-        models =
-            fields.list("models").mapNotNull { item ->
-                val model = item.fields()
-                val id = model.str("id")?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
-                AiModel(
-                    id = id,
-                    name = model.str("name")?.takeIf { it.isNotBlank() } ?: id,
-                    priceInPerM = model.number("price_in_per_m"),
-                    priceOutPerM = model.number("price_out_per_m"),
-                    structured = model.bool("structured") ?: false,
-                    reasoning = model.bool("reasoning") ?: false,
-                    decision = model.bool("decision") ?: false,
-                )
-            },
-        default = fields.str("default")?.takeIf { it.isNotEmpty() },
-    )
-}
+fun parseAiModelsResponse(responseJson: String): AiModelList = decodeAiModelsResponse(responseJson)
 
-fun parseAiSortEstimateResponse(responseJson: String): AiSortEstimate {
-    val fields = responseJson.responseFields()
-    return AiSortEstimate(
-        total = fields.int("total") ?: 0,
-        requests = fields.int("requests") ?: 0,
-        reads = fields.str("reads") ?: "headers",
-        provider = fields.str("provider").orEmpty(),
-        model = fields.str("model").orEmpty(),
-        costUsd = fields.number("cost_usd"),
-        accounts =
-            fields.list("accounts").associate { item ->
-                val account = item.fields()
-                account.str("account").orEmpty() to (account.int("count") ?: 0)
-            },
-    )
-}
+fun parseAiSortEstimateResponse(responseJson: String): AiSortEstimate = decodeAiSortEstimateResponse(responseJson)
 
-fun parseAiSortStatusResponse(responseJson: String): AiSortStatus {
-    val fields = responseJson.responseFields()
-    return AiSortStatus(
-        log =
-            fields.list("log").mapNotNull { item ->
-                val entry = item.fields()
-                AiSortLogEntry(
-                    id = entry.number("id")?.toLong() ?: return@mapNotNull null,
-                    at = entry.number("at")?.toLong() ?: 0,
-                    account = entry.str("account").orEmpty(),
-                    subject = entry.str("subject").orEmpty(),
-                    sender = entry.str("sender").orEmpty(),
-                    toFolder = entry.str("to_folder").orEmpty(),
-                    reason = entry.str("reason").orEmpty(),
-                    state = entry.str("state").orEmpty(),
-                    detail = entry.str("detail").orEmpty(),
-                    meronFolderId = entry.str("meron_folder_id").orEmpty(),
-                )
-            },
-        running = fields.obj("running")?.let { (it.int("total") ?: 0) to (it.int("done") ?: 0) },
-        lastError = parseAiSortError(fields.obj("last_error")),
-    )
-}
+fun parseAiSortStatusResponse(responseJson: String): AiSortStatus = decodeAiSortStatusResponse(responseJson)
 
 /** The `lessons` answering `mail.aiSortLessons` and `mail.aiSortForgetLesson`, newest first. */
-fun parseAiSortLessonsResponse(responseJson: String): List<AiSortLesson> =
-    responseJson.responseFields().list("lessons").mapNotNull { item ->
-        val lesson = item.fields()
-        AiSortLesson(
-            id = lesson.number("id")?.toLong() ?: return@mapNotNull null,
-            at = lesson.number("at")?.toLong() ?: 0,
-            account = lesson.str("account").orEmpty(),
-            sender = lesson.str("sender").orEmpty(),
-            subject = lesson.str("subject").orEmpty(),
-            place = lesson.str("place").orEmpty(),
-            placeName = lesson.str("place_name").orEmpty(),
-            used = lesson.bool("used") ?: true,
-        )
-    }
+fun parseAiSortLessonsResponse(responseJson: String): List<AiSortLesson> = decodeAiSortLessonsResponse(responseJson)
 
 /** The `count` answering `mail.runAiSort`. */
 fun parseAiSortRunResponse(responseJson: String): Int = responseJson.responseFields().int("count") ?: 0
@@ -1077,145 +428,7 @@ fun parseAiSortRunResponse(responseJson: String): Int = responseJson.responseFie
 /** The `ok` answering `mail.stopAiSort` and `mail.aiSortMoveBack`. */
 fun parseAiSortOkResponse(responseJson: String): Boolean = responseJson.responseFields().bool("ok") ?: false
 
-private fun String.topLevelStringArray(name: String): List<String> =
-    jsonObjectEntries()
-        .firstOrNull { it.first == name }
-        ?.second
-        ?.takeIf { it.startsWith("[") }
-        ?.jsonArrayElements()
-        ?.mapNotNull { element -> "{\"value\":$element}".findJsonStringProperty("value") }
-        .orEmpty()
-
-private fun String.findJsonArrayProperty(name: String): String? {
-    val key = name.jsonString()
-    var index = 0
-    while (index < length) {
-        val found = indexOf(key, startIndex = index)
-        if (found < 0) return null
-        var cursor = skipWhitespace(found + key.length)
-        if (cursor < length && this[cursor] == ':') {
-            cursor = skipWhitespace(cursor + 1)
-            if (cursor < length && this[cursor] == '[') {
-                return readBalancedJson(cursor, '[', ']').value
-            }
-        }
-        index = found + key.length
-    }
-    return null
-}
-
-private fun String.findJsonObjectProperty(name: String): String? {
-    val key = name.jsonString()
-    var index = 0
-    while (index < length) {
-        val found = indexOf(key, startIndex = index)
-        if (found < 0) return null
-        var cursor = skipWhitespace(found + key.length)
-        if (cursor < length && this[cursor] == ':') {
-            cursor = skipWhitespace(cursor + 1)
-            if (cursor < length && this[cursor] == '{') {
-                return readBalancedJson(cursor, '{', '}').value
-            }
-        }
-        index = found + key.length
-    }
-    return null
-}
-
-/** Top-level `"key": value` pairs of a JSON object, values left unparsed. */
-private fun String.jsonObjectEntries(): List<Pair<String, String>> {
-    val body = trim().removePrefix("{").removeSuffix("}")
-    val out = mutableListOf<Pair<String, String>>()
-    var index = 0
-    while (index < body.length) {
-        index = body.skipWhitespaceAndCommas(index)
-        if (index >= body.length || body[index] != '"') break
-        val key = body.readJsonString(index)
-        index = body.skipWhitespace(key.nextIndex)
-        if (index >= body.length || body[index] != ':') break
-        index = body.skipWhitespace(index + 1)
-        if (index >= body.length) break
-        val value = body.readJsonValue(index)
-        out += key.value to value.value
-        index = value.nextIndex
-    }
-    return out
-}
-
-// ---- Calendar ---------------------------------------------------------------
-
-/**
- * One occurrence in a calendar range, as meron-core/src/calendar/events.rs
- * shapes it. Times are epoch seconds; an all-day item's are UTC midnights
- * with [end] exclusive. [key] is unique within one answer.
- */
-data class CalendarItem(
-    val id: String,
-    val key: String,
-    /** `event`, `invite` or `task`. */
-    val source: String,
-    val title: String,
-    val notes: String = "",
-    val location: String = "",
-    val start: Long,
-    val end: Long,
-    val allDay: Boolean = false,
-    val recurring: Boolean = false,
-    val repeat: String = "",
-    val account: String = "",
-    val threadId: String = "",
-    /** An invitation's answer: `accepted` or `tentative`. */
-    val response: String = "",
-    /** A task's list. */
-    val listId: String = "",
-    /** The event's own alerts, minutes before start; null follows the
-     *  default and an empty list means none. */
-    val alerts: List<Int>? = null,
-    /** Whether [alerts] count all-day days rather than minutes: the series'
-     *  kind, which one occurrence of an invitation can differ from. */
-    val alertsAllDay: Boolean? = null,
-)
-
-fun parseCalendarEventsResponse(responseJson: String): List<CalendarItem> =
-    responseJson
-        .findJsonArrayProperty("events")
-        ?.jsonArrayElements()
-        ?.mapNotNull { element ->
-            // Own keys only: titles and notes are the user's (or a sender's) text.
-            val entries = element.jsonObjectEntries().toMap()
-
-            fun string(name: String): String =
-                entries[name]
-                    ?.takeIf { it.startsWith('"') }
-                    ?.readJsonString(0)
-                    ?.value
-                    .orEmpty()
-            val id = string("id")
-            if (id.isBlank()) return@mapNotNull null
-            CalendarItem(
-                id = id,
-                key = string("key").ifBlank { id },
-                source = string("source"),
-                title = string("title"),
-                notes = string("notes"),
-                location = string("location"),
-                start = entries["start"]?.toLongOrNull() ?: 0,
-                end = entries["end"]?.toLongOrNull() ?: 0,
-                allDay = entries["all_day"] == "true",
-                recurring = entries["recurring"] == "true",
-                repeat = string("repeat"),
-                account = string("account"),
-                threadId = string("thread_id"),
-                response = string("response"),
-                listId = string("list_id"),
-                alerts =
-                    entries["alerts"]
-                        ?.takeIf { it.startsWith('[') }
-                        ?.jsonArrayElements()
-                        ?.mapNotNull { it.trim().toIntOrNull() },
-                alertsAllDay = entries["alerts_all_day"]?.let { it == "true" },
-            )
-        }.orEmpty()
+fun parseCalendarEventsResponse(responseJson: String): List<CalendarItem> = decodeCalendarEventsResponse(responseJson)
 
 /** The calendar event id an `invite.addToCalendar` filed, or empty. */
 fun parseCalendarEventIdResponse(responseJson: String): String = responseJson.findJsonStringProperty("event_id").orEmpty()
@@ -1226,55 +439,9 @@ fun parseCalendarRestorePayload(responseJson: String): String? = responseJson.fi
 
 // ---- Tasks ------------------------------------------------------------------
 
-/** One task list, as `tasks.lists` reports it. */
-data class TaskListSummary(
-    val id: String,
-    val title: String,
-)
+fun parseTaskListsResponse(responseJson: String): TaskListsResponse = decodeTaskListsResponse(responseJson)
 
-/**
- * One task. `dueAt` and `completedAt` are epoch seconds with 0 for "unset",
- * matching the core's columns, so no nullable arithmetic is needed to sort or
- * compare them.
- */
-data class TaskSummary(
-    val id: String,
-    val listId: String,
-    val title: String,
-    val notes: String = "",
-    val dueAt: Long = 0,
-    val completedAt: Long = 0,
-    val done: Boolean = false,
-    val account: String = "",
-    val threadId: String = "",
-    val messageId: String = "",
-    val dueHasTime: Boolean = false,
-)
-
-/** Lists plus the id to open when the caller has no preference of its own. */
-data class TaskListsResponse(
-    val lists: List<TaskListSummary>,
-    val defaultListId: String,
-)
-
-fun parseTaskListsResponse(responseJson: String): TaskListsResponse {
-    val lists =
-        responseJson
-            .findJsonArrayProperty("lists")
-            ?.jsonArrayElements()
-            ?.mapNotNull { item ->
-                val id = item.findJsonStringProperty("id").orEmpty()
-                if (id.isBlank()) null else TaskListSummary(id, item.findJsonStringProperty("title").orEmpty())
-            }.orEmpty()
-    return TaskListsResponse(lists, responseJson.findJsonStringProperty("default_list_id").orEmpty())
-}
-
-fun parseTasksResponse(responseJson: String): List<TaskSummary> =
-    responseJson
-        .findJsonArrayProperty("tasks")
-        ?.jsonArrayElements()
-        ?.mapNotNull(::parseTaskObject)
-        .orEmpty()
+fun parseTasksResponse(responseJson: String): List<TaskSummary> = decodeTasksResponse(responseJson)
 
 fun parseClearedTaskCount(responseJson: String): Int = responseJson.findJsonLongProperty("removed")?.toInt() ?: 0
 
@@ -1285,301 +452,18 @@ fun parseClearedTaskCount(responseJson: String): Int = responseJson.findJsonLong
  */
 fun parseTaskRestorePayload(responseJson: String): String? = responseJson.findJsonPropertyValue("restore")?.takeIf { it.startsWith('{') }
 
-private fun parseTaskObject(item: String): TaskSummary? {
-    val id = item.findJsonStringProperty("id").orEmpty()
-    if (id.isBlank()) return null
-    return TaskSummary(
-        id = id,
-        listId = item.findJsonStringProperty("list_id").orEmpty(),
-        title = item.findJsonStringProperty("title").orEmpty(),
-        notes = item.findJsonStringProperty("notes").orEmpty(),
-        dueAt = item.findJsonLongProperty("due_at") ?: 0,
-        dueHasTime = item.findJsonBooleanProperty("due_has_time") ?: false,
-        completedAt = item.findJsonLongProperty("completed_at") ?: 0,
-        done = item.findJsonBooleanProperty("done") ?: false,
-        account = item.findJsonStringProperty("account").orEmpty(),
-        threadId = item.findJsonStringProperty("thread_id").orEmpty(),
-        messageId = item.findJsonStringProperty("message_id").orEmpty(),
-    )
-}
-
-private fun String.findJsonStringProperty(
-    name: String,
-    topLevelOnly: Boolean = false,
-): String? {
-    val value = (if (topLevelOnly) findTopLevelJsonPropertyValue(name) else findJsonPropertyValue(name)) ?: return null
-    if (!value.startsWith('"')) return null
-    return value.readJsonString(0).value
-}
-
-private fun String.findJsonBooleanProperty(
-    name: String,
-    topLevelOnly: Boolean = false,
-): Boolean? =
-    when (if (topLevelOnly) findTopLevelJsonPropertyValue(name) else findJsonPropertyValue(name)) {
-        "true" -> true
-        "false" -> false
-        else -> null
-    }
-
-private fun String.findJsonLongProperty(name: String): Long? = findJsonPropertyValue(name)?.toLongOrNull()
-
-// Mutation responses also contain change.thread_id, which identifies the
-// source. The action's location fields belong to the outer object only.
-private fun String.findTopLevelJsonPropertyValue(name: String): String? {
-    var cursor = skipWhitespace(0)
-    if (getOrNull(cursor) != '{') return null
-    cursor = skipWhitespace(cursor + 1)
-    while (cursor < length && this[cursor] != '}') {
-        val key = readJsonString(cursor)
-        cursor = skipWhitespace(key.nextIndex)
-        require(getOrNull(cursor) == ':') { "Expected JSON property value" }
-        val value = readJsonValue(skipWhitespace(cursor + 1))
-        if (key.value == name) return value.value
-        cursor = skipWhitespace(value.nextIndex)
-        if (getOrNull(cursor) != ',') return null
-        cursor = skipWhitespace(cursor + 1)
-    }
-    return null
-}
-
-private fun String.findJsonPropertyValue(name: String): String? {
-    val key = name.jsonString()
-    var index = 0
-    while (index < length) {
-        val found = indexOf(key, startIndex = index)
-        if (found < 0) return null
-        var cursor = skipWhitespace(found + key.length)
-        if (cursor < length && this[cursor] == ':') {
-            cursor = skipWhitespace(cursor + 1)
-            return readJsonValue(cursor).value
-        }
-        index = found + key.length
-    }
-    return null
-}
-
-private data class ResponseJsonSlice(
-    val value: String,
-    val nextIndex: Int,
-)
-
-private fun String.jsonArrayElements(): List<String> {
-    val body = trim().removePrefix("[").removeSuffix("]")
-    val out = mutableListOf<String>()
-    var index = 0
-    while (index < body.length) {
-        index = body.skipWhitespaceAndCommas(index)
-        if (index >= body.length) break
-        val value = body.readJsonValue(index)
-        out += value.value
-        index = value.nextIndex
-    }
-    return out
-}
-
-private fun String.skipWhitespaceAndCommas(start: Int): Int {
-    var index = start
-    while (index < length && (this[index].isWhitespace() || this[index] == ',')) index += 1
-    return index
-}
-
-private fun String.skipWhitespace(start: Int): Int {
-    var index = start
-    while (index < length && this[index].isWhitespace()) index += 1
-    return index
-}
-
-private fun String.readJsonString(start: Int): ResponseJsonSlice {
-    require(start < length && this[start] == '"') { "Expected JSON string" }
-    val out = StringBuilder()
-    var index = start + 1
-    while (index < length) {
-        when (val ch = this[index]) {
-            '"' -> {
-                return ResponseJsonSlice(out.toString(), index + 1)
-            }
-
-            '\\' -> {
-                require(index + 1 < length) { "Dangling JSON escape" }
-                when (val escaped = this[index + 1]) {
-                    '"', '\\', '/' -> {
-                        out.append(escaped)
-                    }
-
-                    'b' -> {
-                        out.append('\b')
-                    }
-
-                    'f' -> {
-                        out.append('\u000c')
-                    }
-
-                    'n' -> {
-                        out.append('\n')
-                    }
-
-                    'r' -> {
-                        out.append('\r')
-                    }
-
-                    't' -> {
-                        out.append('\t')
-                    }
-
-                    'u' -> {
-                        require(index + 5 < length) { "Short unicode escape" }
-                        out.append(substring(index + 2, index + 6).toInt(16).toChar())
-                        index += 4
-                    }
-
-                    else -> {
-                        error("Bad JSON escape: \\$escaped")
-                    }
-                }
-                index += 2
-            }
-
-            else -> {
-                out.append(ch)
-                index += 1
-            }
-        }
-    }
-    error("Unterminated JSON string")
-}
-
-private fun String.readJsonValue(start: Int): ResponseJsonSlice {
-    require(start < length) { "Expected JSON value" }
-    return when (this[start]) {
-        '"' -> {
-            val string = readJsonString(start)
-            ResponseJsonSlice(substring(start, string.nextIndex), string.nextIndex)
-        }
-
-        '{' -> {
-            readBalancedJson(start, '{', '}')
-        }
-
-        '[' -> {
-            readBalancedJson(start, '[', ']')
-        }
-
-        else -> {
-            var index = start
-            while (index < length && this[index] != ',' && this[index] != '}' && this[index] != ']') index += 1
-            ResponseJsonSlice(substring(start, index).trim(), index)
-        }
-    }
-}
-
-private fun String.readBalancedJson(
-    start: Int,
-    open: Char,
-    close: Char,
-): ResponseJsonSlice {
-    var depth = 0
-    var index = start
-    var inString = false
-    while (index < length) {
-        val ch = this[index]
-        if (inString) {
-            when (ch) {
-                '"' -> inString = false
-                '\\' -> index += 1
-            }
-        } else {
-            when (ch) {
-                '"' -> {
-                    inString = true
-                }
-
-                open -> {
-                    depth += 1
-                }
-
-                close -> {
-                    depth -= 1
-                    if (depth == 0) return ResponseJsonSlice(substring(start, index + 1), index + 1)
-                }
-            }
-        }
-        index += 1
-    }
-    error("Unbalanced JSON value")
-}
-
 fun parseSenderImageResponse(responseJson: String): String = responseJson.findJsonStringProperty("src").orEmpty()
-
-private fun parseMeronFolder(item: String): MeronFolderSummary? {
-    val folder = item.fields()
-    val id = folder.str("id")?.takeIf { it.isNotBlank() } ?: return null
-    return MeronFolderSummary(
-        id = id,
-        name = folder.str("name").orEmpty(),
-        unread = folder.int("unread") ?: 0,
-        count = folder.int("count") ?: 0,
-        createdAt = folder.number("created_at")?.toLong() ?: 0,
-        notify = folder.bool("notify") ?: false,
-        builtin = folder.str("builtin")?.takeIf { it.isNotBlank() },
-    )
-}
 
 /** The `folders` list (A to Z) that every Meron folder command answers with;
  *  null when the answer has none. */
-fun parseMeronFolderList(responseJson: String): List<MeronFolderSummary>? {
-    val fields = responseJson.responseFields()
-    val raw = fields["folders"]?.takeIf { it.startsWith('[') } ?: return null
-    return raw.jsonArrayElements().mapNotNull(::parseMeronFolder)
-}
+fun parseMeronFolderList(responseJson: String): List<MeronFolderSummary>? = decodeMeronFolderList(responseJson)
 
 /** The Inbox thread ids of conversations a move out of Meron folders took
  *  out of the built-in Archive (un-archived on the server): an Undo archives
  *  those again. */
-fun parseMeronUnarchived(responseJson: String): List<String> =
-    responseJson.responseFields().list("unarchived").mapNotNull { item ->
-        item.fields().str("thread_id")?.takeIf { it.isNotBlank() }
-    }
+fun parseMeronUnarchived(responseJson: String): List<String> = decodeMeronUnarchived(responseJson)
 
 /** The `folder` a create or rename answers with. */
 fun parseMeronFolderResponse(responseJson: String): MeronFolderSummary? = responseJson.responseFields()["folder"]?.takeIf { it.startsWith('{') }?.let(::parseMeronFolder)
 
-/** One conversation a move into a Meron folder changed; [previousFolderId]
- *  null means it was in no Meron folder before. */
-data class MeronFolderMoveChange(
-    val threadId: String,
-    val accountId: String,
-    val sourceFolder: String,
-    val previousFolderId: String?,
-)
-
-data class MeronFolderMoveResult(
-    val moved: Int,
-    /** Thread ids the core refused, with its reason (`not_allowed`, `not_found`, `invalid`). */
-    val skipped: List<Pair<String, String>>,
-    val changes: List<MeronFolderMoveChange>,
-    val folders: List<MeronFolderSummary>?,
-)
-
-fun parseMeronFolderMoveResponse(responseJson: String): MeronFolderMoveResult {
-    val fields = responseJson.responseFields()
-    return MeronFolderMoveResult(
-        moved = fields.int("moved") ?: 0,
-        skipped =
-            fields.list("skipped").map { item ->
-                val skip = item.fields()
-                skip.str("thread_id").orEmpty() to skip.str("reason").orEmpty()
-            },
-        changes =
-            fields.list("changes").mapNotNull { item ->
-                val change = item.fields()
-                MeronFolderMoveChange(
-                    threadId = change.str("thread_id")?.takeIf { it.isNotBlank() } ?: return@mapNotNull null,
-                    accountId = change.str("account_id").orEmpty(),
-                    sourceFolder = change.str("source_folder").orEmpty(),
-                    previousFolderId = change.str("previous_folder_id")?.takeIf { it.isNotBlank() },
-                )
-            },
-        folders = parseMeronFolderList(responseJson),
-    )
-}
+fun parseMeronFolderMoveResponse(responseJson: String): MeronFolderMoveResult = decodeMeronFolderMoveResponse(responseJson)

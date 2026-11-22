@@ -1,3 +1,7 @@
+// Maintains scroll position as messages load, expand or arrive in a conversation.
+// DOM anchors connect the visible list to the current reader state.
+// Callers include ConversationMessageList.tsx and MessageBubbleBody.tsx.
+
 import { createContext, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import { useValue } from '@legendapp/state/react'
 import { markMessagesRead } from '../../states/mailFlags'

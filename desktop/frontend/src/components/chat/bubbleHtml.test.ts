@@ -60,7 +60,7 @@ const themedFrame = (html: string, theme: BubbleTheme) => {
 // rule of the same importance, wherever the sender's `<style>` happens to sit.
 const sizing = (prepared: string) => {
   const doc = new DOMParser().parseFromString(prepared, 'text/html')
-  return [doc.documentElement, doc.body].map((el) => el.getAttribute('style') ?? '')
+  return [doc.documentElement, doc.body].map((element) => element.getAttribute('style') ?? '')
 }
 
 describe('prepareBubbleHtml', () => {

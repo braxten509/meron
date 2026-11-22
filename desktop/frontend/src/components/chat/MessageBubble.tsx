@@ -1,3 +1,7 @@
+// Presents an individual email in a conversation bubble, including its header and
+// available actions. The body renderer owns the content inside the bubble.
+// Imported by ConversationMessageList.tsx.
+
 import { useEffect, useState } from 'react'
 import { useValue } from '@legendapp/state/react'
 import type { MouseEvent } from 'react'

@@ -1,3 +1,7 @@
+// Holds the pending certificate decision for a failed account operation. Accepting
+// a certificate applies to the identified server before the operation is retried.
+// Imported by quickReplySend.ts and CertificateTrustDialog.tsx.
+
 import { observable } from '@legendapp/state'
 import { invoke } from '../lib/bridge'
 import type { Account } from '../types'
@@ -46,16 +50,16 @@ export async function offerCertificateTrust(
   const target = serverTarget(account, protocol)
   if (!target.host) return false
   try {
-    const res = await invoke<{ certificate: CertificateInfo }>(
+    const response = await invoke<{ certificate: CertificateInfo }>(
       'account.probeCert',
       // Same route as the connection that failed: an account on its own proxy
       // (or pinned to a direct connection while a global proxy is on) would
       // otherwise be probed over a different path — or not reached at all.
       certificateProbePayload({ ...target, protocol }, account.proxy),
     )
-    if (!res?.certificate?.fingerprint) return false
+    if (!response?.certificate?.fingerprint) return false
     pendingRetry = retry
-    certTrust$.prompt.set({ accountId, protocol, ...target, certificate: res.certificate })
+    certTrust$.prompt.set({ accountId, protocol, ...target, certificate: response.certificate })
     return true
   } catch {
     // The probe could not reach the server either. Nothing to show, so the

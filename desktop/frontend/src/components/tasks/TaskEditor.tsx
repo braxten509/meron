@@ -1,3 +1,7 @@
+// Edits a task's details and sends the requested changes to task state. Optional
+// dates and times must retain their distinct meanings.
+// Imported by TasksPanel.tsx.
+
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { CalendarDays, Clock, X } from 'lucide-react'

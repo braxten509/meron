@@ -1,3 +1,7 @@
+// Displays release notes obtained through the desktop changelog reader. The dialog
+// owns presentation of the fetched releases.
+// Imported by App.tsx.
+
 import { useEffect, useState } from 'react'
 import { X } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'

@@ -1,3 +1,7 @@
+// Shared display and action helpers for messages, addresses and attachments. The
+// conversation layouts use them to interpret the same wire metadata consistently.
+// Callers include AddressList.tsx and BubbleHtmlFrame.tsx.
+
 import { splitAddressList } from '../../lib/address'
 import {
   Calendar,
@@ -106,11 +110,11 @@ export function mediaSrc(media: Attachment): string {
 
 /** The media key behind an image src served from the media cache: `/media/<key>`,
  * or that path made absolute, as a frame document's `img.src` reports it. */
-export function mediaKeyFromSrc(src: string): string | null {
+export function mediaKeyFromSrc(source: string): string | null {
   const prefix = '/media/'
-  if (src.startsWith(prefix)) return decodeURIComponent(src.slice(prefix.length))
+  if (source.startsWith(prefix)) return decodeURIComponent(source.slice(prefix.length))
   try {
-    const url = new URL(src)
+    const url = new URL(source)
     if (url.origin !== window.location.origin || !url.pathname.startsWith(prefix)) return null
     return decodeURIComponent(url.pathname.slice(prefix.length))
   } catch {
@@ -126,11 +130,11 @@ export function mediaFilename(key: string, attachments: Attachment[] | undefined
 }
 
 /** Sources the native save/copy flow can handle. Do not fetch until selected. */
-export function imageSource(src: string): { key: string | null; url?: string; filename: string } | null {
-  const key = mediaKeyFromSrc(src)
+export function imageSource(source: string): { key: string | null; url?: string; filename: string } | null {
+  const key = mediaKeyFromSrc(source)
   if (key) return { key, filename: mediaFilename(key, undefined) }
   try {
-    const url = new URL(src)
+    const url = new URL(source)
     if (url.protocol !== 'http:' && url.protocol !== 'https:') return null
     let filename = url.pathname.split('/').pop() || 'image'
     try {
@@ -306,15 +310,15 @@ export function formatMessageStamp(epochSeconds: number, _showDate: boolean): st
   return date.toLocaleDateString([], options)
 }
 
-export function normalizeUrl(urlStr: string): string {
-  if (/^https?:\/\//i.test(urlStr)) return urlStr
-  if (/^[\w.-]+\.[a-z]{2,}(\/|$)/i.test(urlStr)) return `https://${urlStr}`
-  return urlStr
+export function normalizeUrl(urlText: string): string {
+  if (/^https?:\/\//i.test(urlText)) return urlText
+  if (/^[\w.-]+\.[a-z]{2,}(\/|$)/i.test(urlText)) return `https://${urlText}`
+  return urlText
 }
 
-export function getShortenedLinkText(urlStr: string): string {
+export function getShortenedLinkText(urlText: string): string {
   try {
-    const url = new URL(normalizeUrl(urlStr))
+    const url = new URL(normalizeUrl(urlText))
     let display = url.hostname
     if (display.startsWith('www.')) {
       display = display.substring(4)
@@ -328,10 +332,10 @@ export function getShortenedLinkText(urlStr: string): string {
     }
     return display
   } catch {
-    if (urlStr.length > 30) {
-      return urlStr.substring(0, 30) + '…'
+    if (urlText.length > 30) {
+      return urlText.substring(0, 30) + '…'
     }
-    return urlStr
+    return urlText
   }
 }
 

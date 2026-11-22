@@ -1,3 +1,7 @@
+// Observes whether the desktop viewport requires the narrow layout. Components
+// share this decision when choosing how navigation is presented.
+// Callers include App.tsx and ContactsView.tsx.
+
 import { useSyncExternalStore } from 'react'
 
 // Below Tailwind's `max-[900px]`, where the right-hand panels are hidden.

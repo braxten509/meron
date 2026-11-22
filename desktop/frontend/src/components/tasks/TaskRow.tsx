@@ -1,3 +1,7 @@
+// Renders one task in a desktop list and exposes its row actions. The task ID
+// associates edits and state changes with the stored item.
+// Imported by TasksPanel.tsx.
+
 import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { useSortable } from '@dnd-kit/sortable'

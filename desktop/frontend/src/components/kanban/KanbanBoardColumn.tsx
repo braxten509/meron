@@ -1,3 +1,7 @@
+// Renders an expanded board column and connects it to dragging, loading and card
+// selection. Column identity ties mutations to the correct query.
+// Imported by KanbanColumnMinimized.tsx and KanbanView.tsx.
+
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from 'react'
 import { useTranslation } from '../../lib/i18n'
@@ -574,8 +578,8 @@ function KanbanColumnContent({
         className="flex-1 space-y-1 overflow-y-auto p-1"
         onScroll={(event) => {
           if (!hasMore || loadingMore) return
-          const el = event.currentTarget
-          if (el.scrollHeight - el.scrollTop - el.clientHeight < 240) {
+          const element = event.currentTarget
+          if (element.scrollHeight - element.scrollTop - element.clientHeight < 240) {
             void loadMoreKanbanColumn(column)
           }
         }}

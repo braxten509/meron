@@ -1,3 +1,7 @@
+// Records account connectivity and core migration status from desktop events.
+// Banners read this state to explain failed syncs and startup waits.
+// Callers include ConnectivityBanner.tsx and MigrationBanner.tsx.
+
 import { observable } from '@legendapp/state'
 import { invoke } from '../lib/bridge'
 

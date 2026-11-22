@@ -1,3 +1,7 @@
+// Presents configuration transfer and its waiting states on desktop. The host
+// reports progress while the reader follows the setup flow.
+// Imported by AccountDialog.tsx and SettingsDialog.tsx.
+
 import { useEffect, useRef, useState } from 'react'
 import {
   ArrowLeftRight,

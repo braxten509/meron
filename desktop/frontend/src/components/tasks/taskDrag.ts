@@ -1,3 +1,7 @@
+// Defines the drag behavior shared by desktop task controls. The transferred
+// identity determines which task or list a drop concerns.
+// Callers include TasksPanel.tsx and ConversationTabs.tsx.
+
 import { MouseSensor, TouchSensor, useSensor, useSensors } from '@dnd-kit/core'
 
 function isControl(target: EventTarget | null) {

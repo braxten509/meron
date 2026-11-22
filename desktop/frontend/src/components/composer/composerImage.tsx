@@ -1,3 +1,7 @@
+// Defines the editor's resizable image extension. Images inserted into rich
+// compose content keep their editor sizing behavior.
+// Imported by useComposer.ts and SignatureSettingsCard.tsx.
+
 import { useRef, useState } from 'react'
 import { ReactNodeViewRenderer, NodeViewWrapper } from '@tiptap/react'
 import { Image as TiptapImage } from '@tiptap/extension-image'
@@ -5,15 +9,15 @@ import { useTranslation } from '../../lib/i18n'
 
 function ImageNodeView({ node, updateAttributes, selected }: any) {
   const { t } = useTranslation()
-  const imgRef = useRef<HTMLImageElement>(null)
+  const imageReference = useRef<HTMLImageElement>(null)
   const [resizing, setResizing] = useState(false)
 
-  const handleMouseDown = (e: React.MouseEvent, corner: 'tl' | 'tr' | 'bl' | 'br') => {
-    e.preventDefault()
+  const handleMouseDown = (event: React.MouseEvent, corner: 'tl' | 'tr' | 'bl' | 'br') => {
+    event.preventDefault()
     setResizing(true)
 
-    const startX = e.clientX
-    const startWidth = imgRef.current?.offsetWidth || node.attrs.width || 300
+    const startX = event.clientX
+    const startWidth = imageReference.current?.offsetWidth || node.attrs.width || 300
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
       const deltaX = moveEvent.clientX - startX
@@ -37,7 +41,7 @@ function ImageNodeView({ node, updateAttributes, selected }: any) {
     document.addEventListener('mouseup', handleMouseUp)
   }
 
-  const src = node.attrs.src
+  const source = node.attrs.src
   const alt = node.attrs.alt
   const width = node.attrs.width
   const height = node.attrs.height
@@ -50,8 +54,8 @@ function ImageNodeView({ node, updateAttributes, selected }: any) {
         }`}
       >
         <img
-          ref={imgRef}
-          src={src}
+          ref={imageReference}
+          src={source}
           alt={alt}
           width={width}
           height={height}
@@ -60,28 +64,28 @@ function ImageNodeView({ node, updateAttributes, selected }: any) {
         />
         {/* Resize Handles (4 Corners) */}
         <div
-          onMouseDown={(e) => handleMouseDown(e, 'tl')}
+          onMouseDown={(event) => handleMouseDown(event, 'tl')}
           className={`absolute top-1.5 left-1.5 h-2.5 w-2.5 rounded bg-accent border border-white cursor-nwse-resize shadow-md transition-all ${
             resizing ? 'scale-110 bg-accent/90' : 'opacity-0 group-hover:opacity-100'
           }`}
           title={t('composer.imageResize.topLeft')}
         />
         <div
-          onMouseDown={(e) => handleMouseDown(e, 'tr')}
+          onMouseDown={(event) => handleMouseDown(event, 'tr')}
           className={`absolute top-1.5 right-1.5 h-2.5 w-2.5 rounded bg-accent border border-white cursor-nesw-resize shadow-md transition-all ${
             resizing ? 'scale-110 bg-accent/90' : 'opacity-0 group-hover:opacity-100'
           }`}
           title={t('composer.imageResize.topRight')}
         />
         <div
-          onMouseDown={(e) => handleMouseDown(e, 'bl')}
+          onMouseDown={(event) => handleMouseDown(event, 'bl')}
           className={`absolute bottom-1.5 left-1.5 h-2.5 w-2.5 rounded bg-accent border border-white cursor-nesw-resize shadow-md transition-all ${
             resizing ? 'scale-110 bg-accent/90' : 'opacity-0 group-hover:opacity-100'
           }`}
           title={t('composer.imageResize.bottomLeft')}
         />
         <div
-          onMouseDown={(e) => handleMouseDown(e, 'br')}
+          onMouseDown={(event) => handleMouseDown(event, 'br')}
           className={`absolute bottom-1.5 right-1.5 h-2.5 w-2.5 rounded bg-accent border border-white cursor-nwse-resize shadow-md transition-all ${
             resizing ? 'scale-110 bg-accent/90' : 'opacity-0 group-hover:opacity-100'
           }`}

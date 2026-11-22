@@ -1,3 +1,7 @@
+// Coordinates desktop compose, reader and conversation tabs. The mailbox can start
+// a reply, edit a draft or open a separate view through these actions.
+// Callers include calendar.ts and kanban.ts.
+
 import { arrayMove } from '@dnd-kit/sortable'
 import { t } from '../lib/i18n'
 import { isNarrowWindow } from '../lib/useNarrowWindow'
@@ -1072,14 +1076,16 @@ export async function readComposerAttachments(
   const fetched = await Promise.all(
     toFetch.map(async (a) => {
       try {
-        const res = await invoke<{ data: string; mime: string; size: number }>('mail.readAttachment', { key: a.key })
-        if (!res?.data) return null
+        const response = await invoke<{ data: string; mime: string; size: number }>('mail.readAttachment', {
+          key: a.key,
+        })
+        if (!response?.data) return null
         const att: ComposerAttachment = {
           id: `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
           filename: a.filename,
-          mime: a.mime || res.mime || 'application/octet-stream',
-          size: a.size || res.size,
-          data: res.data,
+          mime: a.mime || response.mime || 'application/octet-stream',
+          size: a.size || response.size,
+          data: response.data,
         }
         return att
       } catch {

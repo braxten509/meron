@@ -1,3 +1,7 @@
+// Represents the native updater's status and sends update actions to the desktop
+// host. The frontend consumes the resulting installation state.
+// Imported by update.ts and useAppEffects.ts.
+
 import { invoke } from './bridge'
 
 /** Where the updater currently is. Mirrors the Go state machine in update.go. */

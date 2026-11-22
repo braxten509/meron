@@ -1,3 +1,7 @@
+// Edits a desktop theme and its exported representation. Color tokens and
+// appearance are shared with the theme settings and renderer.
+// Imported by ThemeDialog.tsx.
+
 import { useState } from 'react'
 import { Forward, Upload, X } from 'lucide-react'
 import { useTranslation } from '../../lib/i18n'

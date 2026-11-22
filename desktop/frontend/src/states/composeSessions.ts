@@ -1,3 +1,7 @@
+// Coordinates draft ownership and closure across desktop compose sessions.
+// Concurrent attempts to close the same draft share the pending operation.
+// Callers include compose.ts and quickReply.ts.
+
 import type { ComposeDraft, ComposerAttachment } from '../types'
 
 type CloseComposeSession = () => Promise<void>

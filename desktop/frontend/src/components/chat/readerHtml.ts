@@ -1,3 +1,7 @@
+// Prepares HTML email for the standalone reader. The helpers recover presentation
+// details carried by the core's sanitized document.
+// Imported by HtmlMessageView.tsx and printMail.ts.
+
 import { BUBBLE_HTML_BASE_PX, type MessageFrameFont } from '../../lib/fonts'
 import { copyText } from '../../lib/native'
 import { usesNativeScrollbars } from '../../lib/nativeScrollbars'
@@ -242,11 +246,11 @@ export function stripTrackingPixels(html: string): string {
     const doc = parser.parseFromString(html, 'text/html')
     const images = doc.querySelectorAll('img')
 
-    images.forEach((img) => {
-      const src = img.getAttribute('src') || ''
-      const width = img.getAttribute('width') || ''
-      const height = img.getAttribute('height') || ''
-      const style = img.getAttribute('style') || ''
+    images.forEach((image) => {
+      const source = image.getAttribute('src') || ''
+      const width = image.getAttribute('width') || ''
+      const height = image.getAttribute('height') || ''
+      const style = image.getAttribute('style') || ''
 
       // 1. Size attributes (0, 1, 2)
       const isTinyAttr =
@@ -278,25 +282,25 @@ export function stripTrackingPixels(html: string): string {
       const isTinyStyle = hasTinyW && hasTinyH
 
       // 4. URL pattern matches
-      const lowerSrc = src.toLowerCase()
+      const lowercaseSource = source.toLowerCase()
       const isTrackingUrl =
-        lowerSrc.includes('/open/') ||
-        lowerSrc.includes('/track') ||
-        lowerSrc.includes('/pixel') ||
-        lowerSrc.includes('pixel.gif') ||
-        lowerSrc.includes('cleardot.gif') ||
-        lowerSrc.includes('spacer.gif') ||
-        lowerSrc.includes('/wf/open') ||
-        lowerSrc.includes('/open.php') ||
-        lowerSrc.includes('utm_') ||
-        lowerSrc.includes('bounce')
+        lowercaseSource.includes('/open/') ||
+        lowercaseSource.includes('/track') ||
+        lowercaseSource.includes('/pixel') ||
+        lowercaseSource.includes('pixel.gif') ||
+        lowercaseSource.includes('cleardot.gif') ||
+        lowercaseSource.includes('spacer.gif') ||
+        lowercaseSource.includes('/wf/open') ||
+        lowercaseSource.includes('/open.php') ||
+        lowercaseSource.includes('utm_') ||
+        lowercaseSource.includes('bounce')
 
       if (isTinyAttr || isHiddenStyle || isTinyStyle || isTrackingUrl) {
         // Replace tracker src with safe transparent 1x1 base64 GIF
-        img.setAttribute('src', 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7')
-        img.removeAttribute('srcset')
-        img.removeAttribute('width')
-        img.removeAttribute('height')
+        image.setAttribute('src', 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7')
+        image.removeAttribute('srcset')
+        image.removeAttribute('width')
+        image.removeAttribute('height')
       }
     })
 

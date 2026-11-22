@@ -1,3 +1,7 @@
+// Shows participants as address rows and individual pills. The visible names can
+// be expanded while their underlying email addresses remain available for actions.
+// Callers include MessageBubble.tsx and MessageRow.tsx.
+
 import { useMemo, useState } from 'react'
 import { CheckCheck, Copy, Users } from 'lucide-react'
 import { openContact } from '../../states/contacts'
@@ -67,8 +71,8 @@ export function AddressRow({ label, rawList }: { label: string; rawList: string 
         {label}:
       </span>
       <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
-        {visibleItems.map((item, idx) => (
-          <AddressPill key={idx} {...item} />
+        {visibleItems.map((item, index) => (
+          <AddressPill key={index} {...item} />
         ))}
         {showMore && (
           <button

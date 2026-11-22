@@ -1,3 +1,7 @@
+// Provides actions for the account selected in the navigation rail. Mailbox and
+// settings operations target that account's identity.
+// Imported by SideNav.tsx.
+
 import { useValue } from '@legendapp/state/react'
 import { Bell, BellOff, CheckCheck, EyeOff, Pause, Play, SlidersHorizontal } from 'lucide-react'
 import { useTranslation } from '../../lib/i18n'

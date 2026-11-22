@@ -1,3 +1,7 @@
+// Tracks pointer movement while resizing the thread list or board conversation
+// pane. Bounds and final cleanup belong to the resize interaction.
+// Imported by App.tsx.
+
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import { settings$ } from '../states/settings'
 

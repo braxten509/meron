@@ -10,12 +10,12 @@ import { SettingsGroup, TextRow } from './AccountSettingsRows'
 
 export function AccountProfileGroup({ account, isRSS }: { account: Account; isRSS: boolean }) {
   const { t } = useTranslation()
-  const [displayNameVal, setDisplayNameVal] = useState('')
-  const [senderNameVal, setSenderNameVal] = useState('')
+  const [displayNameValue, setDisplayNameValue] = useState('')
+  const [senderNameValue, setSenderNameValue] = useState('')
 
   useEffect(() => {
-    setDisplayNameVal(account.display_name || '')
-    setSenderNameVal(account.sender_name || '')
+    setDisplayNameValue(account.display_name || '')
+    setSenderNameValue(account.sender_name || '')
   }, [account.id, account.display_name, account.sender_name])
 
   return (
@@ -23,10 +23,10 @@ export function AccountProfileGroup({ account, isRSS }: { account: Account; isRS
       <TextRow
         title={t('settings.account.displayName')}
         hint={t('settings.account.displayNameHint')}
-        value={displayNameVal}
+        value={displayNameValue}
         placeholder={t('settings.account.displayNamePlaceholder')}
         onChange={(value) => {
-          setDisplayNameVal(value)
+          setDisplayNameValue(value)
           void setAccountName(account.id, value)
         }}
       />
@@ -34,10 +34,10 @@ export function AccountProfileGroup({ account, isRSS }: { account: Account; isRS
         <TextRow
           title={t('settings.account.senderName')}
           hint={t('settings.account.senderNameHint')}
-          value={senderNameVal}
+          value={senderNameValue}
           placeholder={t('settings.account.senderNamePlaceholder')}
           onChange={(value) => {
-            setSenderNameVal(value)
+            setSenderNameValue(value)
             void setAccountSenderName(account.id, value)
           }}
         />

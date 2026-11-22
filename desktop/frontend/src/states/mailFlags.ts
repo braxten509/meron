@@ -1,3 +1,7 @@
+// Updates read and starred state from the desktop mailbox. The visible state can
+// change before the corresponding core command has finished.
+// Callers include AccountContextMenu.tsx and AppHotkeys.tsx.
+
 import type { Message } from '../types'
 import { invoke } from '../lib/bridge'
 import { t } from '../lib/i18n'

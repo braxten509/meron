@@ -1,3 +1,7 @@
+// Previews an image attached to the current draft. It consumes the pending
+// attachment data used by the composer.
+// Imported by ComposerAttachments.tsx and QuickReplyAttachments.tsx.
+
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import { useTranslation } from '../../lib/i18n'

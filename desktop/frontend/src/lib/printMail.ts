@@ -1,3 +1,7 @@
+// Loads the complete conversation for printing and builds the printable text or
+// HTML. Headers, message content and attachment names travel together.
+// Callers include ConversationHeader.tsx and MessageContextMenu.tsx.
+
 import { invoke } from './bridge'
 import { CONVERSATION_PAGE_SIZE } from './pagination'
 import { mailHtmlToText } from './html'
@@ -128,9 +132,9 @@ export function mailPrintHtml(mail: Message | MessageTab, allowRemote: boolean):
   doc.head.prepend(policy)
   doc
     .querySelectorAll('script, iframe, object, embed, base, link, meta[http-equiv="refresh" i]')
-    .forEach((el) => el.remove())
-  doc.querySelectorAll('img').forEach((img) => {
-    img.loading = 'eager'
+    .forEach((element) => element.remove())
+  doc.querySelectorAll('img').forEach((image) => {
+    image.loading = 'eager'
   })
   // Keep headers and body in one pagination context. A separately measured
   // iframe can otherwise move the entire body to the page after the headers.
@@ -202,11 +206,11 @@ const remoteCss = (css: string) => REMOTE_CSS_PATTERN.test(decodeCssEscapes(css)
 export function referencesRemoteContent(html: string | undefined): boolean {
   if (!html) return false
   const doc = new DOMParser().parseFromString(stripTrackingPixels(html), 'text/html')
-  for (const el of doc.querySelectorAll('*')) {
-    if (el.localName === 'style' && remoteCss(el.textContent ?? '')) return true
-    for (const { name, value } of Array.from(el.attributes)) {
+  for (const element of doc.querySelectorAll('*')) {
+    if (element.localName === 'style' && remoteCss(element.textContent ?? '')) return true
+    for (const { name, value } of Array.from(element.attributes)) {
       if (!LOADING_ATTRIBUTES.has(name)) continue
-      if (name === 'href' && NAVIGATING_ELEMENTS.has(el.localName)) continue
+      if (name === 'href' && NAVIGATING_ELEMENTS.has(element.localName)) continue
       if (
         name === 'style'
           ? remoteCss(value)
@@ -274,7 +278,7 @@ export function nativePrintHtml(root: HTMLElement): string | undefined {
       const summaries = html.querySelectorAll('body > pre.meron-print-summary')
       summaries.forEach((summary) => summary.remove())
       if (summaries[0]) section.append(summaries[0])
-      html.querySelectorAll('meta, script').forEach((el) => el.remove())
+      html.querySelectorAll('meta, script').forEach((element) => element.remove())
       // Store as escaped text so the outer HTML parser cannot discard the
       // nested html/head/body elements needed by the email's CSS selectors.
       template.content.append(doc.createTextNode(html.outerHTML))
@@ -388,11 +392,11 @@ async function printMails(
       timers.push(window.setTimeout(resolve, 15000))
       Promise.all(
         images.map(
-          (img) =>
-            img.complete ||
+          (image) =>
+            image.complete ||
             new Promise((done) => {
-              img.addEventListener('load', done, { once: true })
-              img.addEventListener('error', done, { once: true })
+              image.addEventListener('load', done, { once: true })
+              image.addEventListener('error', done, { once: true })
             }),
         ),
       ).then(() => resolve())

@@ -1,3 +1,7 @@
+// Exposes frequently used settings from the desktop side navigation. Controls read
+// and update the same preferences as the full settings view.
+// Callers include SideNav.tsx and ThreadList.tsx.
+
 import { Columns3, Info, Plus, RefreshCw, Settings, SquareChevronRight } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'
@@ -41,9 +45,9 @@ export function QuickSettingsMenu({
       onClose={onClose}
       overlay
       className="fixed z-50 max-h-[calc(100dvh-16px)] w-60 overflow-y-auto rounded-lg p-2"
-      onContextMenu={(e) => {
-        e.preventDefault()
-        e.stopPropagation()
+      onContextMenu={(event) => {
+        event.preventDefault()
+        event.stopPropagation()
       }}
     >
       <MenuItem

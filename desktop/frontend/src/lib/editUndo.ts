@@ -39,11 +39,11 @@ export function isRedoChord(event: EditChord): boolean {
 }
 
 export function isPlainTextField(target: EventTarget | null): boolean {
-  const el = target as HTMLElement | null
-  if (!el || el.isContentEditable) return false
-  if (el.tagName === 'TEXTAREA') return true
-  if (el.tagName !== 'INPUT') return false
-  return TEXT_INPUT_TYPES.has((el as HTMLInputElement).type)
+  const element = target as HTMLElement | null
+  if (!element || element.isContentEditable) return false
+  if (element.tagName === 'TEXTAREA') return true
+  if (element.tagName !== 'INPUT') return false
+  return TEXT_INPUT_TYPES.has((element as HTMLInputElement).type)
 }
 
 // Returns whether the chord was handled, so the caller can stop dispatching.

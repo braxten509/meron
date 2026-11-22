@@ -1,3 +1,7 @@
+// Stores boards, column selections and open conversations in the desktop board
+// view. Actions coordinate navigation and mutations across overlapping columns.
+// Callers include compose.ts and mail.ts.
+
 import { observable } from '@legendapp/state'
 import { isNarrowWindow } from '../lib/useNarrowWindow'
 import type { ChatWallpaper, Folder, Message } from '../types'
@@ -478,12 +482,12 @@ export function reorderKanbanColumn(boardId: string, from: KanbanColumn, to: Kan
   const toEntry = kanbanColumnKey(to)
   if (fromEntry === toEntry) return
   updateBoard(boardId, (board) => {
-    const fromIdx = board.columns.findIndex((column) => kanbanColumnKey(column) === fromEntry)
-    const toIdx = board.columns.findIndex((column) => kanbanColumnKey(column) === toEntry)
-    if (fromIdx === -1 || toIdx === -1) return board
+    const fromIndex = board.columns.findIndex((column) => kanbanColumnKey(column) === fromEntry)
+    const toIndex = board.columns.findIndex((column) => kanbanColumnKey(column) === toEntry)
+    if (fromIndex === -1 || toIndex === -1) return board
     const columns = [...board.columns]
-    const [removed] = columns.splice(fromIdx, 1)
-    columns.splice(toIdx, 0, removed)
+    const [removed] = columns.splice(fromIndex, 1)
+    columns.splice(toIndex, 0, removed)
     return { ...board, columns }
   })
 }

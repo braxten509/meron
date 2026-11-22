@@ -1,3 +1,7 @@
+// Interprets clipboard input for the inline reply editor. Message text and
+// attachments need different handling when pasted into a draft.
+// Imported by useQuickReply.ts.
+
 import { invoke } from '../../lib/bridge'
 
 const COMPOSER_PASTE_DEBUG = true
@@ -80,11 +84,11 @@ export async function readClipboardImages(): Promise<File[]> {
   )
   const images: File[] = []
   for (const item of items) {
-    const imgType = item.types.find((type) => type.toLowerCase().startsWith('image/'))
-    if (!imgType) continue
-    const blob = await item.getType(imgType)
-    const ext = imgType.split('/')[1] || 'png'
-    images.push(new File([blob], `pasted-image-${Date.now()}.${ext}`, { type: imgType }))
+    const imageType = item.types.find((type) => type.toLowerCase().startsWith('image/'))
+    if (!imageType) continue
+    const blob = await item.getType(imageType)
+    const ext = imageType.split('/')[1] || 'png'
+    images.push(new File([blob], `pasted-image-${Date.now()}.${ext}`, { type: imageType }))
   }
   return images
 }

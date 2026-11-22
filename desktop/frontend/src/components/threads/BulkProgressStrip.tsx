@@ -1,3 +1,7 @@
+// Displays progress for a batch of desktop mailbox actions. It reads the shared
+// operation state while the host processes the selection.
+// Imported by ThreadList.tsx.
+
 import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'
 import { bulkProgress$, bulkViewKey, requestBulkStop } from '../../states/bulkProgress'

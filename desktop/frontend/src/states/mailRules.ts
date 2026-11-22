@@ -1,3 +1,7 @@
+// Routes inbox rule operations from desktop settings to the core. The UI uses the
+// resulting rule definitions and run status.
+// Imported by mailTags.ts and RulesPanel.tsx.
+
 import { EMPTY_FIELDS, type SearchFields } from '../components/search/searchFields'
 import { invoke } from '../lib/bridge'
 

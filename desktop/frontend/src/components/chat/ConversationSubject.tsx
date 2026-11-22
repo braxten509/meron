@@ -1,3 +1,7 @@
+// Displays the conversation subject in the available header space. A truncated
+// heading still needs to expose its full text.
+// Imported by ConversationHeader.tsx.
+
 import { useId, useState } from 'react'
 import { clsx } from '../../lib/utils'
 

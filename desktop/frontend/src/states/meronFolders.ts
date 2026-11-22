@@ -1,3 +1,7 @@
+// Connects the app's virtual folders to desktop mailbox state. The folder
+// membership returned by the core determines which conversations appear.
+// Callers include mail.ts and mailFlags.ts.
+
 import { observable } from '@legendapp/state'
 import type { Account, Message } from '../types'
 import { invoke } from '../lib/bridge'
