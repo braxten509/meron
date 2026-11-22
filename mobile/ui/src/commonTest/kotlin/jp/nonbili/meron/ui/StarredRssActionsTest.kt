@@ -1,3 +1,8 @@
+// A starred RSS result targets a single feed entry
+// while a normal mailbox row can represent the entire
+// feed. The tests verify the identity passed to the
+// action.
+
 package jp.nonbili.meron.ui
 
 import jp.nonbili.meron.shared.ThreadSummary

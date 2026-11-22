@@ -1,3 +1,8 @@
+// Unified mailbox paging depends on both the core
+// cursor and the selected accounts. The cases check
+// when a visible account can contribute another
+// page.
+
 package jp.nonbili.meron.ui
 
 import jp.nonbili.meron.shared.AccountSummary

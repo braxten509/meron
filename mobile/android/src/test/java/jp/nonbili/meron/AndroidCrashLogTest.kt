@@ -1,3 +1,8 @@
+// Crash summaries combine an exception type with its message
+// for the Android log. Cases cover missing detail so an
+// exception without a message still produces a readable
+// entry.
+
 package jp.nonbili.meron
 
 import org.junit.Assert.assertEquals

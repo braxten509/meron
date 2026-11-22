@@ -1,3 +1,8 @@
+// The mobile theme picker stores choices by light or
+// dark appearance. The cases check the currently
+// displayed theme and the appearance under which an edit
+// is saved.
+
 package jp.nonbili.meron.ui
 
 import kotlin.test.Test

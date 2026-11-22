@@ -1,3 +1,8 @@
+// A removal can finish before an older read returns.
+// The cases cover suppressing stale rows, accepting new
+// replies and releasing only the failed removal's
+// guard.
+
 package jp.nonbili.meron.ui
 
 import jp.nonbili.meron.shared.ThreadSummary

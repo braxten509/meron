@@ -1,3 +1,8 @@
+// The mobile gallery and shared-media panel present
+// attachments in different orders. The tests verify that
+// media references still map back to the correct gallery
+// image.
+
 package jp.nonbili.meron.shared
 
 import kotlin.test.Test

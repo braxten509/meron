@@ -1,3 +1,8 @@
+// Android keeps account images separate from downloaded
+// attachments. These tests cover URL-based cache keys,
+// selection of a cached image and removal of the oldest
+// files.
+
 package jp.nonbili.meron.ui
 
 import java.io.File

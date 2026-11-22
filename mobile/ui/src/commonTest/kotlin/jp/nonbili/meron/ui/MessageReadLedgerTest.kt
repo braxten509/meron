@@ -1,3 +1,7 @@
+// Marking a message read updates its visible state
+// while the write is in flight. The ledger tests apply
+// success and failure responses to the pending change.
+
 package jp.nonbili.meron.ui
 
 import kotlin.test.Test

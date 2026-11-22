@@ -1,3 +1,7 @@
+// Notification taps must reconstruct the same thread identity
+// that the mailbox uses. The fixtures distinguish header-derived
+// keys from UIDs and preserve folder spelling where it matters.
+
 package jp.nonbili.meron.shared
 
 import kotlin.test.Test

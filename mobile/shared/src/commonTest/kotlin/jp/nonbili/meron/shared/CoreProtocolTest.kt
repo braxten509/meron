@@ -1,3 +1,7 @@
+// Mobile requests share the Rust core's JSON envelope.
+// Ping and escaping cases check how command names and
+// data are represented before the transport sends them.
+
 package jp.nonbili.meron.shared
 
 import kotlin.test.Test

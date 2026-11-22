@@ -1,3 +1,7 @@
+// Contact notes support block formatting, inline styles and
+// links. The fixtures check rendered ranges and preserve
+// fenced content literally when the markdown is displayed.
+
 package jp.nonbili.meron.ui
 
 import kotlin.test.Test

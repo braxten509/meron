@@ -1,3 +1,8 @@
+// Android can open the composer from a mailto link or a
+// shared text payload. These cases inspect which
+// recipients and draft fields the incoming intent
+// populates.
+
 package jp.nonbili.meron
 
 import android.content.Context

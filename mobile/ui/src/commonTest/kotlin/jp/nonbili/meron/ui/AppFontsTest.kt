@@ -1,3 +1,8 @@
+// Mobile text size preferences use discrete scale
+// steps. The tests cover storing an exact step and
+// resolving an intermediate value to the nearest
+// available size.
+
 package jp.nonbili.meron.ui
 
 import kotlin.test.Test

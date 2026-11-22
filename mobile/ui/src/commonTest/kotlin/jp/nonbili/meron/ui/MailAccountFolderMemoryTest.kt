@@ -1,3 +1,8 @@
+// The mailbox remembers a folder for each account. Tests
+// recreate the state across account switches and check
+// when an explicit selection supersedes the remembered
+// folder.
+
 package jp.nonbili.meron.ui
 
 import jp.nonbili.meron.shared.CloseableHandle

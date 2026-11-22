@@ -1,3 +1,7 @@
+// The Rust bridge returns JSON for search, starred mail
+// and allocated identities. The shared mobile parser tests
+// turn those responses into the values consumed by the UI.
+
 package jp.nonbili.meron.shared
 
 import kotlin.test.Test

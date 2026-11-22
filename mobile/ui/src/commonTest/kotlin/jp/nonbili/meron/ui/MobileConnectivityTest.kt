@@ -1,3 +1,8 @@
+// A connectivity failure must identify the affected
+// account even when display names collide. These cases
+// exercise the account label shown in mobile status
+// messages.
+
 package jp.nonbili.meron.ui
 
 import jp.nonbili.meron.shared.AccountSummary

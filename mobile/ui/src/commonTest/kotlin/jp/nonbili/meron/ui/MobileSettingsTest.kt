@@ -1,3 +1,8 @@
+// Settings export includes preferences the reader has
+// explicitly set. The cases distinguish an absent
+// preference from a stored false value when gathering
+// mobile settings.
+
 package jp.nonbili.meron.ui
 
 import kotlin.test.Test

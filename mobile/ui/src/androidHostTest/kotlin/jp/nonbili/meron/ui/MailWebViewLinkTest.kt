@@ -1,3 +1,7 @@
+// The Android HTML reader serves local media through an internal
+// origin. Cases cover content types and the distinction between
+// internal resources and links that may be opened externally.
+
 package jp.nonbili.meron.ui
 
 import android.webkit.WebView

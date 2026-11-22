@@ -1,3 +1,7 @@
+// The diagnostic screen presents a log as individual
+// rows. Cases exercise blank input, line boundaries
+// and the display limit for a single oversized line.
+
 package jp.nonbili.meron.ui
 
 import kotlin.test.Test

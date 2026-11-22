@@ -1,3 +1,7 @@
+// The sender allowlist can be edited before its initial read
+// finishes. These tests control read and write completion so
+// a late startup result cannot overwrite the reader's edit.
+
 package jp.nonbili.meron.ui
 
 import jp.nonbili.meron.shared.CloseableHandle

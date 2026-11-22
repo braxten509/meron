@@ -1,3 +1,8 @@
+// The login activity accepts callbacks through a
+// custom scheme and an app link. Intent fixtures
+// verify each Android entry point used to resume
+// authentication.
+
 package jp.nonbili.meron
 
 import android.content.Context

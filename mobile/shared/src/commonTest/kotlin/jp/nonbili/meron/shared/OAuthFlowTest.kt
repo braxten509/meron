@@ -1,3 +1,8 @@
+// The shared login flow must match a callback to the
+// authorization request that started it. These tests check
+// authorization URLs, redirect schemes, codes and state
+// values.
+
 package jp.nonbili.meron.shared
 
 import kotlin.test.Test

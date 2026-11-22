@@ -1,3 +1,8 @@
+// A locally sent reply stays visible while its
+// stored copy is on the way. The cases exercise the
+// message identity used to replace the optimistic
+// row.
+
 package jp.nonbili.meron.ui
 
 import jp.nonbili.meron.shared.MessageBody

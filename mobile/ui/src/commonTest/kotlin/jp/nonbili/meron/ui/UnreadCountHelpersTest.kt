@@ -1,3 +1,7 @@
+// Mailbox badge counts depend on cached folder identity
+// and sync state. The fixtures exercise a never-fetched
+// column and case-insensitive matching for the Inbox.
+
 package jp.nonbili.meron.ui
 
 import jp.nonbili.meron.shared.AccountSummary

@@ -1,3 +1,7 @@
+// Russian catalogs contain named placeholders and plural
+// categories. The fixtures resolve actual resource strings
+// and check the text produced for representative counts.
+
 package jp.nonbili.meron.ui
 
 import kotlin.test.Test

@@ -1,3 +1,7 @@
+// The mobile contacts screen reads history and preferences from
+// core responses. The fixtures exercise JSON envelopes and the
+// canonical identity used across differently written addresses.
+
 package jp.nonbili.meron.ui
 
 import jp.nonbili.meron.shared.CloseableHandle

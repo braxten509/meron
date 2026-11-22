@@ -1,3 +1,8 @@
+// Mobile preferences are cached locally and persisted by
+// the core. These cases cover changes made before
+// hydration and language selections received from the
+// platform.
+
 package jp.nonbili.meron.ui
 
 import jp.nonbili.meron.shared.CloseableHandle

@@ -1,3 +1,8 @@
+// The account editor maps stored server flags to
+// transport-security choices. These tests also check that
+// leaving a password field untouched preserves the
+// existing secret.
+
 package jp.nonbili.meron.ui
 
 import jp.nonbili.meron.shared.AddPasswordAccountParams

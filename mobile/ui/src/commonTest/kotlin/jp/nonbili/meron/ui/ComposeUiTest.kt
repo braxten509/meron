@@ -1,3 +1,8 @@
+// Compose fields accept typed recipient lists as well
+// as individual addresses. These tests exercise
+// parsing and editing behavior used by the mobile
+// composer.
+
 package jp.nonbili.meron.ui
 
 import jp.nonbili.meron.shared.AccountAlias

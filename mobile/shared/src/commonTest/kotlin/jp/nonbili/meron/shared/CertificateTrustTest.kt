@@ -1,3 +1,8 @@
+// A certificate error must identify the server before the client
+// can ask the reader to trust it. Ordinary connection errors
+// retain their original meaning and follow normal error
+// handling.
+
 package jp.nonbili.meron.shared
 
 import kotlin.test.Test

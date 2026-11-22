@@ -1,3 +1,7 @@
+// Inline attachments may arrive with a generated name or no usable
+// extension. These tests exercise how the suggested filename uses
+// cached image information and preserves an existing valid name.
+
 package jp.nonbili.meron.ui
 
 import jp.nonbili.meron.shared.MessageAttachment

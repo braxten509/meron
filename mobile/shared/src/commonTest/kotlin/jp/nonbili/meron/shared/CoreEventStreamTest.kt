@@ -1,3 +1,8 @@
+// The mobile host receives a stream of event envelopes
+// from the Rust core. These fixtures exercise readiness
+// and delivery of nested event details to shared
+// listeners.
+
 package jp.nonbili.meron.shared
 
 import kotlin.test.Test

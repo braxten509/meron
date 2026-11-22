@@ -1,3 +1,8 @@
+// The mobile backup picker suggests a dated filename.
+// Fixtures exercise ISO calendar dates, including the Unix
+// epoch and leap days, before the name is handed to the
+// host.
+
 package jp.nonbili.meron.ui
 
 import kotlin.test.Test

@@ -1,3 +1,8 @@
+// Android's refresh worker routes mail and RSS accounts
+// to different core methods. These cases check the
+// method and mailbox arguments that reach a background
+// sync.
+
 package jp.nonbili.meron
 
 import androidx.test.ext.junit.runners.AndroidJUnit4

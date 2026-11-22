@@ -1,3 +1,8 @@
+// Android resources must be accessible through the locale
+// chosen by the OS. The resource lookups cover default English,
+// Russian and the region-specific Brazilian Portuguese
+// qualifier.
+
 package jp.nonbili.meron
 
 import android.content.Context

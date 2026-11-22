@@ -1,3 +1,8 @@
+// Overlapping board columns can name the same threads
+// in a mark-read request. The fixtures check write
+// deduplication and how partial failures are
+// reported.
+
 package jp.nonbili.meron.ui
 
 import kotlinx.coroutines.CancellationException

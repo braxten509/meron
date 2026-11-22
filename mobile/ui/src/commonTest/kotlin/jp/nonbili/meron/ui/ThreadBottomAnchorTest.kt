@@ -1,3 +1,8 @@
+// Keeping a conversation stable during layout changes
+// requires a visible message anchor. The tests record its
+// lower edge while excluding headers, markers and offscreen
+// items.
+
 package jp.nonbili.meron.ui
 
 import kotlin.test.Test

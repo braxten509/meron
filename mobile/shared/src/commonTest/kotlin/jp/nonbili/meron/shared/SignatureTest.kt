@@ -1,3 +1,8 @@
+// A sending account inherits the global signature until
+// it supplies an override. These tests exercise
+// inheritance and how a blank signature resolves for a
+// new draft.
+
 package jp.nonbili.meron.shared
 
 import kotlin.test.Test

@@ -1,3 +1,8 @@
+// The mobile UI resolves a stored language choice alongside the
+// OS preference. These cases cover platform precedence,
+// supported regional tags and the fallback for unavailable
+// languages.
+
 package jp.nonbili.meron.ui
 
 import kotlin.test.Test

@@ -1,3 +1,7 @@
+// The tag picker consumes usage counts and names from
+// the Rust core. The fixtures exercise ordering and
+// the name returned after one tag replaces another.
+
 package jp.nonbili.meron.shared
 
 import kotlin.test.Test

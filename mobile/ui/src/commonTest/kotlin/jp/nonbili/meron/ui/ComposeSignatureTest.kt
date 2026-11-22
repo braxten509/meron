@@ -1,3 +1,8 @@
+// Mobile compose can start from contacts or from an
+// account-specific context. The tests verify the return
+// destination and the signature applied to the new
+// message.
+
 package jp.nonbili.meron.ui
 
 import jp.nonbili.meron.shared.AccountSummary

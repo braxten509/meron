@@ -1,3 +1,8 @@
+// The background sync worker distinguishes temporary network
+// failures from other outcomes. These tests exercise its
+// decisions about retrying and signaling a completed
+// refresh.
+
 package jp.nonbili.meron
 
 import org.junit.Assert.assertFalse

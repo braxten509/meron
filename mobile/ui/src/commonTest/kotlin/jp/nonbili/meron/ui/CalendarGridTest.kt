@@ -1,3 +1,8 @@
+// The mobile calendar converts dates to grid positions
+// and back. Cases cover day-of-week calculations and how
+// the configured week start anchors a six-week month
+// view.
+
 package jp.nonbili.meron.ui
 
 import jp.nonbili.meron.shared.CalendarItem

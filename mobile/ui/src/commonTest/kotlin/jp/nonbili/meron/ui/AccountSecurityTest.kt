@@ -1,3 +1,8 @@
+// Editing an account port can suggest a new
+// transport-security mode. The tests distinguish
+// untouched defaults from explicit choices the account
+// editor must preserve.
+
 package jp.nonbili.meron.ui
 
 import kotlin.test.Test

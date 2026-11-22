@@ -1,3 +1,8 @@
+// At startup the mobile app restores the selected
+// account and folder. The cases cover saved mailbox
+// navigation and the unified-inbox default on a fresh
+// profile.
+
 package jp.nonbili.meron.ui
 
 import kotlin.test.Test

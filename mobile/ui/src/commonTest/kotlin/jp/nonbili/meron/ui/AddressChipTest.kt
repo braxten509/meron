@@ -1,3 +1,8 @@
+// The mobile composer turns address lists into individual
+// chips and a recipient summary. Quoted display names
+// containing separators must still represent exactly one
+// recipient.
+
 package jp.nonbili.meron.ui
 
 import jp.nonbili.meron.shared.MessageBody

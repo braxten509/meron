@@ -1,3 +1,7 @@
+// Search completion operates on the tag currently being
+// typed. The fixtures exclude tags already present and
+// preserve the other terms when a suggestion is chosen.
+
 package jp.nonbili.meron.ui
 
 import kotlin.test.Test

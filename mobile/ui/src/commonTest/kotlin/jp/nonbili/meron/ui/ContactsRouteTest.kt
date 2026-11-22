@@ -1,3 +1,8 @@
+// The contacts screen can be saved as the last
+// top-level destination. The tests round-trip the route
+// so restoring the app returns the reader to the same
+// screen.
+
 package jp.nonbili.meron.ui
 
 import kotlin.test.Test

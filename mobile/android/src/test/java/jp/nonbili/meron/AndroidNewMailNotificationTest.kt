@@ -1,3 +1,8 @@
+// Android notification rows can arrive before a message body
+// reaches the cache. The cases check how the notification
+// combines the subject and available snippet in either
+// state.
+
 package jp.nonbili.meron
 
 import org.junit.Assert.assertEquals

@@ -1,3 +1,7 @@
+// Inbox rows show a time or a date according to when a
+// message arrived. These tests exercise unknown dates,
+// the current local day and messages from earlier years.
+
 package jp.nonbili.meron.ui
 
 import kotlin.test.Test

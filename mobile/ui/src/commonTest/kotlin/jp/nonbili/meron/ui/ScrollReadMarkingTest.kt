@@ -1,3 +1,8 @@
+// The thread screen marks messages read according to their
+// visibility in the viewport. The cases cover crossed
+// message boundaries and a bubble that fits entirely on
+// screen.
+
 package jp.nonbili.meron.ui
 
 import jp.nonbili.meron.shared.MessageBody

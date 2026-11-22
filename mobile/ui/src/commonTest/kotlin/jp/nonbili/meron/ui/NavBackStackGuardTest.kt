@@ -1,3 +1,8 @@
+// Navigation actions depend on whether the current
+// entry can be modified. These tests cover an empty
+// stack and the lifecycle state of an existing
+// entry.
+
 package jp.nonbili.meron.ui
 
 import androidx.lifecycle.Lifecycle

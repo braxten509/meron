@@ -1,3 +1,7 @@
+// The board loads destination folders independently of opening
+// the copy picker. These tests control request order to verify
+// reuse of folder data and selection of recent destinations.
+
 package jp.nonbili.meron.ui
 
 import jp.nonbili.meron.shared.AccountSummary

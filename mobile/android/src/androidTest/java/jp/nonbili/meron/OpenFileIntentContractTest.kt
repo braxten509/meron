@@ -1,3 +1,7 @@
+// Android opens an attachment by granting its viewer read
+// access to a URI. The save action goes through the system
+// document creator so the user can choose a destination.
+
 package jp.nonbili.meron
 
 import android.content.Intent

@@ -1,3 +1,7 @@
+// Shared UI strings may contain named parameters or be missing
+// from a translation. These tests exercise how the map-backed
+// localizer formats an argument and falls back to a stable key.
+
 package jp.nonbili.meron.shared
 
 import kotlin.test.Test

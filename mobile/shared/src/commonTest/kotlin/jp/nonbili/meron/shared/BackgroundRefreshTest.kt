@@ -1,3 +1,7 @@
+// Background scheduling depends on an active, connected
+// account. The shared tests cover account eligibility and
+// selecting the RSS refresh command from account metadata.
+
 package jp.nonbili.meron.shared
 
 import kotlin.test.Test

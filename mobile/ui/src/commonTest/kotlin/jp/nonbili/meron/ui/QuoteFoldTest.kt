@@ -1,3 +1,8 @@
+// The core supplies an offset separating a plain
+// message from quoted history. These tests check the
+// split and how to display a body when the offset is
+// unusable.
+
 package jp.nonbili.meron.ui
 
 import kotlin.test.Test

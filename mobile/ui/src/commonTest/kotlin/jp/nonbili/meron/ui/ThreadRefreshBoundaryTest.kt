@@ -1,3 +1,8 @@
+// Thread refresh uses a message identity as its paging
+// boundary. Equal timestamps or a removed boundary
+// message must still yield the right amount of
+// history.
+
 package jp.nonbili.meron.ui
 
 import jp.nonbili.meron.shared.MessageBody

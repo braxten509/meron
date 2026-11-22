@@ -1,3 +1,7 @@
+// A pinned header follows the visible message that crosses
+// the top edge. These cases exercise collapsed messages and
+// the point at which an outgoing header should disappear.
+
 package jp.nonbili.meron.ui
 
 import kotlin.test.Test

@@ -1,3 +1,7 @@
+// A remote image can be used as an attachment without
+// a local core cache key. These tests cover retrieval
+// and the suggested filename derived from its URL.
+
 package jp.nonbili.meron.ui
 
 import kotlinx.coroutines.runBlocking

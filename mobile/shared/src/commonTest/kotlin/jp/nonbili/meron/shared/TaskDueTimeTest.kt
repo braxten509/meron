@@ -1,3 +1,8 @@
+// Task edits distinguish midnight from a date
+// without a time. Cases cover setting, clearing and
+// preserving an existing time when serializing an
+// update.
+
 package jp.nonbili.meron.shared
 
 import kotlin.test.Test

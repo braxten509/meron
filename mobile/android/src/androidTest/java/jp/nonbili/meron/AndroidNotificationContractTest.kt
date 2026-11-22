@@ -1,3 +1,8 @@
+// Android background refresh depends on a registered
+// notification channel. The contract uses the
+// platform notification APIs to check channel
+// creation.
+
 package jp.nonbili.meron
 
 import android.app.NotificationManager

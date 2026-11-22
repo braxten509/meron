@@ -1,3 +1,8 @@
+// Recovery of a missing attachment must reach the
+// document that requested it. The fixtures navigate
+// between messages and deliver callbacks out of
+// order.
+
 package jp.nonbili.meron.ui
 
 import kotlin.test.Test

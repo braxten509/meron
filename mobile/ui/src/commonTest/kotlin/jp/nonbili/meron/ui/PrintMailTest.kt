@@ -1,3 +1,8 @@
+// Mobile printing builds a document from cached message
+// bodies and headers. The tests exercise escaping, address
+// display and fallback text for messages containing only
+// HTML.
+
 package jp.nonbili.meron.ui
 
 import jp.nonbili.meron.shared.MessageAttachment

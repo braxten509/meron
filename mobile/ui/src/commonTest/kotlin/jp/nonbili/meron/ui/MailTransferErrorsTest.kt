@@ -1,3 +1,7 @@
+// A transfer failure can occur after part of a mail batch
+// has reached its destination. These tests check how mobile
+// describes confirmed progress and what a retry would do.
+
 package jp.nonbili.meron.ui
 
 import kotlin.test.Test

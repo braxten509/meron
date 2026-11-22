@@ -1,3 +1,8 @@
+// Message text can contain markdown links and bare
+// addresses. The fixtures exercise the display
+// ranges and normalized destinations used by tap
+// handlers.
+
 package jp.nonbili.meron.ui
 
 import kotlin.test.Test

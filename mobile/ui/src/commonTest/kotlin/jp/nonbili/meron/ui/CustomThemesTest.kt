@@ -1,3 +1,8 @@
+// Mobile themes can be shared with desktop
+// installations. The fixtures round-trip the shared
+// format and exercise flexible color notation used by
+// imported themes.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.ui.graphics.Color

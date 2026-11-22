@@ -1,3 +1,8 @@
+// Refresh diagnostics read a bounded tail of
+// an Android log file. Fixtures cover a
+// missing file and logs small enough to return
+// whole.
+
 package jp.nonbili.meron
 
 import org.junit.Assert.assertEquals

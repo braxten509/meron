@@ -1,3 +1,7 @@
+// The mobile destination picker persists recent moves
+// and copies. Tests cover account and action identity,
+// repeated destinations and malformed stored history.
+
 package jp.nonbili.meron.ui
 
 import kotlinx.serialization.encodeToString

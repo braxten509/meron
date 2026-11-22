@@ -1,3 +1,8 @@
+// The shared mail view model owns mailbox navigation, thread
+// actions and compose eligibility. The cases follow those
+// state changes through building a send request with
+// attachments.
+
 package jp.nonbili.meron.shared
 
 import kotlin.test.Test

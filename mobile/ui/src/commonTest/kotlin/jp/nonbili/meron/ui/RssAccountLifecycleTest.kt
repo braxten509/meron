@@ -1,3 +1,8 @@
+// Creating a feed account needs a display name that
+// works beside existing RSS accounts. Tests exercise the
+// initial name and selection of the next available
+// suffix.
+
 package jp.nonbili.meron.ui
 
 import jp.nonbili.meron.shared.AccountSummary

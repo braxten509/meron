@@ -1,3 +1,8 @@
+// After creating a folder the mobile picker must find the
+// server's wire name. Tests exercise ASCII labels and
+// decoded non-ASCII labels before issuing further folder
+// commands.
+
 package jp.nonbili.meron.ui
 
 import jp.nonbili.meron.shared.FolderSummary

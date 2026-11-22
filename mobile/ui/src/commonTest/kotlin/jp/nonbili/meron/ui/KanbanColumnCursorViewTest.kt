@@ -1,3 +1,8 @@
+// An issued board cursor belongs to a specific
+// search and filter. The tests exercise loading its
+// next page while the same column can also be
+// reloading.
+
 package jp.nonbili.meron.ui
 
 import jp.nonbili.meron.shared.AccountSummary

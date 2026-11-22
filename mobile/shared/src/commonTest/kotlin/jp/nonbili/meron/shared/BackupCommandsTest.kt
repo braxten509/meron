@@ -1,3 +1,8 @@
+// Mobile backup commands send host identity, passphrase
+// and export options to the shared core. The fixtures
+// also round-trip settings through the backup
+// representation.
+
 package jp.nonbili.meron.shared
 
 import kotlin.test.Test

@@ -1,3 +1,7 @@
+// A mailbox refresh may overlap an existing load or a
+// search. These tests control when requests finish and
+// check which deferred reload should run afterward.
+
 package jp.nonbili.meron.ui
 
 import jp.nonbili.meron.shared.AccountSummary

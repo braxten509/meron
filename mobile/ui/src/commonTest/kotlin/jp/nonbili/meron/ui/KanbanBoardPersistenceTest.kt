@@ -1,3 +1,8 @@
+// A new profile receives a starter board, while a
+// deliberately empty board list must remain empty. These
+// cases exercise that distinction across persistence and
+// reload.
+
 package jp.nonbili.meron.ui
 
 import jp.nonbili.meron.shared.AccountSummary

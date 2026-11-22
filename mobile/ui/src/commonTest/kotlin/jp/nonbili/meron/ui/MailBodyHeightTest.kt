@@ -1,3 +1,7 @@
+// HTML message bodies report their measured height
+// to the mobile layout. The tests exercise ordinary
+// reports and clamp invalid negative measurements.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.ui.unit.dp

@@ -1,3 +1,7 @@
+// The Android home-screen widget counts unread inbox mail and
+// supplies a tap destination. Feed rows open the app, while
+// mail rows can take the reader directly to a conversation.
+
 package jp.nonbili.meron
 
 import jp.nonbili.meron.shared.FolderSummary

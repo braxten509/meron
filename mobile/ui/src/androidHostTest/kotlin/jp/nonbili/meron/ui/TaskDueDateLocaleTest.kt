@@ -1,3 +1,8 @@
+// Task dates must round-trip independently of the display
+// locale. The fixture runs the due-date representation under
+// Thai locale settings to catch calendar-dependent
+// conversions.
+
 package jp.nonbili.meron.ui
 
 import java.util.Locale

@@ -1,3 +1,8 @@
+// A trust prompt can interrupt an in-flight send. The
+// state tests check which refused operation resumes after
+// trust is granted and which failures leave nothing to
+// retry.
+
 package jp.nonbili.meron.ui
 
 import jp.nonbili.meron.shared.AccountSummary

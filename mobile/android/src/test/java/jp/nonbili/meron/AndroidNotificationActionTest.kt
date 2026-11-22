@@ -1,3 +1,8 @@
+// Android notification actions need stable IDs for
+// individual arrivals. Cases exercise multiple replies
+// in one thread and ensure related rows are cleared
+// together.
+
 package jp.nonbili.meron
 
 import org.junit.Assert.assertNotEquals

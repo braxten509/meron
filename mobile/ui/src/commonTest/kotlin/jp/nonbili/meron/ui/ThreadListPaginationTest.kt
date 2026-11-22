@@ -1,3 +1,8 @@
+// The list requests another page as the viewport approaches
+// its end. The tests check the remaining-row threshold and
+// avoid triggering while the reader is far from the
+// boundary.
+
 package jp.nonbili.meron.ui
 
 import kotlin.test.Test

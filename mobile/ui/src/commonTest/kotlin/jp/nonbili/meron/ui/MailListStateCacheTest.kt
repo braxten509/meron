@@ -1,3 +1,8 @@
+// The mobile mailbox retains scroll state across folder
+// changes with a bounded cache. Tests distinguish revisiting
+// an existing entry from evicting a state to add a new
+// mailbox.
+
 package jp.nonbili.meron.ui
 
 import kotlin.test.Test

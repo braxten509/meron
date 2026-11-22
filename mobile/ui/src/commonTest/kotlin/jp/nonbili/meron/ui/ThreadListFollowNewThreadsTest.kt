@@ -1,3 +1,7 @@
+// Incoming mail can prepend rows to a mobile thread list.
+// The tests distinguish following new rows at the top from
+// preserving position for someone reading further down.
+
 package jp.nonbili.meron.ui
 
 import kotlin.test.Test

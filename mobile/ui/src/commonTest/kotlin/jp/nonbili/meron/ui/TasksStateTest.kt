@@ -1,3 +1,7 @@
+// A message sent to Tasks needs a destination even when
+// the reader starts from a thread. The fixtures exercise
+// the selected list and the default supplied by the core.
+
 package jp.nonbili.meron.ui
 
 import jp.nonbili.meron.shared.CloseableHandle

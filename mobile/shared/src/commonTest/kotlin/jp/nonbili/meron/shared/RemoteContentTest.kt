@@ -1,3 +1,7 @@
+// Mobile and core use a common sender identity when deciding
+// whether remote media may load. Cases exercise the account
+// preference, sender allowlist and address normalization.
+
 package jp.nonbili.meron.shared
 
 import kotlin.test.Test

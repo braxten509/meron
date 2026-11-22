@@ -1,3 +1,8 @@
+// Opening a conversation needs a scroll target among
+// message and header rows. The tests exercise an unread
+// destination and the offset contributed by a load-older
+// header.
+
 package jp.nonbili.meron.ui
 
 import jp.nonbili.meron.shared.MessageBody

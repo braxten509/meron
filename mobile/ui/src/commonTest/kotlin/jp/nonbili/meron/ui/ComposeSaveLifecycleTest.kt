@@ -1,3 +1,8 @@
+// Several saves can overlap while editing or transferring
+// ownership of a mobile draft. The fixtures control completion
+// order and verify how the current remote draft is retained or
+// discarded.
+
 package jp.nonbili.meron.ui
 
 import jp.nonbili.meron.shared.AccountSummary

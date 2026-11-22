@@ -1,3 +1,8 @@
+// The drawer shows the result of marking a mailbox read
+// before the core write finishes. These tests exercise
+// both confirmation and restoration after a failed
+// write.
+
 package jp.nonbili.meron.ui
 
 import jp.nonbili.meron.shared.AccountSummary

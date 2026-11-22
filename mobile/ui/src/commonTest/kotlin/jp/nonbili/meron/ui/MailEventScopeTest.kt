@@ -1,3 +1,8 @@
+// Background sync events can belong to a different
+// account from the open mailbox. These tests check
+// which changes schedule a reload of the visible
+// folder.
+
 package jp.nonbili.meron.ui
 
 import jp.nonbili.meron.shared.FolderSummary

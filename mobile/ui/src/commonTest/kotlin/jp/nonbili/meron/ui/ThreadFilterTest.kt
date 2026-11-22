@@ -1,3 +1,8 @@
+// Starred filtering can include a feed because one entry
+// is starred. The fixture verifies that the feed itself
+// retains its own flag state when shown in the filtered
+// list.
+
 package jp.nonbili.meron.ui
 
 import jp.nonbili.meron.shared.ThreadSummary

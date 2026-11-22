@@ -1,3 +1,7 @@
+// A unified folder resolves separately for each provider
+// and account. Tests cover the Inbox bootstrap path and
+// missing special folders when a role cannot be resolved.
+
 package jp.nonbili.meron.ui
 
 import jp.nonbili.meron.shared.FolderSummary

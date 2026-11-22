@@ -1,3 +1,7 @@
+// Refreshing the visible mailbox must fetch enough pages to
+// cover the previous view. Tests distinguish an open list
+// from a background mailbox that needs only its first page.
+
 package jp.nonbili.meron.ui
 
 import jp.nonbili.meron.shared.ThreadSummary
