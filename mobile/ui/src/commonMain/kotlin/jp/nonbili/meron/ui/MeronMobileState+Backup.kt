@@ -286,16 +286,17 @@ private fun floorDiv(
 private fun pad2(value: Long): String = if (value < 10) "0$value" else "$value"
 
 /**
- * Re-seed the settings this state holds after [hydrateSettingsFromCore] found
- * the authoritative table disagreeing with the platform cache — most often
- * because a backup was just restored.
+ * Refresh visible settings after the core restores a backup.
  *
- * The cache has already been updated, so each field is simply re-read through
- * the same loader that seeded it at construction; that keeps coercion and
- * default handling in one place instead of duplicating it per key.
+ * Re-seed the settings this state holds after [hydrateSettingsFromCore] found the authoritative table
+ * disagreeing with the platform cache — most often because a backup was just restored.
  *
- * Appearance and language are not here: the host owns those (they are `remember`
- * values in the Activity / view controller), so they apply on the next launch.
+ * The cache has already been updated, so each field is simply re-read through the same loader that seeded
+ * it at construction; that keeps coercion and default handling in one place instead of duplicating it per
+ * key.
+ *
+ * Appearance and language are not here: the host owns those (they are `remember` values in the Activity /
+ * view controller), so they apply on the next launch.
  */
 internal fun MeronMobileState.applyHydratedSettings(changed: Map<String, Any>) {
     for (settingKey in changed.keys) {

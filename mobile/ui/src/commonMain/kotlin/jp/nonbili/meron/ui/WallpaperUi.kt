@@ -108,7 +108,7 @@ private val wallpaperPresets =
     )
 
 // Photographic presets ship as bundled drawables so the preview matches desktop.
-private fun wallpaperImageRes(presetId: String): DrawableResource? =
+private fun wallpaperImageResource(presetId: String): DrawableResource? =
     when (presetId) {
         "aurora" -> Res.drawable.wp_aurora
         "nebula" -> Res.drawable.wp_nebula
@@ -342,11 +342,11 @@ internal fun ChatWallpaperBackground(
         }
     }
 
-    val imageRes = if (customImage == null) wallpaperImageRes(presetId) else null
+    val imageResource = if (customImage == null) wallpaperImageResource(presetId) else null
     Box(
         modifier =
             modifier.then(
-                if (customImage == null && imageRes == null) {
+                if (customImage == null && imageResource == null) {
                     Modifier.chatWallpaper(presetId, dark, fallback)
                 } else {
                     Modifier
@@ -361,9 +361,9 @@ internal fun ChatWallpaperBackground(
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop,
             )
-        } else if (imageRes != null) {
+        } else if (imageResource != null) {
             Image(
-                painter = painterResource(imageRes),
+                painter = painterResource(imageResource),
                 contentDescription = null,
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop,

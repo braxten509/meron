@@ -5,15 +5,16 @@
 package jp.nonbili.meron.shared
 
 /**
- * Trust-on-first-use for mail servers whose certificate cannot be validated
- * against the public roots — a local Proton Mail Bridge, say, which serves a
- * self-signed CA certificate as its leaf. The core tags those failures; the app
- * fetches the certificate that was rejected and lets the user pin it.
+ * Handles a user's trust decision when a mail server presents an unfamiliar certificate.
+ *
+ * Trust-on-first-use for mail servers whose certificate cannot be validated against the public roots — a
+ * local Proton Mail Bridge, say, which serves a self-signed CA certificate as its leaf. The core tags those
+ * failures; the app fetches the certificate that was rejected and lets the user pin it.
  *
  * Mirrors desktop/frontend/src/components/dialog/certificateTrust.ts.
  *
- * The markers must match meron-core/src/tls.rs. The SMTP one contains the
- * general one, so an untrusted certificate matches whichever check runs first.
+ * The markers must match meron-core/src/tls.rs. The SMTP one contains the general one, so an untrusted
+ * certificate matches whichever check runs first.
  */
 
 private const val UNTRUSTED_CERT_MARKER = "untrusted-certificate"

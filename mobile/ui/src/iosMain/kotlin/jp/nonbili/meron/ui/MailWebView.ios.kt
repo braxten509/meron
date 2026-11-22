@@ -97,7 +97,7 @@ actual fun MailWebView(
                 name = "meronLink",
             )
             config.userContentController.addScriptMessageHandler(
-                scriptMessageHandler = ImageMessageHandler { src -> latestOnOpenImage.value(src) },
+                scriptMessageHandler = ImageMessageHandler { imageSource -> latestOnOpenImage.value(imageSource) },
                 name = "meronImage",
             )
             config.userContentController.addScriptMessageHandler(

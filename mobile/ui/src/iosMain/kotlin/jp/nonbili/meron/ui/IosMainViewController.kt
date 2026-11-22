@@ -350,9 +350,9 @@ private class IosPlatformServices : PlatformServices {
         mimeType: String,
     ) {
         val safeName = fileName.replace('/', '_').ifBlank { "attachment" }
-        val dir = NSTemporaryDirectory() + "meron-share/"
-        NSFileManager.defaultManager.createDirectoryAtPath(dir, withIntermediateDirectories = true, attributes = null, error = null)
-        val path = dir + safeName
+        val shareDirectory = NSTemporaryDirectory() + "meron-share/"
+        NSFileManager.defaultManager.createDirectoryAtPath(shareDirectory, withIntermediateDirectories = true, attributes = null, error = null)
+        val path = shareDirectory + safeName
         val data =
             bytes.usePinned { pinned ->
                 NSData.create(bytes = if (bytes.isNotEmpty()) pinned.addressOf(0) else null, length = bytes.size.toULong())

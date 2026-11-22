@@ -13,7 +13,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 
@@ -184,6 +183,7 @@ private val IndigoLight =
         Color(0xFFE0E7FF),
         Color(0xFF312E81),
     )
+
 private val IndigoDark =
     MobileThemeSpec(
         true,
@@ -203,6 +203,7 @@ private val IndigoDark =
         Color(0xFF2A2577),
         Color(0xFFE0E7FF),
     )
+
 private val MeronLight =
     MobileThemeSpec(
         false,
@@ -222,6 +223,7 @@ private val MeronLight =
         Color(0xFFDCEDE5),
         Color(0xFF14543E),
     )
+
 private val MeronDark =
     MobileThemeSpec(
         true,
@@ -241,6 +243,7 @@ private val MeronDark =
         Color(0xFF153F33),
         Color(0xFFD6EEE2),
     )
+
 private val Mist =
     MobileThemeSpec(
         false,
@@ -260,6 +263,7 @@ private val Mist =
         Color(0xFFD3EEF2),
         Color(0xFF0E5663),
     )
+
 private val Paper =
     MobileThemeSpec(
         false,
@@ -279,6 +283,7 @@ private val Paper =
         Color(0xFFDFE7EC),
         Color(0xFF334155),
     )
+
 private val Dawn =
     MobileThemeSpec(
         false,
@@ -298,6 +303,7 @@ private val Dawn =
         Color(0xFFF8DCDC),
         Color(0xFF753849),
     )
+
 private val Honey =
     MobileThemeSpec(
         false,
@@ -317,6 +323,7 @@ private val Honey =
         Color(0xFFF4E5C3),
         Color(0xFF6E4D09),
     )
+
 private val Lilac =
     MobileThemeSpec(
         false,
@@ -336,6 +343,7 @@ private val Lilac =
         Color(0xFFEAE0FA),
         Color(0xFF4B3389),
     )
+
 private val Graphite =
     MobileThemeSpec(
         true,
@@ -355,6 +363,7 @@ private val Graphite =
         Color(0xFF3C4552),
         Color(0xFFEEF3F8),
     )
+
 private val Midnight =
     MobileThemeSpec(
         true,
@@ -374,6 +383,7 @@ private val Midnight =
         Color(0xFF193851),
         Color(0xFFDFF6FF),
     )
+
 private val Forest =
     MobileThemeSpec(
         true,
@@ -393,6 +403,7 @@ private val Forest =
         Color(0xFF234633),
         Color(0xFFE2F8E9),
     )
+
 private val Plum =
     MobileThemeSpec(
         true,
@@ -412,6 +423,7 @@ private val Plum =
         Color(0xFF3F3059),
         Color(0xFFECDFFB),
     )
+
 private val Ember =
     MobileThemeSpec(
         true,
@@ -504,7 +516,7 @@ fun MeronTheme(
     }
 }
 
-private fun mobileThemeSpec(
+internal fun mobileThemeSpec(
     mode: AppAppearanceMode,
 ): MobileThemeSpec =
     when (mode) {
@@ -669,80 +681,3 @@ private fun materialColors(spec: MobileThemeSpec) =
             onError = Color.White,
         )
     }
-
-/** WCAG contrast ratio between two opaque colors. */
-internal fun contrastRatio(
-    a: Color,
-    b: Color,
-): Float {
-    val la = a.luminance()
-    val lb = b.luminance()
-    return (maxOf(la, lb) + 0.05f) / (minOf(la, lb) + 0.05f)
-}
-
-/** [text] blended toward [toward] just until it reaches [min] contrast on [bg]. */
-private fun readableOn(
-    text: Color,
-    bg: Color,
-    toward: Color,
-    min: Float = 4.5f,
-): Color {
-    for (step in 0..20) {
-        val candidate = lerp(text, toward, step / 20f)
-        if (contrastRatio(candidate, bg) >= min) return candidate
-    }
-    return toward
-}
-
-/** The accent darkened just enough for white numbers, like desktop's whiteLabelAccent. */
-private fun whiteLabelAccent(accent: Color): Color {
-    for (step in 0..50) {
-        val candidate = Color.Black.copy(alpha = step / 50f).compositeOver(accent)
-        if (contrastRatio(Color.White, candidate) >= 4.5f) return candidate
-    }
-    return Color.Black
-}
-
-/**
- * Drawer colors for Meron's own themes, mirroring desktop's rail: the drawer
- * wears the rail color, rows take the thread list's selection tint, and unread
- * counts are the rail's white numbers on the accent.
- */
-private fun drawerColors(spec: MobileThemeSpec): SidebarColors {
-    // Desktop's sideNavInkColor: the theme's text where it reads on the rail.
-    val text =
-        if (contrastRatio(spec.textPrimary, spec.sidebar) >= 4.5f) spec.textPrimary else accentLabelColor(spec.sidebar)
-    return SidebarColors(
-        text = text,
-        textMuted = readableOn(spec.textSecondary, spec.sidebar, text),
-        selected = spec.accent.copy(alpha = if (spec.dark) 0.2f else 0.13f),
-        // An icon tint, so 3:1 is enough.
-        selectedContent = readableOn(spec.accent, spec.sidebar, text, 3f),
-        unreadBackground = whiteLabelAccent(spec.accent),
-        unreadText = Color.White,
-    )
-}
-
-/** A built-in theme's chat colors, outside composition (for tests). */
-internal fun builtinChatColors(mode: AppAppearanceMode): ChatColors = chatColors(mobileThemeSpec(mode))
-
-private fun chatColors(spec: MobileThemeSpec): ChatColors {
-    val drawer = spec.sidebarColors ?: drawerColors(spec)
-    return ChatColors(
-        sidebar = spec.sidebar,
-        onSidebar = drawer.text,
-        onSidebarMuted = drawer.textMuted,
-        sidebarAccent = drawer.selectedContent,
-        bubbleIn = spec.bubbleIn,
-        bubbleInText = spec.bubbleInText,
-        bubbleOut = spec.bubbleOut,
-        bubbleOutText = spec.bubbleOutText,
-        star = if (spec.dark) Color(0xFFFBBF24) else Color(0xFFF59E0B),
-        // Alpha compositing over opaque sRGB colors matches desktop's color-mix(in srgb).
-        unreadBackground = spec.accent.copy(alpha = 0.18f).compositeOver(spec.bgChats),
-        unreadText = spec.accent.copy(alpha = 0.55f).compositeOver(spec.textPrimary),
-        sidebarUnreadBackground = drawer.unreadBackground,
-        sidebarUnreadText = drawer.unreadText,
-        sidebarSelected = drawer.selected,
-    )
-}

@@ -45,11 +45,12 @@ private const val EDGE_RESISTANCE = 0.2f
 private const val COMMIT_FRACTION = 0.3f
 
 /**
- * Paging between conversations by swiping the open one sideways, as Gmail does:
- * towards the start for the next (older) conversation in the list it was opened
- * from, towards the end for the previous (newer) one. The conversations either
- * side are laid out a page width away and move with [offsetPx], so the one
- * being swiped to shows as it is.
+ * Page between adjacent conversations with a horizontal swipe.
+ *
+ * Paging between conversations by swiping the open one sideways, as Gmail does: towards the start for the
+ * next (older) conversation in the list it was opened from, towards the end for the previous (newer) one.
+ * The conversations either side are laid out a page width away and move with [offsetPx], so the one being
+ * swiped to shows as it is.
  *
  * Held above the pages, so the settle outlives the page that started it.
  */

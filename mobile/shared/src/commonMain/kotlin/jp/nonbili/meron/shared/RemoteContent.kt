@@ -126,11 +126,11 @@ fun mailBodyCsp(
     allowRemote: Boolean,
     scriptNonce: String,
 ): String {
-    val img = if (allowRemote) "'self' data: http: https:" else "'self' data:"
+    val imagePolicy = if (allowRemote) "'self' data: http: https:" else "'self' data:"
     val media = if (allowRemote) "'self' data: blob: http: https:" else "'self' data: blob:"
     return "default-src 'none'; script-src 'nonce-$scriptNonce'; object-src 'none'; frame-src 'none'; " +
         "base-uri 'none'; form-action 'none'; " +
-        "img-src $img; media-src $media; style-src 'unsafe-inline'; font-src 'self' data:;"
+        "img-src $imagePolicy; media-src $media; style-src 'unsafe-inline'; font-src 'self' data:;"
 }
 
 private val CSP_META =

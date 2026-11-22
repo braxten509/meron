@@ -9,16 +9,16 @@ import androidx.compose.runtime.Composable
 import jp.nonbili.meron.shared.FolderSummary
 
 /**
- * The folders the unified view offers, in the same order a single account lists
- * its own — so switching between an account and the unified view keeps the same
- * muscle memory. These are roles, not folder names: "Sent" here means each
- * account's own Sent, which the core resolves per account, leaving out accounts
+ * Present unified folders in the same order as a single account's folders.
+ *
+ * The folders the unified view offers, in the same order a single account lists its own — so switching
+ * between an account and the unified view keeps the same muscle memory. These are roles, not folder names:
+ * "Sent" here means each account's own Sent, which the core resolves per account, leaving out accounts
  * whose server has no such mailbox.
  *
- * Starred is absent here because it is not a mailbox any account owns — it is
- * the cross-account starred *items* listing, which resolves through the core's
- * starred-items command rather than through a per-account folder. It still sits
- * in the switcher: see [UNIFIED_VIEW_ROLES].
+ * Starred is absent here because it is not a mailbox any account owns — it is the cross-account starred
+ * *items* listing, which resolves through the core's starred-items command rather than through a
+ * per-account folder. It still sits in the switcher: see [UNIFIED_VIEW_ROLES].
  */
 internal val UNIFIED_FOLDER_ROLES = listOf(INBOX_FOLDER, "sent", "drafts", "archive", "junk", "trash")
 

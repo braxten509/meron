@@ -129,13 +129,13 @@ internal class ContactsScreenState(
                 (prefs["pinned_contacts"] as? JsonArray)
                     .orEmpty()
                     .mapNotNull { value ->
-                        val obj = value as? JsonObject ?: return@mapNotNull null
+                        val fields = value as? JsonObject ?: return@mapNotNull null
                         val addr =
-                            (obj["addr"] as? JsonPrimitive)
+                            (fields["addr"] as? JsonPrimitive)
                                 ?.contentOrNull
                                 ?.let(::contactAddressKey)
                                 ?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
-                        ContactSuggestion((obj["name"] as? JsonPrimitive)?.contentOrNull.orEmpty(), addr)
+                        ContactSuggestion((fields["name"] as? JsonPrimitive)?.contentOrNull.orEmpty(), addr)
                     }.distinctBy { it.addr }
             pinsLoaded = true
         } catch (error: Exception) {

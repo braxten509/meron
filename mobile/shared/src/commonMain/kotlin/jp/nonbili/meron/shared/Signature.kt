@@ -147,17 +147,19 @@ fun bodyWithSwappedSignature(
 }
 
 /**
- * Where the tracked signature sits in [body] as whole lines of its own, or null
- * when it cannot be identified — because the user has edited it, or because the
- * body holds a second block just like it and ours is no longer where it was put.
+ * Locate the managed signature inside the editor's current body.
  *
- * The line boundaries tell an untouched signature apart from one the user has
- * written into: "Ping" must not match inside "Ping, but edited". The placement
- * says which copy is ours when there are several — above a quote the first,
- * below the text the last — but that alone is a guess, and guessing wrong would
- * rewrite the user's own words. So in an ambiguous body ours must still be
- * exactly at the edge it was inserted against to be touched at all; failing
- * that the draft simply stops being managed.
+ * Where the tracked signature sits in [body] as whole lines of its own, or null when it cannot be
+ * identified — because the user has edited it, or because the body holds a second block just like it and
+ * ours is no longer where it was put.
+ *
+ * The line boundaries tell an untouched signature apart from one the user has written into: "Ping" must not
+ * match inside "Ping, but edited". The placement says which copy is ours when there are several — above a
+ * quote the first, below the text the last — but that alone is a guess, and guessing wrong would rewrite
+ * the user's own words.
+ *
+ * So in an ambiguous body ours must still be exactly at the edge it was inserted against to be touched at
+ * all; failing that the draft simply stops being managed.
  */
 private fun signatureRange(
     body: String,

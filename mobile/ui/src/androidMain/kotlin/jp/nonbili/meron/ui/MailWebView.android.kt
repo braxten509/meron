@@ -210,8 +210,8 @@ actual fun MailWebView(
                 addJavascriptInterface(
                     object {
                         @JavascriptInterface
-                        fun open(src: String) {
-                            mailImageRef(src)?.let { imageRef ->
+                        fun open(imageSource: String) {
+                            mailImageRef(imageSource)?.let { imageRef ->
                                 post { latestOnOpenImage.value(imageRef) }
                             }
                         }
@@ -329,8 +329,8 @@ internal fun externalMailUrl(url: String): String? {
     }
 }
 
-internal fun mailImageRef(src: String): String? {
-    val value = src.trim()
+internal fun mailImageRef(imageSource: String): String? {
+    val value = imageSource.trim()
     if (value.isEmpty()) return null
     val uri = runCatching { URI(encodeIllegalUriCharacters(value)) }.getOrNull() ?: return null
     if (isMailWebViewOrigin(uri.host)) return uri.path?.takeIf { it.startsWith("/media/") }
@@ -359,13 +359,16 @@ private fun encodeIllegalUriCharacters(value: String): String =
         }
     }
 
-/** Remembers where the finger went down: [View.OnLongClickListener] is not told the
- *  press position, and without it a link menu can only be placed at the view corner.
+/**
+ * Retain the touch coordinates needed for a long press on message content.
  *
- *  Also keeps the gestures that are the page's own away from the list or reader
- *  scrolling around it, which would otherwise take the touch over (and cancel it
- *  here) as soon as a finger drifted vertically: a pinch, and a sideways drag
- *  across a page zoomed wider than the view. */
+ * Remembers where the finger went down: [View.OnLongClickListener] is not told the press position, and
+ * without it a link menu can only be placed at the view corner.
+ *
+ * Also keeps the gestures that are the page's own away from the list or reader scrolling around it, which
+ * would otherwise take the touch over (and cancel it here) as soon as a finger drifted vertically: a pinch,
+ * and a sideways drag across a page zoomed wider than the view.
+ */
 private class LongPressWebView(
     context: Context,
 ) : WebView(context) {

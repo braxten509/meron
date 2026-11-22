@@ -7,26 +7,16 @@ package jp.nonbili.meron.ui
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.History
@@ -56,10 +46,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import jp.nonbili.meron.shared.AccountSummary
-import jp.nonbili.meron.shared.AiModel
 import jp.nonbili.meron.shared.AiModelList
 import jp.nonbili.meron.shared.AiSortConfig
 import jp.nonbili.meron.shared.AiSortError
@@ -67,76 +54,30 @@ import jp.nonbili.meron.shared.AiSortEstimate
 import jp.nonbili.meron.shared.AiSortFolder
 import jp.nonbili.meron.shared.AiSortKeyState
 import jp.nonbili.meron.shared.AiSortLesson
-import jp.nonbili.meron.shared.AiSortLogEntry
 import jp.nonbili.meron.shared.AiSortStatus
 import jp.nonbili.meron.shared.accountSummaryIsRss
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlin.math.pow
-import kotlin.math.roundToLong
 
 private const val PROVIDER_TINFOIL = "tinfoil"
+
 private const val PROVIDER_OPENROUTER = "openrouter"
+
 private const val READS_HEADERS = "headers"
-private const val READS_START = "start"
-private const val AI_POLL_MS = 1500L
+
+internal const val READS_START = "start"
+
+internal const val AI_POLL_MS = 1500L
+
 /** History rows shown at first and added by each "View more". */
-private const val AI_LOG_PAGE = 50
+internal const val AI_LOG_PAGE = 50
 
 /** The core refuses these as targets too; the picker just doesn't offer them. */
 private val SYSTEM_FOLDER_ROLES = setOf("inbox", "sent", "drafts", "trash", "junk")
 
-// Rough size of one new email's request, as in the plan's cost table: about
-// 300 tokens in for sender and subject, 125 more with the start of the email,
-// and 30 out.
-private const val TOKENS_IN_HEADERS = 300.0
-private const val TOKENS_IN_START = 425.0
-private const val TOKENS_OUT = 30.0
+internal fun accountName(account: AccountSummary): String = account.displayName.ifEmpty { account.email }
 
-// A decision model reads one email and the folder list per request, and bills
-// no output.
-private const val DECISION_TOKENS_IN_HEADERS = 150.0
-private const val DECISION_TOKENS_IN_START = 275.0
-
-/** About what 1,000 new emails cost with [model], or null when its price is unknown. */
-private fun costPerThousand(
-    model: AiModel,
-    reads: String,
-): Double? {
-    val priceIn = model.priceInPerM ?: return null
-    if (model.decision) {
-        val tokensIn = if (reads == READS_START) DECISION_TOKENS_IN_START else DECISION_TOKENS_IN_HEADERS
-        return 1000 * tokensIn * priceIn / 1_000_000
-    }
-    val priceOut = model.priceOutPerM ?: return null
-    val tokensIn = if (reads == READS_START) TOKENS_IN_START else TOKENS_IN_HEADERS
-    return 1000 * (tokensIn * priceIn + TOKENS_OUT * priceOut) / 1_000_000
-}
-
-/** US dollars with two significant digits below a dollar: $0.042, $0.50, $1.20. */
-internal fun formatUsd(value: Double): String {
-    if (value <= 0.0) return "\$0"
-    var decimals = 2
-    if (value < 1) {
-        var scaled = value
-        decimals = 0
-        while (scaled < 10 && decimals < 8) {
-            scaled *= 10
-            decimals += 1
-        }
-        decimals = maxOf(decimals, 2)
-    }
-    val factor = 10.0.pow(decimals).toLong()
-    val units = (value * factor).roundToLong()
-    val fraction = (units % factor).toString().padStart(decimals, '0')
-    val trimmed = if (decimals > 2) fraction.trimEnd('0').padEnd(2, '0') else fraction
-    return "\$${units / factor}.$trimmed"
-}
-
-private fun accountName(account: AccountSummary): String = account.displayName.ifEmpty { account.email }
-
-private fun folderKey(folder: AiSortFolder): String =
-    if (folder.isMeron) "meron\u0000${folder.meronFolderId}" else "${folder.account}\u0000${folder.folder}"
+private fun folderKey(folder: AiSortFolder): String = if (folder.isMeron) "meron\u0000${folder.meronFolderId}" else "${folder.account}\u0000${folder.folder}"
 
 @Composable
 private fun errorLabel(error: AiSortError): String =
@@ -148,8 +89,7 @@ private fun errorLabel(error: AiSortError): String =
     }
 
 @Composable
-private fun providerLabel(provider: String): String =
-    if (provider == PROVIDER_TINFOIL) tr("aiSort.providerTinfoil") else tr("aiSort.providerOpenRouter")
+private fun providerLabel(provider: String): String = if (provider == PROVIDER_TINFOIL) tr("aiSort.providerTinfoil") else tr("aiSort.providerOpenRouter")
 
 @Composable
 private fun SectionTitle(text: String) {
@@ -157,7 +97,7 @@ private fun SectionTitle(text: String) {
 }
 
 @Composable
-private fun SmallNote(
+internal fun SmallNote(
     text: String,
     color: Color = MaterialTheme.colorScheme.onSurfaceVariant,
 ) {
@@ -326,6 +266,7 @@ internal fun MeronMobileState.AiSortPage(
     editingKeyFor?.let { forProvider ->
         val state = keys[forProvider] ?: AiSortKeyState()
         val works = tr("aiSort.keyOk")
+
         fun close() {
             editingKeyFor = null
             keyDraft = ""
@@ -468,6 +409,7 @@ internal fun MeronMobileState.AiSortPage(
         )
 
         SectionTitle(tr("aiSort.provider"))
+
         // One card per service with its own key, so switching is one tap; the
         // model last used there comes back with it.
         fun switchTo(option: String) {
@@ -600,7 +542,11 @@ internal fun MeronMobileState.AiSortPage(
             options = emptyList(),
             include = { it.role !in SYSTEM_FOLDER_ROLES && folderKey(AiSortFolder(it.accountId, it.name)) !in chosen },
             meronOptions = meronFolders.filterNot(::isMeronArchiveFolder),
-            meronChosen = current.folders.filter { it.isMeron }.map { it.meronFolderId }.toSet(),
+            meronChosen =
+                current.folders
+                    .filter { it.isMeron }
+                    .map { it.meronFolderId }
+                    .toSet(),
             onPickMeron = { meron ->
                 update(current.copy(folders = current.folders + AiSortFolder(account = "", folder = "", meronFolderId = meron.id)))
             },
@@ -687,306 +633,4 @@ internal fun MeronMobileState.AiSortPage(
             }
         }
     }
-}
-
-/** Everything the AI moved, newest first, one line each, [AI_LOG_PAGE] at a time. */
-@Composable
-internal fun MeronMobileState.AiSortLogPage(modifier: Modifier = Modifier) {
-    var history by remember { mutableStateOf<AiSortStatus?>(null) }
-    var shown by remember { mutableIntStateOf(AI_LOG_PAGE) }
-    val coroutines = rememberCoroutineScope()
-    LaunchedEffect(Unit) { loadAiSortStatus()?.let { history = it } }
-    val current = history
-    val polling = current != null && (current.running != null || current.log.any { it.state == "moving" })
-    LaunchedEffect(polling) {
-        while (polling) {
-            delay(AI_POLL_MS)
-            loadAiSortStatus()?.let { history = it }
-        }
-    }
-    if (current == null) {
-        Column(modifier.padding(16.dp)) { SmallNote(tr("common.loading")) }
-        return
-    }
-    val moveBackFailed = trs("aiSort.moveBackFailed")
-    var failedNote by remember { mutableStateOf(false) }
-    LazyColumn(modifier, contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)) {
-        if (failedNote) {
-            item(key = "move-back-failed") { SmallNote(moveBackFailed, MaterialTheme.colorScheme.error) }
-        }
-        if (current.log.isEmpty()) {
-            item { SmallNote(tr("aiSort.logEmpty")) }
-        }
-        items(current.log.take(shown), key = { it.id }) { entry ->
-            AiSortLogRow(
-                entry = entry,
-                onMoveBack = {
-                    coroutines.launch {
-                        val ok = aiSortMoveBack(entry.id)
-                        failedNote = !ok
-                        if (!ok) status = moveBackFailed
-                        loadAiSortStatus()?.let { history = it }
-                    }
-                },
-            )
-            HorizontalDivider()
-        }
-        if (current.log.size > shown) {
-            item {
-                TextButton(onClick = { shown += AI_LOG_PAGE }, modifier = Modifier.fillMaxWidth()) {
-                    Text(tr("aiSort.viewMore"))
-                }
-            }
-        }
-    }
-}
-
-/** A chosen folder's name, with its account when there is more than one. */
-private fun MeronMobileState.aiFolderLabel(
-    accounts: List<AccountSummary>,
-    folder: AiSortFolder,
-): String {
-    if (folder.isMeron) return meronFolderName(folder.meronFolderId) ?: folder.meronFolderId
-    val name = foldersByAccount[folder.account]?.firstOrNull { it.name == folder.folder }?.displayName ?: folder.folder
-    val account = accounts.firstOrNull { it.id == folder.account }
-    return if (accounts.size > 1 && account != null) "${accountName(account)} / $name" else name
-}
-
-/**
- * One line of the AI's history: the subject, a tag with the folder (or why it
- * stayed), and an undo arrow while it can still be moved back.
- */
-@Composable
-private fun AiSortLogRow(
-    entry: AiSortLogEntry,
-    onMoveBack: () -> Unit,
-) {
-    val moved = entry.state == "moved" || entry.state == "moving"
-    val failed = entry.state == "failed"
-    val tag =
-        when (entry.state) {
-            "moved", "moving" -> entry.toFolder
-            "left" -> tr("aiSort.tagLeft")
-            "slow" -> tr("aiSort.tagSlow")
-            "failed" -> tr("aiSort.tagFailed")
-            "moved_back" -> tr("aiSort.tagMovedBack")
-            else -> entry.state
-        }
-    val colors = MaterialTheme.colorScheme
-    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            entry.subject.ifBlank { entry.sender },
-            Modifier.weight(1f),
-            fontSize = 14.sp,
-            color = if (moved) Color.Unspecified else colors.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        Surface(
-            color = if (failed) colors.errorContainer else if (moved) colors.secondaryContainer else colors.surfaceVariant,
-            shape = RoundedCornerShape(50),
-            modifier = Modifier.padding(start = 8.dp).widthIn(max = 140.dp),
-        ) {
-            Text(
-                tag,
-                Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                fontSize = 11.sp,
-                color = if (failed) colors.onErrorContainer else if (moved) colors.onSecondaryContainer else colors.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        // The same room on every line, so the tags line up.
-        Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
-            if (entry.state == "moved") {
-                IconButton(onClick = onMoveBack) {
-                    Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = tr("aiSort.moveBack"), tint = colors.primary)
-                }
-            }
-        }
-    }
-}
-
-/**
- * One thing the AI learned from mail moved by hand: the sender, the subject, a
- * tag with where it went, and a button to forget it. Dimmed, with a note,
- * while the AI can't follow it.
- */
-@Composable
-private fun AiSortLessonRow(
-    lesson: AiSortLesson,
-    onForget: () -> Unit,
-) {
-    val tag =
-        when (lesson.place) {
-            "spam" -> tr("aiSort.lessonSpam")
-            "inbox" -> tr("aiSort.lessonInbox")
-            else -> lesson.placeName
-        }
-    val colors = MaterialTheme.colorScheme
-    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f).padding(vertical = 4.dp)) {
-            Text(
-                lesson.sender,
-                fontSize = 14.sp,
-                color = if (lesson.used) Color.Unspecified else colors.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            if (lesson.subject.isNotBlank()) {
-                Text(lesson.subject, fontSize = 12.sp, color = colors.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-            if (!lesson.used) {
-                when (lesson.place) {
-                    "meron" -> SmallNote(tr("aiSort.lessonUnusedMeron"))
-                    "spam" -> SmallNote(tr("aiSort.lessonUnusedSpam"))
-                }
-            }
-        }
-        Surface(
-            color = if (lesson.used) colors.secondaryContainer else colors.surfaceVariant,
-            shape = RoundedCornerShape(50),
-            modifier = Modifier.padding(start = 8.dp).widthIn(max = 140.dp),
-        ) {
-            Text(
-                tag,
-                Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                fontSize = 11.sp,
-                color = if (lesson.used) colors.onSecondaryContainer else colors.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
-            IconButton(onClick = onForget) {
-                Icon(Icons.Filled.Close, contentDescription = tr("aiSort.lessonForget"), tint = colors.onSurfaceVariant)
-            }
-        }
-    }
-}
-
-/**
- * Full-screen model list with a search field. Each row shows about what 1,000
- * new emails cost and flags thinking models, which may be too slow. If the list
- * can't load, a model id can still be typed in.
- */
-@Composable
-private fun AiModelPicker(
-    list: AiModelList?,
-    failed: Boolean,
-    reads: String,
-    selected: String,
-    recent: List<String>,
-    onPick: (String) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    var query by remember { mutableStateOf("") }
-    var typed by remember { mutableStateOf(selected) }
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
-            Column(Modifier.fillMaxSize()) {
-                Row(Modifier.padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = onDismiss) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = tr("buttons.back"))
-                    }
-                    Text(tr("aiSort.model"), style = MaterialTheme.typography.titleLarge)
-                }
-                when {
-                    list != null -> {
-                        OutlinedTextField(
-                            value = query,
-                            onValueChange = { query = it },
-                            placeholder = { Text(tr("kanban.actions.search")) },
-                            singleLine = true,
-                            keyboardOptions = nativeTextKeyboardOptions,
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-                        )
-                        val needle = query.trim()
-                        val shown =
-                            list.models.filter {
-                                needle.isEmpty() || it.name.contains(needle, ignoreCase = true) || it.id.contains(needle, ignoreCase = true)
-                            }
-                        // The last few picked, on top while not searching.
-                        val recentShown =
-                            if (needle.isEmpty()) recent.map { id -> list.models.firstOrNull { it.id == id } ?: AiModel(id) } else emptyList()
-                        LazyColumn(Modifier.fillMaxSize()) {
-                            if (recentShown.isNotEmpty()) {
-                                item(key = "recent-title") { ModelListTitle(tr("aiSort.recentModels")) }
-                                items(recentShown, key = { "recent:${it.id}" }) { model ->
-                                    AiModelRow(model, reads, model.id == selected) { onPick(model.id) }
-                                }
-                                item(key = "all-title") { ModelListTitle(tr("aiSort.allModels")) }
-                            }
-                            items(shown, key = { it.id }) { model ->
-                                AiModelRow(model, reads, model.id == selected) { onPick(model.id) }
-                            }
-                        }
-                    }
-
-                    failed -> {
-                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            SmallNote(tr("aiSort.modelsFailed"), MaterialTheme.colorScheme.error)
-                            OutlinedTextField(
-                                value = typed,
-                                onValueChange = { typed = it },
-                                label = { Text(tr("aiSort.model")) },
-                                singleLine = true,
-                                keyboardOptions = nativeTextKeyboardOptions,
-                                modifier = Modifier.fillMaxWidth(),
-                            )
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                                TextButton(enabled = typed.isNotBlank(), onClick = { onPick(typed.trim()) }) { Text(tr("buttons.save")) }
-                            }
-                        }
-                    }
-
-                    else -> {
-                        SmallNote(tr("common.loading"))
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ModelListTitle(text: String) {
-    Text(
-        text,
-        Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp),
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.primary,
-    )
-}
-
-/** One model: its name, id and about what 1,000 emails cost. */
-@Composable
-private fun AiModelRow(
-    model: AiModel,
-    reads: String,
-    selected: Boolean,
-    onPick: () -> Unit,
-) {
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onPick)
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-    ) {
-        Text(
-            model.name,
-            color = if (selected) MaterialTheme.colorScheme.primary else Color.Unspecified,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        val details =
-            listOfNotNull(
-                model.id.takeIf { it != model.name },
-                costPerThousand(model, reads)?.let { tr("aiSort.modelPrice", mapOf("cost" to formatUsd(it))) },
-                tr("aiSort.modelDecision").takeIf { model.decision },
-            )
-        if (details.isNotEmpty()) SmallNote(details.joinToString(" · "))
-        if (model.reasoning) SmallNote(tr("aiSort.modelSlow"), MaterialTheme.colorScheme.error)
-    }
-    HorizontalDivider()
 }

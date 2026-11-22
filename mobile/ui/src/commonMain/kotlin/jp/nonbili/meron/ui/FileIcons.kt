@@ -89,24 +89,24 @@ internal fun fileIconFor(
 
     // Specific types before the `text/` catch-all: invites and contact cards are
     // text/calendar and text/vcard.
-    val m = mime.lowercase().substringBefore(';').trim()
+    val mediaType = mime.lowercase().substringBefore(';').trim()
     return when {
-        m == "text/calendar" || m == "application/ics" -> Icons.Filled.Event
-        m == "text/vcard" || m == "text/x-vcard" || m == "text/directory" -> Icons.Filled.ContactPage
-        m == "message/rfc822" || m == "application/vnd.ms-outlook" -> Icons.Filled.Email
-        "pkcs7" in m || "pgp" in m || "x509" in m -> Icons.Filled.Key
-        m.startsWith("image/") -> Icons.Filled.Image
-        m.startsWith("video/") -> Icons.Filled.VideoFile
-        m.startsWith("audio/") -> Icons.Filled.AudioFile
-        m.startsWith("font/") -> Icons.Filled.FontDownload
-        m.startsWith("text/") -> Icons.Filled.Description
-        m == "application/pdf" -> Icons.Filled.PictureAsPdf
-        "spreadsheet" in m || "excel" in m -> Icons.Filled.TableChart
-        "presentation" in m || "powerpoint" in m -> Icons.Filled.Slideshow
-        "wordprocessing" in m || "msword" in m || "opendocument.text" in m -> Icons.Filled.Description
-        "zip" in m || "compressed" in m || "tar" in m -> Icons.Filled.FolderZip
-        "android.package" in m || "x-msdownload" in m || "diskimage" in m -> Icons.Filled.Inventory2
-        "json" in m || "javascript" in m || "xml" in m -> Icons.Filled.Code
+        mediaType == "text/calendar" || mediaType == "application/ics" -> Icons.Filled.Event
+        mediaType == "text/vcard" || mediaType == "text/x-vcard" || mediaType == "text/directory" -> Icons.Filled.ContactPage
+        mediaType == "message/rfc822" || mediaType == "application/vnd.ms-outlook" -> Icons.Filled.Email
+        "pkcs7" in mediaType || "pgp" in mediaType || "x509" in mediaType -> Icons.Filled.Key
+        mediaType.startsWith("image/") -> Icons.Filled.Image
+        mediaType.startsWith("video/") -> Icons.Filled.VideoFile
+        mediaType.startsWith("audio/") -> Icons.Filled.AudioFile
+        mediaType.startsWith("font/") -> Icons.Filled.FontDownload
+        mediaType.startsWith("text/") -> Icons.Filled.Description
+        mediaType == "application/pdf" -> Icons.Filled.PictureAsPdf
+        "spreadsheet" in mediaType || "excel" in mediaType -> Icons.Filled.TableChart
+        "presentation" in mediaType || "powerpoint" in mediaType -> Icons.Filled.Slideshow
+        "wordprocessing" in mediaType || "msword" in mediaType || "opendocument.text" in mediaType -> Icons.Filled.Description
+        "zip" in mediaType || "compressed" in mediaType || "tar" in mediaType -> Icons.Filled.FolderZip
+        "android.package" in mediaType || "x-msdownload" in mediaType || "diskimage" in mediaType -> Icons.Filled.Inventory2
+        "json" in mediaType || "javascript" in mediaType || "xml" in mediaType -> Icons.Filled.Code
         else -> Icons.AutoMirrored.Filled.InsertDriveFile
     }
 }

@@ -25,11 +25,11 @@ internal suspend fun loadSenderImage(
     loadCachedImageBitmap("sender:$email#$side") {
         withContext(ioDispatcher) {
             try {
-                val src = parseSenderImageResponse(MobileMailCommandClient(core).resolveSenderImage(email))
-                if (!src.startsWith("data:image/") || !src.contains(";base64,")) {
+                val imageSource = parseSenderImageResponse(MobileMailCommandClient(core).resolveSenderImage(email))
+                if (!imageSource.startsWith("data:image/") || !imageSource.contains(";base64,")) {
                     null
                 } else {
-                    decodeThumbnailBitmap(Base64.Default.decode(src.substringAfter(";base64,")), side)
+                    decodeThumbnailBitmap(Base64.Default.decode(imageSource.substringAfter(";base64,")), side)
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled

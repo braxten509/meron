@@ -22,11 +22,13 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 /**
- * Stepping aside for the load already out for a mailbox is not the same as
- * being answered by it: that load read the store before the change the reload
- * is reacting to. A quick reply's post-send draft discard used to run its reload
- * while the reload the send itself started was still out, and the rows that
- * one then painted still counted the discarded draft — the card showed one
+ * Verify that a mailbox reload requested during a read sees subsequent changes.
+ *
+ * Stepping aside for the load already out for a mailbox is not the same as being answered by it: that load
+ * read the store before the change the reload is reacting to.
+ *
+ * A quick reply's post-send draft discard used to run its reload while the reload the send itself started
+ * was still out, and the rows that one then painted still counted the discarded draft — the card showed one
  * message too many until something else reloaded the list.
  */
 class MailboxReloadDeferralTest {

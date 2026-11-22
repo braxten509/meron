@@ -121,11 +121,11 @@ internal fun parseCustomThemes(raw: String): List<CustomTheme> {
     val array = runCatching { customThemesJson.parseToJsonElement(raw) as? JsonArray }.getOrNull() ?: return emptyList()
     val seen = mutableSetOf<String>()
     return array.mapNotNull { element ->
-        val obj = element as? JsonObject ?: return@mapNotNull null
-        val id = (obj["id"] as? JsonPrimitive)?.takeIf { it.isString }?.content ?: return@mapNotNull null
+        val fields = element as? JsonObject ?: return@mapNotNull null
+        val id = (fields["id"] as? JsonPrimitive)?.takeIf { it.isString }?.content ?: return@mapNotNull null
         if (!id.startsWith(CUSTOM_THEME_ID_PREFIX) || !seen.add(id)) return@mapNotNull null
-        val source = (obj["source"] as? JsonPrimitive)?.content?.let(::parseThemeSource) ?: return@mapNotNull null
-        val name = (obj["name"] as? JsonPrimitive)?.content?.trim().orEmpty()
+        val source = (fields["source"] as? JsonPrimitive)?.content?.let(::parseThemeSource) ?: return@mapNotNull null
+        val name = (fields["name"] as? JsonPrimitive)?.content?.trim().orEmpty()
         CustomTheme(id, name.ifEmpty { "Custom theme" }, source)
     }
 }
@@ -145,24 +145,24 @@ internal fun serializeCustomThemes(themes: List<CustomTheme>): String =
 // channels as desktop's formatColor does, so both derive the same colors.
 
 private fun rgba(
-    r: Float,
-    g: Float,
-    b: Float,
+    red: Float,
+    green: Float,
+    blue: Float,
     a: Float,
-): Color = Color(r.roundToInt().coerceIn(0, 255), g.roundToInt().coerceIn(0, 255), b.roundToInt().coerceIn(0, 255), (a.coerceIn(0f, 1f) * 255).roundToInt())
+): Color = Color(red.roundToInt().coerceIn(0, 255), green.roundToInt().coerceIn(0, 255), blue.roundToInt().coerceIn(0, 255), (a.coerceIn(0f, 1f) * 255).roundToInt())
 
 /** Linear sRGB blend: weight 0 -> [a], 1 -> [b]. */
 private fun mix(
     a: Color,
-    b: Color,
+    blue: Color,
     weight: Float,
 ): Color {
     val w = weight.coerceIn(0f, 1f)
     return rgba(
-        (a.red + (b.red - a.red) * w) * 255,
-        (a.green + (b.green - a.green) * w) * 255,
-        (a.blue + (b.blue - a.blue) * w) * 255,
-        a.alpha + (b.alpha - a.alpha) * w,
+        (a.red + (blue.red - a.red) * w) * 255,
+        (a.green + (blue.green - a.green) * w) * 255,
+        (a.blue + (blue.blue - a.blue) * w) * 255,
+        a.alpha + (blue.alpha - a.alpha) * w,
     )
 }
 
@@ -186,7 +186,7 @@ private fun flatten(
 }
 
 private class Oklch(
-    var l: Double,
+    var lightness: Double,
     val c: Double,
     val h: Double,
 )
@@ -196,28 +196,28 @@ private fun toLinear(channel: Float): Double = if (channel <= 0.04045f) channel 
 private fun fromLinear(value: Double): Float = (255 * if (value <= 0.0031308) 12.92 * value else 1.055 * max(0.0, value).pow(1 / 2.4) - 0.055).toFloat()
 
 private fun toOklch(color: Color): Oklch {
-    val r = toLinear(color.red)
-    val g = toLinear(color.green)
-    val b = toLinear(color.blue)
-    val l = cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b)
-    val m = cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b)
-    val s = cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b)
-    val lightness = 0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s
-    val a = 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s
-    val bb = 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s
+    val red = toLinear(color.red)
+    val green = toLinear(color.green)
+    val blue = toLinear(color.blue)
+    val longCone = cbrt(0.4122214708 * red + 0.5363325363 * green + 0.0514459929 * blue)
+    val middleCone = cbrt(0.2119034982 * red + 0.6806995451 * green + 0.1073969566 * blue)
+    val shortCone = cbrt(0.0883024619 * red + 0.2817188376 * green + 0.6299787005 * blue)
+    val lightness = 0.2104542553 * longCone + 0.793617785 * middleCone - 0.0040720468 * shortCone
+    val a = 1.9779984951 * longCone - 2.428592205 * middleCone + 0.4505937099 * shortCone
+    val bb = 0.0259040371 * longCone + 0.7827717662 * middleCone - 0.808675766 * shortCone
     return Oklch(lightness, hypot(a, bb), (atan2(bb, a) * 180 / PI + 360) % 360)
 }
 
 private fun fromOklch(oklch: Oklch): Color {
     val a = oklch.c * cos(oklch.h * PI / 180)
-    val b = oklch.c * sin(oklch.h * PI / 180)
-    val l = (oklch.l + 0.3963377774 * a + 0.2158037573 * b).pow(3)
-    val m = (oklch.l - 0.1055613458 * a - 0.0638541728 * b).pow(3)
-    val s = (oklch.l - 0.0894841775 * a - 1.291485548 * b).pow(3)
+    val blue = oklch.c * sin(oklch.h * PI / 180)
+    val longCone = (oklch.lightness + 0.3963377774 * a + 0.2158037573 * blue).pow(3)
+    val middleCone = (oklch.lightness - 0.1055613458 * a - 0.0638541728 * blue).pow(3)
+    val shortCone = (oklch.lightness - 0.0894841775 * a - 1.291485548 * blue).pow(3)
     return rgba(
-        fromLinear(4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s),
-        fromLinear(-1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s),
-        fromLinear(-0.0041960863 * l - 0.7034186147 * m + 1.7076949135 * s),
+        fromLinear(4.0767416621 * longCone - 3.3077115913 * middleCone + 0.2309699292 * shortCone),
+        fromLinear(-1.2684380046 * longCone + 2.6097574011 * middleCone - 0.3413193965 * shortCone),
+        fromLinear(-0.0041960863 * longCone - 0.7034186147 * middleCone + 1.7076949135 * shortCone),
         1f,
     )
 }
@@ -226,9 +226,9 @@ private fun fromOklch(oklch: Oklch): Color {
 private fun withLightness(
     color: Color,
     lightness: Float,
-): Color = fromOklch(toOklch(color).apply { l = lightness.toDouble().coerceIn(0.0, 1.0) })
+): Color = fromOklch(toOklch(color).apply { this.lightness = lightness.toDouble().coerceIn(0.0, 1.0) })
 
-private fun lightnessOf(color: Color): Float = toOklch(color).l.toFloat()
+private fun lightnessOf(color: Color): Float = toOklch(color).lightness.toFloat()
 
 // Surface placement and contrast, after desktop's applySurfaceRules.
 
@@ -256,9 +256,9 @@ private fun withMinContrast(
     var out = rgba(color.red * 255, color.green * 255, color.blue * 255, color.alpha)
     // Stop only at the end of the scale being moved toward: white sits at the
     // top of it and can still darken, black at the bottom and can still lighten.
-    val hasRoom = { if (direction < 0) oklch.l > 0.0 else oklch.l < 1.0 }
+    val hasRoom = { if (direction < 0) oklch.lightness > 0.0 else oklch.lightness < 1.0 }
     while (backgrounds.minOf { contrastRatio(out, it) } < min && hasRoom()) {
-        oklch.l = (oklch.l + direction * 0.005).coerceIn(0.0, 1.0)
+        oklch.lightness = (oklch.lightness + direction * 0.005).coerceIn(0.0, 1.0)
         out = fromOklch(oklch)
     }
     return out

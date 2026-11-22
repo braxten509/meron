@@ -11,27 +11,30 @@ import android.content.Intent
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** Debug-only: posts a fake `mail.newMessages` batch so the shade layout, the
- *  group summary and the tap targets can be checked without waiting for real
- *  mail to arrive. Debug source set only — never in a release build.
+/**
+ * Posts sample new-mail notifications in debug builds.
  *
- *  Send a canned batch:
- *      adb shell am broadcast -a jp.nonbili.meron.DEBUG_NEW_MAIL \
- *          -n jp.nonbili.meron/.DebugNotificationReceiver --ei count 3
+ * Debug-only: posts a fake `mail.newMessages` batch so the shade layout, the group summary and the tap
+ * targets can be checked without waiting for real mail to arrive. Debug source set only — never in a
+ * release build.
  *
- *  Or a payload of your own, shaped like a `mail.newMessages` detail:
- *      adb shell am broadcast -a jp.nonbili.meron.DEBUG_NEW_MAIL \
- *          -n jp.nonbili.meron/.DebugNotificationReceiver \
- *          --es detail '{"account":"a1","accountName":"me@example.com",...}'
+ * Send a canned batch:
+ *     adb shell am broadcast -a jp.nonbili.meron.DEBUG_NEW_MAIL \
+ *         -n jp.nonbili.meron/.DebugNotificationReceiver --ei count 3
  *
- *  `account`/`folder` should match a real account for the tap-through to land
- *  on a mailbox; anything else still renders.
+ * Or a payload of your own, shaped like a `mail.newMessages` detail:
+ *     adb shell am broadcast -a jp.nonbili.meron.DEBUG_NEW_MAIL \
+ *         -n jp.nonbili.meron/.DebugNotificationReceiver \
+ *         --es detail '{"account":"a1","accountName":"me@example.com",...}'
  *
- *  Raise the mailbox-changed event on its own, to check that a running app
- *  reloads when something changes behind its back:
- *      adb shell am broadcast -a jp.nonbili.meron.DEBUG_MAILBOX_CHANGED \
- *          -n jp.nonbili.meron/.DebugNotificationReceiver \
- *          --es account <account-id> --es folder INBOX
+ * `account`/`folder` should match a real account for the tap-through to land on a mailbox; anything else
+ * still renders.
+ *
+ * Raise the mailbox-changed event on its own, to check that a running app reloads when something changes
+ * behind its back:
+ *     adb shell am broadcast -a jp.nonbili.meron.DEBUG_MAILBOX_CHANGED \
+ *         -n jp.nonbili.meron/.DebugNotificationReceiver \
+ *         --es account <account-id> --es folder INBOX
  */
 class DebugNotificationReceiver : BroadcastReceiver() {
     override fun onReceive(

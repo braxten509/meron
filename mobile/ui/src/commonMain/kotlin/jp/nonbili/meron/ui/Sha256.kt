@@ -8,7 +8,7 @@ package jp.nonbili.meron.ui
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 
-private val SHA256_K =
+private val ROUND_CONSTANTS =
     intArrayOf(
         0x428a2f98,
         0x71374491,
@@ -112,45 +112,45 @@ fun sha256(message: ByteArray): ByteArray {
                 (padded[j + 3].toInt() and 0xff)
         }
         for (i in 16 until 64) {
-            val s0 = rotr(w[i - 15], 7) xor rotr(w[i - 15], 18) xor (w[i - 15] ushr 3)
-            val s1 = rotr(w[i - 2], 17) xor rotr(w[i - 2], 19) xor (w[i - 2] ushr 10)
-            w[i] = w[i - 16] + s0 + w[i - 7] + s1
+            val sigmaZero = rotr(w[i - 15], 7) xor rotr(w[i - 15], 18) xor (w[i - 15] ushr 3)
+            val sigmaOne = rotr(w[i - 2], 17) xor rotr(w[i - 2], 19) xor (w[i - 2] ushr 10)
+            w[i] = w[i - 16] + sigmaZero + w[i - 7] + sigmaOne
         }
 
-        var a = h0
-        var b = h1
-        var c = h2
-        var d = h3
-        var e = h4
-        var f = h5
-        var g = h6
-        var h = h7
+        var firstWord = h0
+        var secondWord = h1
+        var thirdWord = h2
+        var fourthWord = h3
+        var fifthWord = h4
+        var sixthWord = h5
+        var seventhWord = h6
+        var eighthWord = h7
 
         for (i in 0 until 64) {
-            val s1 = rotr(e, 6) xor rotr(e, 11) xor rotr(e, 25)
-            val ch = (e and f) xor (e.inv() and g)
-            val temp1 = h + s1 + ch + SHA256_K[i] + w[i]
-            val s0 = rotr(a, 2) xor rotr(a, 13) xor rotr(a, 22)
-            val maj = (a and b) xor (a and c) xor (b and c)
-            val temp2 = s0 + maj
-            h = g
-            g = f
-            f = e
-            e = d + temp1
-            d = c
-            c = b
-            b = a
-            a = temp1 + temp2
+            val sigmaOne = rotr(fifthWord, 6) xor rotr(fifthWord, 11) xor rotr(fifthWord, 25)
+            val ch = (fifthWord and sixthWord) xor (fifthWord.inv() and seventhWord)
+            val temp1 = eighthWord + sigmaOne + ch + ROUND_CONSTANTS[i] + w[i]
+            val sigmaZero = rotr(firstWord, 2) xor rotr(firstWord, 13) xor rotr(firstWord, 22)
+            val maj = (firstWord and secondWord) xor (firstWord and thirdWord) xor (secondWord and thirdWord)
+            val temp2 = sigmaZero + maj
+            eighthWord = seventhWord
+            seventhWord = sixthWord
+            sixthWord = fifthWord
+            fifthWord = fourthWord + temp1
+            fourthWord = thirdWord
+            thirdWord = secondWord
+            secondWord = firstWord
+            firstWord = temp1 + temp2
         }
 
-        h0 += a
-        h1 += b
-        h2 += c
-        h3 += d
-        h4 += e
-        h5 += f
-        h6 += g
-        h7 += h
+        h0 += firstWord
+        h1 += secondWord
+        h2 += thirdWord
+        h3 += fourthWord
+        h4 += fifthWord
+        h5 += sixthWord
+        h6 += seventhWord
+        h7 += eighthWord
         chunk += 64
     }
 

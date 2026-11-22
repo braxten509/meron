@@ -102,14 +102,14 @@ private fun Modifier.drawScrollbar(
     drawWithContent {
         drawContent()
         if (alpha <= 0f) return@drawWithContent
-        val m = metrics() ?: return@drawWithContent
-        if (m.content <= m.viewport || m.viewport <= 0f) return@drawWithContent
+        val scrollMetrics = metrics() ?: return@drawWithContent
+        if (scrollMetrics.content <= scrollMetrics.viewport || scrollMetrics.viewport <= 0f) return@drawWithContent
 
         val thickness = ThumbThickness.toPx()
         val margin = ThumbMargin.toPx()
         val track = if (orientation == Orientation.Vertical) size.height else size.width
-        val length = max(MinThumbLength.toPx(), track * (m.viewport / m.content))
-        val progress = (m.scrolled / (m.content - m.viewport)).coerceIn(0f, 1f)
+        val length = max(MinThumbLength.toPx(), track * (scrollMetrics.viewport / scrollMetrics.content))
+        val progress = (scrollMetrics.scrolled / (scrollMetrics.content - scrollMetrics.viewport)).coerceIn(0f, 1f)
         val start = (track - length) * progress
 
         // endOffset pushes the thumb past this node's own edge, so a scroller
@@ -151,13 +151,14 @@ private class ItemSizes {
 }
 
 /**
- * Lazy lists only know the items they have measured, so the content length is
- * estimated: items seen so far count at the size they were measured at, and
- * the rest at the average of those. Averaging only the visible items is exact
- * for the uniform rows most of these lists use, but a conversation mixes
- * one-line rows with mails thousands of pixels tall, and there the estimate
- * swung with every row that entered or left the viewport, moving the thumb
- * while the content barely moved.
+ * Estimate the scrolling range of a partially measured lazy list.
+ *
+ * Lazy lists only know the items they have measured, so the content length is estimated: items seen so far
+ * count at the size they were measured at, and the rest at the average of those.
+ *
+ * Averaging only the visible items is exact for the uniform rows most of these lists use, but a
+ * conversation mixes one-line rows with mails thousands of pixels tall, and there the estimate swung with
+ * every row that entered or left the viewport, moving the thumb while the content barely moved.
  */
 private fun metrics(
     state: LazyListState,

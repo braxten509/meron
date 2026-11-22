@@ -161,15 +161,16 @@ internal fun MeronMobileState.reinsertBulkRows(
 private const val BULK_GROUP_SIZE = 25
 
 /**
- * Archives or deletes several mail rows as one action: all leave the list at
- * once and, once the server has answered, one snackbar counts the rows that
- * actually moved, its Undo bringing every one of those back. Each row is still
- * answered on its own; one that fails comes back on its own, and is neither
- * counted nor undone.
+ * Archive or delete the selected conversations as a single UI action.
  *
- * With [groupAction] the rows go to the core a group at a time (one account's
- * rows, [BULK_GROUP_SIZE] at most), and it answers every row of the group
- * (see [parseBulkActionResults]). Without it each row is its own [action].
+ * Archives or deletes several mail rows as one action: all leave the list at once and, once the server has
+ * answered, one snackbar counts the rows that actually moved, its Undo bringing every one of those back.
+ * Each row is still answered on its own; one that fails comes back on its own, and is neither counted nor
+ * undone.
+ *
+ * With [groupAction] the rows go to the core a group at a time (one account's rows, [BULK_GROUP_SIZE] at
+ * most), and it answers every row of the group (see [parseBulkActionResults]). Without it each row is its
+ * own [action].
  */
 internal fun MeronMobileState.runBulkThreadRemoval(
     threads: List<ThreadSummary>,
@@ -226,6 +227,7 @@ internal fun MeronMobileState.runBulkThreadRemoval(
         } else {
             // One account's rows at a time: a sign-in is renewed per account.
             val groups = threads.groupBy { it.accountId }.values.flatMap { it.chunked(BULK_GROUP_SIZE) }
+
             suspend fun ask(rows: List<ThreadSummary>): List<Result<String>> {
                 val response =
                     requireCoreOk(

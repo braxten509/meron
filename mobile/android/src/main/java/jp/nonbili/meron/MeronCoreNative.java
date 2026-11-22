@@ -64,22 +64,22 @@ final class MeronCoreNative {
 
     /** Sets up the core without opening the store, so unlike {@link #initJson}
      *  it is safe on the main thread. The first command prepares the store. */
-    static String configureJson(String dataDir, String dbKey) {
+    static String configureJson(String dataDirectory, String dbKey) {
         if (!LOADED) return "";
         configureOAuthDefaults();
-        return meronCoreConfigureJsonKeyed(dataDir, dbKey);
+        return meronCoreConfigureJsonKeyed(dataDirectory, dbKey);
     }
 
-    static String initJson(String dataDir) {
+    static String initJson(String dataDirectory) {
         if (!LOADED) return "";
         configureOAuthDefaults();
-        return meronCoreInitJson(dataDir);
+        return meronCoreInitJson(dataDirectory);
     }
 
-    static String initJson(String dataDir, String dbKey) {
+    static String initJson(String dataDirectory, String dbKey) {
         if (!LOADED) return "";
         configureOAuthDefaults();
-        return meronCoreInitJsonKeyed(dataDir, dbKey);
+        return meronCoreInitJsonKeyed(dataDirectory, dbKey);
     }
 
     static void addCoreEventListener(CoreEventListener listener) {
@@ -122,14 +122,12 @@ final class MeronCoreNative {
     }
 
     /**
-     * Delivers an event that this process raised itself, to the same listeners a
-     * core-raised event reaches.
+     * Delivers an event that this process raised itself, to the same listeners a core-raised event reaches.
      *
      * <p>Mutations made outside the UI — a notification's Archive button, say —
-     * are invisible to a running app otherwise: core emits nothing for a thread
-     * move, so the open thread list would keep showing mail that is no longer
-     * there. Listeners cannot tell this apart from a core event, which is the
-     * point: they already know how to refresh.
+     * are invisible to a running app otherwise: core emits nothing for a thread move, so the open thread list
+     * would keep showing mail that is no longer there. Listeners cannot tell this apart from a core event,
+     * which is the point: they already know how to refresh.
      */
     static void dispatchLocalEvent(String eventJson) {
         dispatchEvent(eventJson);
@@ -143,9 +141,9 @@ final class MeronCoreNative {
 
     private static native int meronCoreProtocolVersion();
     private static native void meronCoreInitializeAndroidContext(Context context);
-    private static native String meronCoreConfigureJsonKeyed(String dataDir, String dbKey);
-    private static native String meronCoreInitJson(String dataDir);
-    private static native String meronCoreInitJsonKeyed(String dataDir, String dbKey);
+    private static native String meronCoreConfigureJsonKeyed(String dataDirectory, String dbKey);
+    private static native String meronCoreInitJson(String dataDirectory);
+    private static native String meronCoreInitJsonKeyed(String dataDirectory, String dbKey);
     private static native String meronCoreInvokeJson(String requestJson);
     private static native void meronCoreConfigureOAuthDefaults(
             String googleClientId, String googleTokenUrl, String outlookClientId);

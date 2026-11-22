@@ -194,12 +194,14 @@ internal fun collectCachedSettings(
 }
 
 /**
- * Write settings from the core table into the platform cache, skipping keys the
- * cache should keep (see `skip`) and anything whose type does not match — a
- * newer build's key, or a value the pref store cannot hold.
+ * Reconcile the mobile settings cache with the preferences stored by the core.
  *
- * Returns the keys actually written, so the caller can re-seed the matching UI
- * state without re-reading everything.
+ * Write settings from the core table into the platform cache, skipping keys the cache should keep (see
+ * `skip`) and anything whose type does not match — a newer build's key, or a value the pref store cannot
+ * hold.
+ *
+ * Returns the keys actually written, so the caller can re-seed the matching UI state without re-reading
+ * everything.
  */
 internal fun writeSettingsToCache(
     app: AppPreferences,

@@ -193,7 +193,7 @@ internal fun ThreadImageGallery(
     loadImageAttachment: suspend (MessageAttachment) -> ImageBitmap?,
 ) {
     val current = images.getOrNull(index) ?: return
-    val canPrev = index > 0
+    val canGoBack = index > 0
     val canNext = index < images.lastIndex
     var scale by remember(current.ref) { mutableStateOf(1f) }
     var offset by remember(current.ref) { mutableStateOf(Offset.Zero) }
@@ -209,8 +209,8 @@ internal fun ThreadImageGallery(
 
     BackHandler(onBack = onClose)
 
-    fun goPrev() {
-        if (!canPrev) return
+    fun goBack() {
+        if (!canGoBack) return
         scale = 1f
         offset = Offset.Zero
         onIndexChange(index - 1)
@@ -323,7 +323,7 @@ internal fun ThreadImageGallery(
                         },
                         onDragEnd = {
                             if (dragMode == 1 && abs(swipeDistance) > 80f) {
-                                if (swipeDistance > 0f) goPrev() else goNext()
+                                if (swipeDistance > 0f) goBack() else goNext()
                             } else if (dragMode == 2) {
                                 coroutineScope.launch { settleOrDismissPull(0f) }
                             }
@@ -412,13 +412,13 @@ internal fun ThreadImageGallery(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(
-                enabled = canPrev,
-                onClick = ::goPrev,
+                enabled = canGoBack,
+                onClick = ::goBack,
             ) {
                 Icon(
                     Icons.Filled.KeyboardArrowLeft,
                     contentDescription = tr("chat.previousImage"),
-                    tint = if (canPrev) Color.White.copy(alpha = 0.55f) else Color.White.copy(alpha = 0.18f),
+                    tint = if (canGoBack) Color.White.copy(alpha = 0.55f) else Color.White.copy(alpha = 0.18f),
                     modifier = Modifier.size(24.dp),
                 )
             }

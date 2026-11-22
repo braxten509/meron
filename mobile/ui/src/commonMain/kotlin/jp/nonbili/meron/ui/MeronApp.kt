@@ -263,16 +263,6 @@ fun MeronApp(
     }
 }
 
-@OptIn(ExperimentalEncodingApi::class)
-private fun PickedFile.toDraftAttachment(): DraftAttachment =
-    DraftAttachment(
-        id = name,
-        displayName = name.ifBlank { "attachment" },
-        mimeType = mimeType.ifBlank { "application/octet-stream" },
-        sizeBytes = bytes.size.toLong(),
-        dataBase64 = Base64.Default.encode(bytes),
-    )
-
 // Mutating the back stack while a NavHost transition is still running can make
 // AnimatedContent recompose an already-destroyed NavBackStackEntry, crashing in
 // its ViewModelStore. Only pop/navigate once the current entry has settled.
@@ -477,7 +467,7 @@ private fun MeronMobileScreenContent(
                                     // Watcher/runtime failures are regular core events,
                                     // not `log` events. Keep them visible in Logcat and
                                     // the redacted on-device diagnostic log.
-                                    Log.e("core/event", event.detailJson.jsonStringValue("message"))
+                                    Log.error("core/event", event.detailJson.jsonStringValue("message"))
                                 }
 
                                 "log" -> {
@@ -487,10 +477,10 @@ private fun MeronMobileScreenContent(
                                     val tag = "core/" + event.detailJson.jsonStringValue("tag")
                                     val message = event.detailJson.jsonStringValue("message")
                                     when (event.detailJson.jsonStringValue("level")) {
-                                        "DEBUG" -> Log.d(tag, message)
+                                        "DEBUG" -> Log.debug(tag, message)
                                         "INFO" -> Log.i(tag, message)
                                         "WARN" -> Log.w(tag, message)
-                                        else -> Log.e(tag, message)
+                                        else -> Log.error(tag, message)
                                     }
                                     // A core panic aborts the process right after
                                     // this line, so mark it here; the JVM crash
@@ -553,58 +543,6 @@ private fun MeronMobileScreenContent(
                     notificationPermissionGranted = mobileHost.notificationsEnabled()
                 }
             }
-            val importOpml: (PickedFile?) -> Unit = { picked ->
-                if (picked != null) {
-                    runCatching { picked.bytes.decodeToString() }
-                        .onSuccess { opml ->
-                            val accountId = selectedCoreAccountId
-                            if (accountId == UNIFIED_ACCOUNT_ID || accountId.isBlank()) {
-                                status = trs("mobile.status.selectRssAccountFirst")
-                                return@onSuccess
-                            }
-                            if (!coreLoaded) {
-                                status = coreUnavailableMessage
-                                return@onSuccess
-                            }
-                            scope.launchThreadListRead(threadRemovalGuard) { read ->
-                                runCatching {
-                                    withContext(ioDispatcher) {
-                                        val client = MobileMailCommandClient(core)
-                                        val importJson = client.importOpml(ImportOpmlParams(accountId = accountId, opml = opml))
-                                        client.syncRss(SyncRssParams(accountId = accountId))
-                                        val foldersJson = client.listFolders(FolderListParams(accountId = accountId))
-                                        val threadsJson =
-                                            client.listThreads(
-                                                ThreadListParams(
-                                                    accountId = accountId,
-                                                    folderId = INBOX_FOLDER,
-                                                    query = mailSearch.trim(),
-                                                    filter = mailFilter.protocolValue(),
-                                                    attachments = mailAttachmentsOnly,
-                                                    groupBy = threadListGroupBy(mailGroupBySender),
-                                                ),
-                                            )
-                                        Triple(importJson, foldersJson, threadsJson)
-                                    }
-                                }.onSuccess { (importJson, foldersJson, threadsJson) ->
-                                    val imported = parseOpmlImportCountResponse(importJson)
-                                    coreFolders = parseFolderListResponse(foldersJson)
-                                    coreThreads = withLocalDraftFlags(read.filter(parseThreadListResponse(threadsJson)))
-                                    selectedCoreFolder = INBOX_FOLDER
-                                    visibleMailboxKey =
-                                        mailboxCacheKey(accountId, INBOX_FOLDER, mailSearch, mailFilter, mailAttachmentsOnly, mailGroupBySender)
-                                    mailboxPageDepth = MAILBOX_PAGE_SIZE
-                                    mailboxHeldThreads = emptyList()
-                                    status = if (imported == 0) trs("feeds.toast.noNewFeedsToImport") else trs("feeds.toast.importedFeeds", mapOf("count" to imported))
-                                }.onFailure {
-                                    status = trsError("mobile.status.opmlImportFailed", it)
-                                }
-                            }
-                        }.onFailure {
-                            status = trsError("mobile.status.opmlReadFailed", it)
-                        }
-                }
-            }
             launchOpmlExport = { fileName ->
                 val document = pendingOpmlExport
                 services.saveFile(document.encodeToByteArray(), fileName, "text/xml") { result ->
@@ -629,15 +567,6 @@ private fun MeronMobileScreenContent(
             }
             // Restore starts at the file picker; the core decides whether what came
             // back needs a passphrase.
-            val pickBackupFile: () -> Unit = {
-                services.pickFile(listOf("application/json", "text/plain", "*/*")) { picked ->
-                    if (picked != null) {
-                        runCatching { picked.bytes.decodeToString() }
-                            .onSuccess { document -> importBackup(document) }
-                            .onFailure { status = trsError("settings.backup.restoreFailed", it) }
-                    }
-                }
-            }
             launchAttachmentSave = { fileName ->
                 val attachment = pendingAttachmentSave
                 pendingAttachmentSave = null
@@ -655,99 +584,6 @@ private fun MeronMobileScreenContent(
                             }
                         }.onFailure {
                             status = trsError("mobile.status.attachmentSaveFailed", it)
-                        }
-                    }
-                }
-            }
-            val pickAttachmentInto: ((DraftAttachment) -> Unit) -> Unit = { onPicked ->
-                services.pickFile(listOf("*/*")) { picked ->
-                    if (picked != null) {
-                        runCatching { picked.toDraftAttachment() }
-                            .onSuccess {
-                                onPicked(it)
-                                status = trs("mobile.status.attachedFile", mapOf("name" to it.displayName))
-                            }.onFailure {
-                                status = trsError("mobile.status.attachFailed", it)
-                            }
-                    }
-                }
-            }
-            val pickAccountMedia: () -> Unit = {
-                val target = accountMediaUploadTarget
-                accountMediaUploadTarget = null
-                if (target != null) {
-                    services.pickImage { picked ->
-                        if (picked == null) return@pickImage
-                        runCatching {
-                            AccountMediaFileParams(
-                                accountId = target.account.id,
-                                filename = picked.name,
-                                mime = picked.mimeType.ifBlank { "application/octet-stream" },
-                                data = Base64.Default.encode(picked.bytes),
-                            )
-                        }.onSuccess { params ->
-                            if (!coreLoaded) {
-                                status = coreUnavailableMessage
-                                return@onSuccess
-                            }
-                            scope.launch {
-                                runCatching {
-                                    withContext(ioDispatcher) {
-                                        val client = MobileMailCommandClient(core)
-                                        val uploadJson =
-                                            if (target.wallpaper) {
-                                                client.writeAccountChatWallpaperFile(params)
-                                            } else {
-                                                client.writeAccountAvatarFile(params)
-                                            }
-                                        val mediaUrl = parseMediaFileUrlResponse(uploadJson)
-                                        if (mediaUrl.isBlank()) error("Media upload returned no URL")
-                                        if (target.wallpaper) {
-                                            client.setAccountChatWallpaper(AccountChatWallpaperParams(target.account.id, customUrl = mediaUrl))
-                                        } else {
-                                            client.setAccountAvatar(AccountAvatarParams(target.account.id, mediaUrl))
-                                        }
-                                        client.listAccounts()
-                                    }
-                                }.onSuccess {
-                                    accountJson = it
-                                    coreAccounts = parseAccountListResponse(it)
-                                    status = trs(if (target.wallpaper) "mobile.status.chatWallpaperUpdated" else "mobile.status.avatarUpdated")
-                                }.onFailure {
-                                    status = trsError(if (target.wallpaper) "wallpaper.uploadFailed" else "settings.toast.failedToUploadAvatar", it)
-                                }
-                            }
-                        }.onFailure {
-                            status = trsError("mobile.status.mediaReadFailed", it)
-                        }
-                    }
-                }
-            }
-            val pickKanbanBoardMedia: () -> Unit = {
-                val target = kanbanBoardMediaTarget
-                kanbanBoardMediaTarget = null
-                if (target != null) {
-                    services.pickImage { picked ->
-                        if (picked == null) return@pickImage
-                        val mediaUrl = "data:${picked.mimeType.ifBlank { "application/octet-stream" }};base64,${Base64.Default.encode(picked.bytes)}"
-                        if (target.wallpaper) {
-                            updateKanbanBoard(
-                                target.board.id,
-                                target.board.name,
-                                target.board.avatarUrl,
-                                "",
-                                mediaUrl,
-                            )
-                            status = trs("mobile.status.boardWallpaperUpdated")
-                        } else {
-                            updateKanbanBoard(
-                                target.board.id,
-                                target.board.name,
-                                mediaUrl,
-                                target.board.wallpaperPresetId,
-                                target.board.wallpaperUrl,
-                            )
-                            status = trs("mobile.status.boardAvatarUpdated")
                         }
                     }
                 }
@@ -1064,269 +900,20 @@ private fun MeronMobileScreenContent(
                     }
 
                     composable(AppRoutes.Settings) {
-                        LaunchedEffect(Unit) { loadStorageUsage() }
-                        SettingsScreen(
-                            rulesPage = { modifier -> RulesPage(modifier) },
-                            aiSortPage = { modifier, onOpenLog -> AiSortPage(modifier, onOpenLog) },
-                            aiSortLogPage = { modifier -> AiSortLogPage(modifier) },
-                            setupCopyPage = { modifier -> SetupCopyPage(modifier) },
-                            onOpenTags = { showTagsDialog = true },
-                            onBack = popAppBack,
-                            initialGeneral = settingsGeneralTarget,
-                            onConsumeInitialGeneral = { settingsGeneralTarget = false },
-                            initialAccountId = accountSettingsTargetId,
-                            initialAccountProxy =
-                                accountSettingsTargetId != null &&
-                                    accountSettingsTargetId == accountSettingsProxyTargetId,
-                            onConsumeInitialAccount = {
-                                accountSettingsTargetId = null
-                                accountSettingsProxyTargetId = null
-                            },
-                            initialKanbanBoardId = kanbanSettingsTargetId,
-                            onConsumeInitialKanbanBoard = { kanbanSettingsTargetId = null },
-                            accounts = coreAccounts,
-                            hiddenNavigationAccountIds = hiddenNavigationAccountIds,
-                            kanbanBoards = kanbanBoards,
-                            onSaveKanbanBoard = { board, name, avatarUrl, wallpaperPresetId, wallpaperUrl ->
-                                updateKanbanBoard(board.id, name, avatarUrl, wallpaperPresetId, wallpaperUrl)
-                            },
-                            onDeleteKanbanBoard = { board ->
-                                deleteKanbanBoard(board.id)
-                            },
-                            onCreateKanbanBoard = ::createKanbanBoard,
-                            onAddMailAccount = {
-                                resetPasswordAccountForm()
-                                addSection = 0
-                                previousTopScreen = Screen.Settings
-                                screen = Screen.AddAccount
-                            },
-                            onAddFeedAccount = {
-                                resetPasswordAccountForm()
-                                addSection = 2
-                                previousTopScreen = Screen.Settings
-                                screen = Screen.AddAccount
-                            },
-                            onSaveAccountSettings = {
-                                account,
-                                displayName,
-                                senderName,
-                                avatarUrl,
-                                wallpaperPresetId,
-                                loadRemoteImages,
-                                conversationHtml,
-                                includedInUnified,
-                                showInNavigation,
-                                muted,
-                                paused,
-                                interval,
-                                aliases,
-                                ->
-                                setAccountNavigationVisible(account, showInNavigation)
-                                saveAccountSettings(
-                                    account,
-                                    displayName,
-                                    senderName,
-                                    avatarUrl,
-                                    wallpaperPresetId,
-                                    loadRemoteImages,
-                                    conversationHtml,
-                                    includedInUnified,
-                                    muted,
-                                    paused,
-                                    interval,
-                                    aliases,
-                                )
-                            },
-                            onPickAccountAvatar = { account ->
-                                accountMediaUploadTarget = AccountMediaUploadTarget(account, wallpaper = false)
-                                pickAccountMedia()
-                            },
-                            onPickAccountWallpaper = { account ->
-                                accountMediaUploadTarget = AccountMediaUploadTarget(account, wallpaper = true)
-                                pickAccountMedia()
-                            },
-                            onPickKanbanBoardAvatar = { board ->
-                                kanbanBoardMediaTarget = KanbanBoardMediaTarget(board, wallpaper = false)
-                                pickKanbanBoardMedia()
-                            },
-                            onPickKanbanBoardWallpaper = { board ->
-                                kanbanBoardMediaTarget = KanbanBoardMediaTarget(board, wallpaper = true)
-                                pickKanbanBoardMedia()
-                            },
-                            onMoveAccountUp = { account -> moveAccount(account, -1) },
-                            onMoveAccountDown = { account -> moveAccount(account, 1) },
-                            onRemoveAccount = ::removeAccount,
-                            themeChoice = themeChoice,
-                            systemDark = systemDark,
-                            onThemeChoiceChange = onThemeChoiceChange,
-                            customThemes = customThemes,
-                            onImportCustomTheme = onImportCustomTheme,
-                            onDeleteCustomTheme = onDeleteCustomTheme,
-                            onShareCustomTheme = { theme -> mobileHost.shareText(serializeThemeSource(theme.source)) },
-                            appLanguageTag = appLanguageTag,
-                            onAppLanguageChange = onAppLanguageChange,
-                            showSenderImages = showSenderImages,
-                            onToggleSenderImages = {
-                                showSenderImages = !showSenderImages
-                                saveAppBoolean(prefs, SHOW_SENDER_IMAGES_PREF, showSenderImages)
-                            },
-                            darkMailBodies = darkMailBodies,
-                            onToggleDarkMailBodies = {
-                                darkMailBodies = !darkMailBodies
-                                saveAppBoolean(prefs, DARK_MAIL_BODIES_PREF, darkMailBodies)
-                            },
-                            chatFullMessages = chatFullMessages,
-                            onToggleChatFullMessages = {
-                                chatFullMessages = !chatFullMessages
-                                saveAppBoolean(prefs, CHAT_FULL_MESSAGES_PREF, chatFullMessages)
-                            },
-                            autoFitMessages = autoFitMessages,
-                            onToggleAutoFitMessages = {
-                                autoFitMessages = !autoFitMessages
-                                saveAppBoolean(prefs, AUTO_FIT_MESSAGES_PREF, autoFitMessages)
-                            },
-                            readerBottomActions = readerBottomActions,
-                            onToggleReaderBottomActions = {
-                                readerBottomActions = !readerBottomActions
-                                saveAppBoolean(prefs, READER_BOTTOM_ACTIONS_PREF, readerBottomActions)
-                            },
-                            blurredBars = blurredBars,
-                            onToggleBlurredBars = {
-                                blurredBars = !blurredBars
-                                saveAppBoolean(prefs, BLURRED_BARS_PREF, blurredBars)
-                            },
-                            showUnreadBadges = showUnreadBadges,
-                            onToggleUnreadBadges = {
-                                showUnreadBadges = !showUnreadBadges
-                                saveAppBoolean(prefs, SHOW_UNREAD_BADGES_PREF, showUnreadBadges)
-                            },
-                            showUnifiedInboxNav = showUnifiedInboxNav,
-                            onToggleUnifiedInboxNav = {
-                                showUnifiedInboxNav = !showUnifiedInboxNav
-                                saveAppBoolean(prefs, SHOW_UNIFIED_INBOX_PREF, showUnifiedInboxNav)
-                            },
-                            tasksEnabled = tasksEnabled,
-                            onToggleTasks = {
-                                tasksEnabled = !tasksEnabled
-                                saveAppBoolean(prefs, TASKS_ENABLED_PREF, tasksEnabled)
-                                if (!tasksEnabled && screen == Screen.Tasks) screen = Screen.Mail
-                            },
-                            calendarEnabled = calendarEnabled,
-                            onToggleCalendar = {
-                                calendarEnabled = !calendarEnabled
-                                saveAppBoolean(prefs, CALENDAR_ENABLED_PREF, calendarEnabled)
-                                if (!calendarEnabled && screen == Screen.Calendar) screen = Screen.Mail
-                            },
-                            reminderLeadMinutes = reminderLeadMinutes,
-                            reminderAllDayDays = reminderAllDayDays,
-                            onAlertDefaultChange = ::saveAlertDefault,
-                            sendShortcutMode = sendShortcutMode,
-                            onToggleSendShortcut = {
-                                val next = sendShortcutMode.next()
-                                sendShortcutMode = next
-                                saveSendShortcutMode(prefs, next)
-                            },
-                            quoteReplies = quoteReplies,
-                            onToggleQuoteReplies = {
-                                quoteReplies = !quoteReplies
-                                saveAppBoolean(prefs, QUOTE_REPLIES_PREF, quoteReplies)
-                            },
-                            conversationLayout = conversationLayout,
-                            onToggleConversationLayout = {
-                                val next = conversationLayout.next()
-                                conversationLayout = next
-                                saveConversationLayout(prefs, next)
-                            },
-                            messageFontScale = messageFontScale,
-                            onMessageFontScaleChange = { scale ->
-                                messageFontScale = coerceMessageFontScale(scale)
-                                saveMessageFontScale(prefs, messageFontScale)
-                            },
-                            appProxy = appProxy,
-                            onSaveAppProxy = ::saveAppProxy,
-                            appSignatureHtml = appSignatureHtml,
-                            onSaveAppSignature = ::saveAppSignature,
-                            remoteImageSenders = remoteImageSenders,
-                            onRemoveRemoteImageSender = { addr -> setRemoteImageSender(addr, false) },
-                            onSaveAccountSignature = ::saveAccountSignature,
-                            onSaveAccountProxy = ::saveAccountProxy,
-                            onSaveAccountServerSettings = ::saveAccountServerSettings,
-                            foldersByAccount = foldersByAccount,
-                            onRequestAccountFolders = { account -> ensureAccountFolders(account.id) },
-                            onSetFolderNotify = { folder, enabled ->
-                                setMailFolderNotify(
-                                    accountId = folder.accountId,
-                                    folderId = folder.name,
-                                    folderName = folder.displayName,
-                                    enabled = enabled,
-                                )
-                            },
-                            kanbanColumnWidth = kanbanColumnWidth,
-                            onCycleKanbanColumnWidth = {
-                                val next = nextKanbanColumnWidth(kanbanColumnWidth)
-                                kanbanColumnWidth = next
-                                saveAppInt(prefs, KANBAN_COLUMN_WIDTH_PREF, next)
-                            },
-                            notificationsNeedPermission = !notificationPermissionGranted,
-                            onEnableNotifications = {
-                                mobileHost.requestNotificationPermission()
-                                notificationPermissionGranted = mobileHost.notificationsEnabled()
-                            },
-                            supportsBackgroundPush = mobileHost.supportsBackgroundPush,
-                            liveMailPushEnabled = liveMailPushEnabled,
-                            onToggleLiveMailPush = {
-                                val next = !liveMailPushEnabled
-                                liveMailPushEnabled = next
-                                saveAppBoolean(prefs, LIVE_MAIL_PUSH_PREF, next)
-                                mobileHost.syncLiveMailPush(next)
-                                status = trs(if (next) "mobile.status.liveMailPushEnabled" else "mobile.ios.liveMailPushDisabled")
-                            },
-                            backgroundSyncEnabled = backgroundSyncEnabled,
-                            onToggleBackgroundSync = {
-                                val next = !backgroundSyncEnabled
-                                backgroundSyncEnabled = next
-                                saveAppBoolean(prefs, BACKGROUND_SYNC_ENABLED_PREF, next)
-                                mobileHost.syncBackgroundRefresh(next)
-                                status = trs(if (next) "mobile.status.backgroundSyncEnabled" else "mobile.status.backgroundSyncDisabled")
-                            },
-                            onRefreshBackground = {
-                                mobileHost.runBackgroundRefreshOnce()
-                                status = trs("mobile.status.backgroundRefreshQueued")
-                            },
-                            readDiagnosticLog = { mobileHost.readDiagnosticLog() },
-                            onShareDiagnosticLog = { mobileHost.shareDiagnosticLog() },
-                            pollIntervalMinutes = pollIntervalMinutes,
-                            onCyclePollInterval = {
-                                val next = nextPollIntervalMinutes(pollIntervalMinutes)
-                                pollIntervalMinutes = next
-                                saveAppInt(prefs, POLL_INTERVAL_MINUTES_PREF, next)
-                            },
-                            storageUsage = storageUsage,
-                            storageBusy = storageBusy,
-                            storageClearConfirming = storageClearConfirming,
-                            onRefreshStorage = { loadStorageUsage(showStatus = true) },
-                            onClearStorageCache = ::clearStorageCache,
-                            onExportBackup = {
-                                backupPassphraseError = ""
-                                backupPassphraseMode = BackupPassphraseMode.Export
-                            },
-                            onRestoreBackup = pickBackupFile,
-                            backupBusy = backupBusy,
+                        MobileSettingsRoute(
+                            themeChoice,
+                            systemDark,
+                            onThemeChoiceChange,
+                            customThemes,
+                            onImportCustomTheme,
+                            onDeleteCustomTheme,
+                            appLanguageTag,
+                            onAppLanguageChange,
+                            popAppBack,
+                            ::pickAccountMedia,
+                            ::pickKanbanBoardMedia,
+                            ::pickBackupFile,
                         )
-                        backupPassphraseMode?.let { mode ->
-                            BackupPassphraseDialog(
-                                mode = mode,
-                                busy = backupBusy,
-                                error = backupPassphraseError,
-                                onDismiss = ::closeBackupPassphrase,
-                                onConfirm = { passphrase, includeSecrets ->
-                                    when (mode) {
-                                        BackupPassphraseMode.Export -> exportBackup(includeSecrets, passphrase)
-                                        BackupPassphraseMode.Restore -> retryBackupRestore(passphrase)
-                                    }
-                                },
-                            )
-                        }
                     }
 
                     composable(AppRoutes.Kanban) {
@@ -1386,7 +973,7 @@ private fun MeronMobileScreenContent(
                             selectedAccountIsRss = selectedAccountIsRss,
                             mailSelectionActive = mailSelectionActive,
                             selectedMailThreads = selectedMailThreads,
-                            importOpml = importOpml,
+                            importOpml = ::importOpml,
                             mailListStates = mailListStates,
                         )
                     }

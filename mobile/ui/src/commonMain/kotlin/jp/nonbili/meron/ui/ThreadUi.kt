@@ -66,6 +66,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -74,7 +75,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.Alignment
@@ -610,93 +610,7 @@ internal fun ThreadScreen(
     // and the whole thread once the view reaches the bottom — desktop's
     // scroll-driven read marking (useConversationScroll.ts) on mobile. Marked
     // ids are remembered per open so each is sent at most once.
-    val currentOnMessagesRead by rememberUpdatedState(onMessagesRead)
-    val currentOnViewedToBottom by rememberUpdatedState(onViewedToBottom)
-    if (thread != null && active) {
-        val density = LocalDensity.current
-        val markedReadIds = remember(thread.id) { mutableSetOf<String>() }
-        var viewedToBottomSent by remember(thread.id) { mutableStateOf(false) }
-        // Messages the reader turned unread by hand, held out of scroll marking
-        // until they leave the viewport — otherwise the next layout change
-        // (rotation, a body finishing its measurement, older messages loading)
-        // marks them read again and the action looks like it did nothing.
-        val heldUnreadIds = remember(thread.id) { mutableSetOf<String>() }
-        val previousUnread = remember(thread.id) { mutableMapOf<String, Boolean>() }
-        for (id in manualUnreadIds(messages, previousUnread)) {
-            heldUnreadIds += id
-            // Forget that it was ever marked read, so revisiting the thread and
-            // reading it again marks it read as usual.
-            markedReadIds -= id
-        }
-        // A message that is no longer unread has nothing left to protect —
-        // the reader marked it read again, or the request rolled back. Holding
-        // its id would keep the whole-thread marking below switched off for
-        // every other message too.
-        heldUnreadIds.retainAll { id -> messages.any { it.id == id && it.unread } }
-        messages.forEach { previousUnread[it.id] = it.unread }
-        LaunchedEffect(thread.id) {
-            val topSlackPx = with(density) { 24.dp.roundToPx() }
-            val bottomSlackPx = with(density) { 160.dp.roundToPx() }
-            snapshotFlow {
-                val info = listState.layoutInfo
-                ThreadScrollSnapshot(
-                    firstVisibleIndex = listState.firstVisibleItemIndex,
-                    visible = info.visibleItemsInfo.map { ListItemGeometry(it.index, it.offset, it.size) },
-                    totalItemCount = info.totalItemsCount,
-                    viewportEndOffset = info.viewportEndOffset - replyOverlayPx,
-                )
-            }.collect { snapshot ->
-                val msgs = currentMessages
-                if (msgs.isEmpty()) return@collect
-                // A held message is released once it is out of view; reading it
-                // again then marks it read like any other.
-                val visibleIndices = snapshot.visible.mapTo(mutableSetOf()) { it.index }
-                heldUnreadIds.removeAll { id ->
-                    val messageIndex = msgs.indexOfFirst { it.id == id }
-                    messageIndex < 0 || (messageIndex + currentHeaderItemCount) !in visibleIndices
-                }
-                val readIds =
-                    readMessageIndices(
-                        visible = snapshot.visible,
-                        firstVisibleIndex = snapshot.firstVisibleIndex,
-                        headerItemCount = currentHeaderItemCount,
-                        messageCount = msgs.size,
-                        topSlackPx = topSlackPx,
-                        viewportEndOffset = snapshot.viewportEndOffset,
-                    ).mapNotNull { msgs.getOrNull(it) }
-                        // A body still loading (or failed) shows only a short
-                        // placeholder, which fits on screen without having been
-                        // read. It is marked once the body lands and relayouts.
-                        .filter { it.unread && !it.bodyMissing }
-                        .map { it.id }
-                        .filter { it !in heldUnreadIds }
-                        .filter { markedReadIds.add(it) }
-                if (readIds.isNotEmpty()) currentOnMessagesRead(readIds)
-                val atBottom =
-                    listViewedToBottom(
-                        visible = snapshot.visible,
-                        totalItemCount = snapshot.totalItemCount,
-                        viewportEndOffset = snapshot.viewportEndOffset,
-                        bottomSlackPx = bottomSlackPx,
-                    )
-                // Reaching the bottom marks the whole thread read — including
-                // messages on older pages that are not loaded — so it has to
-                // stand down while a hand-unread message is on screen, or it
-                // undoes the action the held set just protected. It resumes as
-                // soon as that message scrolls out of view.
-                // It also waits for placeholder bodies, for the same reason.
-                if (
-                    atBottom &&
-                    heldUnreadIds.isEmpty() &&
-                    msgs.none { it.unread && it.bodyMissing } &&
-                    (!viewedToBottomSent || msgs.any { it.unread })
-                ) {
-                    viewedToBottomSent = true
-                    currentOnViewedToBottom()
-                }
-            }
-        }
-    }
+    ThreadReadTracking(thread, active, messages, listState, currentHeaderItemCount, replyOverlayPx, onMessagesRead, onViewedToBottom)
     LaunchedEffect(normalizedSearch) {
         activeSearchIndex = 0
     }
@@ -755,21 +669,21 @@ internal fun ThreadScreen(
         galleryIndexForAttachment(attachment)?.let { galleryIndex = it } ?: onOpenAttachment(attachment)
     }
 
-    fun openGalleryForHtmlSrc(
-        src: String,
+    fun openGalleryForHtmlSource(
+        imageSource: String,
         message: MessageBody,
     ) {
-        val normalized = src.trim()
+        val normalized = imageSource.trim()
         if (normalized.isBlank()) return
         if (!normalized.startsWith("/media/") && !remoteAllowed(message)) return
-        val idx =
+        val mediaIndex =
             galleryImages.indexOfFirst { image ->
                 image.ref == normalized ||
                     normalized.endsWith(image.ref) ||
                     (image.attachment.key.isNotBlank() && normalized.contains("/media/${image.attachment.key}"))
             }
-        if (idx >= 0) {
-            galleryIndex = idx
+        if (mediaIndex >= 0) {
+            galleryIndex = mediaIndex
         } else if (boundedRemoteImageActions && (normalized.startsWith("https://") || normalized.startsWith("http://"))) {
             // HTML-only feed pictures need not appear in the attachment list.
             val attachment = remoteHtmlImageAttachment(normalized)
@@ -1209,7 +1123,7 @@ internal fun ThreadScreen(
                                         onSaveAttachment = onSaveAttachment,
                                         loadImageAttachment = loadImageAttachment,
                                         onOpenImageAttachment = ::openGalleryForAttachment,
-                                        onOpenHtmlImage = { openGalleryForHtmlSrc(it, message) },
+                                        onOpenHtmlImage = { openGalleryForHtmlSource(it, message) },
                                         onCopyMessageText = onCopyMessageText,
                                         onComposeTo = onComposeTo,
                                         onOpenUrl = services::openUrl,
@@ -1270,7 +1184,7 @@ internal fun ThreadScreen(
                                         onSaveAttachment = onSaveAttachment,
                                         loadImageAttachment = loadImageAttachment,
                                         onOpenImageAttachment = ::openGalleryForAttachment,
-                                        onOpenHtmlImage = { openGalleryForHtmlSrc(it, message) },
+                                        onOpenHtmlImage = { openGalleryForHtmlSource(it, message) },
                                         onCopyMessageText = onCopyMessageText,
                                         onComposeTo = onComposeTo,
                                         onOpenMessage = { readerMessage = it },
@@ -1527,7 +1441,7 @@ internal fun ThreadScreen(
                 onSaveAttachment = onSaveAttachment,
                 loadImageAttachment = loadImageAttachment,
                 onOpenImageAttachment = ::openGalleryForAttachment,
-                onOpenHtmlImage = { openGalleryForHtmlSrc(it, reader) },
+                onOpenHtmlImage = { openGalleryForHtmlSource(it, reader) },
                 onOpenUrl = services::openUrl,
             )
         }

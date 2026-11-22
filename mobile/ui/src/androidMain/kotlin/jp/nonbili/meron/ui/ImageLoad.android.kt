@@ -30,18 +30,18 @@ actual suspend fun loadImageBytes(ref: String): ByteArray? =
         runCatching {
             when {
                 ref.startsWith("/media/") -> {
-                    val ctx = androidImageContext ?: return@withContext null
+                    val imageContext = androidImageContext ?: return@withContext null
                     val relative = ref.removePrefix("/media/").trimStart('/')
                     if (relative.isBlank() || relative.split('/').any { it == ".." || it.isBlank() }) return@withContext null
-                    val root = androidMediaRoot(ctx, relative)
+                    val root = androidMediaRoot(imageContext, relative)
                     val file = File(root, relative).canonicalFile
                     if (!file.startsWith(root)) return@withContext null
                     file.readBytes()
                 }
 
                 ref.startsWith("content://") -> {
-                    val ctx = androidImageContext ?: return@withContext null
-                    ctx.contentResolver.openInputStream(Uri.parse(ref))?.use { it.readBytes() }
+                    val imageContext = androidImageContext ?: return@withContext null
+                    imageContext.contentResolver.openInputStream(Uri.parse(ref))?.use { it.readBytes() }
                 }
 
                 ref.startsWith("http://") || ref.startsWith("https://") -> {
@@ -56,11 +56,11 @@ actual suspend fun loadImageBytes(ref: String): ByteArray? =
     }
 
 internal fun androidMediaRoot(
-    ctx: Context,
+    imageContext: Context,
     relative: String,
 ): File =
     File(
-        ctx.filesDir,
+        imageContext.filesDir,
         androidMediaRootDirectoryName(relative),
     ).canonicalFile
 
@@ -69,20 +69,20 @@ internal fun androidMediaRootDirectoryName(relative: String): String = if (relat
 internal fun remoteImageCacheKey(url: String): String = sha256Hex(url)
 
 internal fun cachedRemoteImageFile(
-    cacheDir: File,
+    cacheDirectory: File,
     url: String,
 ): File? {
     val prefix = "${remoteImageCacheKey(url)}."
-    return cacheDir
+    return cacheDirectory
         .listFiles { file -> file.isFile && file.name.startsWith(prefix) && imageExtensionFromFileName(file.name) != null }
         ?.maxByOrNull { it.lastModified() }
 }
 
 internal fun pruneRemoteImageCache(
-    cacheDir: File,
+    cacheDirectory: File,
     maxBytes: Long = REMOTE_IMAGE_CACHE_MAX_BYTES,
 ) {
-    val files = cacheDir.listFiles { file -> file.isFile }?.toList().orEmpty()
+    val files = cacheDirectory.listFiles { file -> file.isFile }?.toList().orEmpty()
     var total = files.sumOf { it.length().coerceAtLeast(0L) }
     if (total <= maxBytes) return
     for (file in files.sortedBy { it.lastModified() }) {
@@ -96,10 +96,10 @@ private fun loadRemoteImageBytes(
     url: String,
     context: Context?,
 ): ByteArray? {
-    val cacheDir = context?.cacheDir?.let { File(it, "image-cache") }
-    if (cacheDir != null) {
-        cacheDir.mkdirs()
-        cachedRemoteImageFile(cacheDir, url)?.let { file ->
+    val cacheDirectory = context?.cacheDir?.let { File(it, "image-cache") }
+    if (cacheDirectory != null) {
+        cacheDirectory.mkdirs()
+        cachedRemoteImageFile(cacheDirectory, url)?.let { file ->
             val bytes =
                 try {
                     file.readBytes()
@@ -138,17 +138,17 @@ private fun loadRemoteImageBytes(
             }
         if (bytes.isEmpty()) return null
         val ext = sniffImageExtension(bytes, connection.contentType)
-        if (cacheDir != null && ext != null) {
-            cacheDir.mkdirs()
-            val target = File(cacheDir, "${remoteImageCacheKey(url)}.$ext")
-            val tmp = File(cacheDir, "${target.name}.${System.nanoTime()}.tmp")
-            tmp.writeBytes(bytes)
-            if (!tmp.renameTo(target)) {
-                tmp.copyTo(target, overwrite = true)
-                tmp.delete()
+        if (cacheDirectory != null && ext != null) {
+            cacheDirectory.mkdirs()
+            val target = File(cacheDirectory, "${remoteImageCacheKey(url)}.$ext")
+            val temporaryFile = File(cacheDirectory, "${target.name}.${System.nanoTime()}.tmp")
+            temporaryFile.writeBytes(bytes)
+            if (!temporaryFile.renameTo(target)) {
+                temporaryFile.copyTo(target, overwrite = true)
+                temporaryFile.delete()
             }
             target.setLastModified(System.currentTimeMillis())
-            pruneRemoteImageCache(cacheDir)
+            pruneRemoteImageCache(cacheDirectory)
         }
         bytes
     } finally {

@@ -34,20 +34,20 @@ internal fun parseKanbanBoards(raw: String): List<KanbanBoardSpec> {
     return runCatching {
         val array = kanbanJson.parseToJsonElement(raw) as? JsonArray ?: return emptyList()
         array.mapNotNull { element ->
-            val obj = element.jsonObject
-            val id = (obj["id"]?.asStringOrEmpty()).orEmpty().orFallback("kb-${Uuid.random()}")
-            val name = (obj["name"]?.asStringOrEmpty()).orEmpty().orFallback("Kanban board")
-            val avatarUrl = obj["avatarUrl"]?.asStringOrEmpty().orEmpty()
-            val wallpaper = obj["wallpaper"]?.let { runCatching { it.jsonObject }.getOrNull() }
+            val fields = element.jsonObject
+            val id = (fields["id"]?.asStringOrEmpty()).orEmpty().orFallback("kb-${Uuid.random()}")
+            val name = (fields["name"]?.asStringOrEmpty()).orEmpty().orFallback("Kanban board")
+            val avatarUrl = fields["avatarUrl"]?.asStringOrEmpty().orEmpty()
+            val wallpaper = fields["wallpaper"]?.let { runCatching { it.jsonObject }.getOrNull() }
             val wallpaperPresetId = boardWallpaperPresetId(wallpaper?.get("presetId")?.asStringOrEmpty().orEmpty())
             val wallpaperUrl = wallpaper?.get("url")?.asStringOrEmpty().orEmpty()
             val columns =
-                (obj["columns"]?.let { runCatching { it.jsonArray }.getOrNull() } ?: JsonArray(emptyList()))
+                (fields["columns"]?.let { runCatching { it.jsonArray }.getOrNull() } ?: JsonArray(emptyList()))
                     .mapNotNull { col ->
-                        val colObj = runCatching { col.jsonObject }.getOrNull() ?: return@mapNotNull null
-                        val accountId = colObj["accountId"]?.asStringOrEmpty().orEmpty()
-                        val folderId = colObj["folderId"]?.asStringOrEmpty().orEmpty()
-                        val query = normalizeKanbanColumnQuery(colObj["query"]?.asStringOrEmpty().orEmpty())
+                        val columnFields = runCatching { col.jsonObject }.getOrNull() ?: return@mapNotNull null
+                        val accountId = columnFields["accountId"]?.asStringOrEmpty().orEmpty()
+                        val folderId = columnFields["folderId"]?.asStringOrEmpty().orEmpty()
+                        val query = normalizeKanbanColumnQuery(columnFields["query"]?.asStringOrEmpty().orEmpty())
                         if (accountId.isNotBlank() && folderId.isNotBlank()) KanbanColumnSpec(accountId, folderId, query) else null
                     }.distinctBy(::kanbanColumnKey)
             KanbanBoardSpec(id, name, columns, avatarUrl, wallpaperPresetId, wallpaperUrl)

@@ -37,63 +37,63 @@ class ImageLoadAndroidTest {
 
     @Test
     fun cachedRemoteImageFileFindsNewestImageForUrl() {
-        withTempDir("meron-image-cache-find") { dir ->
+        withTemporaryDirectory("meron-image-cache-find") { directory ->
             val key = remoteImageCacheKey("https://example.com/photo")
-            File(dir, "$key.txt").writeText("not-image")
+            File(directory, "$key.txt").writeText("not-image")
             val old =
-                File(dir, "$key.jpg").apply {
+                File(directory, "$key.jpg").apply {
                     writeBytes(byteArrayOf(1))
                     setLastModified(100)
                 }
             val newest =
-                File(dir, "$key.webp").apply {
+                File(directory, "$key.webp").apply {
                     writeBytes(byteArrayOf(2))
                     setLastModified(200)
                 }
 
-            assertEquals(newest, cachedRemoteImageFile(dir, "https://example.com/photo"))
+            assertEquals(newest, cachedRemoteImageFile(directory, "https://example.com/photo"))
             assertTrue(old.exists())
-            assertNull(cachedRemoteImageFile(dir, "https://example.com/other"))
+            assertNull(cachedRemoteImageFile(directory, "https://example.com/other"))
         }
     }
 
     @Test
     fun pruneRemoteImageCacheDeletesOldestFilesFirst() {
-        withTempDir("meron-image-cache-prune") { dir ->
+        withTemporaryDirectory("meron-image-cache-prune") { directory ->
             val oldest =
-                File(dir, "old.png").apply {
+                File(directory, "old.png").apply {
                     writeBytes(ByteArray(60))
                     setLastModified(100)
                 }
             val middle =
-                File(dir, "middle.png").apply {
+                File(directory, "middle.png").apply {
                     writeBytes(ByteArray(50))
                     setLastModified(200)
                 }
             val newest =
-                File(dir, "new.png").apply {
+                File(directory, "new.png").apply {
                     writeBytes(ByteArray(40))
                     setLastModified(300)
                 }
 
-            pruneRemoteImageCache(dir, maxBytes = 90)
+            pruneRemoteImageCache(directory, maxBytes = 90)
 
             assertFalse(oldest.exists())
             assertTrue(middle.exists())
             assertTrue(newest.exists())
-            assertTrue(dir.listFiles().orEmpty().sumOf { it.length() } <= 90)
+            assertTrue(directory.listFiles().orEmpty().sumOf { it.length() } <= 90)
         }
     }
 }
 
-private fun withTempDir(
+private fun withTemporaryDirectory(
     prefix: String,
     block: (File) -> Unit,
 ) {
-    val dir = Files.createTempDirectory(prefix).toFile()
+    val directory = Files.createTempDirectory(prefix).toFile()
     try {
-        block(dir)
+        block(directory)
     } finally {
-        dir.deleteRecursively()
+        directory.deleteRecursively()
     }
 }

@@ -122,8 +122,8 @@ fun oauthCallbackValidationErrorForRedirect(
     runCatching {
         parseOAuthCallbackUrlForRedirect(rawUrl, expectedState, redirectUri)
         null
-    }.getOrElse { err ->
-        err.message ?: "OAuth callback failed"
+    }.getOrElse { failure ->
+        failure.message ?: "OAuth callback failed"
     }
 
 fun oauthCallbackValidationError(
@@ -133,8 +133,8 @@ fun oauthCallbackValidationError(
     runCatching {
         parseOAuthCallbackUrl(rawUrl, expectedState)
         null
-    }.getOrElse { err ->
-        err.message ?: "OAuth callback failed"
+    }.getOrElse { failure ->
+        failure.message ?: "OAuth callback failed"
     }
 
 private fun parseUrlQuery(query: String): Map<String, String> {

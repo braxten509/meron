@@ -443,14 +443,14 @@ internal fun SetupField(
         lineLimits = TextFieldLineLimits.SingleLine,
         keyboardOptions = nativeTextKeyboardOptions,
         modifier =
-            Modifier.fillMaxWidth().let { m ->
+            Modifier.fillMaxWidth().let { fieldModifier ->
                 if (onFocusLost != null) {
-                    m.onFocusChanged { focusState ->
+                    fieldModifier.onFocusChanged { focusState ->
                         if (wasFocused && !focusState.isFocused) onFocusLost()
                         wasFocused = focusState.isFocused
                     }
                 } else {
-                    m
+                    fieldModifier
                 }
             },
         outputTransformation = if (isPassword && !revealed) PasswordOutputTransformation else null,

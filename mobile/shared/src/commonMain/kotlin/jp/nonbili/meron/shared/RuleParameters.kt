@@ -126,8 +126,8 @@ data class AiSortKeyCheck(
 data class AiModel(
     val id: String,
     val name: String = id,
-    val priceInPerM: Double? = null,
-    val priceOutPerM: Double? = null,
+    val inputPricePerMillion: Double? = null,
+    val outputPricePerMillion: Double? = null,
     val structured: Boolean = false,
     val reasoning: Boolean = false,
     /** An OpenRouter decision model: one email per request, input billed only. */

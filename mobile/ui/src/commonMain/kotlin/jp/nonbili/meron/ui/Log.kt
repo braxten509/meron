@@ -40,7 +40,7 @@ object Log {
         sink("${level.name[0]} $tag $message$suffix")
     }
 
-    fun d(
+    fun debug(
         tag: String,
         message: String,
     ) {
@@ -63,7 +63,7 @@ object Log {
         mirrorToDiagnosticLog(LogLevel.WARN, tag, message, error)
     }
 
-    fun e(
+    fun error(
         tag: String,
         message: String,
         error: Throwable? = null,

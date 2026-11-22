@@ -1,0 +1,673 @@
+// Delivers mail notifications and handles changes to the Android notification shade.
+// The service groups new messages by account and withdraws rows that are no longer unread.
+// Payload parsing and stable notification identities are shared with its callers.
+
+package jp.nonbili.meron
+
+import android.Manifest
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
+import jp.nonbili.meron.shared.backgroundRefreshSummaryKey
+import org.json.JSONArray
+import org.json.JSONObject
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
+
+object AndroidNotificationService {
+    private const val CHANNEL_ID = "meron_sync"
+
+    /** New mail lives on its own channel so muting background-refresh status
+     *  notifications doesn't mute the mail itself (and vice versa). */
+    private const val MAIL_CHANNEL_ID = "meron_new_mail"
+
+    /** Private extra: the summary row a child stands for, see [activeLines]. */
+    private const val EXTRA_SUMMARY_LINE = "jp.nonbili.meron.extra.SUMMARY_LINE"
+
+    /** Private extra marking a row that sits in the mail group but is not mail
+     *  — an undo offer, a failure report. [activeLines] skips these, or the
+     *  summary would count them as arrivals and list them as messages. */
+    private const val EXTRA_ANCILLARY = "jp.nonbili.meron.extra.ANCILLARY"
+
+    /** Private extras on the group summary: what to rebuild it with after
+     *  [reconcileNewMail] withdraws rows, which knows only the rows. */
+    private const val EXTRA_SUMMARY_ACCOUNT_NAME = "jp.nonbili.meron.extra.SUMMARY_ACCOUNT_NAME"
+    private const val EXTRA_SUMMARY_FOLDER = "jp.nonbili.meron.extra.SUMMARY_FOLDER"
+
+    /** Private extras: the core store row a child stands for, see
+     *  [newMailStoreKey]. Absent on rows posted before they existed. */
+    private const val EXTRA_STORE_FOLDER = "jp.nonbili.meron.extra.STORE_FOLDER"
+    private const val EXTRA_STORE_MESSAGE_ID = "jp.nonbili.meron.extra.STORE_MESSAGE_ID"
+
+    /** Reconciles run one at a time, off the caller's thread, and a request
+     *  made while one is queued joins it rather than adding another. */
+    private val reconcileExecutor = Executors.newSingleThreadExecutor()
+    private val reconcileQueued = AtomicBoolean(false)
+    private const val NOTIFICATION_ID = 1001
+    const val EXTRA_ACCOUNT_ID = "jp.nonbili.meron.extra.ACCOUNT_ID"
+    const val EXTRA_FOLDER = "jp.nonbili.meron.extra.FOLDER"
+    const val EXTRA_THREAD_KEY = "jp.nonbili.meron.extra.THREAD_KEY"
+    const val EXTRA_FROM_ADDR = "jp.nonbili.meron.extra.FROM_ADDR"
+
+    fun refreshChannelIdForTesting(): String = CHANNEL_ID
+
+    fun mailChannelIdForTesting(): String = MAIL_CHANNEL_ID
+
+    fun ensureChannels(base: Context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        val context = localizedAppContext(base)
+        val manager = context.getSystemService(NotificationManager::class.java)
+        manager.createNotificationChannel(
+            NotificationChannel(
+                CHANNEL_ID,
+                context.getString(R.string.mobile_android_sync_channel_name),
+                NotificationManager.IMPORTANCE_DEFAULT,
+            ).apply {
+                description = context.getString(R.string.mobile_android_sync_channel_desc)
+            },
+        )
+        manager.createNotificationChannel(
+            NotificationChannel(
+                MAIL_CHANNEL_ID,
+                context.getString(R.string.mobile_android_new_mail_channel_name),
+                NotificationManager.IMPORTANCE_DEFAULT,
+            ).apply {
+                description = context.getString(R.string.mobile_android_new_mail_channel_desc)
+            },
+        )
+    }
+
+    fun canNotify(context: Context): Boolean =
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
+            PackageManager.PERMISSION_GRANTED
+
+    fun notifyRefreshComplete(
+        base: Context,
+        refreshed: Int,
+        skipped: Int,
+        failed: Int,
+    ) {
+        // Notifications are built from service/application contexts, which carry
+        // the per-app language only on API 33+ (where the platform applies it).
+        // Below that the choice lives in prefs alone, so apply it here or the
+        // shade speaks the device language while the UI speaks the app's.
+        val context = localizedAppContext(base)
+        if (!canNotify(context)) return
+        ensureChannels(context)
+        // Only the placeholder messages are in the generated helper; the one
+        // without any is an ordinary string resource.
+        val body =
+            when (val key = backgroundRefreshSummaryKey(refreshed = refreshed, skipped = skipped, failed = failed)) {
+                "mobile.refresh.noAccounts" -> {
+                    context.getString(R.string.mobile_refresh_no_accounts)
+                }
+
+                else -> {
+                    generatedIcuString(
+                        context.resourceLanguageTag(),
+                        key,
+                        mapOf("refreshed" to refreshed, "skipped" to skipped, "failed" to failed),
+                    )
+                }
+            }
+        val notification =
+            NotificationCompat
+                .Builder(context, CHANNEL_ID)
+                .setSmallIcon(R.drawable.ic_stat_mail)
+                .setContentTitle(context.getString(R.string.mobile_android_refresh_complete))
+                .setContentText(body)
+                .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                .setAutoCancel(true)
+                .build()
+        try {
+            NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, notification)
+        } catch (_: SecurityException) {
+            // Notification permission can change after canNotify() checks it.
+        }
+    }
+
+    /** Posts new-mail notifications from a `mail.newMessages`-shaped detail
+     *  object; no-op when the account is muted. */
+    fun notifyNewMail(
+        context: Context,
+        detail: JSONObject,
+    ) {
+        if (detail.optBoolean("muted")) return
+        notifyNewMail(context, parseNewMailBatch(detail))
+    }
+
+    /** One notification per arrival plus a group summary, the way the platform
+     *  expects a mail client to report a batch: the summary collapses the lot
+     *  under the account, and each child opens its own thread. */
+    fun notifyNewMail(
+        base: Context,
+        batch: NewMailBatch,
+    ) {
+        val context = localizedAppContext(base)
+        if (batch.items.isEmpty() || !canNotify(context)) return
+        ensureChannels(context)
+        val manager = NotificationManagerCompat.from(context)
+        val groupKey = newMailGroupKey(batch.accountId)
+        // Read the shade before posting: afterwards it also holds this batch,
+        // and those lines would be counted a second time.
+        val carriedOver = activeLines(context, groupKey)
+        try {
+            for (item in batch.items) {
+                manager.notify(
+                    newMailNotificationId(batch.accountId, item),
+                    buildNewMailChild(context, batch, item, groupKey),
+                )
+            }
+            // Posted last so its alert is the one the user hears (the children
+            // are silenced via GROUP_ALERT_SUMMARY).
+            manager.notify(
+                newMailSummaryId(batch.accountId),
+                buildNewMailSummary(context, batch, groupKey, carriedOver),
+            )
+        } catch (_: SecurityException) {
+            // Notification permission can change after canNotify() checks it.
+        }
+    }
+
+    private fun buildNewMailChild(
+        context: Context,
+        batch: NewMailBatch,
+        item: NewMailItem,
+        groupKey: String,
+    ): android.app.Notification {
+        val fallback = context.getString(R.string.mobile_android_new_mail_arrived)
+        val title =
+            newMailChildTitle(
+                item.from,
+                batch.accountName,
+                context.getString(R.string.mobile_android_new_mail_channel_name),
+            )
+        // Lock screens that hide sensitive content show this instead: who wrote
+        // and about what, but never the body.
+        val publicVersion =
+            NotificationCompat
+                .Builder(context, MAIL_CHANNEL_ID)
+                .setSmallIcon(R.drawable.ic_stat_mail)
+                .setContentTitle(title)
+                .setContentText(item.subject.ifBlank { context.getString(R.string.mobile_android_new_mail_arrived) })
+                .setGroup(groupKey)
+                .build()
+        return NotificationCompat
+            .Builder(context, MAIL_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_stat_mail)
+            .setContentTitle(title)
+            .setContentText(newMailChildText(item.subject, item.preview, fallback))
+            .setStyle(
+                NotificationCompat
+                    .BigTextStyle()
+                    .bigText(newMailChildBigText(item.subject, item.preview, fallback))
+                    .setSummaryText(batch.accountName),
+            ).setContentIntent(openAppIntent(context, batch.accountId, batch.folder, item.threadKey, item.fromAddr))
+            // Archive and mark-as-read only; a reply needs a send queue that
+            // survives being offline, which does not exist yet. Both address the
+            // thread by id, so a payload missing any part of it gets no buttons
+            // rather than buttons that quietly do nothing. A feed arrival drops
+            // Archive, see [newMailSupportsArchive].
+            .apply {
+                if (batch.accountId.isNotBlank() && batch.folder.isNotBlank() && item.threadKey.isNotBlank()) {
+                    val id = newMailNotificationId(batch.accountId, item)
+                    if (newMailSupportsArchive(batch.accountId)) {
+                        addAction(
+                            archiveAction(
+                                context,
+                                accountId = batch.accountId,
+                                folder = batch.folder,
+                                threadKey = item.threadKey,
+                                accountName = batch.accountName,
+                                title = title,
+                                notificationId = id,
+                            ),
+                        )
+                    }
+                    addAction(
+                        markReadAction(
+                            context,
+                            accountId = batch.accountId,
+                            folder = batch.folder,
+                            threadKey = item.threadKey,
+                            accountName = batch.accountName,
+                            title = title,
+                            notificationId = id,
+                        ),
+                    )
+                }
+            }.setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setPublicVersion(publicVersion)
+            .setGroup(groupKey)
+            .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_SUMMARY)
+            // The summary row this child contributes, carried on the child so a
+            // later batch can read it back verbatim: the visible text is
+            // "subject - preview", which would not match a freshly built line.
+            .addExtras(
+                android.os.Bundle().apply {
+                    putString(EXTRA_SUMMARY_LINE, newMailInboxLine(item.from, item.subject))
+                    // Which thread this row belongs to, so an action on any one
+                    // row can find its siblings; see [cancelThreadRows].
+                    putString(EXTRA_THREAD_KEY, item.threadKey)
+                    newMailStoreKey(batch, item)?.let { (folder, messageId) ->
+                        putString(EXTRA_STORE_FOLDER, folder)
+                        putString(EXTRA_STORE_MESSAGE_ID, messageId)
+                    }
+                },
+            ).apply { if (item.date > 0) setWhen(item.date * 1000L) }
+            .setAutoCancel(true)
+            .build()
+    }
+
+    private fun buildNewMailSummary(
+        context: Context,
+        batch: NewMailBatch,
+        groupKey: String,
+        carriedOver: List<String>,
+        /** A recount, not an arrival: the shade updates without alerting. */
+        recount: Boolean = false,
+    ): android.app.Notification {
+        // Lines the user hasn't dismissed yet (read back from the shade) plus
+        // this batch's, so the summary describes what is actually showing rather
+        // than only the newest arrivals.
+        val lines = (batch.items.map { newMailInboxLine(it.from, it.subject) } + carriedOver).distinct()
+        val style = NotificationCompat.InboxStyle().setSummaryText(batch.accountName)
+        lines.take(NEW_MAIL_SUMMARY_LINES).forEach { style.addLine(it) }
+        return NotificationCompat
+            .Builder(context, MAIL_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_stat_mail)
+            .setContentTitle(batch.accountName.ifBlank { context.getString(R.string.notify_new_message) })
+            // `count` can exceed the listed messages when a batch is larger than
+            // the detail carries; never report fewer than the shade is showing.
+            .setContentText(
+                generatedIcuString(
+                    context.resourceLanguageTag(),
+                    "notify.newMessageCount",
+                    mapOf("count" to maxOf(batch.count, lines.size)),
+                ),
+            ).setStyle(style)
+            .setContentIntent(openAppIntent(context, batch.accountId, batch.folder))
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setGroup(groupKey)
+            .setGroupSummary(true)
+            .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_SUMMARY)
+            .setOnlyAlertOnce(recount)
+            .addExtras(
+                android.os.Bundle().apply {
+                    putString(EXTRA_SUMMARY_ACCOUNT_NAME, batch.accountName)
+                    putString(EXTRA_SUMMARY_FOLDER, batch.folder)
+                },
+            ).setAutoCancel(true)
+            .build()
+    }
+
+    /** Cancels every row standing for the given thread, and returns their ids.
+     *
+     *  A notification is posted per arriving message, but Archive and Mark as
+     *  read act on the whole thread: a reply that arrived alongside the message
+     *  the user pressed the button on would otherwise stay in the shade
+     *  advertising mail that is already filed or already read. */
+    fun cancelThreadRows(
+        context: Context,
+        accountId: String,
+        threadKey: String,
+    ): List<Int> {
+        val manager = NotificationManagerCompat.from(context)
+        val groupKey = newMailGroupKey(accountId)
+        val ids =
+            try {
+                context
+                    .getSystemService(NotificationManager::class.java)
+                    .activeNotifications
+                    .asSequence()
+                    .filter { it.notification.group == groupKey }
+                    .filter { (it.notification.flags and android.app.Notification.FLAG_GROUP_SUMMARY) == 0 }
+                    .filter { it.notification.extras?.getString(EXTRA_THREAD_KEY) == threadKey }
+                    .map { it.id }
+                    .toList()
+            } catch (_: RuntimeException) {
+                // Reading the shade back is an enhancement; on any refusal the
+                // caller still cancels the row that was pressed.
+                emptyList()
+            }
+        ids.forEach { manager.cancel(it) }
+        return ids
+    }
+
+    /** Queues a [reconcileNewMail] after something that can change what is
+     *  unread: a sync, or a read, move or delete from the app. */
+    fun requestReconcile(context: Context) {
+        val appContext = context.applicationContext
+        if (!reconcileQueued.compareAndSet(false, true)) return
+        reconcileExecutor.execute {
+            reconcileQueued.set(false)
+            reconcileNewMail(appContext)
+        }
+    }
+
+    /**
+     * Withdraw notifications for messages that have since been read or removed.
+     *
+     * Withdraws every new-mail row whose message is no longer unread, the way Gmail does: read, archived or
+     * deleted here, or — once a sync has brought the change in — on another device. Blocking; asks core.
+     *
+     * The shade is compared against core's store rather than tracking each action, so every path that changes a
+     * message is covered alike.
+     */
+    fun reconcileNewMail(base: Context) {
+        val context = localizedAppContext(base)
+        val rows =
+            try {
+                context
+                    .getSystemService(NotificationManager::class.java)
+                    .activeNotifications
+                    .mapNotNull { row ->
+                        val notification = row.notification
+                        val accountId = notification.group?.removePrefix(NEW_MAIL_GROUP_PREFIX)
+                        val extras = notification.extras
+                        if (accountId == null || accountId == notification.group) return@mapNotNull null
+                        if ((notification.flags and android.app.Notification.FLAG_GROUP_SUMMARY) != 0) return@mapNotNull null
+                        val folder = extras?.getString(EXTRA_STORE_FOLDER) ?: return@mapNotNull null
+                        val messageId = extras.getString(EXTRA_STORE_MESSAGE_ID) ?: return@mapNotNull null
+                        StoreRow(row.id, accountId, folder, messageId)
+                    }
+            } catch (_: RuntimeException) {
+                return
+            }
+        if (rows.isEmpty()) return
+        val stillUnread = stillUnreadRows(rows) ?: return
+        val stale = rows.filterNot { it.key() in stillUnread }
+        if (stale.isEmpty()) return
+        val manager = NotificationManagerCompat.from(context)
+        stale.forEach { manager.cancel(it.notificationId) }
+        stale.groupBy { it.accountId }.forEach { (accountId, cancelled) ->
+            val extras = summaryExtras(context, accountId)
+            refreshNewMailSummary(
+                context,
+                accountId,
+                // A summary posted before these extras existed still names the
+                // account in its summary text.
+                accountName =
+                    extras?.getString(EXTRA_SUMMARY_ACCOUNT_NAME)
+                        ?: extras?.getCharSequence(NotificationCompat.EXTRA_SUMMARY_TEXT)?.toString().orEmpty(),
+                folder = extras?.getString(EXTRA_SUMMARY_FOLDER).orEmpty(),
+                justCancelled = cancelled.map { it.notificationId },
+            )
+        }
+    }
+
+    private data class StoreRow(
+        val notificationId: Int,
+        val accountId: String,
+        val folder: String,
+        val messageId: String,
+    ) {
+        fun key(): Triple<String, String, String> = Triple(accountId, folder, messageId)
+    }
+
+    /** The rows core still holds unread, or null when it could not say — in
+     *  which case nothing is withdrawn. */
+    private fun stillUnreadRows(rows: List<StoreRow>): Set<Triple<String, String, String>>? {
+        if (!MeronCoreNative.isLoaded()) return null
+        val messages = JSONArray()
+        rows.forEach {
+            messages.put(
+                JSONObject()
+                    .put("account_id", it.accountId)
+                    .put("folder_id", it.folder)
+                    .put("message_id", it.messageId),
+            )
+        }
+        val request =
+            JSONObject()
+                .put("id", 1)
+                .put("method", "mail.stillUnread")
+                .put("params", JSONObject().put("messages", messages))
+        val unread =
+            try {
+                JSONObject(MeronCoreNative.invokeJson(request.toString()))
+                    .optJSONObject("result")
+                    ?.optJSONArray("unread")
+            } catch (_: Exception) {
+                null
+            } ?: return null
+        return (0 until unread.length())
+            .mapNotNull { unread.optJSONObject(it) }
+            .map { Triple(it.optString("account_id"), it.optString("folder_id"), it.optString("message_id")) }
+            .toSet()
+    }
+
+    private fun summaryExtras(
+        context: Context,
+        accountId: String,
+    ): android.os.Bundle? {
+        val summaryId = newMailSummaryId(accountId)
+        return try {
+            context
+                .getSystemService(NotificationManager::class.java)
+                .activeNotifications
+                .firstOrNull { it.id == summaryId }
+                ?.notification
+                ?.extras
+        } catch (_: RuntimeException) {
+            null
+        }
+    }
+
+    /** Replaces the archived mail's row with an offer to put it back.
+     *
+     *  Posted into the same group as the mail it replaced, so the account's
+     *  shade stays a single stack rather than sprouting a loose row. */
+    fun notifyArchivedWithUndo(
+        base: Context,
+        accountId: String,
+        accountName: String,
+        folder: String,
+        threadKey: String,
+        title: String,
+        notificationId: Int,
+    ) {
+        val context = localizedAppContext(base)
+        if (!canNotify(context)) return
+        ensureChannels(context)
+        val notification =
+            NotificationCompat
+                .Builder(context, MAIL_CHANNEL_ID)
+                .setSmallIcon(R.drawable.ic_stat_mail)
+                .setContentTitle(context.getString(R.string.notification_archived_title))
+                .setContentText(title)
+                .setPriority(NotificationCompat.PRIORITY_LOW)
+                .setGroup(newMailGroupKey(accountId))
+                // Silent: the mail already alerted once, and the user is holding
+                // the phone — they just pressed the button.
+                .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_SUMMARY)
+                .setOnlyAlertOnce(true)
+                .setTimeoutAfter(UNDO_WINDOW_MS)
+                .addExtras(android.os.Bundle().apply { putBoolean(EXTRA_ANCILLARY, true) })
+                .addAction(
+                    NotificationCompat
+                        .Action
+                        .Builder(
+                            R.drawable.ic_action_undo,
+                            context.getString(R.string.notification_action_undo),
+                            notificationActionIntent(
+                                context,
+                                ACTION_UNDO_ARCHIVE,
+                                accountId,
+                                folder,
+                                threadKey,
+                                accountName,
+                                title,
+                                notificationId,
+                            ),
+                        ).build(),
+                ).setAutoCancel(true)
+                .build()
+        try {
+            NotificationManagerCompat.from(context).notify(undoNotificationId(notificationId), notification)
+        } catch (_: SecurityException) {
+            // Notification permission can change after canNotify() checks it.
+        }
+    }
+
+    /** Tells the user an action did not take, naming the mail it was meant for
+     *  so a retry is possible from the app. */
+    fun notifyActionFailed(
+        base: Context,
+        accountId: String,
+        accountName: String,
+        folder: String,
+        threadKey: String,
+        title: String,
+        notificationId: Int,
+        action: String,
+    ) {
+        val context = localizedAppContext(base)
+        if (!canNotify(context)) return
+        ensureChannels(context)
+        // An archive that failed changed nothing, so its offer to undo would
+        // undo nothing — drop it rather than leave it contradicting the failure
+        // reported right beside it.
+        NotificationManagerCompat.from(context).cancel(undoNotificationId(notificationId))
+        val message =
+            when (action) {
+                ACTION_ARCHIVE -> context.getString(R.string.notification_archive_failed)
+                ACTION_MARK_READ -> context.getString(R.string.notification_mark_read_failed)
+                else -> context.getString(R.string.notification_undo_failed)
+            }
+        val notification =
+            NotificationCompat
+                .Builder(context, MAIL_CHANNEL_ID)
+                .setSmallIcon(R.drawable.ic_stat_mail)
+                .setContentTitle(message)
+                .setContentText(title)
+                .setStyle(NotificationCompat.BigTextStyle().bigText(title))
+                .setContentIntent(openAppIntent(context, accountId, folder, threadKey))
+                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                .setGroup(newMailGroupKey(accountId))
+                .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_SUMMARY)
+                .addExtras(android.os.Bundle().apply { putBoolean(EXTRA_ANCILLARY, true) })
+                .setAutoCancel(true)
+                .build()
+        try {
+            NotificationManagerCompat.from(context).notify(actionFailedNotificationId(notificationId), notification)
+        } catch (_: SecurityException) {
+            // Notification permission can change after canNotify() checks it.
+        }
+    }
+
+    /** Recounts the group summary after a row leaves the shade.
+     *
+     *  Android keeps a group summary showing even when its last child is gone,
+     *  and its count would still describe the mail that was just handled. */
+    fun refreshNewMailSummary(
+        base: Context,
+        accountId: String,
+        accountName: String,
+        folder: String,
+        justCancelled: List<Int> = emptyList(),
+    ) {
+        val context = localizedAppContext(base)
+        if (!canNotify(context)) return
+        val manager = NotificationManagerCompat.from(context)
+        val groupKey = newMailGroupKey(accountId)
+        // Cancelling is asynchronous: a row dismissed a moment ago can still be
+        // in activeNotifications, and counting it would leave the summary
+        // advertising mail the shade no longer shows.
+        val remaining = activeLines(context, groupKey, justCancelled.toSet())
+        if (remaining.isEmpty()) {
+            manager.cancel(newMailSummaryId(accountId))
+            return
+        }
+        val batch =
+            NewMailBatch(
+                accountId = accountId,
+                accountName = accountName,
+                folder = folder,
+                count = remaining.size,
+                items = emptyList(),
+            )
+        try {
+            manager.notify(
+                newMailSummaryId(accountId),
+                buildNewMailSummary(context, batch, groupKey, remaining, recount = true),
+            )
+        } catch (_: SecurityException) {
+            // Notification permission can change after canNotify() checks it.
+        }
+    }
+
+    /** Inbox lines for the group's notifications that are still showing, newest
+     *  first. Read from the shade rather than remembered in-process, because a
+     *  background sync posts from a worker that doesn't outlive the batch. */
+    private fun activeLines(
+        context: Context,
+        groupKey: String,
+        excludedIds: Set<Int> = emptySet(),
+    ): List<String> =
+        try {
+            context
+                .getSystemService(NotificationManager::class.java)
+                .activeNotifications
+                .asSequence()
+                .filterNot { it.id in excludedIds }
+                .map { it.notification }
+                .filter { it.group == groupKey && (it.flags and android.app.Notification.FLAG_GROUP_SUMMARY) == 0 }
+                .filterNot { it.extras?.getBoolean(EXTRA_ANCILLARY) == true }
+                .sortedByDescending { it.`when` }
+                .mapNotNull { notification ->
+                    val extras = notification.extras ?: return@mapNotNull null
+                    val line =
+                        extras.getString(EXTRA_SUMMARY_LINE) ?: run {
+                            val title = extras.getCharSequence(NotificationCompat.EXTRA_TITLE)?.toString().orEmpty()
+                            val text = extras.getCharSequence(NotificationCompat.EXTRA_TEXT)?.toString().orEmpty()
+                            newMailInboxLine(title, text)
+                        }
+                    line.ifBlank { null }
+                }.toList()
+        } catch (_: RuntimeException) {
+            // Reading the shade back is an enhancement, not the notification
+            // itself: on any refusal fall back to this batch's lines alone.
+            emptyList()
+        }
+
+    fun openAppIntent(
+        context: Context,
+        accountId: String = "",
+        folder: String = "",
+        threadKey: String = "",
+        fromAddr: String = "",
+    ): PendingIntent {
+        val intent =
+            Intent(context, ComposeMainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                // A blank thread key still navigates: the group summary targets
+                // the account's folder, and only the thread is left unopened.
+                if (accountId.isNotBlank() && folder.isNotBlank()) {
+                    putExtra(EXTRA_ACCOUNT_ID, accountId)
+                    putExtra(EXTRA_FOLDER, folder)
+                    putExtra(EXTRA_THREAD_KEY, threadKey)
+                    if (fromAddr.isNotBlank()) putExtra(EXTRA_FROM_ADDR, fromAddr)
+                }
+            }
+        // The sender is part of the request code, so two people's mail in one
+        // thread keep separate intents instead of the newer overwriting both.
+        val requestKey = listOf(accountId, folder, threadKey) + listOfNotNull(fromAddr.ifBlank { null })
+        return PendingIntent.getActivity(
+            context,
+            requestKey.joinToString("|").hashCode(),
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+    }
+}

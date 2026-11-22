@@ -22,10 +22,10 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
-import com.journeyapps.barcodescanner.ScanContract
-import com.journeyapps.barcodescanner.ScanOptions
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import com.journeyapps.barcodescanner.ScanContract
+import com.journeyapps.barcodescanner.ScanOptions
 import jp.nonbili.meron.ui.AttachmentOpenResult
 import jp.nonbili.meron.ui.GoogleDeviceAccount
 import jp.nonbili.meron.ui.GoogleDeviceAccountResult
@@ -50,19 +50,19 @@ class AndroidPlatformServices(
     private val activity: ComponentActivity,
 ) : PlatformServices {
     private var pendingPick: ((PickedFile?) -> Unit)? = null
-    private val pendingSaveDir = File(activity.cacheDir, "pending-saves").apply { mkdirs() }.canonicalFile
+    private val pendingSaveDirectory = File(activity.cacheDir, "pending-saves").apply { mkdirs() }.canonicalFile
     private var pendingSaveFile: File? =
         activity.savedStateRegistry
             .consumeRestoredStateForKey(PENDING_SAVE_STATE_KEY)
             ?.getString(PENDING_SAVE_PATH_KEY)
             ?.let(::File)
             ?.canonicalFile
-            ?.takeIf { it.isFile && it.parentFile == pendingSaveDir }
+            ?.takeIf { it.isFile && it.parentFile == pendingSaveDirectory }
     private var pendingSaveCallback: ((Result<Boolean>) -> Unit)? = null
     private var pendingSaveStarting = false
 
     init {
-        pendingSaveDir.listFiles()?.forEach { file ->
+        pendingSaveDirectory.listFiles()?.forEach { file ->
             if (file.canonicalFile != pendingSaveFile) file.delete()
         }
         activity.savedStateRegistry.registerSavedStateProvider(PENDING_SAVE_STATE_KEY) {
@@ -275,7 +275,7 @@ class AndroidPlatformServices(
             val staged =
                 runCatching {
                     withContext(Dispatchers.IO) {
-                        File.createTempFile("document-", ".tmp", pendingSaveDir).apply { writeBytes(bytes) }
+                        File.createTempFile("document-", ".tmp", pendingSaveDirectory).apply { writeBytes(bytes) }
                     }
                 }.getOrElse {
                     pendingSaveStarting = false
@@ -338,8 +338,8 @@ private fun writeBytesToAttachmentCache(
     bytes: ByteArray,
     fileName: String,
 ): Uri {
-    val dir = File(activity.cacheDir, "attachments").apply { mkdirs() }
-    val file = File(dir, fileName.ifBlank { "meron-file" })
+    val attachmentDirectory = File(activity.cacheDir, "attachments").apply { mkdirs() }
+    val file = File(attachmentDirectory, fileName.ifBlank { "meron-file" })
     file.writeBytes(bytes)
     return FileProvider.getUriForFile(activity, "${activity.packageName}.fileprovider", file)
 }
@@ -376,12 +376,14 @@ internal fun isSafeAttachmentToOpen(
 
 internal const val NOTIFICATION_PERMISSION_REQUEST_CODE = 4001
 
-/** One-line explanation of why libmeron_core.so failed to load, with the facts
- *  needed to diagnose a bad install from a screenshot: the loader error, the
- *  device's supported ABIs (we ship arm64-v8a and armeabi-v7a), whether the per-ABI split
- *  APK made it onto the device (lost when the app is shared/restored instead
- *  of installed from Play), and the installer package. Empty once the core is
- *  loaded. */
+/**
+ * Summarize a native core load failure for Android diagnostics.
+ *
+ * One-line explanation of why libmeron_core.so failed to load, with the facts needed to diagnose a bad
+ * install from a screenshot: the loader error, the device's supported ABIs (we ship arm64-v8a and
+ * armeabi-v7a), whether the per-ABI split APK made it onto the device (lost when the app is shared/restored
+ * instead of installed from Play), and the installer package. Empty once the core is loaded.
+ */
 internal fun describeCoreLoadFailure(context: Context): String {
     if (MeronCoreNative.isLoaded()) return ""
     val error = MeronCoreNative.loadError().ifBlank { "libmeron_core.so not found" }

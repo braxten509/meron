@@ -22,11 +22,13 @@ internal fun parseAiSortConfig(fields: Map<String, String>?): AiSortConfig {
                 )
             },
         recentModels =
-            fields.objectField("recent_models")?.mapValues { (_, ids) ->
-                ids.takeIf { it.startsWith('[') }?.jsonArrayElements().orEmpty().mapNotNull { id ->
-                    id.takeIf { it.startsWith('"') }?.readResponseString(0)?.value
-                }
-            }.orEmpty(),
+            fields
+                .objectField("recent_models")
+                ?.mapValues { (_, ids) ->
+                    ids.takeIf { it.startsWith('[') }?.jsonArrayElements().orEmpty().mapNotNull { id ->
+                        id.takeIf { it.startsWith('"') }?.readResponseString(0)?.value
+                    }
+                }.orEmpty(),
     )
 }
 
@@ -73,8 +75,8 @@ internal fun decodeAiModelsResponse(responseJson: String): AiModelList {
                 AiModel(
                     id = id,
                     name = model.stringField("name")?.takeIf { it.isNotBlank() } ?: id,
-                    priceInPerM = model.number("price_in_per_m"),
-                    priceOutPerM = model.number("price_out_per_m"),
+                    inputPricePerMillion = model.number("price_in_per_m"),
+                    outputPricePerMillion = model.number("price_out_per_m"),
                     structured = model.bool("structured") ?: false,
                     reasoning = model.bool("reasoning") ?: false,
                     decision = model.bool("decision") ?: false,

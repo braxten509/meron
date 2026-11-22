@@ -139,22 +139,22 @@ private fun JsonObject.int(key: String): Int = (this[key] as? JsonPrimitive)?.in
 private fun JsonObject.bool(key: String): Boolean = (this[key] as? JsonPrimitive)?.booleanOrNull ?: false
 
 private fun parseCounts(value: Any?): SetupCounts? {
-    val obj = value as? JsonObject ?: return null
-    return SetupCounts(obj.int("accounts"), obj.int("folders"), obj.int("keys"))
+    val fields = value as? JsonObject ?: return null
+    return SetupCounts(fields.int("accounts"), fields.int("folders"), fields.int("keys"))
 }
 
 private fun parseSetupStatus(json: String): SetupStatus {
-    val obj = runCatching { Json.parseToJsonElement(json).jsonObject }.getOrNull() ?: return SetupStatus()
-    val result = obj["result"] as? JsonObject
+    val fields = runCatching { Json.parseToJsonElement(json).jsonObject }.getOrNull() ?: return SetupStatus()
+    val result = fields["result"] as? JsonObject
     return SetupStatus(
-        stage = obj.str("stage").ifEmpty { "idle" },
-        me = obj.str("me").ifEmpty { "phone" },
-        keep = obj.str("keep"),
-        mine = parseCounts(obj["mine"]) ?: SetupCounts(),
-        peer = parseCounts(obj["peer"]),
-        starting = obj.bool("starting"),
-        error = obj.str("error"),
-        replaced = obj.bool("replaced"),
+        stage = fields.str("stage").ifEmpty { "idle" },
+        me = fields.str("me").ifEmpty { "phone" },
+        keep = fields.str("keep"),
+        mine = parseCounts(fields["mine"]) ?: SetupCounts(),
+        peer = parseCounts(fields["peer"]),
+        starting = fields.bool("starting"),
+        error = fields.str("error"),
+        replaced = fields.bool("replaced"),
         secretFailures = result?.int("secret_failures") ?: 0,
     )
 }
@@ -171,10 +171,10 @@ private suspend fun MeronMobileState.setupCopyStatus(
 
 private suspend fun MeronMobileState.loadSafetyCopy(): SafetyCopy =
     runCatching {
-        val obj = Json.parseToJsonElement(setupCopyCall("safetyInfo")).jsonObject
+        val fields = Json.parseToJsonElement(setupCopyCall("safetyInfo")).jsonObject
         SafetyCopy(
-            exists = obj.bool("exists"),
-            createdAt = (obj["created_at"] as? JsonPrimitive)?.longOrNull ?: 0,
+            exists = fields.bool("exists"),
+            createdAt = (fields["created_at"] as? JsonPrimitive)?.longOrNull ?: 0,
         )
     }.getOrDefault(SafetyCopy())
 
@@ -294,11 +294,15 @@ internal fun MeronMobileState.SetupCopyPage(modifier: Modifier = Modifier) {
                         note = ""
                         platform.scanQrCode(scanPrompt) { result ->
                             when {
-                                result.text != null -> join(buildJsonObject { put("qr", result.text) })
+                                result.text != null -> {
+                                    join(buildJsonObject { put("qr", result.text) })
+                                }
+
                                 result.cameraDenied -> {
                                     note = cameraDeniedText
                                     typing = true
                                 }
+
                                 result.unsupported -> {
                                     note = cannotScanText
                                     typing = true
@@ -457,6 +461,7 @@ private fun DirectionScreen(
 ) {
     val keep = status.keep.ifEmpty { "computer" }
     val erased = if (keep == "phone") "computer" else "phone"
+
     fun countsOf(device: String) = if (status.me == device) status.mine else status.peer
     val working = status.stage == "copying" || status.stage == "applying"
     val locked = working || status.starting

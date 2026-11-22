@@ -196,13 +196,15 @@ internal suspend fun MeronMobileState.ensureManagedGoogleToken(
 }
 
 /**
- * Run a server-touching mail command with managed-Gmail token upkeep: refresh
- * the pushed token first when it is near expiry, and if the server still
- * rejects our OAuth credentials (token revoked mid-session, or core state that
- * drifted from the host's expiry record), force-mint a fresh token and retry
- * once. Non-managed accounts run [action] unchanged. Handles both failure
- * shapes: hosts whose core invoke throws on an error payload, and ones that
- * return the payload for the caller to inspect.
+ * Refresh managed Google credentials around a server-side mail command.
+ *
+ * Run a server-touching mail command with managed-Gmail token upkeep: refresh the pushed token first when
+ * it is near expiry, and if the server still rejects our OAuth credentials (token revoked mid-session, or
+ * core state that drifted from the host's expiry record), force-mint a fresh token and retry once.
+ * Non-managed accounts run [action] unchanged.
+ *
+ * Handles both failure shapes: hosts whose core invoke throws on an error payload, and ones that return the
+ * payload for the caller to inspect.
  */
 internal suspend fun MeronMobileState.withManagedGoogleAuth(
     client: MobileMailCommandClient,
