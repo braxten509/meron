@@ -40,7 +40,8 @@ FAMILY_PATTERNS = {
     ],
     "rust": [
         # not the const in a *const pointer type, nor the static in a 'static lifetime
-        re.compile(r"(?<![*'])\b(?:let|const|static)\s+(?:mut\s+)?(?P<names>" + IDENTIFIER + ")"),
+        # Constructor and path patterns reference existing Rust names.
+        re.compile(r"(?<![*'])\b(?:let|const|static)\s+(?:mut\s+)?(?P<names>" + IDENTIFIER + r")\b(?!\s*(?:\(|::))"),
         re.compile(r"\blet\s+(?:mut\s+)?\((?P<names>[^)]*)\)"),
         re.compile(r"(?:^|[=(,\s])(?:move\s+)?\|(?P<params>[^|]*)\|"),
     ],

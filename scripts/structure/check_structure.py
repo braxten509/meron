@@ -279,6 +279,23 @@ def init_old_list(rules: Rules, failing: dict[str, list[str]]) -> int:
     return 0
 
 
+def retire_fixed(rules: Rules, files: list[str], failing: dict[str, list[str]]) -> None:
+    """Remove legacy entries whose files now pass or have moved out of the tree."""
+    path = ROOT / rules.settings["old_list"]
+    existing = set(files)
+    lines = path.read_text().splitlines(keepends=True)
+    remaining = []
+    for line in lines:
+        name = line.strip()
+        if not name or name.startswith("#") or name in failing:
+            remaining.append(line)
+        elif name in existing and style_problems(rules, [name], file_lines_only=True):
+            remaining.append(line)
+    if remaining != lines:
+        path.write_text("".join(remaining))
+    print(f"Removed {len(lines) - len(remaining)} resolved entries from {path.name}.")
+
+
 def list_problems(rules: Rules, files: list[str], failing: dict[str, list[str]]) -> list[str]:
     """The old-files list rules: it only shrinks, it lists real files, and a fixed file comes off it."""
     name = rules.settings["old_list"]
@@ -320,10 +337,14 @@ def check(files: list[str]) -> int:
             failing[path] = problems
     if "--init-old-list" in sys.argv:
         return init_old_list(rules, failing)
+    if "--retire-fixed" in sys.argv:
+        if "--hook" in sys.argv:
+            sys.exit("Retire resolved entries in the working tree before staging.")
+        retire_fixed(rules, files, failing)
     old_now = read_old_list(rules, from_commit=False) or set()
     errors = table_problems(rules, files) + list_problems(rules, files, failing)
     for path, problems in failing.items():
-        if own_file(path, rules) in old_now:
+        if own_file(path, rules) in old_now and "--audit" not in sys.argv:
             continue
         if shown_paths and not any(path == shown or path.startswith(shown + "/") for shown in shown_paths):
             continue

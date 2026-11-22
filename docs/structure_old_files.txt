@@ -505,7 +505,6 @@ meron-core/src/calendar.rs
 meron-core/src/calendar/events.rs
 meron-core/src/calendar/tests.rs
 meron-core/src/changelog.rs
-meron-core/src/engine/ai_sort.rs
 meron-core/src/engine/append.rs
 meron-core/src/engine/background_sync.rs
 meron-core/src/engine/bulk.rs
@@ -517,7 +516,6 @@ meron-core/src/engine/rules.rs
 meron-core/src/engine/search.rs
 meron-core/src/engine/sync.rs
 meron-core/src/engine/sync/destination.rs
-meron-core/src/engine/sync/folders.rs
 meron-core/src/engine/sync/messages.rs
 meron-core/src/engine/sync/policy.rs
 meron-core/src/engine/sync/recovery.rs

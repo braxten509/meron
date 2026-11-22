@@ -27,7 +27,7 @@ Prefer feature names that explain where to look. Preserve Go package and build-t
 
 Aim for at most 600 code lines per file. Split by responsibility with its tests. Document any cohesive exception in the table below. Open each source file with three lines that identify its job and its callers. Keep documentation paragraphs to four lines.
 
-Run `python3 scripts/structure/check_structure.py` from the repository. The existing commit hook runs gofmt, rustfmt, Prettier, ktlint and SwiftFormat when available, and validates the staged translations. CI runs the structure check on clean checkouts. Existing violations are tracked in `docs/structure_old_files.txt`; remove paths as they are brought into compliance. A new file must pass.
+Run `python3 scripts/structure/check_structure.py` from the repository. The existing commit hook runs gofmt, rustfmt, Prettier, ktlint and SwiftFormat when available, and validates the staged translations. CI runs the structure check on clean checkouts. Existing violations are tracked in `docs/structure_old_files.txt`; remove paths as they are brought into compliance. A new file must pass. Use `python3 scripts/structure/check_structure.py --audit <folder>` to see that folder’s existing violations. After fixing them, run `python3 scripts/structure/check_structure.py --retire-fixed` and stage the updated list with the source changes.
 
 ## Long-file exceptions
 
