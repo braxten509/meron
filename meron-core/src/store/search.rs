@@ -10,11 +10,10 @@ use crate::search_query::{SearchQuery, local_midnight};
 
 use super::*;
 
-/// Flatten `To`/`Cc` into the plain text `messages.recipients` indexes. The
-/// recipient lists themselves live in the `json` catch-all, which FTS can't
-/// reach, so this mirror is what makes "find the mail I sent to Ann" work
-/// against the cache. `None` for a message with no addressees, which the write
-/// path treats as "leave whatever is already indexed alone".
+/// Flatten `To`/`Cc` into the plain text `messages.recipients` indexes. The recipient lists
+/// themselves live in the `json` catch-all, which FTS can't reach, so this mirror is what makes
+/// "find the mail I sent to Ann" work against the cache. `None` for a message with no addressees,
+/// which the write path treats as "leave whatever is already indexed alone".
 pub(super) fn recipients_index_text(
     to: &[crate::imap::Recipient],
     cc: &[crate::imap::Recipient],
@@ -33,20 +32,21 @@ pub(super) fn recipients_index_text(
     (!text.is_empty()).then_some(text)
 }
 
-/// Search one folder's cached messages, newest first. `query` may carry the
-/// operators [`SearchQuery`] understands; its free text is a substring match
+/// Search one folder's cached messages, newest first.
+///
+/// `query` may carry the operators [`SearchQuery`] understands; its free text is a substring match
 /// over subject, sender, recipients and body.
 ///
-/// Each text condition of 3+ codepoints is answered by the trigram FTS indexes;
-/// shorter ones (common for CJK, where words are often 2 characters) are matched
-/// in Rust while rows stream newest first, stopping at `limit` hits. The Rust
-/// match is used rather than SQL `lower(..) LIKE ..` because SQLite's `lower()`
-/// folds ASCII only, so a two-letter Cyrillic or Greek query would miss
-/// capitalised text that the (Unicode-folding) trigram path finds once the query
-/// grows a third letter.
+/// Each text condition of 3+ codepoints is answered by the trigram FTS indexes; shorter ones
+/// (common for CJK, where words are often 2 characters) are matched in Rust while rows stream
+/// newest first, stopping at `limit` hits.
 ///
-/// `before_cursor` is the `(date, uid, folder)` of the last row of the previous
-/// page. The folder tie-breaker is required because UIDs are mailbox-scoped.
+/// The Rust match is used rather than SQL `lower(..) LIKE ..` because SQLite's `lower()` folds
+/// ASCII only, so a two-letter Cyrillic or Greek query would miss capitalised text that the
+/// (Unicode-folding) trigram path finds once the query grows a third letter.
+///
+/// `before_cursor` is the `(date, uid, folder)` of the last row of the previous page. The folder
+/// tie-breaker is required because UIDs are mailbox-scoped.
 pub fn search_messages(
     conn: &Connection,
     account: &str,
@@ -250,11 +250,10 @@ fn search_messages_among(
     Ok(messages)
 }
 
-/// Search several folders (typically the open mailbox plus Sent) as one
-/// newest-first result set. UIDs are folder-scoped, so each header carries the
-/// folder it came from and ordering is by date — the only key comparable across
-/// mailboxes. Used both for the cached half of a live search and, on mobile, as
-/// the whole answer when the server can't be reached.
+/// Search several folders (typically the open mailbox plus Sent) as one newest-first result set.
+/// UIDs are folder-scoped, so each header carries the folder it came from and ordering is by date —
+/// the only key comparable across mailboxes. Used both for the cached half of a live search and, on
+/// mobile, as the whole answer when the server can't be reached.
 pub fn search_messages_in_folders(
     conn: &Connection,
     account: &str,

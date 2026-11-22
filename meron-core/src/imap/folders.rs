@@ -156,14 +156,15 @@ pub async fn prepare_folder_delete(session: &mut Session) -> Result<()> {
     Ok(())
 }
 
-/// Delete folders on the server, messages and all. The caller must first run
-/// [`prepare_folder_delete`] on the same session. `names` is deleted in order,
-/// so a subtree must arrive deepest first — RFC 3501 lets a server refuse DELETE
-/// on a mailbox that still has inferiors. Returns the names actually removed;
-/// if a later command fails, the error carries the successful prefix so callers
-/// can reconcile irreversible changes. Callers must refuse special-use folders
-/// first: IMAP happily deletes Sent or Archive, and nothing on the server brings
-/// them back.
+/// Delete folders on the server, messages and all.
+///
+/// The caller must first run [`prepare_folder_delete`] on the same session. `names` is deleted in
+/// order, so a subtree must arrive deepest first — RFC 3501 lets a server refuse DELETE on a
+/// mailbox that still has inferiors. Returns the names actually removed; if a later command fails,
+/// the error carries the successful prefix so callers can reconcile irreversible changes.
+///
+/// Callers must refuse special-use folders first: IMAP happily deletes Sent or Archive, and nothing
+/// on the server brings them back.
 pub async fn delete_folders(session: &mut Session, names: &[String]) -> Result<Vec<String>> {
     let mut removed = Vec::new();
     for name in names {
@@ -179,20 +180,17 @@ pub async fn delete_folders(session: &mut Session, names: &[String]) -> Result<V
     Ok(removed)
 }
 
-/// Whether `err` is a FETCH response our IMAP parser could not read, as opposed
-/// to a network or server failure.
+/// Whether `err` is a FETCH response our IMAP parser could not read, as opposed to a network or server failure.
 ///
-/// This matters because such a response is unrecoverable *on that connection*:
-/// async-imap reports the parse failure without consuming the offending bytes
-/// from its read buffer, so every later poll re-parses them and fails again.
-/// The only way forward is to drop the session and re-fetch a range that
-/// excludes the message — see `fetch_headers_isolating_unparseable` in
-/// `engine/sync.rs`.
+/// This matters because such a response is unrecoverable *on that connection*: async-imap reports
+/// the parse failure without consuming the offending bytes from its read buffer, so every later
+/// poll re-parses them and fails again. The only way forward is to drop the session and re-fetch a
+/// range that excludes the message — see `fetch_headers_isolating_unparseable` in `engine/sync.rs`.
 ///
-/// Detection is by message text because async-imap surfaces the failure as a
-/// plain `io::Error::other`, with no variant to match on. The substring is the
-/// literal from its `ImapStream::decode`; if the pinned fork moves, this needs
-/// rechecking (`unparseable_response_marker_matches_async_imap` covers it).
+/// Detection is by message text because async-imap surfaces the failure as a plain
+/// `io::Error::other`, with no variant to match on. The substring is the literal from its
+/// `ImapStream::decode`; if the pinned fork moves, this needs rechecking
+/// (`unparseable_response_marker_matches_async_imap` covers it).
 pub fn is_unparseable_response(err: &anyhow::Error) -> bool {
     err.chain().any(|cause| {
         cause

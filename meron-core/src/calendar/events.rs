@@ -1,10 +1,9 @@
-//! The local calendar: the shape both frontends render for a range of days,
-//! and the writes behind its editor.
+//! The local calendar: the shape both frontends render for a range of days, and the writes behind its editor.
 //!
-//! Like Tasks, everything is on this device: events the user typed in, and
-//! the invitations they accepted (filed by [`super::respond`]). A month view
-//! asks for a range and gets back occurrences — a repeating event expanded,
-//! by calcard, from its own rule — with the open tasks due in it alongside.
+//! Like Tasks, everything is on this device: events the user typed in, and the invitations they
+//! accepted (filed by [`super::respond`]). A month view asks for a range and gets back occurrences
+//! — a repeating event expanded, by calcard, from its own rule — with the open tasks due in it
+//! alongside.
 
 #[cfg(test)]
 mod tests;
@@ -192,11 +191,10 @@ pub fn update_event(conn: &Connection, id: &str, input: &EventInput) -> Result<V
     Ok(json!({ "event": event_json(&saved) }))
 }
 
-/// An edit made on one occurrence of a repeating event, restated for the
-/// series: the editor shows the occurrence it was opened on, and moving that
-/// occurrence moves every one by the same amount, from the series' own start.
-/// Without this, saving a later occurrence would make it the first and drop
-/// the ones before it.
+/// An edit made on one occurrence of a repeating event, restated for the series: the editor shows
+/// the occurrence it was opened on, and moving that occurrence moves every one by the same amount,
+/// from the series' own start. Without this, saving a later occurrence would make it the first and
+/// drop the ones before it.
 fn series_input(event: &CalendarEvent, input: &EventInput) -> EventInput {
     if !event.recurring || input.occurrence_start <= 0 || input.start <= 0 {
         return input.clone();
@@ -212,13 +210,12 @@ fn series_input(event: &CalendarEvent, input: &EventInput) -> EventInput {
     }
 }
 
-/// The series' new start, moved as far on the calendar and the clock as the
-/// edited occurrence moved, all read in the zone the series repeats in.
-/// Counting seconds instead would carry a DST change between the two into
-/// every occurrence: moving a 09:00 across the change by a day would make the
-/// whole series 10:00. An all-day bound is a UTC midnight, not a local time,
-/// so when either side is all-day — including a switch between the two —
-/// the move is counted in whole dates and the time of day comes from the edit.
+/// The series' new start, moved as far on the calendar and the clock as the edited occurrence moved, all read in the zone the series repeats in.
+///
+/// Counting seconds instead would carry a DST change between the two into every occurrence: moving
+/// a 09:00 across the change by a day would make the whole series 10:00. An all-day bound is a UTC
+/// midnight, not a local time, so when either side is all-day — including a switch between the two
+/// — the move is counted in whole dates and the time of day comes from the edit.
 fn shift_series_start(event: &CalendarEvent, input: &EventInput) -> Option<i64> {
     let tz = event
         .tzid
@@ -370,11 +367,10 @@ pub fn record_invite_event(
     Ok(())
 }
 
-/// Bring a filed invitation up to date with the organizer's newer revision of
-/// it (a later SEQUENCE: moved, renamed, ...), as soon as that message is read.
-/// The calendar would otherwise keep the old time until the user answered
-/// again. The answer they gave carries over; the card asks for a new one.
-/// `sender` is the message's From address.
+/// Bring a filed invitation up to date with the organizer's newer revision of it (a later SEQUENCE:
+/// moved, renamed, ...), as soon as that message is read. The calendar would otherwise keep the old
+/// time until the user answered again. The answer they gave carries over; the card asks for a new
+/// one. `sender` is the message's From address.
 pub fn apply_invite_update(
     conn: &Connection,
     account: &str,
@@ -1013,11 +1009,10 @@ fn override_bounds(
     Some((start, end, all_day))
 }
 
-/// The zone a calendar's times without a TZID are expanded in. Dates without
-/// a time are UTC midnights here, and times without a zone the device's. A
-/// time in UTC (`…Z`) or at an offset is in that: calcard expands a repeat in
-/// the TZID's zone or the default, not the start's own offset, so a weekly
-/// 17:00Z would otherwise land at 17:00 local.
+/// The zone a calendar's times without a TZID are expanded in. Dates without a time are UTC
+/// midnights here, and times without a zone the device's. A time in UTC (`…Z`) or at an offset is
+/// in that: calcard expands a repeat in the TZID's zone or the default, not the start's own offset,
+/// so a weekly 17:00Z would otherwise land at 17:00 local.
 fn expansion_tz(ical: &calcard::icalendar::ICalendar, all_day: bool) -> Tz {
     if all_day {
         return Tz::UTC;
@@ -1095,11 +1090,10 @@ fn repeat_ics(event: &CalendarEvent) -> String {
     )
 }
 
-/// `series_ics` with the occurrence `invite` is about answered: declined, it
-/// is excluded (EXDATE); accepted, the organizer's version of it replaces any
-/// earlier one (an override VEVENT with its RECURRENCE-ID), which the
-/// expansion then shows in place of the series' own. With no `response`, an
-/// organizer's update the user has not answered, it takes the series' answer.
+/// `series_ics` with the occurrence `invite` is about answered: declined, it is excluded (EXDATE);
+/// accepted, the organizer's version of it replaces any earlier one (an override VEVENT with its
+/// RECURRENCE-ID), which the expansion then shows in place of the series' own. With no `response`,
+/// an organizer's update the user has not answered, it takes the series' answer.
 fn with_occurrence(
     series_ics: &str,
     invite: &Invite,
@@ -1208,11 +1202,10 @@ fn with_series_sequence(ics: &str) -> Result<String> {
     })
 }
 
-/// A newly answered `incoming` series, with the exceptions the user already
-/// had on the `stored` one carried over: dates declined or cancelled away,
-/// and occurrences answered on their own. Re-filing the series must not bring
-/// back a meeting the user took out, nor undo a moved one they accepted. What
-/// the organizer's new calendar says about a date itself wins.
+/// A newly answered `incoming` series, with the exceptions the user already had on the `stored` one
+/// carried over: dates declined or cancelled away, and occurrences answered on their own. Re-filing
+/// the series must not bring back a meeting the user took out, nor undo a moved one they accepted.
+/// What the organizer's new calendar says about a date itself wins.
 fn carry_exceptions(stored: &str, incoming: &str) -> Result<String> {
     let mut series =
         super::parse_ical(incoming).ok_or_else(|| anyhow!("invitation is not iCalendar"))?;
@@ -1380,11 +1373,10 @@ fn remove_overrides(series: &mut calcard::icalendar::ICalendar, recurrence_id: i
     series.remove_component_ids(&stale);
 }
 
-/// Add an occurrence's own VEVENT to `series`. calcard pairs an override with
-/// its series by RECURRENCE-ID and SEQUENCE together, and an organizer who
-/// moves one occurrence bumps the SEQUENCE of that occurrence alone, so it
-/// takes the series' own — or the moved meeting would show beside the one it
-/// replaces. `response`, when given, is the user's answer about it.
+/// Add an occurrence's own VEVENT to `series`. calcard pairs an override with its series by
+/// RECURRENCE-ID and SEQUENCE together, and an organizer who moves one occurrence bumps the
+/// SEQUENCE of that occurrence alone, so it takes the series' own — or the moved meeting would show
+/// beside the one it replaces. `response`, when given, is the user's answer about it.
 fn put_override(
     series: &mut calcard::icalendar::ICalendar,
     mut component: calcard::icalendar::ICalendarComponent,

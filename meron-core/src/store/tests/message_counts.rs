@@ -161,24 +161,33 @@ fn get_recent_page_can_return_only_unread_messages() {
     let date = fresh_date();
     let (all, all_cursor) =
         get_recent_page(&conn, "acct", "INBOX", 2, None, RecentFilter::default()).unwrap();
-    assert_eq!(all.iter().map(|m| m.uid).collect::<Vec<_>>(), vec![5, 4]);
+    assert_eq!(
+        all.iter().map(|message| message.uid).collect::<Vec<_>>(),
+        vec![5, 4]
+    );
     assert_eq!(
         all_cursor.as_deref(),
         Some(format!("date:{date}:4").as_str())
     );
 
     let (unread, unread_cursor) = get_recent_page(&conn, "acct", "INBOX", 2, None, UNREAD).unwrap();
-    assert_eq!(unread.iter().map(|m| m.uid).collect::<Vec<_>>(), vec![5, 3]);
+    assert_eq!(
+        unread.iter().map(|message| message.uid).collect::<Vec<_>>(),
+        vec![5, 3]
+    );
     assert_eq!(
         unread_cursor.as_deref(),
         Some(format!("date:{date}:3").as_str())
     );
-    assert!(unread.iter().all(|m| !m.seen));
+    assert!(unread.iter().all(|message| !message.seen));
 
     let (next_unread, next_cursor) =
         get_recent_page(&conn, "acct", "INBOX", 2, Some((date, 3)), UNREAD).unwrap();
     assert_eq!(
-        next_unread.iter().map(|m| m.uid).collect::<Vec<_>>(),
+        next_unread
+            .iter()
+            .map(|message| message.uid)
+            .collect::<Vec<_>>(),
         vec![2]
     );
     assert_eq!(next_cursor, None);

@@ -48,12 +48,12 @@ pub(super) struct FlagReads {
 
 /// Read the folder's flag changes, UIDs and unseen UIDs after its window.
 ///
-/// `flags_for` is set for an incremental sync: the window's cached messages,
-/// whose flags no full FETCH read. When CONDSTORE reports every change since
-/// the stored modseq they cost nothing; otherwise their FLAGS are read here,
-/// and a failure to read them fails the call, since the sync would otherwise
-/// miss flag changes a full read would have seen. `listed_uids` is a UID
-/// listing already taken after the window's UIDNEXT, reused for pruning.
+/// `flags_for` is set for an incremental sync: the window's cached messages, whose flags no full
+/// FETCH read. When CONDSTORE reports every change since the stored modseq they cost nothing;
+/// otherwise their FLAGS are read here, and a failure to read them fails the call, since the sync
+/// would otherwise miss flag changes a full read would have seen.
+///
+/// `listed_uids` is a UID listing already taken after the window's UIDNEXT, reused for pruning.
 #[allow(clippy::too_many_arguments)]
 pub(super) async fn read_flag_state(
     session: &mut imap::Session,
@@ -115,13 +115,12 @@ pub(super) fn cached_in_window(window: &[u32], batch: &imap::RecentBatch) -> Vec
         .collect()
 }
 
-/// Rebuild what the batched sync would have produced, for a folder holding at
-/// least one message whose FETCH response cannot be parsed. Establishes the
-/// window as UIDs, reads in full what needs it (only the messages missing from
-/// `known` when the folder was synced before, else the whole window, see
-/// [`recover_recent_batch`]) a narrower range at a time, then re-runs the
-/// best-effort flag reconciliation and UID listing that the failed attempt
-/// never reached.
+/// Rebuild what the batched sync would have produced, for a folder holding at least one message whose FETCH response cannot be parsed.
+///
+/// Establishes the window as UIDs, reads in full what needs it (only the messages missing from
+/// `known` when the folder was synced before, else the whole window, see [`recover_recent_batch`])
+/// a narrower range at a time, then re-runs the best-effort flag reconciliation and UID listing
+/// that the failed attempt never reached.
 #[allow(clippy::too_many_arguments)]
 pub(in crate::engine) async fn sync_state_isolating_unparseable(
     engine: &Arc<Engine>,

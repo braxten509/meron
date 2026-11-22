@@ -1,14 +1,12 @@
 //! Tags on cached mail.
 //!
-//! `message_tags` is the source of truth, so a tag works on every account,
-//! online or not. On a server that stores keywords it is mirrored there, which
-//! carries it to other devices and clients.
+//! `message_tags` is the source of truth, so a tag works on every account, online or not. On a
+//! server that stores keywords it is mirrored there, which carries it to other devices and clients.
 //!
-//! A tag belongs to the message rather than to one mailbox copy: rows are keyed
-//! by [`TAG_KEY_SQL`], which survives a move. Each copy's `server_tags` records
-//! what that copy last showed, so sync merges the *change*: a copy that simply
-//! never had a keyword (a fresh COPY, a folder without keyword support) says
-//! nothing, and only a keyword that was there and went away removes a tag.
+//! A tag belongs to the message rather than to one mailbox copy: rows are keyed by [`TAG_KEY_SQL`],
+//! which survives a move. Each copy's `server_tags` records what that copy last showed, so sync
+//! merges the *change*: a copy that simply never had a keyword (a fresh COPY, a folder without
+//! keyword support) says nothing, and only a keyword that was there and went away removes a tag.
 
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior, params};
@@ -27,11 +25,11 @@ const REMOVED: i64 = 3;
 /// SQL for the states a reader sees.
 pub(super) const LIVE_STATES: &str = "(0, 1)";
 
-/// A sync that was on the wire when a tag changed here reports the state from
-/// before the change. For this long after a local change, a keyword going
-/// missing may be that echo, and the local change wins: it is pushed again. If
-/// it really was another client removing it just then, the two still converge,
-/// which waiting for a later look would not promise: CONDSTORE reports a change
+/// A sync that was on the wire when a tag changed here reports the state from before the change.
+///
+/// For this long after a local change, a keyword going missing may be that echo, and the local
+/// change wins: it is pushed again. If it really was another client removing it just then, the two
+/// still converge, which waiting for a later look would not promise: CONDSTORE reports a change
 /// once.
 const STALE_ECHO_SECS: i64 = 120;
 

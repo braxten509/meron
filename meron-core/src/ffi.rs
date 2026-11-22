@@ -42,11 +42,10 @@ static ANDROID_EVENT_DISPATCHER: OnceLock<AndroidEventDispatcher> = OnceLock::ne
 static ANDROID_CONTEXT: Mutex<Option<GlobalRef>> = Mutex::new(None);
 static MOBILE_IDLE_WATCHES: Mutex<Option<HashMap<String, Arc<AtomicBool>>>> = Mutex::new(None);
 
-/// The shared mail [`Engine`], hosted while the app is foreground so the request
-/// path reuses warm IMAP sessions (and, later, drives foreground IDLE) instead
-/// of reconnecting per FFI call. Built on `engine.foreground`, kept across calls,
-/// and parked (pool cleared) on `engine.background`. `None` until the first
-/// foreground transition.
+/// The shared mail [`Engine`], hosted while the app is foreground so the request path reuses warm
+/// IMAP sessions (and, later, drives foreground IDLE) instead of reconnecting per FFI call. Built
+/// on `engine.foreground`, kept across calls, and parked (pool cleared) on `engine.background`.
+/// `None` until the first foreground transition.
 static ENGINE: Mutex<Option<Arc<Engine>>> = Mutex::new(None);
 
 /// Long-lived multi-thread tokio runtime that owns the Engine's async work
@@ -80,12 +79,12 @@ pub(crate) fn current_engine() -> Option<Arc<Engine>> {
     ENGINE.lock().unwrap().clone()
 }
 
-/// Evict `account_id` from the hosted Engine's in-memory creds cache, if an
-/// Engine is live. Account mutations (add/reconnect, removal, platform token
-/// push via `account.updateOAuthToken`) go through the stateless DB path, and
-/// `ensure_valid_creds` only hydrates accounts *missing* from its cache — so
-/// without eviction a warm foreground Engine keeps authenticating with the
-/// stale creds it loaded before the mutation.
+/// Evict `account_id` from the hosted Engine's in-memory creds cache, if an Engine is live.
+///
+/// Account mutations (add/reconnect, removal, platform token push via `account.updateOAuthToken`)
+/// go through the stateless DB path, and `ensure_valid_creds` only hydrates accounts *missing* from
+/// its cache — so without eviction a warm foreground Engine keeps authenticating with the stale
+/// creds it loaded before the mutation.
 pub(crate) fn evict_engine_account(account_id: &str) {
     if let Some(engine) = current_engine() {
         engine.accounts.blocking_lock().remove(account_id);
@@ -96,11 +95,10 @@ pub(crate) fn evict_engine_account(account_id: &str) {
     }
 }
 
-/// The Engine to run a mobile command against: the warm hosted one while
-/// foreground, or a transient one (own connection, no pooling) built on demand
-/// for background/one-off calls (e.g. a `BGAppRefreshTask` sync before any
-/// foreground transition). Either way the command path is identical, so there is
-/// only one implementation to maintain.
+/// The Engine to run a mobile command against: the warm hosted one while foreground, or a transient
+/// one (own connection, no pooling) built on demand for background/one-off calls (e.g. a
+/// `BGAppRefreshTask` sync before any foreground transition). Either way the command path is
+/// identical, so there is only one implementation to maintain.
 pub(crate) fn engine_for(data_dir: &str) -> Result<Arc<Engine>, String> {
     if let Some(engine) = current_engine() {
         return Ok(engine);
@@ -226,11 +224,10 @@ where
     rt.block_on(crate::engine::bulk::with_thread_seat(future))
 }
 
-/// IDLE watches the foreground session (`engine.foreground`) wants, as opposed
-/// to the ones the host asked for ([`HOST_WATCHES`], the opt-in live-mail-push
-/// feature). A watch runs while either side wants it, so each consults the
-/// other before stopping one: `engine.background` leaves live-push watches
-/// running, and turning live push off leaves the open app's watches running.
+/// IDLE watches the foreground session (`engine.foreground`) wants, as opposed to the ones the host
+/// asked for ([`HOST_WATCHES`], the opt-in live-mail-push feature). A watch runs while either side
+/// wants it, so each consults the other before stopping one: `engine.background` leaves live-push
+/// watches running, and turning live push off leaves the open app's watches running.
 static ENGINE_OWNED_WATCHES: Mutex<Vec<(String, String)>> = Mutex::new(Vec::new());
 
 /// IDLE watches the host asked for through `watch.start`.

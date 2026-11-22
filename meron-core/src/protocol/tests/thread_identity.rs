@@ -6,9 +6,9 @@ use super::*;
 
 #[test]
 fn requested_mobile_uids_uses_message_ids_without_thread_fallback() {
-    let data_dir = unique_data_dir("targeted-uids");
-    seed_mobile_account(&data_dir, "me@example.com");
-    let conn = store::open_at(data_dir.join("meron.db")).unwrap();
+    let data_directory = unique_data_directory("targeted-uids");
+    seed_mobile_account(&data_directory, "me@example.com");
+    let conn = store::open_at(data_directory.join("meron.db")).unwrap();
     store::ensure_folder(&conn, "me@example.com", "INBOX").unwrap();
     store::upsert_messages(
         &conn,
@@ -53,7 +53,7 @@ fn requested_mobile_uids_uses_message_ids_without_thread_fallback() {
     let fallback = requested_mobile_uids(&conn, &parsed, &json!({})).unwrap();
     assert_eq!(fallback, vec![7, 8]);
 
-    let _ = std::fs::remove_dir_all(data_dir);
+    let _ = std::fs::remove_dir_all(data_directory);
 }
 
 #[test]
@@ -73,9 +73,9 @@ fn parse_thread_id_round_trips_branch_root_containing_hash() {
 
 #[test]
 fn cached_thread_uids_uid_style_survives_thread_key_backfill() {
-    let data_dir = unique_data_dir("uid-style-backfill");
-    seed_mobile_account(&data_dir, "me@example.com");
-    let conn = store::open_at(data_dir.join("meron.db")).unwrap();
+    let data_directory = unique_data_directory("uid-style-backfill");
+    seed_mobile_account(&data_directory, "me@example.com");
+    let conn = store::open_at(data_directory.join("meron.db")).unwrap();
     store::ensure_folder(&conn, "me@example.com", "INBOX").unwrap();
     // The row was rendered as a uid-style card while its thread_key was empty,
     // then a later sync filled in the real key.
@@ -94,14 +94,14 @@ fn cached_thread_uids_uid_style_survives_thread_key_backfill() {
     let parsed = parse_thread_id("me@example.com#INBOX#9").unwrap();
     assert_eq!(parsed.uid, Some(9));
     assert_eq!(cached_thread_uids(&conn, &parsed).unwrap(), vec![9]);
-    let _ = std::fs::remove_dir_all(data_dir);
+    let _ = std::fs::remove_dir_all(data_directory);
 }
 
 #[test]
 fn update_mobile_read_state_scopes_branched_threads_to_their_uids() {
-    let data_dir = unique_data_dir("branch-read-scope");
-    seed_mobile_account(&data_dir, "me@example.com");
-    let conn = store::open_at(data_dir.join("meron.db")).unwrap();
+    let data_directory = unique_data_directory("branch-read-scope");
+    seed_mobile_account(&data_directory, "me@example.com");
+    let conn = store::open_at(data_directory.join("meron.db")).unwrap();
     store::ensure_folder(&conn, "me@example.com", "INBOX").unwrap();
     store::upsert_messages(
         &conn,
@@ -142,7 +142,7 @@ fn update_mobile_read_state_scopes_branched_threads_to_their_uids() {
         .collect();
     assert!(seen_by_uid[&2]);
     assert!(!seen_by_uid[&1]);
-    let _ = std::fs::remove_dir_all(data_dir);
+    let _ = std::fs::remove_dir_all(data_directory);
 }
 
 #[test]

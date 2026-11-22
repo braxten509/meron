@@ -35,11 +35,10 @@ pub fn group_thread_cards_with_drafts(
     use std::collections::HashMap;
 
     struct RootSubject {
-        /// The card's title: the oldest message's subject verbatim. Reply
-        /// prefixes are stripped for grouping, never for display — when the
-        /// thread's own first message is not in the mailbox the oldest one here
-        /// is itself a reply, and dropping its `Re:` claims a thread start that
-        /// this folder does not hold.
+        /// The card's title: the oldest message's subject verbatim. Reply prefixes are stripped for
+        /// grouping, never for display — when the thread's own first message is not in the mailbox the
+        /// oldest one here is itself a reply, and dropping its `Re:` claims a thread start that this folder
+        /// does not hold.
         display: String,
         group: String,
     }
@@ -308,17 +307,15 @@ pub fn card_message_counts(
     Ok(counts)
 }
 
-/// The title each of `card_keys` should show: the subject of the oldest cached
-/// message of its thread, verbatim.
+/// The title each of `card_keys` should show: the subject of the oldest cached message of its thread, verbatim.
 ///
-/// The page a card was grouped from is a filtered, cursor-paged slice — an
-/// unread view can hold a reply while the seen thread opener sits in the same
-/// folder just outside the page — so a title read off that slice can call a
-/// reply the thread's start. The cache has the whole mailbox and settles it, the
-/// same way [`card_message_counts`] settles the tally.
+/// The page a card was grouped from is a filtered, cursor-paged slice — an unread view can hold a
+/// reply while the seen thread opener sits in the same folder just outside the page — so a title
+/// read off that slice can call a reply the thread's start. The cache has the whole mailbox and
+/// settles it, the same way [`card_message_counts`] settles the tally.
 ///
-/// Keyed by root thread key, not card key: every subject branch of a thread
-/// carries the root thread's title.
+/// Keyed by root thread key, not card key: every subject branch of a thread carries the root
+/// thread's title.
 pub fn card_root_subjects(
     conn: &Connection,
     account: &str,
@@ -431,11 +428,10 @@ pub struct CardFile {
     pub mime: String,
 }
 
-/// The real attachments behind each of `card_keys`, in thread order, keyed by
-/// card key; cards with none are absent. Scoped and deduplicated exactly like
-/// [`card_message_counts`], so the chips speak for the same messages the reader
-/// opens. Header sync supplies names from BODYSTRUCTURE; a cached body refines
-/// them using the HTML references to exclude inline images.
+/// The real attachments behind each of `card_keys`, in thread order, keyed by card key; cards with
+/// none are absent. Scoped and deduplicated exactly like [`card_message_counts`], so the chips
+/// speak for the same messages the reader opens. Header sync supplies names from BODYSTRUCTURE; a
+/// cached body refines them using the HTML references to exclude inline images.
 pub fn card_attachments(
     conn: &Connection,
     account: &str,
@@ -691,14 +687,14 @@ pub(super) struct CardRow {
     tag_key: String,
 }
 
-/// Visit every cached message behind `roots` once, with the card key it belongs
-/// to. `folder` scopes the scan (for `uid:` roots); Message-ID copies across
-/// folders are folded, so a self-sent message cached in Inbox and Sent is one
-/// visit. Mail `scope` leaves out of the conversation is not visited, so every
-/// tally agrees with what opening the card shows.
+/// Visit every cached message behind `roots` once, with the card key it belongs to.
 ///
-/// The first copy supplies identity. Attachment metadata prefers a cached body
-/// over header-only copies, even when its refined list is empty.
+/// `folder` scopes the scan (for `uid:` roots); Message-ID copies across folders are folded, so a
+/// self-sent message cached in Inbox and Sent is one visit. Mail `scope` leaves out of the
+/// conversation is not visited, so every tally agrees with what opening the card shows.
+///
+/// The first copy supplies identity. Attachment metadata prefers a cached body over header-only
+/// copies, even when its refined list is empty.
 fn for_each_card_row(
     conn: &Connection,
     account: &str,
@@ -806,21 +802,22 @@ pub(super) struct RootCandidate {
     subject: String,
 }
 
-/// Choose the oldest message of one thread from `candidates`. `read_folder` is
-/// the mailbox the card belongs to.
+/// Choose the oldest message of one thread from `candidates`.
 ///
-/// UIDs ascend with arrival inside a folder, so there the lowest UID is the
-/// oldest message — authoritative even for a row whose Date header is missing.
-/// Across folders UIDs are unrelated: on a page that merges the mailbox with
-/// Sent (search, and any thread the user replied to) a Sent reply's UID 1 is not
-/// older than an Inbox root's UID 100. So each folder's own pick is made by UID
-/// first, and only those are compared, by send time alone — UID says nothing
-/// here and must not break the tie, or the Sent reply wins back whenever the two
+/// `read_folder` is the mailbox the card belongs to.
+///
+/// UIDs ascend with arrival inside a folder, so there the lowest UID is the oldest message —
+/// authoritative even for a row whose Date header is missing. Across folders UIDs are unrelated: on
+/// a page that merges the mailbox with Sent (search, and any thread the user replied to) a Sent
+/// reply's UID 1 is not older than an Inbox root's UID 100.
+///
+/// So each folder's own pick is made by UID first, and only those are compared, by send time alone
+/// — UID says nothing here and must not break the tie, or the Sent reply wins back whenever the two
 /// share a timestamp or neither carries one.
 ///
-/// What breaks a cross-folder tie is the mailbox being read: it is the folder
-/// the card sits in, so its copy is the one that should title it. The folder
-/// name settles what is left, so the pick never follows input order.
+/// What breaks a cross-folder tie is the mailbox being read: it is the folder the card sits in, so
+/// its copy is the one that should title it. The folder name settles what is left, so the pick
+/// never follows input order.
 pub(super) fn pick_root(
     candidates: Vec<RootCandidate>,
     read_folder: &str,
@@ -859,11 +856,10 @@ pub(super) fn effective_thread_key(message: &MessageHeader) -> String {
     }
 }
 
-/// The branch-aware thread key a list card for `message` carries: the root
-/// thread key joined with the message's grouping subject for branchable
-/// threads, or the bare root for uid:/gmthrid: keys. Every path that mints a
-/// clickable thread id (thread lists, starred items, new-mail notifications)
-/// must use this so the id matches the card the grouping produced.
+/// The branch-aware thread key a list card for `message` carries: the root thread key joined with
+/// the message's grouping subject for branchable threads, or the bare root for uid:/gmthrid: keys.
+/// Every path that mints a clickable thread id (thread lists, starred items, new-mail
+/// notifications) must use this so the id matches the card the grouping produced.
 pub fn card_thread_key(message: &MessageHeader) -> String {
     let base = effective_thread_key(message);
     if should_branch_thread_by_subject(&base) {
@@ -890,11 +886,10 @@ pub fn should_branch_thread_by_subject(thread_key: &str) -> bool {
         && !thread_key.starts_with(super::SENDER_KEY_PREFIX)
 }
 
-/// Join a root thread key and a grouping subject into one branch key. The root
-/// is a raw Message-ID, where `#` is legal atext — escape it so
-/// [`split_branch_compound_key`] can split at the first literal `#`
-/// unambiguously (the subject side stays verbatim; it is only ever compared
-/// whole against other grouping subjects).
+/// Join a root thread key and a grouping subject into one branch key. The root is a raw Message-ID,
+/// where `#` is legal atext — escape it so [`split_branch_compound_key`] can split at the first
+/// literal `#` unambiguously (the subject side stays verbatim; it is only ever compared whole
+/// against other grouping subjects).
 pub fn branch_compound_key(root: &str, group_subject: &str) -> String {
     let escaped = root.replace('%', "%25").replace('#', "%23");
     format!("{escaped}#{group_subject}")
@@ -986,14 +981,15 @@ pub(super) fn strip_leading_bracket_tag(subject: &str) -> Option<&str> {
     Some(&trimmed[end + 1..])
 }
 
-/// Message-IDs a thread references but hasn't cached locally. Across every
-/// cached row of `account` sharing `thread_key`, collect the union of ids they
-/// reference (each row's `References` chain) plus the root id (`thread_key`
-/// itself), then subtract the ids already present as cached messages. The
-/// remainder is the ancestry the thread links to but that lies outside the
-/// synced window — the on-demand fetch target. All ids are lowercased here so
-/// the set comparison is case-insensitive; stored ids preserve the original
-/// header casing.
+/// Message-IDs a thread references but hasn't cached locally.
+///
+/// Across every cached row of `account` sharing `thread_key`, collect the union of ids they
+/// reference (each row's `References` chain) plus the root id (`thread_key` itself), then subtract
+/// the ids already present as cached messages. The remainder is the ancestry the thread links to
+/// but that lies outside the synced window — the on-demand fetch target.
+///
+/// All ids are lowercased here so the set comparison is case-insensitive; stored ids preserve the
+/// original header casing.
 pub fn get_thread_reference_gaps(
     conn: &Connection,
     account: &str,
@@ -1052,22 +1048,22 @@ pub fn get_thread_reference_gaps(
         .collect())
 }
 
-/// Like `get_thread_headers`, but spans any folder of `account` whose row
-/// shares the `thread_key`. Used by the cross-folder thread view so a reply
-/// stored in Sent appears alongside the inbox messages it threads with.
-/// Each header carries its source `folder` so the reader can fetch the body
-/// from the right mailbox. Ordered by `date` ASC (UIDs are folder-scoped, so
-/// they aren't comparable across folders).
+/// Like `get_thread_headers`, but spans any folder of `account` whose row shares the `thread_key`.
 ///
-/// A self-addressed message is delivered to both Sent and the Inbox, so the
-/// same RFC `Message-ID` lands as two rows under one `thread_key` (distinct
-/// per-folder UIDs sidestep the `UNIQUE(account, folder, msg_id)` constraint).
-/// We collapse those to a single bubble by keeping, per non-empty
-/// `Message-ID`, the unread copy if any, otherwise the lowest-`id` row. Rows
-/// without a `Message-ID` (e.g. drafts) are never collapsed.
+/// Used by the cross-folder thread view so a reply stored in Sent appears alongside the inbox
+/// messages it threads with. Each header carries its source `folder` so the reader can fetch the
+/// body from the right mailbox. Ordered by `date` ASC (UIDs are folder-scoped, so they aren't
+/// comparable across folders).
 ///
-/// This is every cached copy, thrown-away mail included; a conversation on
-/// screen is read with [`get_thread_headers_from_folder`].
+/// A self-addressed message is delivered to both Sent and the Inbox, so the same RFC `Message-ID`
+/// lands as two rows under one `thread_key` (distinct per-folder UIDs sidestep the
+/// `UNIQUE(account, folder, msg_id)` constraint). We collapse those to a single bubble by keeping,
+/// per non-empty `Message-ID`, the unread copy if any, otherwise the lowest-`id` row.
+///
+/// Rows without a `Message-ID` (e.g. drafts) are never collapsed.
+///
+/// This is every cached copy, thrown-away mail included; a conversation on screen is read with
+/// [`get_thread_headers_from_folder`].
 pub fn get_thread_headers_all_folders(
     conn: &Connection,
     account: &str,

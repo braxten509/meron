@@ -119,14 +119,16 @@ struct CanvasDeclaration {
 
 /// The canvas colors the email declares on its own `<body>`.
 ///
-/// Ammonia sanitises a fragment, so the `<body>` tag (and with it the page colors
-/// most HTML mail sets there) never survives into the rendered document. The
-/// frames need them: a declared background marks the message as carrying its own
-/// design, which is what keeps a dark theme from repainting it, and the text
-/// color has to travel with it — restoring a black canvas without the white text
-/// that went on it is worse than restoring neither (see `frameTheme.ts`). Both
-/// are echoed into the head as `<meta>`s rather than re-applied here, so the
-/// frontend stays the single place that decides.
+/// Ammonia sanitises a fragment, so the `<body>` tag (and with it the page colors most HTML mail
+/// sets there) never survives into the rendered document.
+///
+/// The frames need them: a declared background marks the message as carrying its own design, which
+/// is what keeps a dark theme from repainting it, and the text color has to travel with it —
+/// restoring a black canvas without the white text that went on it is worse than restoring neither
+/// (see `frameTheme.ts`).
+///
+/// Both are echoed into the head as `<meta>`s rather than re-applied here, so the frontend stays
+/// the single place that decides.
 fn declared_body_colors(source: &str) -> BodyCanvas {
     let Some(tag) = body_start_tag(source) else {
         return BodyCanvas::default();
@@ -268,11 +270,10 @@ fn attribute_value(tag: &str, name: &str) -> Option<String> {
 
 /// The canvas colors a style attribute ends up with: `(background, text)`.
 ///
-/// Declarations are read in source order and the winner is chosen the way the
-/// cascade chooses it: an `!important` declaration beats a normal one, and among
-/// equals the last wins — including the `background` shorthand, which resets the
-/// color even when it names an image, so a later `background: url(...)` really
-/// does drop an earlier `background-color`.
+/// Declarations are read in source order and the winner is chosen the way the cascade chooses it:
+/// an `!important` declaration beats a normal one, and among equals the last wins — including the
+/// `background` shorthand, which resets the color even when it names an image, so a later
+/// `background: url(...)` really does drop an earlier `background-color`.
 fn css_canvas_colors(style: &str) -> (Option<CanvasDeclaration>, Option<CanvasDeclaration>) {
     let mut background: Option<CanvasDeclaration> = None;
     let mut text: Option<CanvasDeclaration> = None;
@@ -417,11 +418,10 @@ pub fn prepare_message_html(source: &str, load_remote_images: bool, subject: &st
 
 /// Wrap a sanitized message in the document that carries `head_extra`.
 ///
-/// Always a fresh shell, never a search for the message's own `<html>` or
-/// `<head>`: ammonia returns a fragment, so those strings can only occur inside
-/// its `<style>` text or an attribute value. Injecting there would park the CSP
-/// `<meta>` where the browser does not read it. The desktop frame recognises
-/// this exact shell (see `bubbleHtml.ts`), so keep the two in step.
+/// Always a fresh shell, never a search for the message's own `<html>` or `<head>`: ammonia returns
+/// a fragment, so those strings can only occur inside its `<style>` text or an attribute value.
+/// Injecting there would park the CSP `<meta>` where the browser does not read it. The desktop
+/// frame recognises this exact shell (see `bubbleHtml.ts`), so keep the two in step.
 fn inject_head(html: &str, head_extra: &str) -> String {
     format!("<!doctype html><html><head>{head_extra}</head><body>{html}</body></html>")
 }

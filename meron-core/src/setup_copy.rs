@@ -1,29 +1,30 @@
-//! "Copy setup to another device": one device's whole setup replaces the
-//! other's, once, over the local network. Nothing goes through the internet.
+//! "Copy setup to another device": one device's whole setup replaces the other's, once, over the local network.
 //!
-//! The computer listens on its network address on a random port for five
-//! minutes and shows a QR code (`meron-setup://<addresses>:<port>/<code>`) plus
-//! the address and an 8-character code to type. The phone connects; the two
-//! agree on keys with SPAKE2 using the code, and each proves it got the same
-//! key (HMAC) before anything else is said. Neither side ever sends anything a
-//! code could be guessed against offline, not even to a fake computer, so a
-//! wrong code learns nothing and a listener on the network sees only
-//! ciphertext. Five wrong codes end the session, and pairing must finish
-//! within the five minutes. Everything after is AES-256-GCM.
+//! Nothing goes through the internet.
 //!
-//! Both screens then show the same thing: which device is kept, which erased,
-//! with a swap button (the computer decides; the phone asks) and a Copy button
-//! on each. The kept device sends a [`SetupPayload`] (the config backup with
-//! secrets, plus AI sorting keys); the erased device checks it, saves one
-//! locked safety copy of its own setup, wipes its accounts, cached mail,
-//! shared settings, Meron folders, tasks, calendar and tags, and applies the
-//! copy in one transaction. Ids stay the same (Meron folder ids too, for the
-//! `$MeronF_` marks, see [`crate::meron_marks`]).
+//! The computer listens on its network address on a random port for five minutes and shows a QR
+//! code (`meron-setup://<addresses>:<port>/<code>`) plus the address and an 8-character code to
+//! type. The phone connects; the two agree on keys with SPAKE2 using the code, and each proves it
+//! got the same key (HMAC) before anything else is said.
 //!
-//! Not copied: mail (downloads again), AI sorting history, each app's own
-//! settings (`mobile.*` on the phone, the desktop's look and layout keys), and
-//! the computer's local folders, which hold the only copy of their mail and
-//! are left alone.
+//! Neither side ever sends anything a code could be guessed against offline, not even to a fake
+//! computer, so a wrong code learns nothing and a listener on the network sees only ciphertext.
+//! Five wrong codes end the session, and pairing must finish within the five minutes. Everything
+//! after is AES-256-GCM.
+//!
+//! Both screens then show the same thing: which device is kept, which erased, with a swap button
+//! (the computer decides; the phone asks) and a Copy button on each.
+//!
+//! The kept device sends a [`SetupPayload`] (the config backup with secrets, plus AI sorting keys);
+//! the erased device checks it, saves one locked safety copy of its own setup, wipes its accounts,
+//! cached mail, shared settings, Meron folders, tasks, calendar and tags, and applies the copy in
+//! one transaction.
+//!
+//! Ids stay the same (Meron folder ids too, for the `$MeronF_` marks, see [`crate::meron_marks`]).
+//!
+//! Not copied: mail (downloads again), AI sorting history, each app's own settings (`mobile.*` on
+//! the phone, the desktop's look and layout keys), and the computer's local folders, which hold the
+//! only copy of their mail and are left alone.
 //!
 //! The screens poll `setupCopy.status`.
 
@@ -643,11 +644,10 @@ async fn join(engine: &Arc<Engine>, params: &Value, device: &str) -> Result<Valu
     Ok(status())
 }
 
-/// Connect to the first address that answers, those on this phone's own
-/// network first. Fails with `refused` (nothing listens: the computer stopped
-/// waiting, or a firewall said no), `other_network` (this phone isn't on a
-/// local network the computer could be on) or `unreachable` (no answer: most
-/// likely the computer's firewall).
+/// Connect to the first address that answers, those on this phone's own network first. Fails with
+/// `refused` (nothing listens: the computer stopped waiting, or a firewall said no),
+/// `other_network` (this phone isn't on a local network the computer could be on) or `unreachable`
+/// (no answer: most likely the computer's firewall).
 async fn connect_any(hosts: &[Ipv4Addr], port: u16) -> Result<TcpStream> {
     let mut ordered: Vec<Ipv4Addr> = hosts.to_vec();
     ordered.sort_by_key(|host| !same_network(*host));
@@ -1501,11 +1501,10 @@ pub async fn replace_setup(
 
 type Applied = (Vec<String>, crate::backup::ImportSummary);
 
-/// Wipe this device's setup and apply `data`, in one transaction, with every
-/// account secret saved before it commits (in the same transaction where the
-/// store keeps them, else in the keychain). When a secret can't be saved, or
-/// the commit fails, the old secrets go back and nothing changes. Answers
-/// with the old account ids.
+/// Wipe this device's setup and apply `data`, in one transaction, with every account secret saved
+/// before it commits (in the same transaction where the store keeps them, else in the keychain).
+/// When a secret can't be saved, or the commit fails, the old secrets go back and nothing changes.
+/// Answers with the old account ids.
 fn wipe_and_apply(
     conn: &Connection,
     host: &dyn crate::engine::EngineHost,

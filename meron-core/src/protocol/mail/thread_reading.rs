@@ -82,12 +82,12 @@ pub(crate) fn list_mobile_starred_items(data_dir: &str, params: &Value) -> Resul
     })
 }
 
-/// Which of the given messages are still unread, for clients withdrawing
-/// new-mail notifications. `messages` holds `{account_id, folder_id,
-/// message_id}` entries (a feed item: its subscription and item key); the
-/// result lists the ones still unread, echoed exactly as asked so a client can
-/// match them to its own keys. Reads the cache only, so it reflects other
-/// devices as of the last sync.
+/// Which of the given messages are still unread, for clients withdrawing new-mail notifications.
+///
+/// `messages` holds `{account_id, folder_id, message_id}` entries (a feed item: its subscription
+/// and item key); the result lists the ones still unread, echoed exactly as asked so a client can
+/// match them to its own keys. Reads the cache only, so it reflects other devices as of the last
+/// sync.
 pub fn messages_still_unread(conn: &rusqlite::Connection, params: &Value) -> Result<Value, String> {
     let entries = params
         .get("messages")

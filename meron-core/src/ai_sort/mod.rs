@@ -875,11 +875,10 @@ pub struct Pick {
     pub why: String,
 }
 
-/// Read an answer, tolerantly (fences, text around the JSON), and apply the
-/// "not sure" rule: an email moves only when its id is known and answered once,
-/// `sure` is true, and its folder is one of the list (exactly, else ignoring
-/// case). Answers by id: `Some` to move, `None` to leave in the Inbox (also
-/// for every id the answer left out). Unreadable answers leave everything.
+/// Read an answer, tolerantly (fences, text around the JSON), and apply the "not sure" rule: an
+/// email moves only when its id is known and answered once, `sure` is true, and its folder is one
+/// of the list (exactly, else ignoring case). Answers by id: `Some` to move, `None` to leave in the
+/// Inbox (also for every id the answer left out). Unreadable answers leave everything.
 pub fn parse_answer(
     text: &str,
     ids: &[String],
@@ -900,10 +899,9 @@ pub fn parse_answer_flagged(
     parse_answer_taught(text, ids, folders, automated, None)
 }
 
-/// [`parse_answer_flagged`], with the Spam choice of the request and the ids
-/// it is backed for (see [`PromptEmail::spam_backed`]). Spam is the careful
-/// answer: it only counts for a backed id and with `sure` true, bulk or
-/// automated mail included; any other Spam answer keeps the email in the
+/// [`parse_answer_flagged`], with the Spam choice of the request and the ids it is backed for (see
+/// [`PromptEmail::spam_backed`]). Spam is the careful answer: it only counts for a backed id and
+/// with `sure` true, bulk or automated mail included; any other Spam answer keeps the email in the
 /// Inbox.
 pub fn parse_answer_taught(
     text: &str,

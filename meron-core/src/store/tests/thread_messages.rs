@@ -99,16 +99,16 @@ fn get_thread_headers_all_folders_sorts_chronologically_by_parsed_date() {
     let conn = test_conn();
     // Insert via the real RFC 2822 parser (the ingestion path), so this also
     // covers parse_date_to_epoch; ordering is then done by the stored epoch.
-    let d = |s: &str| crate::parse::parse_date_to_epoch(s);
+    let parse_date = |date_text: &str| crate::parse::parse_date_to_epoch(date_text);
     conn.execute(
             "INSERT INTO messages(account, folder, msg_id, uid, subject, from_name, from_addr, date, seen, thread_key)
              VALUES('acct', 'Sent', '2', 2, 'Re: Topic', 'Me', 'me@example.com', ?1, 1, 'topic-key'),
                    ('acct', 'INBOX', '3', 3, 'Re: Topic', 'Them', 'them@example.com', ?2, 1, 'topic-key'),
                    ('acct', 'INBOX', '1', 1, 'Topic', 'Them', 'them@example.com', ?3, 1, 'topic-key')",
             params![
-                d("Fri, 22 May 2026 21:05:20 -0700"),
-                d("Fri, 22 May 2026 21:13:27 -0700"),
-                d("Thu, 21 May 2026 22:02:02 -0700"),
+                parse_date("Fri, 22 May 2026 21:05:20 -0700"),
+                parse_date("Fri, 22 May 2026 21:13:27 -0700"),
+                parse_date("Thu, 21 May 2026 22:02:02 -0700"),
             ],
         )
         .unwrap();

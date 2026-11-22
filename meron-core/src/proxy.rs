@@ -144,11 +144,13 @@ pub fn parse_global(v: &Value) -> Option<ProxyConfig> {
 
 static GLOBAL: RwLock<Option<ProxyConfig>> = RwLock::new(None);
 
-/// Publish the app-wide proxy. Called once at engine start from the persisted
-/// setting, and again whenever the user saves a new one.
+/// Publish the app-wide proxy.
 ///
-/// Existing pooled IMAP sessions and IDLE watchers keep their current sockets;
-/// the new setting takes effect as those reconnect.
+/// Called once at engine start from the persisted setting, and again whenever the user saves a new
+/// one.
+///
+/// Existing pooled IMAP sessions and IDLE watchers keep their current sockets; the new setting
+/// takes effect as those reconnect.
 pub fn set_global(cfg: Option<ProxyConfig>) {
     if let Ok(mut slot) = GLOBAL.write() {
         *slot = cfg;
@@ -399,12 +401,13 @@ fn socks5_error(code: u8) -> &'static str {
 
 // ---- Blocking HTTP ----------------------------------------------------------
 
-/// A `ureq` agent honouring the app-wide proxy. Every outbound HTTP call in the
-/// core goes through this so feed fetches, avatar downloads and OAuth token
-/// exchanges don't quietly bypass a configured proxy.
+/// A `ureq` agent honouring the app-wide proxy.
 ///
-/// Built per call rather than cached: the setting can change at runtime, and
-/// these requests are network-bound anyway.
+/// Every outbound HTTP call in the core goes through this so feed fetches, avatar downloads and
+/// OAuth token exchanges don't quietly bypass a configured proxy.
+///
+/// Built per call rather than cached: the setting can change at runtime, and these requests are
+/// network-bound anyway.
 pub fn agent() -> Result<ureq::Agent> {
     agent_for(global().as_ref())
 }

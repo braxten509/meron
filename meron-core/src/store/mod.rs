@@ -1,17 +1,15 @@
 //! Local SQLite store (rusqlite, bundled) — the single source of truth.
 //!
-//! `meron.db` (renamed from the old `cache.sqlite`) holds *all* accounts (mail and
-//! RSS), fetched folders/messages, per-folder UID sync state, and RSS
-//! subscriptions, so the UI renders instantly from disk and history persists
-//! across runs. The desktop bridge sets `MERON_CORE_DB` to the active app
-//! profile (`meron` or `meron-dev`); standalone runs default under
-//! `~/.config/meron`.
+//! `meron.db` (renamed from the old `cache.sqlite`) holds *all* accounts (mail and RSS), fetched
+//! folders/messages, per-folder UID sync state, and RSS subscriptions, so the UI renders instantly
+//! from disk and history persists across runs. The desktop bridge sets `MERON_CORE_DB` to the
+//! active app profile (`meron` or `meron-dev`); standalone runs default under `~/.config/meron`.
 //!
-//! Accounts and messages share one table each, with a catch-all JSON column
-//! absorbing per-engine fields so new account kinds don't force schema
-//! migrations (accounts: `config` for mail connection metadata, plus `prefs` for
-//! user preferences; messages: `json` for rss item fields). Mail's hot-path
-//! columns (integer `uid`, `seen`, `thread_key`) stay typed; JSON carries the
+//! Accounts and messages share one table each, with a catch-all JSON column absorbing per-engine
+//! fields so new account kinds don't force schema migrations (accounts: `config` for mail
+//! connection metadata, plus `prefs` for user preferences; messages: `json` for rss item fields).
+//!
+//! Mail's hot-path columns (integer `uid`, `seen`, `thread_key`) stay typed; JSON carries the
 //! divergent tail.
 
 mod db;

@@ -6,15 +6,15 @@ use super::*;
 
 #[test]
 fn mobile_protocol_oauth_reconnect_keeps_the_stored_avatar() {
-    let data_dir = unique_data_dir("oauth-keeps-avatar");
-    let data_dir_str = data_dir.to_str().unwrap();
+    let data_directory = unique_data_directory("oauth-keeps-avatar");
+    let directory_text = data_directory.to_str().unwrap();
     let email = format!("keep+{}@gmail.com", unique_test_suffix());
     let add = |avatar: &str| {
         invoke_mobile_protocol_json(
             &format!(
                 r#"{{"id":1,"method":"account.addOAuth","params":{{"email":"{email}","provider":"gmail","avatar_url":"{avatar}","access_token":"access","refresh_token":"refresh"}}}}"#
             ),
-            Some(data_dir_str),
+            Some(directory_text),
         )
     };
     let first = add("https://example.com/provider.png");
@@ -26,7 +26,7 @@ fn mobile_protocol_oauth_reconnect_keeps_the_stored_avatar() {
         &format!(
             r#"{{"id":2,"method":"account.setAvatar","params":{{"id":"{email}","avatar_url":"/media/avatars/custom.png"}}}}"#
         ),
-        Some(data_dir_str),
+        Some(directory_text),
     );
     assert!(set.get("error").is_none(), "{set}");
 
@@ -37,7 +37,7 @@ fn mobile_protocol_oauth_reconnect_keeps_the_stored_avatar() {
         "{again}"
     );
 
-    let _ = std::fs::remove_dir_all(data_dir);
+    let _ = std::fs::remove_dir_all(data_directory);
 }
 
 #[test]
@@ -60,19 +60,19 @@ fn engine_refreshes_outlook_with_the_accounts_client_and_imap_scopes() {
         .unwrap();
     });
 
-    let data_dir = unique_data_dir("engine-outlook-refresh");
-    let data_dir_str = data_dir.to_str().unwrap();
+    let data_directory = unique_data_directory("engine-outlook-refresh");
+    let directory_text = data_directory.to_str().unwrap();
     let email = format!("refresh+{}@outlook.com", unique_test_suffix());
     let added = invoke_mobile_protocol_json(
         &format!(
             r#"{{"id":1,"method":"account.addOAuth","params":{{"email":"{email}","provider":"outlook","client_id":"own-client","token_url":"{token_url}","access_token":"stale","refresh_token":"refresh","token_expires_at":1}}}}"#
         ),
-        Some(data_dir_str),
+        Some(directory_text),
     );
     assert!(added.get("error").is_none(), "{added}");
 
     let engine = crate::engine::Engine::new(Box::new(MobileHost {
-        data_dir: data_dir_str.to_string(),
+        data_dir: directory_text.to_string(),
     }))
     .expect("engine builds");
     let rt = tokio::runtime::Runtime::new().unwrap();
@@ -86,5 +86,5 @@ fn engine_refreshes_outlook_with_the_accounts_client_and_imap_scopes() {
     assert!(request.contains("IMAP.AccessAsUser.All"), "{request}");
     assert!(!request.contains("client_secret"), "{request}");
 
-    let _ = std::fs::remove_dir_all(data_dir);
+    let _ = std::fs::remove_dir_all(data_directory);
 }

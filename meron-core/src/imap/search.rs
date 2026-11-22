@@ -46,13 +46,12 @@ pub(super) const ATTACHMENT_CANDIDATES: &str = "OR OR HEADER Content-Disposition
 
 /// Build the SEARCH criteria for a text `query`.
 ///
-/// On Gmail, defer to its own search engine via X-GM-RAW: it understands the
-/// full Gmail query syntax (operators like `from:`, `has:attachment`,
-/// `older_than:`, relevance) instead of our crude substring OR. Elsewhere the
-/// operators [`SearchQuery`] knows become their SEARCH keys, ANDed by
-/// juxtaposition, and the free text falls back to plain SUBJECT/FROM/TEXT
-/// matching. `literal` sends each string as a non-synchronizing literal instead
-/// of a quoted string.
+/// On Gmail, defer to its own search engine via X-GM-RAW: it understands the full Gmail query
+/// syntax (operators like `from:`, `has:attachment`, `older_than:`, relevance) instead of our crude
+/// substring OR. Elsewhere the operators [`SearchQuery`] knows become their SEARCH keys, ANDed by
+/// juxtaposition, and the free text falls back to plain SUBJECT/FROM/TEXT matching.
+///
+/// `literal` sends each string as a non-synchronizing literal instead of a quoted string.
 pub(super) fn search_criteria(gmail: bool, query: &str, charset: bool, literal: bool) -> String {
     let string = |value: &str| {
         if literal {

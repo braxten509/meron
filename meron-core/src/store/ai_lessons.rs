@@ -1,19 +1,17 @@
 //! What the reader taught AI sorting by moving mail by hand.
 //!
-//! A *lesson* is one email the reader put somewhere themselves: into Spam,
-//! back into the Inbox, or into a Meron folder. AI sorting shows the lessons
-//! most like a new email to the AI, which then decides (see
-//! [`crate::ai_sort::lessons`]).
+//! A *lesson* is one email the reader put somewhere themselves: into Spam, back into the Inbox, or
+//! into a Meron folder. AI sorting shows the lessons most like a new email to the AI, which then
+//! decides (see [`crate::ai_sort::lessons`]).
 //!
-//! A lesson lives in `ai_sort_lessons` and, so the reader's other devices
-//! learn it too, as a system tag on the email itself: `meron.put.<place>`
-//! (see [`LessonPlace::tag`]). Tags travel as IMAP keywords and follow the
-//! message through moves, so [`ai_lessons_reconcile`] can bring the table in
-//! line with them: a tag seen on mail without a lesson makes one, a lesson
+//! A lesson lives in `ai_sort_lessons` and, so the reader's other devices learn it too, as a system
+//! tag on the email itself: `meron.put.<place>` (see [`LessonPlace::tag`]).
+//!
+//! Tags travel as IMAP keywords and follow the message through moves, so [`ai_lessons_reconcile`]
+//! can bring the table in line with them: a tag seen on mail without a lesson makes one, a lesson
 //! whose tag went away (forgotten on another device) goes too.
 //!
-//! Lessons are only made while AI sorting is on, and never from the reader's
-//! own mail.
+//! Lessons are only made while AI sorting is on, and never from the reader's own mail.
 
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, params};
@@ -550,10 +548,9 @@ pub struct MoveLesson {
     undo: bool,
 }
 
-/// The lesson in moving `uids` from `folder` to `target` on one account: Spam
-/// for a move into the account's Spam folder, Inbox for a move into its
-/// Inbox, nothing for any other folder. An Undo teaches nothing and forgets
-/// the lesson the undone move made (the one for the folder the mail now
+/// The lesson in moving `uids` from `folder` to `target` on one account: Spam for a move into the
+/// account's Spam folder, Inbox for a move into its Inbox, nothing for any other folder. An Undo
+/// teaches nothing and forgets the lesson the undone move made (the one for the folder the mail now
 /// leaves). Never fails: a move goes on without its lesson.
 pub fn ai_lesson_before_move(
     conn: &Connection,
@@ -641,11 +638,10 @@ impl MoveLesson {
     }
 }
 
-/// The lesson in filing a whole conversation (Meron folder entry `entry_id`)
-/// by hand, which leaves it in `place`: its newest email not the reader's own
-/// teaches `place`. An Undo (`undo`) teaches nothing: it forgets what the
-/// undone filing taught, the lessons of its mail for any other place. Inside
-/// the caller's transaction, and before the entry is released when it is.
+/// The lesson in filing a whole conversation (Meron folder entry `entry_id`) by hand, which leaves
+/// it in `place`: its newest email not the reader's own teaches `place`. An Undo (`undo`) teaches
+/// nothing: it forgets what the undone filing taught, the lessons of its mail for any other place.
+/// Inside the caller's transaction, and before the entry is released when it is.
 pub fn ai_lesson_of_entry_in(
     conn: &Connection,
     entry_id: &str,

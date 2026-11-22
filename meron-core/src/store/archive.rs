@@ -1,18 +1,16 @@
 //! Local folders: mail kept on this computer instead of on a server.
 //!
-//! There is one local account, [`LOCAL_ACCOUNT_ID`]. Its row lives in the store
-//! like any account's, so it lists, orders and themes like one, but its folders
-//! and mail live in a separate database, `archive.db` (see
-//! `db::open_archive_at`). The store is a cache that sync may clear and refill;
-//! the archive holds the only copy of what it keeps, so no cache-management
-//! path can reach it.
+//! There is one local account, [`LOCAL_ACCOUNT_ID`]. Its row lives in the store like any account's,
+//! so it lists, orders and themes like one, but its folders and mail live in a separate database,
+//! `archive.db` (see `db::open_archive_at`). The store is a cache that sync may clear and refill;
+//! the archive holds the only copy of what it keeps, so no cache-management path can reach it.
 //!
-//! The archive shares the store's schema, so the message-list, search and
-//! thread code reads it unchanged. `archive_raw` is the source of truth: the
-//! original RFC822 message, zstd-compressed, with the few fields it does not
-//! carry itself (flags, thread key, a date fallback). The `messages` row of an
-//! archived message is derived from it by [`index_raw`] and can be rebuilt at
-//! any time, which is how a move between local folders re-keys a message.
+//! The archive shares the store's schema, so the message-list, search and thread code reads it
+//! unchanged. `archive_raw` is the source of truth: the original RFC822 message, zstd-compressed,
+//! with the few fields it does not carry itself (flags, thread key, a date fallback).
+//!
+//! The `messages` row of an archived message is derived from it by [`index_raw`] and can be rebuilt
+//! at any time, which is how a move between local folders re-keys a message.
 
 use anyhow::{Context, Result, anyhow, bail};
 use rusqlite::{Connection, OptionalExtension, params};

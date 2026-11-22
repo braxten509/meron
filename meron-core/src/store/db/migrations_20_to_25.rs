@@ -27,11 +27,10 @@ pub(super) fn migrate_v21(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
-/// Tags (see `store::tags`). `server_tags` is what a mailbox copy last showed,
-/// NULL until it has been looked at. The key lives in an expression index
-/// rather than a column so every path that writes a message row is covered.
-/// Rules (see `store::rules`): `rule_actions` is what they still have to do on
-/// the server, so a failed sync keeps it, and `rule_log` what they did.
+/// Tags (see `store::tags`). `server_tags` is what a mailbox copy last showed, NULL until it has
+/// been looked at. The key lives in an expression index rather than a column so every path that
+/// writes a message row is covered. Rules (see `store::rules`): `rule_actions` is what they still
+/// have to do on the server, so a failed sync keeps it, and `rule_log` what they did.
 pub(super) fn migrate_v22(conn: &Connection) -> Result<()> {
     conn.execute_batch(&format!(
         "ALTER TABLE messages ADD COLUMN server_tags TEXT;
@@ -227,11 +226,10 @@ pub(super) fn migrate_v24(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
-/// AI sorting: new Inbox mail held back while the AI decides
-/// (`ai_sort_hidden`, ignored once `hide_until` has passed), mail this device
-/// has had decided (`ai_sort_done`), what the AI did (`ai_sort_log`), and how
-/// many emails automatic sorting sent each day (`ai_sort_usage`, for the daily
-/// cap). None of it holds the API key.
+/// AI sorting: new Inbox mail held back while the AI decides (`ai_sort_hidden`, ignored once
+/// `hide_until` has passed), mail this device has had decided (`ai_sort_done`), what the AI did
+/// (`ai_sort_log`), and how many emails automatic sorting sent each day (`ai_sort_usage`, for the
+/// daily cap). None of it holds the API key.
 pub(super) fn migrate_v25(conn: &Connection) -> Result<()> {
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS ai_sort_hidden (

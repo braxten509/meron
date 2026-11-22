@@ -6,9 +6,9 @@ use super::*;
 
 #[test]
 fn mobile_protocol_lists_threads_from_store() {
-    let data_dir = unique_data_dir("threads");
-    seed_mobile_account(&data_dir, "me@example.com");
-    let conn = store::open_at(data_dir.join("meron.db")).unwrap();
+    let data_directory = unique_data_directory("threads");
+    seed_mobile_account(&data_directory, "me@example.com");
+    let conn = store::open_at(data_directory.join("meron.db")).unwrap();
     store::ensure_folder(&conn, "me@example.com", "INBOX").unwrap();
     store::upsert_messages(
         &conn,
@@ -44,7 +44,7 @@ fn mobile_protocol_lists_threads_from_store() {
 
     let value = invoke_mobile_protocol_json(
         r#"{"id":64,"method":"mail.threadList","params":{"account_id":"me@example.com","folder_id":"inbox","filter":"all"}}"#,
-        Some(data_dir.to_str().unwrap()),
+        Some(data_directory.to_str().unwrap()),
     );
     assert_eq!(value["id"], 64);
     assert_eq!(value["result"]["folder_unread"], 1);
@@ -64,36 +64,36 @@ fn mobile_protocol_lists_threads_from_store() {
 
     let unread = invoke_mobile_protocol_json(
         r#"{"id":65,"method":"mail.threadList","params":{"account_id":"me@example.com","folder_id":"inbox","filter":"unread"}}"#,
-        Some(data_dir.to_str().unwrap()),
+        Some(data_directory.to_str().unwrap()),
     );
     assert_eq!(unread["result"]["threads"].as_array().unwrap().len(), 1);
 
     let starred = invoke_mobile_protocol_json(
         r#"{"id":66,"method":"mail.threadList","params":{"account_id":"me@example.com","folder_id":"inbox","filter":"starred"}}"#,
-        Some(data_dir.to_str().unwrap()),
+        Some(data_directory.to_str().unwrap()),
     );
     let starred_threads = starred["result"]["threads"].as_array().unwrap();
     assert_eq!(starred_threads.len(), 1);
     assert_eq!(starred_threads[0]["subject"], "Newest");
 
-    let conn = store::open_at(data_dir.join("meron.db")).unwrap();
+    let conn = store::open_at(data_directory.join("meron.db")).unwrap();
     store::set_folder_state(&conn, "me@example.com", "INBOX", 1, 8).unwrap();
     drop(conn);
     let synced = invoke_mobile_protocol_json(
         r#"{"id":67,"method":"mail.threadList","params":{"account_id":"me@example.com","folder_id":"inbox","filter":"all"}}"#,
-        Some(data_dir.to_str().unwrap()),
+        Some(data_directory.to_str().unwrap()),
     );
     assert_eq!(synced["result"]["folder_synced"], true);
 
-    let _ = std::fs::remove_dir_all(data_dir);
+    let _ = std::fs::remove_dir_all(data_directory);
 }
 
 #[test]
 fn mobile_protocol_contact_threads_pages_exact_matches_across_accounts() {
-    let data_dir = unique_data_dir("contact-threads");
-    seed_mobile_account(&data_dir, "me@example.com");
-    seed_mobile_account(&data_dir, "other@example.com");
-    let conn = store::open_at(data_dir.join("meron.db")).unwrap();
+    let data_directory = unique_data_directory("contact-threads");
+    seed_mobile_account(&data_directory, "me@example.com");
+    seed_mobile_account(&data_directory, "other@example.com");
+    let conn = store::open_at(data_directory.join("meron.db")).unwrap();
     for (account, folder, uid, addr, date) in [
         ("me@example.com", "INBOX", 1, "Alice@example.com", 300),
         ("other@example.com", "Archive", 2, "alice@example.com", 200),
@@ -122,7 +122,7 @@ fn mobile_protocol_contact_threads_pages_exact_matches_across_accounts() {
     let invoke = |method: &str, params: Value| {
         invoke_mobile_protocol_json(
             &json!({"id": 1, "method": method, "params": params}).to_string(),
-            Some(data_dir.to_str().unwrap()),
+            Some(data_directory.to_str().unwrap()),
         )
     };
     let first = invoke(
@@ -177,20 +177,20 @@ fn mobile_protocol_contact_threads_pages_exact_matches_across_accounts() {
         json!({"addr": "alice@example.com", "limit": 0}),
     );
     assert_eq!(clamped["result"]["threads"].as_array().unwrap().len(), 1);
-    let _ = std::fs::remove_dir_all(data_dir);
+    let _ = std::fs::remove_dir_all(data_directory);
 }
 
 #[test]
 fn mobile_protocol_lists_unified_threads_and_excludes_opted_out_accounts() {
-    let data_dir = unique_data_dir("unified-threads");
+    let data_directory = unique_data_directory("unified-threads");
     for account in [
         "first@example.com",
         "second@example.com",
         "excluded@example.com",
     ] {
-        seed_mobile_account(&data_dir, account);
+        seed_mobile_account(&data_directory, account);
     }
-    let conn = store::open_at(data_dir.join("meron.db")).unwrap();
+    let conn = store::open_at(data_directory.join("meron.db")).unwrap();
     store::set_account_pref(&conn, "excluded@example.com", "included_in_unified", false).unwrap();
     for (account, uid, date, unread) in [
         ("first@example.com", 7, 100, true),
@@ -218,7 +218,7 @@ fn mobile_protocol_lists_unified_threads_and_excludes_opted_out_accounts() {
 
     let value = invoke_mobile_protocol_json(
         r#"{"id":164,"method":"mail.threadList","params":{"account_id":"unified","folder_id":"inbox","filter":"all"}}"#,
-        Some(data_dir.to_str().unwrap()),
+        Some(data_directory.to_str().unwrap()),
     );
     let threads = value["result"]["threads"].as_array().unwrap();
     assert_eq!(threads.len(), 2, "{value}");
@@ -229,14 +229,14 @@ fn mobile_protocol_lists_unified_threads_and_excludes_opted_out_accounts() {
     assert_eq!(value["result"]["folder_unreads"]["second@example.com"], 1);
     assert_eq!(value["result"]["failures"], json!([]));
 
-    let _ = std::fs::remove_dir_all(data_dir);
+    let _ = std::fs::remove_dir_all(data_directory);
 }
 
 #[test]
 fn starred_rows_group_into_threads_across_folders() {
-    let data_dir = unique_data_dir("starred-threads");
-    seed_mobile_account(&data_dir, "me@example.com");
-    let conn = store::open_at(data_dir.join("meron.db")).unwrap();
+    let data_directory = unique_data_directory("starred-threads");
+    seed_mobile_account(&data_directory, "me@example.com");
+    let conn = store::open_at(data_directory.join("meron.db")).unwrap();
     for folder in ["INBOX", "Archive"] {
         store::ensure_folder(&conn, "me@example.com", folder).unwrap();
     }
@@ -301,7 +301,7 @@ fn starred_rows_group_into_threads_across_folders() {
 
     let value = invoke_mobile_protocol_json(
         r#"{"id":75,"method":"mail.starredItems","params":{"limit":10}}"#,
-        Some(data_dir.to_str().unwrap()),
+        Some(data_directory.to_str().unwrap()),
     );
     let items = value["result"]["items"].as_array().unwrap();
     assert_eq!(items.len(), 1, "{value}");
@@ -312,16 +312,16 @@ fn starred_rows_group_into_threads_across_folders() {
     assert_eq!(inbox["unread"], true, "{value}");
     assert_eq!(inbox["unread_count"], 1, "{value}");
 
-    let _ = std::fs::remove_dir_all(data_dir);
+    let _ = std::fs::remove_dir_all(data_directory);
 }
 
 #[test]
 fn unified_folder_role_resolves_per_account_and_skips_accounts_without_it() {
-    let data_dir = unique_data_dir("unified-role");
+    let data_directory = unique_data_directory("unified-role");
     for account in ["has-sent@example.com", "no-sent@example.com"] {
-        seed_mobile_account(&data_dir, account);
+        seed_mobile_account(&data_directory, account);
     }
-    let conn = store::open_at(data_dir.join("meron.db")).unwrap();
+    let conn = store::open_at(data_directory.join("meron.db")).unwrap();
     // One account files sent mail under a non-obvious name flagged \Sent; the
     // other has no sent mailbox at all and must drop out of the merge.
     store::upsert_folders(
@@ -354,7 +354,7 @@ fn unified_folder_role_resolves_per_account_and_skips_accounts_without_it() {
 
     let value = invoke_mobile_protocol_json(
         r#"{"id":165,"method":"mail.threadList","params":{"account_id":"unified","folder_id":"sent","folder_role":"sent","filter":"all"}}"#,
-        Some(data_dir.to_str().unwrap()),
+        Some(data_directory.to_str().unwrap()),
     );
     let threads = value["result"]["threads"].as_array().unwrap();
     assert_eq!(threads.len(), 1, "{value}");
@@ -369,7 +369,7 @@ fn unified_folder_role_resolves_per_account_and_skips_accounts_without_it() {
     // skipped; treating "sent" as a literal folder would silently update neither.
     let mark_all = invoke_mobile_protocol_json(
         r#"{"id":168,"method":"mail.markAllRead","params":{"account_id":"unified","folder_id":"sent"}}"#,
-        Some(data_dir.to_str().unwrap()),
+        Some(data_directory.to_str().unwrap()),
     );
     let failures = mark_all["result"]["failures"].as_array().unwrap();
     assert_eq!(failures.len(), 1, "{mark_all}");
@@ -378,14 +378,14 @@ fn unified_folder_role_resolves_per_account_and_skips_accounts_without_it() {
         "{mark_all}"
     );
 
-    let _ = std::fs::remove_dir_all(data_dir);
+    let _ = std::fs::remove_dir_all(data_directory);
 }
 
 #[test]
 fn mobile_protocol_keeps_gmail_thread_id_atomic_across_subject_drift() {
-    let data_dir = unique_data_dir("gmail-thread-id");
-    seed_mobile_account(&data_dir, "me@example.com");
-    let conn = store::open_at(data_dir.join("meron.db")).unwrap();
+    let data_directory = unique_data_directory("gmail-thread-id");
+    seed_mobile_account(&data_directory, "me@example.com");
+    let conn = store::open_at(data_directory.join("meron.db")).unwrap();
     store::ensure_folder(&conn, "me@example.com", "INBOX").unwrap();
     store::upsert_messages(
         &conn,
@@ -417,7 +417,7 @@ fn mobile_protocol_keeps_gmail_thread_id_atomic_across_subject_drift() {
 
     let value = invoke_mobile_protocol_json(
         r#"{"id":166,"method":"mail.threadList","params":{"account_id":"me@example.com","folder_id":"inbox","filter":"all"}}"#,
-        Some(data_dir.to_str().unwrap()),
+        Some(data_directory.to_str().unwrap()),
     );
     let threads = value["result"]["threads"].as_array().unwrap();
     assert_eq!(threads.len(), 1, "{value}");
@@ -426,14 +426,14 @@ fn mobile_protocol_keeps_gmail_thread_id_atomic_across_subject_drift() {
         "me@example.com#INBOX#t.Z210aHJpZDoxMjM"
     );
 
-    let _ = std::fs::remove_dir_all(data_dir);
+    let _ = std::fs::remove_dir_all(data_directory);
 }
 
 #[test]
 fn mobile_protocol_inherits_parent_thread_key_for_sent_reply_chain() {
-    let data_dir = unique_data_dir("sent-reply-chain");
-    seed_mobile_account(&data_dir, "me@example.com");
-    let conn = store::open_at(data_dir.join("meron.db")).unwrap();
+    let data_directory = unique_data_directory("sent-reply-chain");
+    seed_mobile_account(&data_directory, "me@example.com");
+    let conn = store::open_at(data_directory.join("meron.db")).unwrap();
     store::ensure_folder(&conn, "me@example.com", "INBOX").unwrap();
     store::ensure_folder(&conn, "me@example.com", "Sent").unwrap();
 
@@ -550,7 +550,7 @@ fn mobile_protocol_inherits_parent_thread_key_for_sent_reply_chain() {
 
     let sent = invoke_mobile_protocol_json(
         r#"{"id":167,"method":"mail.threadList","params":{"account_id":"me@example.com","folder_id":"Sent","filter":"all"}}"#,
-        Some(data_dir.to_str().unwrap()),
+        Some(data_directory.to_str().unwrap()),
     );
     let sent_threads = sent["result"]["threads"].as_array().unwrap();
     assert_eq!(sent_threads.len(), 1, "{sent}");
@@ -561,7 +561,7 @@ fn mobile_protocol_inherits_parent_thread_key_for_sent_reply_chain() {
 
     let read = invoke_mobile_protocol_json(
         r#"{"id":168,"method":"mail.threadRead","params":{"thread_id":"me@example.com#INBOX#t.cm9vdEBtYWlsLmdtYWlsLmNvbQ"}}"#,
-        Some(data_dir.to_str().unwrap()),
+        Some(data_directory.to_str().unwrap()),
     );
     let messages = read["result"]["messages"].as_array().unwrap();
     assert_eq!(messages.len(), 3, "{read}");
@@ -571,5 +571,5 @@ fn mobile_protocol_inherits_parent_thread_key_for_sent_reply_chain() {
     assert_eq!(messages[1]["message_id"], "first-reply@mailo.com");
     assert_eq!(messages[2]["message_id"], "second-reply@mailo.com");
 
-    let _ = std::fs::remove_dir_all(data_dir);
+    let _ = std::fs::remove_dir_all(data_directory);
 }

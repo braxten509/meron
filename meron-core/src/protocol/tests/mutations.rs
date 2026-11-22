@@ -6,9 +6,9 @@ use super::*;
 
 #[test]
 fn mobile_protocol_move_requires_usable_account_secret() {
-    let data_dir = unique_data_dir("move-needs-secret");
-    seed_mobile_account(&data_dir, "me@example.com");
-    let conn = store::open_at(data_dir.join("meron.db")).unwrap();
+    let data_directory = unique_data_directory("move-needs-secret");
+    seed_mobile_account(&data_directory, "me@example.com");
+    let conn = store::open_at(data_directory.join("meron.db")).unwrap();
     store::ensure_folder(&conn, "me@example.com", "INBOX").unwrap();
     store::upsert_messages(
         &conn,
@@ -26,7 +26,7 @@ fn mobile_protocol_move_requires_usable_account_secret() {
 
     let value = invoke_mobile_protocol_json(
         r#"{"id":67,"method":"mail.move","params":{"thread_id":"me@example.com#INBOX#t.dG9waWM","target_folder_id":"Work"}}"#,
-        Some(data_dir.to_str().unwrap()),
+        Some(data_directory.to_str().unwrap()),
     );
 
     assert_eq!(value["id"], 67);
@@ -40,7 +40,7 @@ fn mobile_protocol_move_requires_usable_account_secret() {
     // INBOX in another account must not be mistaken for the source INBOX.
     let cross_account = invoke_mobile_protocol_json(
         r#"{"id":69,"method":"mail.move","params":{"thread_id":"me@example.com#INBOX#t.dG9waWM","target_account_id":"other@example.com","target_folder_id":"INBOX"}}"#,
-        Some(data_dir.to_str().unwrap()),
+        Some(data_directory.to_str().unwrap()),
     );
     assert!(
         cross_account["error"]["message"]
@@ -49,15 +49,15 @@ fn mobile_protocol_move_requires_usable_account_secret() {
             .contains("account needs reconnect")
     );
 
-    let _ = std::fs::remove_dir_all(data_dir);
+    let _ = std::fs::remove_dir_all(data_directory);
 }
 
 #[test]
 fn mobile_protocol_copy_requires_usable_account_secret() {
-    let data_dir = unique_data_dir("copy-needs-secret");
-    seed_mobile_account(&data_dir, "me@example.com");
-    seed_mobile_account(&data_dir, "target@example.com");
-    let conn = store::open_at(data_dir.join("meron.db")).unwrap();
+    let data_directory = unique_data_directory("copy-needs-secret");
+    seed_mobile_account(&data_directory, "me@example.com");
+    seed_mobile_account(&data_directory, "target@example.com");
+    let conn = store::open_at(data_directory.join("meron.db")).unwrap();
     store::ensure_folder(&conn, "me@example.com", "INBOX").unwrap();
     store::ensure_folder(&conn, "target@example.com", "Archive").unwrap();
     store::upsert_messages(
@@ -76,7 +76,7 @@ fn mobile_protocol_copy_requires_usable_account_secret() {
 
     let value = invoke_mobile_protocol_json(
         r#"{"id":68,"method":"mail.copy","params":{"thread_id":"me@example.com#INBOX#t.dG9waWM","target_account_id":"target@example.com","target_folder_id":"Archive"}}"#,
-        Some(data_dir.to_str().unwrap()),
+        Some(data_directory.to_str().unwrap()),
     );
 
     assert_eq!(value["id"], 68);
@@ -87,14 +87,14 @@ fn mobile_protocol_copy_requires_usable_account_secret() {
             .contains("account needs reconnect")
     );
 
-    let _ = std::fs::remove_dir_all(data_dir);
+    let _ = std::fs::remove_dir_all(data_directory);
 }
 
 #[test]
 fn mobile_protocol_delete_requires_server_credentials() {
-    let data_dir = unique_data_dir("thread-delete");
-    seed_mobile_account(&data_dir, "me@example.com");
-    let conn = store::open_at(data_dir.join("meron.db")).unwrap();
+    let data_directory = unique_data_directory("thread-delete");
+    seed_mobile_account(&data_directory, "me@example.com");
+    let conn = store::open_at(data_directory.join("meron.db")).unwrap();
     store::ensure_folder(&conn, "me@example.com", "INBOX").unwrap();
     store::upsert_messages(
         &conn,
@@ -129,7 +129,7 @@ fn mobile_protocol_delete_requires_server_credentials() {
 
     let value = invoke_mobile_protocol_json(
         r#"{"id":75,"method":"mail.delete","params":{"thread_id":"me@example.com#INBOX#t.dG9waWM"}}"#,
-        Some(data_dir.to_str().unwrap()),
+        Some(data_directory.to_str().unwrap()),
     );
     assert_eq!(value["id"], 75);
     assert!(
@@ -141,7 +141,7 @@ fn mobile_protocol_delete_requires_server_credentials() {
 
     let threads = invoke_mobile_protocol_json(
         r#"{"id":76,"method":"mail.threadList","params":{"account_id":"me@example.com","folder_id":"INBOX","filter":"all"}}"#,
-        Some(data_dir.to_str().unwrap()),
+        Some(data_directory.to_str().unwrap()),
     );
     let rows = threads["result"]["threads"].as_array().unwrap();
     assert_eq!(rows.len(), 3);
@@ -149,14 +149,14 @@ fn mobile_protocol_delete_requires_server_credentials() {
     assert_eq!(rows[1]["subject"], "Delete me");
     assert_eq!(rows[2]["subject"], "Keep me");
 
-    let _ = std::fs::remove_dir_all(data_dir);
+    let _ = std::fs::remove_dir_all(data_directory);
 }
 
 #[test]
 fn mobile_protocol_delete_uid_thread_requires_server_credentials() {
-    let data_dir = unique_data_dir("uid-thread-delete");
-    seed_mobile_account(&data_dir, "me@example.com");
-    let conn = store::open_at(data_dir.join("meron.db")).unwrap();
+    let data_directory = unique_data_directory("uid-thread-delete");
+    seed_mobile_account(&data_directory, "me@example.com");
+    let conn = store::open_at(data_directory.join("meron.db")).unwrap();
     store::save_cached_message(
         &conn,
         "me@example.com",
@@ -176,7 +176,7 @@ fn mobile_protocol_delete_uid_thread_requires_server_credentials() {
 
     let value = invoke_mobile_protocol_json(
         r#"{"id":77,"method":"mail.delete","params":{"thread_id":"me@example.com#Drafts#4"}}"#,
-        Some(data_dir.to_str().unwrap()),
+        Some(data_directory.to_str().unwrap()),
     );
     assert!(
         value["error"]["message"]
@@ -187,18 +187,18 @@ fn mobile_protocol_delete_uid_thread_requires_server_credentials() {
 
     let read = invoke_mobile_protocol_json(
         r#"{"id":78,"method":"mail.threadRead","params":{"thread_id":"me@example.com#Drafts#4"}}"#,
-        Some(data_dir.to_str().unwrap()),
+        Some(data_directory.to_str().unwrap()),
     );
     assert_eq!(read["result"]["messages"].as_array().unwrap().len(), 1);
 
-    let _ = std::fs::remove_dir_all(data_dir);
+    let _ = std::fs::remove_dir_all(data_directory);
 }
 
 #[test]
 fn mobile_protocol_archive_requires_server_credentials() {
-    let data_dir = unique_data_dir("thread-archive");
-    seed_mobile_account(&data_dir, "me@example.com");
-    let conn = store::open_at(data_dir.join("meron.db")).unwrap();
+    let data_directory = unique_data_directory("thread-archive");
+    seed_mobile_account(&data_directory, "me@example.com");
+    let conn = store::open_at(data_directory.join("meron.db")).unwrap();
     store::upsert_folders(
         &conn,
         "me@example.com",
@@ -249,7 +249,7 @@ fn mobile_protocol_archive_requires_server_credentials() {
 
     let value = invoke_mobile_protocol_json(
         r#"{"id":79,"method":"mail.archive","params":{"thread_id":"me@example.com#INBOX#t.dG9waWM"}}"#,
-        Some(data_dir.to_str().unwrap()),
+        Some(data_directory.to_str().unwrap()),
     );
     assert_eq!(value["id"], 79);
     assert!(
@@ -261,7 +261,7 @@ fn mobile_protocol_archive_requires_server_credentials() {
 
     let inbox = invoke_mobile_protocol_json(
         r#"{"id":80,"method":"mail.threadList","params":{"account_id":"me@example.com","folder_id":"INBOX","filter":"all"}}"#,
-        Some(data_dir.to_str().unwrap()),
+        Some(data_directory.to_str().unwrap()),
     );
     let inbox_rows = inbox["result"]["threads"].as_array().unwrap();
     assert_eq!(inbox_rows.len(), 3);
@@ -271,19 +271,19 @@ fn mobile_protocol_archive_requires_server_credentials() {
 
     let archive = invoke_mobile_protocol_json(
         r#"{"id":81,"method":"mail.threadList","params":{"account_id":"me@example.com","folder_id":"Archive","filter":"all"}}"#,
-        Some(data_dir.to_str().unwrap()),
+        Some(data_directory.to_str().unwrap()),
     );
     let archive_rows = archive["result"]["threads"].as_array().unwrap();
     assert_eq!(archive_rows.len(), 0);
 
-    let _ = std::fs::remove_dir_all(data_dir);
+    let _ = std::fs::remove_dir_all(data_directory);
 }
 
 #[test]
 fn mobile_protocol_archive_requires_cached_archive_folder() {
-    let data_dir = unique_data_dir("thread-archive-missing-folder");
-    seed_mobile_account(&data_dir, "me@example.com");
-    let conn = store::open_at(data_dir.join("meron.db")).unwrap();
+    let data_directory = unique_data_directory("thread-archive-missing-folder");
+    seed_mobile_account(&data_directory, "me@example.com");
+    let conn = store::open_at(data_directory.join("meron.db")).unwrap();
     store::ensure_folder(&conn, "me@example.com", "INBOX").unwrap();
     store::upsert_messages(
         &conn,
@@ -304,7 +304,7 @@ fn mobile_protocol_archive_requires_cached_archive_folder() {
     // `meron_folders::archive_meron_only`).
     let value = invoke_mobile_protocol_json(
         r#"{"id":82,"method":"mail.archive","params":{"thread_id":"me@example.com#INBOX#41"}}"#,
-        Some(data_dir.to_str().unwrap()),
+        Some(data_directory.to_str().unwrap()),
     );
     assert_eq!(value["id"], 82);
     assert!(
@@ -314,7 +314,7 @@ fn mobile_protocol_archive_requires_cached_archive_folder() {
             .contains("Archive folder not found")
     );
 
-    let _ = std::fs::remove_dir_all(data_dir);
+    let _ = std::fs::remove_dir_all(data_directory);
 }
 
 #[test]
@@ -323,22 +323,22 @@ fn mobile_protocol_move_honors_explicit_message_ids() {
     // need not be cached in the archive folder, and a uid: thread key names
     // nothing there at all — so the explicit ids must be used as given rather
     // than resolved through the cached thread.
-    let data_dir = unique_data_dir("move-explicit-ids");
-    seed_mobile_account(&data_dir, "me@example.com");
-    let conn = store::open_at(data_dir.join("meron.db")).unwrap();
+    let data_directory = unique_data_directory("move-explicit-ids");
+    seed_mobile_account(&data_directory, "me@example.com");
+    let conn = store::open_at(data_directory.join("meron.db")).unwrap();
     store::ensure_folder(&conn, "me@example.com", "Archive").unwrap();
     drop(conn);
 
     let without_ids = invoke_mobile_protocol_json(
         r#"{"id":68,"method":"mail.move","params":{"thread_id":"me@example.com#Archive#t.dG9waWM","target_folder_id":"INBOX"}}"#,
-        Some(data_dir.to_str().unwrap()),
+        Some(data_directory.to_str().unwrap()),
     );
     assert_eq!(without_ids["result"]["moved"], 0);
 
     // Past UID resolution to the server write, which this account can't make.
     let with_ids = invoke_mobile_protocol_json(
         r#"{"id":69,"method":"mail.move","params":{"thread_id":"me@example.com#Archive#t.dG9waWM","target_folder_id":"INBOX","message_ids":["42"]}}"#,
-        Some(data_dir.to_str().unwrap()),
+        Some(data_directory.to_str().unwrap()),
     );
     assert!(
         with_ids["error"]["message"]
@@ -348,5 +348,5 @@ fn mobile_protocol_move_honors_explicit_message_ids() {
         "{with_ids}"
     );
 
-    let _ = std::fs::remove_dir_all(data_dir);
+    let _ = std::fs::remove_dir_all(data_directory);
 }

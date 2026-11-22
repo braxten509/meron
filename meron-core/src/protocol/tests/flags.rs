@@ -6,9 +6,9 @@ use super::*;
 
 #[test]
 fn mobile_protocol_flag_actions_leave_the_store_alone_when_the_server_write_fails() {
-    let data_dir = unique_data_dir("thread-actions");
-    seed_mobile_account(&data_dir, "me@example.com");
-    let conn = store::open_at(data_dir.join("meron.db")).unwrap();
+    let data_directory = unique_data_directory("thread-actions");
+    seed_mobile_account(&data_directory, "me@example.com");
+    let conn = store::open_at(data_directory.join("meron.db")).unwrap();
     store::ensure_folder(&conn, "me@example.com", "INBOX").unwrap();
     store::upsert_messages(
         &conn,
@@ -38,7 +38,7 @@ fn mobile_protocol_flag_actions_leave_the_store_alone_when_the_server_write_fail
 
     let read = invoke_mobile_protocol_json(
         r#"{"id":68,"method":"mail.markRead","params":{"thread_id":"me@example.com#INBOX#t.dG9waWM","seen":true}}"#,
-        Some(data_dir.to_str().unwrap()),
+        Some(data_directory.to_str().unwrap()),
     );
     assert_eq!(read["id"], 68);
     assert!(
@@ -50,7 +50,7 @@ fn mobile_protocol_flag_actions_leave_the_store_alone_when_the_server_write_fail
 
     let starred = invoke_mobile_protocol_json(
         r#"{"id":69,"method":"mail.markStarred","params":{"thread_id":"me@example.com#INBOX#t.dG9waWM","starred":true}}"#,
-        Some(data_dir.to_str().unwrap()),
+        Some(data_directory.to_str().unwrap()),
     );
     assert_eq!(starred["id"], 69);
     assert!(
@@ -62,7 +62,7 @@ fn mobile_protocol_flag_actions_leave_the_store_alone_when_the_server_write_fail
 
     let mark_all = invoke_mobile_protocol_json(
         r#"{"id":72,"method":"mail.markAllRead","params":{"account_id":"me@example.com","folder_id":"INBOX"}}"#,
-        Some(data_dir.to_str().unwrap()),
+        Some(data_directory.to_str().unwrap()),
     );
     assert_eq!(mark_all["id"], 72);
     assert!(
@@ -76,7 +76,7 @@ fn mobile_protocol_flag_actions_leave_the_store_alone_when_the_server_write_fail
     // INBOX is refused outright, while Trash gets as far as the creds check.
     let empty_inbox = invoke_mobile_protocol_json(
         r#"{"id":73,"method":"mail.emptyFolder","params":{"account_id":"me@example.com","folder_id":"INBOX"}}"#,
-        Some(data_dir.to_str().unwrap()),
+        Some(data_directory.to_str().unwrap()),
     );
     assert_eq!(empty_inbox["id"], 73);
     assert!(
@@ -88,7 +88,7 @@ fn mobile_protocol_flag_actions_leave_the_store_alone_when_the_server_write_fail
 
     let empty_trash = invoke_mobile_protocol_json(
         r#"{"id":74,"method":"mail.emptyFolder","params":{"account_id":"me@example.com","folder_id":"Trash"}}"#,
-        Some(data_dir.to_str().unwrap()),
+        Some(data_directory.to_str().unwrap()),
     );
     assert_eq!(empty_trash["id"], 74);
     assert!(
@@ -100,7 +100,7 @@ fn mobile_protocol_flag_actions_leave_the_store_alone_when_the_server_write_fail
 
     let threads = invoke_mobile_protocol_json(
         r#"{"id":70,"method":"mail.threadList","params":{"account_id":"me@example.com","folder_id":"INBOX","filter":"all"}}"#,
-        Some(data_dir.to_str().unwrap()),
+        Some(data_directory.to_str().unwrap()),
     );
     let first = &threads["result"]["threads"][0];
     assert_eq!(
@@ -114,18 +114,18 @@ fn mobile_protocol_flag_actions_leave_the_store_alone_when_the_server_write_fail
 
     let unread = invoke_mobile_protocol_json(
         r#"{"id":71,"method":"mail.threadList","params":{"account_id":"me@example.com","folder_id":"INBOX","filter":"unread"}}"#,
-        Some(data_dir.to_str().unwrap()),
+        Some(data_directory.to_str().unwrap()),
     );
     assert_eq!(unread["result"]["threads"].as_array().unwrap().len(), 2);
 
-    let _ = std::fs::remove_dir_all(data_dir);
+    let _ = std::fs::remove_dir_all(data_directory);
 }
 
 #[test]
 fn mobile_protocol_keeps_uid_thread_unread_when_server_write_fails() {
-    let data_dir = unique_data_dir("uid-thread-actions");
-    seed_mobile_account(&data_dir, "me@example.com");
-    let conn = store::open_at(data_dir.join("meron.db")).unwrap();
+    let data_directory = unique_data_directory("uid-thread-actions");
+    seed_mobile_account(&data_directory, "me@example.com");
+    let conn = store::open_at(data_directory.join("meron.db")).unwrap();
     store::save_cached_message(
         &conn,
         "me@example.com",
@@ -145,7 +145,7 @@ fn mobile_protocol_keeps_uid_thread_unread_when_server_write_fails() {
 
     let value = invoke_mobile_protocol_json(
         r#"{"id":72,"method":"mail.markRead","params":{"thread_id":"me@example.com#Drafts#4","seen":true}}"#,
-        Some(data_dir.to_str().unwrap()),
+        Some(data_directory.to_str().unwrap()),
     );
     assert!(
         value["error"]["message"]
@@ -156,10 +156,10 @@ fn mobile_protocol_keeps_uid_thread_unread_when_server_write_fails() {
 
     let read = invoke_mobile_protocol_json(
         r#"{"id":73,"method":"mail.threadRead","params":{"thread_id":"me@example.com#Drafts#4"}}"#,
-        Some(data_dir.to_str().unwrap()),
+        Some(data_directory.to_str().unwrap()),
     );
     // The server never took the change, so the store must not claim it did.
     assert_eq!(read["result"]["messages"][0]["unread"], true);
 
-    let _ = std::fs::remove_dir_all(data_dir);
+    let _ = std::fs::remove_dir_all(data_directory);
 }

@@ -1,10 +1,9 @@
-//! Local folders in the sidecar: requests for the local account, and moves
-//! between it and server accounts.
+//! Local folders in the sidecar: requests for the local account, and moves between it and server accounts.
 //!
-//! The local account's mail lives in the archive (`store::archive`), behind an
-//! [`Engine`] of its own that has no server accounts. Reads go through the same
-//! list and thread code as server mail, pointed at that engine; writes never
-//! leave the machine, except an upload back to a server account.
+//! The local account's mail lives in the archive (`store::archive`), behind an [`Engine`] of its
+//! own that has no server accounts. Reads go through the same list and thread code as server mail,
+//! pointed at that engine; writes never leave the machine, except an upload back to a server
+//! account.
 
 use serde_json::{Value, json};
 use std::sync::{Arc, Mutex};

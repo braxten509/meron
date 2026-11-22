@@ -5,47 +5,49 @@
 
 use super::*;
 
-/// Cap on DNS plus every TCP attempt for one host. Without it a sick resolver
-/// (getaddrinfo retrying across nameservers) or a run of black-holed addresses
-/// can hold a sync for the better part of a minute before erroring; failing
-/// fast surfaces the error banner while a retry is still worth offering. It has
-/// to cover several sequential [`CONNECT_ATTEMPT_TIMEOUT`] rounds, so it is
-/// deliberately larger than one attempt: capping it near a single attempt would
-/// abandon a host whose later addresses are the reachable ones. This is the
-/// only bound on the SMTP and certificate-probe paths, which do not run under
-/// [`imap_connect_timeout`].
+/// Cap on DNS plus every TCP attempt for one host.
+///
+/// Without it a sick resolver (getaddrinfo retrying across nameservers) or a run of black-holed
+/// addresses can hold a sync for the better part of a minute before erroring; failing fast surfaces
+/// the error banner while a retry is still worth offering.
+///
+/// It has to cover several sequential [`CONNECT_ATTEMPT_TIMEOUT`] rounds, so it is deliberately
+/// larger than one attempt: capping it near a single attempt would abandon a host whose later
+/// addresses are the reachable ones. This is the only bound on the SMTP and certificate-probe
+/// paths, which do not run under [`imap_connect_timeout`].
 const TCP_CONNECT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(20);
 
 /// Cap on the TLS handshake alone, for the same reason.
 const TLS_HANDSHAKE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(8);
 
-/// Total budget for DNS through authentication. Leave 20% of the configured
-/// background-sync budget for connection coordination and the actual mailbox
-/// command. `MERON_SYNC_TIMEOUT` is raised precisely for gateways whose
-/// handshake is slow (see [`crate::engine::background_sync_timeout`]), so this
-/// scales with it rather than pinning a ceiling such a gateway could never
-/// finish under.
+/// Total budget for DNS through authentication. Leave 20% of the configured background-sync budget
+/// for connection coordination and the actual mailbox command. `MERON_SYNC_TIMEOUT` is raised
+/// precisely for gateways whose handshake is slow (see [`crate::engine::background_sync_timeout`]),
+/// so this scales with it rather than pinning a ceiling such a gateway could never finish under.
 fn imap_connect_timeout() -> std::time::Duration {
     crate::engine::background_sync_timeout().mul_f32(0.8)
 }
 
-/// Floor under [`imap_protocol_timeout`]. A stage cap is a fallback for a stage
-/// that never completes, not a bar a slow-but-working server has to clear:
-/// Gmail's XOAUTH2 exchange routinely takes 4-7s on a congested link, so an
-/// even share of the default budget (8s) fails it often enough to keep the
-/// connectivity banner up on an account that is fine. Keep the floor several
-/// times the slowest healthy stage seen in the wild.
+/// Floor under [`imap_protocol_timeout`].
+///
+/// A stage cap is a fallback for a stage that never completes, not a bar a slow-but-working server
+/// has to clear: Gmail's XOAUTH2 exchange routinely takes 4-7s on a congested link, so an even
+/// share of the default budget (8s) fails it often enough to keep the connectivity banner up on an
+/// account that is fine. Keep the floor several times the slowest healthy stage seen in the wild.
 pub(super) const MIN_PROTOCOL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(20);
 
-/// The TCP/TLS stages may complete while the server never sends its greeting or
-/// never finishes authentication. Keep those protocol stages independently
-/// bounded so callers receive the concrete failing stage rather than only an
-/// outer operation-budget timeout. Each stage gets a share of the connect
-/// budget, floored at [`MIN_PROTOCOL_TIMEOUT`] and never above the budget
-/// itself; it scales with `MERON_SYNC_TIMEOUT` for the same reason the connect
-/// budget does, so a DavMail-style LOGIN that needs 15s is not capped into
-/// permanent failure that no setting can lift. The stages run in sequence under
-/// [`imap_connect_timeout`], which stays the real ceiling for the whole connect.
+/// The TCP/TLS stages may complete while the server never sends its greeting or never finishes authentication.
+///
+/// Keep those protocol stages independently bounded so callers receive the concrete failing stage
+/// rather than only an outer operation-budget timeout.
+///
+/// Each stage gets a share of the connect budget, floored at [`MIN_PROTOCOL_TIMEOUT`] and never
+/// above the budget itself; it scales with `MERON_SYNC_TIMEOUT` for the same reason the connect
+/// budget does, so a DavMail-style LOGIN that needs 15s is not capped into permanent failure that
+/// no setting can lift.
+///
+/// The stages run in sequence under [`imap_connect_timeout`], which stays the real ceiling for the
+/// whole connect.
 fn imap_protocol_timeout() -> std::time::Duration {
     protocol_timeout_for(imap_connect_timeout())
 }
@@ -58,11 +60,10 @@ pub(super) fn protocol_timeout_for(connect: std::time::Duration) -> std::time::D
 /// IPv6 route ahead of a fine IPv4 one) must not eat the whole connect budget.
 const CONNECT_ATTEMPT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 
-/// Delay before the second of the two initially-dialed addresses. Alternating
-/// families and staggering the opening attempts follows Happy Eyeballs'
-/// important property: a broken preferred family cannot hold a working fallback
-/// behind several full connection timeouts. Attempts that replace a failed one
-/// start immediately.
+/// Delay before the second of the two initially-dialed addresses. Alternating families and
+/// staggering the opening attempts follows Happy Eyeballs' important property: a broken preferred
+/// family cannot hold a working fallback behind several full connection timeouts. Attempts that
+/// replace a failed one start immediately.
 const CONNECT_ATTEMPT_STAGGER: std::time::Duration = std::time::Duration::from_millis(250);
 
 pub(super) fn interleave_address_families(
@@ -193,12 +194,13 @@ async fn connect_tcp_inner(host: &str, port: u16) -> Result<TcpStream> {
     Err(last_err.context("tcp connect"))
 }
 
-/// Open a TCP connection, optionally wrapped in implicit TLS. Shared by the
-/// IMAP and SMTP paths.
+/// Open a TCP connection, optionally wrapped in implicit TLS.
 ///
-/// `proxy` is the account's resolved proxy (see [`crate::proxy`]); `None`
-/// connects directly. TLS is negotiated with the real destination host either
-/// way, so the tunnel never terminates the mail server's certificate.
+/// Shared by the IMAP and SMTP paths.
+///
+/// `proxy` is the account's resolved proxy (see [`crate::proxy`]); `None` connects directly. TLS is
+/// negotiated with the real destination host either way, so the tunnel never terminates the mail
+/// server's certificate.
 pub async fn connect_stream(
     host: &str,
     port: u16,

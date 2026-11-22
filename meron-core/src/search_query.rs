@@ -1,22 +1,19 @@
 //! Gmail-style search operators, parsed once and compiled per backend.
 //!
-//! A query is whitespace-separated terms ANDed together. A term of the form
-//! `key:value` with a known key becomes a structured filter; everything else is
-//! free text, matched as one substring the way a plain query always was.
-//! Values may be double-quoted to hold spaces (`from:"Ann Lee"`). Unknown keys
-//! and empty values stay free text, so `re:foo` or a URL still searches as
-//! typed.
+//! A query is whitespace-separated terms ANDed together. A term of the form `key:value` with a
+//! known key becomes a structured filter; everything else is free text, matched as one substring
+//! the way a plain query always was. Values may be double-quoted to hold spaces (`from:"Ann Lee"`).
+//! Unknown keys and empty values stay free text, so `re:foo` or a URL still searches as typed.
 //!
 //! `tag:name` matches a tag, and is answered by the local store alone.
 //!
-//! `from:`, `to:` and `subject:` take alternatives the Gmail way — any of them
-//! matches: `from:{a b}`, `from:(a OR b)`, `from:a,b`, or `from:a OR from:b`.
-//! `OR` between other terms, negation and general grouping are not supported.
+//! `from:`, `to:` and `subject:` take alternatives the Gmail way — any of them matches:
+//! `from:{a b}`, `from:(a OR b)`, `from:a,b`, or `from:a OR from:b`. `OR` between other terms,
+//! negation and general grouping are not supported.
 //!
-//! A bare uppercase `AND`, as in Gmail, joins queries that must all match —
-//! how a saved search is narrowed by another. Each side is read on its own, so
-//! its free text stays its own substring and its dates and read state narrow
-//! the other side's rather than replacing them.
+//! A bare uppercase `AND`, as in Gmail, joins queries that must all match — how a saved search is
+//! narrowed by another. Each side is read on its own, so its free text stays its own substring and
+//! its dates and read state narrow the other side's rather than replacing them.
 
 use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
@@ -372,12 +369,11 @@ fn pieces(inner: &str) -> Vec<Piece<'_>> {
     pieces
 }
 
-/// The search options form: one field per operator, read from and written
-/// back to query text so the text stays the single source of truth. A term the
-/// form has no field for (a second `from:`, `is:read`) is kept verbatim in
-/// `words`, so opening the form and searching again never drops part of a
-/// query. From, To and Subject list a term's alternatives comma-separated, as
-/// Gmail's form does.
+/// The search options form: one field per operator, read from and written back to query text so the text stays the single source of truth.
+///
+/// A term the form has no field for (a second `from:`, `is:read`) is kept verbatim in `words`, so
+/// opening the form and searching again never drops part of a query. From, To and Subject list a
+/// term's alternatives comma-separated, as Gmail's form does.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct SearchFields {

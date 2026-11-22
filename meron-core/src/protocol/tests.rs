@@ -1,6 +1,7 @@
 //! Shared protocol test fixtures and feature-specific suites.
 //!
-//! Child modules use these helpers to exercise the same underlying store.
+//! The fixtures seed accounts, folders and media in isolated SQLite stores.
+//! Token exchanges and provider requests use local HTTP responders.
 
 use super::*;
 use crate::imap::{Folder, MessageHeader, Recipient};
@@ -63,13 +64,13 @@ fn one_shot_server(path: &str, content_type: &str, body: &str) -> String {
                 .set_read_timeout(Some(Duration::from_secs(2)))
                 .unwrap();
             let mut request = Vec::new();
-            let mut buf = [0_u8; 1024];
+            let mut buffer = [0_u8; 1024];
             loop {
-                let read = stream.read(&mut buf).unwrap_or(0);
+                let read = stream.read(&mut buffer).unwrap_or(0);
                 if read == 0 {
                     break;
                 }
-                request.extend_from_slice(&buf[..read]);
+                request.extend_from_slice(&buffer[..read]);
                 let Some(header_end) = request.windows(4).position(|window| window == b"\r\n\r\n")
                 else {
                     continue;
@@ -124,7 +125,7 @@ fn one_shot_server(path: &str, content_type: &str, body: &str) -> String {
 // Drafts folder sync; opening the thread must surface it from the store alone
 // (thread read spans folders), with no per-thread network check.
 
-fn unique_data_dir(label: &str) -> std::path::PathBuf {
+fn unique_data_directory(label: &str) -> std::path::PathBuf {
     std::env::temp_dir().join(format!("meron-mobile-{label}-{}", unique_test_suffix()))
 }
 
@@ -146,8 +147,8 @@ fn fresh_date() -> i64 {
     *DATE.get_or_init(|| store::now_unix() - 3600)
 }
 
-fn seed_mobile_account(data_dir: &std::path::Path, email: &str) {
-    let conn = store::open_at(data_dir.join("meron.db")).unwrap();
+fn seed_mobile_account(data_directory: &std::path::Path, email: &str) {
+    let conn = store::open_at(data_directory.join("meron.db")).unwrap();
     let creds = Creds {
         host: "imap.example.com".to_string(),
         port: 993,
@@ -183,8 +184,8 @@ fn seed_mobile_account(data_dir: &std::path::Path, email: &str) {
     store::upsert_account(&conn, email, &meta, &creds).unwrap();
 }
 
-fn seed_rss_account(data_dir: &std::path::Path, account: &str, display_name: &str) {
-    let conn = store::open_at(data_dir.join("meron.db")).unwrap();
+fn seed_rss_account(data_directory: &std::path::Path, account: &str, display_name: &str) {
+    let conn = store::open_at(data_directory.join("meron.db")).unwrap();
     conn.execute(
         "INSERT INTO accounts(id, engine, provider, email, display_name, config)
              VALUES(?1, 'rss', 'rss', ?2, ?3, '{}')",
@@ -239,11 +240,11 @@ fn seed_rss_item(
     .unwrap();
 }
 
-fn add_password_account(data_dir_str: &str, email: &str) {
+fn add_password_account(directory_text: &str, email: &str) {
     let add = format!(
         r#"{{"id":1,"method":"account.addPassword","params":{{"email":"{email}","display_name":"E","sender_name":"E","imap_host":"imap.example.com","imap_port":993,"smtp_host":"smtp.example.com","smtp_port":587,"username":"{email}","password":"secret","tls":true}}}}"#
     );
-    let added = invoke_mobile_protocol_json(&add, Some(data_dir_str));
+    let added = invoke_mobile_protocol_json(&add, Some(directory_text));
     assert_eq!(added["result"]["account"]["id"], email);
 }
 

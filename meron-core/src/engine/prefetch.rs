@@ -206,11 +206,10 @@ struct Blame {
     failed_twice: Vec<u32>,
 }
 
-/// Whether a failed download may be the message's own doing; only asked of a
-/// message downloaded on its own. A connection that went away is not. An
-/// error the server reported, or a download that went silent or outlasted its
-/// allowance, may be — or may be the account or the network, which is why it
-/// only makes the message a suspect (see [`PrefetchRun::after_success`]).
+/// Whether a failed download may be the message's own doing; only asked of a message downloaded on
+/// its own. A connection that went away is not. An error the server reported, or a download that
+/// went silent or outlasted its allowance, may be — or may be the account or the network, which is
+/// why it only makes the message a suspect (see [`PrefetchRun::after_success`]).
 pub(super) fn prefetch_failure_is_the_messages(err: &anyhow::Error) -> bool {
     err.is::<TransferTimedOut>() || !background_sync::is_transient_sync_error(err)
 }

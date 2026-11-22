@@ -5,14 +5,14 @@
 
 use super::*;
 
-/// Fetch and parse one full message by UID, assuming `folder` is already
-/// selected on `session`. Shared by the on-demand reader (which selects then
-/// calls this once) and the body prefetcher (which selects once and pulls many
-/// UIDs over a single connection).
+/// Fetch and parse one full message by UID, assuming `folder` is already selected on `session`.
 ///
-/// `peek` selects `BODY.PEEK[]` over `RFC822`: both return the full message, but
-/// `RFC822` implicitly sets `\Seen` server-side while `BODY.PEEK[]` does not. The
-/// prefetcher must peek so background warming never marks unread mail as read.
+/// Shared by the on-demand reader (which selects then calls this once) and the body prefetcher
+/// (which selects once and pulls many UIDs over a single connection).
+///
+/// `peek` selects `BODY.PEEK[]` over `RFC822`: both return the full message, but `RFC822`
+/// implicitly sets `\Seen` server-side while `BODY.PEEK[]` does not. The prefetcher must peek so
+/// background warming never marks unread mail as read.
 pub async fn fetch_full_message(
     session: &mut Session,
     uid: u32,
@@ -47,13 +47,13 @@ pub async fn fetch_full_message(
 /// caller holds the connection before an interactive read can use it.
 pub const BODY_FETCH_BATCH: usize = 4;
 
-/// Select `folder` and fetch full bodies for `uids`, parsing each into a
-/// `Message`. Used by the thread reader and the body prefetcher. `peek` so
-/// reading doesn't flip server-side `\Seen`.
+/// Select `folder` and fetch full bodies for `uids`, parsing each into a `Message`.
 ///
-/// Each message goes to `on_message` as it arrives rather than into a returned
-/// list, so a caller keeps what was downloaded before an error or a deadline
-/// cut the rest short.
+/// Used by the thread reader and the body prefetcher. `peek` so reading doesn't flip server-side
+/// `\Seen`.
+///
+/// Each message goes to `on_message` as it arrives rather than into a returned list, so a caller
+/// keeps what was downloaded before an error or a deadline cut the rest short.
 pub async fn fetch_bodies(
     session: &mut Session,
     folder: &str,
@@ -133,11 +133,10 @@ async fn fetch_bodies_unpruned(
     Ok(())
 }
 
-/// IMAP SEARCH key for the body prefetcher: every message received since
-/// `since` (`dd-Mon-yyyy`), read or not. `UNSEEN SINCE` left already-read recent
-/// mail cold, so opening it always waited on a full download. Older unread mail
-/// stays with the on-demand reader: a mailbox can hold years of it, attachments
-/// included.
+/// IMAP SEARCH key for the body prefetcher: every message received since `since` (`dd-Mon-yyyy`),
+/// read or not. `UNSEEN SINCE` left already-read recent mail cold, so opening it always waited on a
+/// full download. Older unread mail stays with the on-demand reader: a mailbox can hold years of
+/// it, attachments included.
 pub fn prefetch_search_criteria(since: &str) -> String {
     format!("SINCE {since}")
 }

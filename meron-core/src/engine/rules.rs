@@ -482,12 +482,15 @@ async fn move_batch(
     Ok(())
 }
 
-/// Copy mail for a rule. The target is asked first, on every try: the answer to
-/// an earlier APPEND may have been lost, the rule may have run before, and an
-/// earlier copy may be gone again by the time a failed move is retried, which is
-/// why the queue keeps a copy until all of its action is done. Like a move, this
-/// leaves the target for its own sync to read. Another client may have taken a
-/// message away meanwhile: it is answered with, not failed on, so the rest go on.
+/// Copy mail for a rule.
+///
+/// The target is asked first, on every try: the answer to an earlier APPEND may have been lost, the
+/// rule may have run before, and an earlier copy may be gone again by the time a failed move is
+/// retried, which is why the queue keeps a copy until all of its action is done. Like a move, this
+/// leaves the target for its own sync to read.
+///
+/// Another client may have taken a message away meanwhile: it is answered with, not failed on, so
+/// the rest go on.
 async fn copy_rule_mail(
     engine: &Arc<Engine>,
     account: &str,

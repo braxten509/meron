@@ -39,13 +39,12 @@ pub struct Creds {
     /// different daemons with different certificates — a local bridge serves one
     /// certificate on both ports, but nothing guarantees that in general.
     pub smtp_cert_pin: Option<String>,
-    /// Fingerprint ([`grant_fingerprint`]) of a refresh token the provider
-    /// refused outright (an expired or revoked OAuth grant). Persisted, so the
-    /// account reads as needing a reconnect across restarts instead of failing
-    /// the same refresh on every sync. It names the token rather than the
-    /// account on purpose: once the account holds any other token — however
-    /// and whenever a reconnect's writes land — the verdict no longer applies.
-    /// See [`Creds::auth_rejected`].
+    /// Fingerprint ([`grant_fingerprint`]) of a refresh token the provider refused outright (an expired or revoked OAuth grant).
+    ///
+    /// Persisted, so the account reads as needing a reconnect across restarts instead of failing the
+    /// same refresh on every sync. It names the token rather than the account on purpose: once the
+    /// account holds any other token — however and whenever a reconnect's writes land — the verdict no
+    /// longer applies. See [`Creds::auth_rejected`].
     pub rejected_grant: Option<String>,
 }
 
@@ -59,13 +58,12 @@ pub fn grant_fingerprint(refresh_token: &str) -> String {
         .collect()
 }
 
-/// Which settings a save left out of its parameters, and so must be carried
-/// over from the stored account instead of reset.
+/// Which settings a save left out of its parameters, and so must be carried over from the stored account instead of reset.
 ///
-/// Saving an account resends what the setup form holds — servers, ports,
-/// credentials. Everything else about a connection lives elsewhere in the UI (a
-/// per-account proxy) or is answered by a prompt (an accepted certificate), so a
-/// reconnect that only re-enters a password must not clear them.
+/// Saving an account resends what the setup form holds — servers, ports, credentials. Everything
+/// else about a connection lives elsewhere in the UI (a per-account proxy) or is answered by a
+/// prompt (an accepted certificate), so a reconnect that only re-enters a password must not clear
+/// them.
 #[derive(Clone, Copy, Debug)]
 pub struct OmittedSettings {
     pub proxy: bool,

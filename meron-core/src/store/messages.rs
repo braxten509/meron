@@ -177,20 +177,20 @@ pub(super) fn cached_thread_key_of(
         .optional()?)
 }
 
-/// Hand the canonical thread key down to rows that named a message we only just
-/// cached.
+/// Hand the canonical thread key down to rows that named a message we only just cached.
 ///
-/// A fresh folder sync may upsert a reply before the referenced row whose
-/// Message-ID reveals the root key, so `resolve_message_thread_key` alone can't
-/// settle those. Walking out from the ids this batch wrote — rather than
-/// re-scanning the account cache — keeps the work proportional to the batch:
-/// each newly cached id fixes the rows that name it, and each row so fixed
-/// becomes the next id to walk out from, since its own children inherited
-/// through it. `seen` stops the walk from revisiting an id, so a reference cycle
-/// (two messages naming each other) terminates instead of flip-flopping.
+/// A fresh folder sync may upsert a reply before the referenced row whose Message-ID reveals the
+/// root key, so `resolve_message_thread_key` alone can't settle those.
 ///
-/// Answers with every row it re-keyed and that row's thread key from before,
-/// lowercased, so Meron folders can follow the conversation.
+/// Walking out from the ids this batch wrote — rather than re-scanning the account cache — keeps
+/// the work proportional to the batch: each newly cached id fixes the rows that name it, and each
+/// row so fixed becomes the next id to walk out from, since its own children inherited through it.
+///
+/// `seen` stops the walk from revisiting an id, so a reference cycle (two messages naming each
+/// other) terminates instead of flip-flopping.
+///
+/// Answers with every row it re-keyed and that row's thread key from before, lowercased, so Meron
+/// folders can follow the conversation.
 pub(super) fn reconcile_thread_keys_from(
     conn: &rusqlite::Transaction<'_>,
     account: &str,
@@ -559,11 +559,10 @@ pub fn classify_inbox_arrivals(
     classify_arrivals(conn, account, "INBOX", before, after, messages)
 }
 
-/// Unread messages in `folder` in the UID range that appeared during the last
-/// sync, newest first. Returns the whole batch rather than just its latest
-/// message so notifications can post one entry per arrival; empty when nothing
-/// new and unread landed. A message already observed anywhere in the account
-/// (one the user filed here from INBOX, say) is not an arrival.
+/// Unread messages in `folder` in the UID range that appeared during the last sync, newest first.
+/// Returns the whole batch rather than just its latest message so notifications can post one entry
+/// per arrival; empty when nothing new and unread landed. A message already observed anywhere in
+/// the account (one the user filed here from INBOX, say) is not an arrival.
 pub fn classify_arrivals(
     conn: &Connection,
     account: &str,
@@ -786,17 +785,17 @@ pub fn get_starred_page_from(
 
 /// What makes two cached rows the same starred conversation.
 ///
-/// A Message-ID or `gmthrid:` thread key names the conversation itself and
-/// holds wherever the server files it, so those dedupe across folders. `uid:`
-/// is the reserved key [`crate::store::card_thread_key`] mints for a message
-/// that arrived with no threading headers at all, and an IMAP UID means nothing
-/// outside its own mailbox — `uid:1` in Inbox and `uid:1` in Archive are
-/// ordinarily two unrelated messages, so those stay scoped to their folder.
+/// A Message-ID or `gmthrid:` thread key names the conversation itself and holds wherever the
+/// server files it, so those dedupe across folders.
 ///
-/// Both the query budget below and the card-level dedupe in
-/// `mail_model::starred_thread_cards` key on this, so a row that survives the
-/// budget as its own conversation cannot then be swallowed as a copy of
-/// another, or vice versa.
+/// `uid:` is the reserved key [`crate::store::card_thread_key`] mints for a message that arrived
+/// with no threading headers at all, and an IMAP UID means nothing outside its own mailbox —
+/// `uid:1` in Inbox and `uid:1` in Archive are ordinarily two unrelated messages, so those stay
+/// scoped to their folder.
+///
+/// Both the query budget below and the card-level dedupe in `mail_model::starred_thread_cards` key
+/// on this, so a row that survives the budget as its own conversation cannot then be swallowed as a
+/// copy of another, or vice versa.
 pub fn starred_thread_identity(folder: &str, thread_key: &str) -> String {
     if thread_key.starts_with("uid:") {
         format!("{folder}\u{0}{thread_key}")
@@ -805,22 +804,20 @@ pub fn starred_thread_identity(folder: &str, thread_key: &str) -> String {
     }
 }
 
-/// Every starred mail message across all accounts and folders, newest first,
-/// for the newest `max_threads` distinct conversations.
+/// Every starred mail message across all accounts and folders, newest first, for the newest `max_threads` distinct conversations.
 ///
-/// The budget counts conversations rather than rows because the caller renders
-/// one card per conversation: an account whose server files each message under
-/// several folders (Gmail's All Mail beside the Inbox copy, plus every label)
-/// would otherwise spend the whole budget on copies of the same few threads and
-/// silently drop older ones off the end of the list.
+/// The budget counts conversations rather than rows because the caller renders one card per
+/// conversation: an account whose server files each message under several folders (Gmail's All Mail
+/// beside the Inbox copy, plus every label) would otherwise spend the whole budget on copies of the
+/// same few threads and silently drop older ones off the end of the list.
 ///
-/// A conversation past the budget is skipped rather than ending the scan, since
-/// its rows carry no signal about where the remaining copies of the admitted
-/// ones are: two folders' copies of one message can hold different cached dates,
-/// which puts them arbitrarily far apart in this ordering. Stopping at the first
-/// over-budget row would drop those stragglers, and the caller picks which
-/// folder's copy to show from exactly this set — losing the Inbox copy would put
-/// the thread under All Mail instead.
+/// A conversation past the budget is skipped rather than ending the scan, since its rows carry no
+/// signal about where the remaining copies of the admitted ones are: two folders' copies of one
+/// message can hold different cached dates, which puts them arbitrarily far apart in this ordering.
+///
+/// Stopping at the first over-budget row would drop those stragglers, and the caller picks which
+/// folder's copy to show from exactly this set — losing the Inbox copy would put the thread under
+/// All Mail instead.
 ///
 /// RSS rows carry `uid = 0` and are excluded; `rss::starred_items` covers them.
 pub fn get_starred_all_accounts(
@@ -901,14 +898,12 @@ pub fn get_thread_headers(
     Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
 }
 
-/// The newest message of a thread (or of one subject branch of it), as a
-/// single-element uid list — empty when the thread has no cached messages.
+/// The newest message of a thread (or of one subject branch of it), as a single-element uid list — empty when the thread has no cached messages.
 ///
-/// Marking a whole thread unread uses this: the gesture means "bring this back
-/// to me", not "I read none of these", so only the newest message carries the
-/// flag. The thread then shows one unread message and opening it lands on that
-/// message, instead of reopening at the oldest one and shedding the count again
-/// as the reader scrolls down.
+/// Marking a whole thread unread uses this: the gesture means "bring this back to me", not "I read
+/// none of these", so only the newest message carries the flag. The thread then shows one unread
+/// message and opening it lands on that message, instead of reopening at the oldest one and
+/// shedding the count again as the reader scrolls down.
 pub fn newest_thread_uids(
     conn: &Connection,
     account: &str,
@@ -928,14 +923,14 @@ pub fn newest_thread_uids(
 }
 
 /// A thread's messages grouped by mailbox, for a whole-thread "mark read".
-/// Covers every folder the reader shows the thread from (see `thread_read`),
-/// not just the card's own, so an unread copy filed elsewhere is not left
-/// behind a card that now reads as read. A synthetic `uid:N` key stays
-/// folder-local: UIDs are only unique within one mailbox.
 ///
-/// `unseen_only` narrows it to messages the store still has unread. Only a
-/// caller that updates the store after the server write may use it: one that
-/// marks the store first would leave a retry of a failed write nothing to send.
+/// Covers every folder the reader shows the thread from (see `thread_read`), not just the card's
+/// own, so an unread copy filed elsewhere is not left behind a card that now reads as read. A
+/// synthetic `uid:N` key stays folder-local: UIDs are only unique within one mailbox.
+///
+/// `unseen_only` narrows it to messages the store still has unread. Only a caller that updates the
+/// store after the server write may use it: one that marks the store first would leave a retry of a
+/// failed write nothing to send.
 pub fn thread_uids_by_folder(
     conn: &Connection,
     account: &str,
@@ -976,11 +971,10 @@ pub fn thread_uids_by_folder(
     Ok(by_folder)
 }
 
-/// Which of the account's threads have a draft waiting in them — the keys the
-/// list's Draft badge is decided by. Only real thread keys: a draft with no
-/// threading headers falls back to `uid:<its own uid>`, which says nothing about
-/// any thread and would collide with an unrelated message that happens to hold
-/// that UID in another mailbox (UIDs are unique only within one).
+/// Which of the account's threads have a draft waiting in them — the keys the list's Draft badge is
+/// decided by. Only real thread keys: a draft with no threading headers falls back to
+/// `uid:<its own uid>`, which says nothing about any thread and would collide with an unrelated
+/// message that happens to hold that UID in another mailbox (UIDs are unique only within one).
 pub fn draft_thread_keys(conn: &Connection, account: &str) -> Result<HashSet<String>> {
     let mut stmt = conn.prepare(
         "SELECT DISTINCT m.thread_key, m.folder, f.special_use
@@ -1028,12 +1022,13 @@ pub fn resolve_message_uids(
 }
 
 /// Delete locally cached messages whose UIDs are no longer on the server.
-/// `server_uids` must be the complete UID set for the folder, listed no
-/// earlier than `uid_next` was read. Rows at or above `uid_next` arrived after
-/// that snapshot (a move's copy cached meanwhile, say), so the list cannot
-/// speak for them and they are kept. With `0` (no UIDNEXT) the newest listed
-/// UID bounds it instead; an empty listing prunes everything. Returns the number
-/// of rows removed.
+///
+/// `server_uids` must be the complete UID set for the folder, listed no earlier than `uid_next` was
+/// read. Rows at or above `uid_next` arrived after that snapshot (a move's copy cached meanwhile,
+/// say), so the list cannot speak for them and they are kept. With `0` (no UIDNEXT) the newest
+/// listed UID bounds it instead; an empty listing prunes everything.
+///
+/// Returns the number of rows removed.
 pub fn prune_missing_messages(
     conn: &Connection,
     account: &str,
@@ -1115,11 +1110,10 @@ fn message_sync_owner() -> &'static str {
     OWNER.get_or_init(|| uuid::Uuid::new_v4().to_string())
 }
 
-/// Register a folder sync before network I/O. The registry is an ordinary
-/// table because engines in one process each hold their own connection (the
-/// mobile foreground engine and a transient background one), and a removal on
-/// one must stay hidden from a snapshot another is still fetching.
-/// Registration and cleanup run under the engine's database lock.
+/// Register a folder sync before network I/O. The registry is an ordinary table because engines in
+/// one process each hold their own connection (the mobile foreground engine and a transient
+/// background one), and a removal on one must stay hidden from a snapshot another is still
+/// fetching. Registration and cleanup run under the engine's database lock.
 pub fn begin_message_sync(conn: &Connection) -> Result<(i64, i64)> {
     // Take the write lock before reading the epoch. A deferred transaction that
     // reads first fails with SQLITE_BUSY_SNAPSHOT when another connection
@@ -1378,13 +1372,13 @@ fn files_json(message: &Message) -> Option<String> {
 /// done, or `done`.
 const FILES_BACKFILL_KEY: &str = "files_backfill";
 
-/// Fill `messages.files` for up to `batch` rows cached before the column
-/// existed (see the v11 migration), resuming where the last call stopped.
-/// Returns true once every row has been visited. Each call is one short
-/// transaction, so the caller can release the store between batches.
+/// Fill `messages.files` for up to `batch` rows cached before the column existed (see the v11 migration), resuming where the last call stopped.
 ///
-/// Mirrors [`Message::file_attachments`] in SQL: an attachment counts unless the
-/// stored HTML shows it inline.
+/// Returns true once every row has been visited. Each call is one short transaction, so the caller
+/// can release the store between batches.
+///
+/// Mirrors [`Message::file_attachments`] in SQL: an attachment counts unless the stored HTML shows
+/// it inline.
 pub fn backfill_files_batch(conn: &Connection, batch: u32) -> Result<bool> {
     let cursor = match super::db::meta_get(conn, FILES_BACKFILL_KEY)?.as_deref() {
         Some("done") => return Ok(true),

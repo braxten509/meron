@@ -6,9 +6,9 @@ use super::*;
 
 #[test]
 fn mobile_protocol_suggests_contacts_from_cached_messages() {
-    let data_dir = unique_data_dir("contact-suggest");
-    seed_mobile_account(&data_dir, "me@example.com");
-    let conn = store::open_at(data_dir.join("meron.db")).unwrap();
+    let data_directory = unique_data_directory("contact-suggest");
+    seed_mobile_account(&data_directory, "me@example.com");
+    let conn = store::open_at(data_directory.join("meron.db")).unwrap();
     store::ensure_folder(&conn, "me@example.com", "INBOX").unwrap();
     store::upsert_messages(
         &conn,
@@ -49,7 +49,7 @@ fn mobile_protocol_suggests_contacts_from_cached_messages() {
 
     let suggestions = invoke_mobile_protocol_json(
         r#"{"id":93,"method":"mail.suggestContacts","params":{"account":"me@example.com","query":"","limit":2}}"#,
-        Some(data_dir.to_str().unwrap()),
+        Some(data_directory.to_str().unwrap()),
     );
     assert_eq!(
         suggestions["result"]["contacts"][0]["addr"], "aki@example.com",
@@ -66,7 +66,7 @@ fn mobile_protocol_suggests_contacts_from_cached_messages() {
 
     let filtered = invoke_mobile_protocol_json(
         r#"{"id":94,"method":"contacts.suggest","params":{"account_id":"me@example.com","query":"bea","limit":8}}"#,
-        Some(data_dir.to_str().unwrap()),
+        Some(data_directory.to_str().unwrap()),
     );
     assert_eq!(filtered["result"]["contacts"].as_array().unwrap().len(), 1);
     assert_eq!(
@@ -81,7 +81,7 @@ fn mobile_protocol_suggests_contacts_from_cached_messages() {
                 "params": {"query": "", "limit": 100, "sort": sort, "directory": true}
             })
             .to_string(),
-            Some(data_dir.to_str().unwrap()),
+            Some(data_directory.to_str().unwrap()),
         );
         assert_eq!(
             directory["result"]["contacts"][0]["addr"], first,
@@ -89,5 +89,5 @@ fn mobile_protocol_suggests_contacts_from_cached_messages() {
         );
     }
 
-    let _ = std::fs::remove_dir_all(data_dir);
+    let _ = std::fs::remove_dir_all(data_directory);
 }

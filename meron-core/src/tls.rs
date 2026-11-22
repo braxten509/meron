@@ -1,19 +1,19 @@
-//! TLS client setup for the IMAP and SMTP transports, plus trust-on-first-use
-//! (TOFU) certificate pinning.
+//! TLS client setup for the IMAP and SMTP transports, plus trust-on-first-use (TOFU) certificate pinning.
 //!
-//! Normal mail servers present a chain that webpki validates against the bundled
-//! Mozilla roots. Local bridges do not: Proton Mail Bridge, for one, serves a
-//! self-signed certificate that carries `basicConstraints: CA:TRUE` and then
-//! presents it as the leaf, which rustls rejects outright (`CaUsedAsEndEntity`)
-//! before trust anchors ever matter — installing that certificate as a root
-//! would not help. The only way to reach such a server is to pin the exact
-//! certificate the user looked at and accepted.
+//! Normal mail servers present a chain that webpki validates against the bundled Mozilla roots.
 //!
-//! So an account may carry a `cert_pin`: the hex SHA-256 of the leaf DER it is
-//! willing to talk to. When the presented leaf hashes to that pin we accept it
-//! without chain or hostname checks; anything else still goes through webpki, so
-//! a rotated bridge certificate re-prompts instead of silently connecting.
-//! [`probe`] fetches the certificate for that prompt.
+//! Local bridges do not: Proton Mail Bridge, for one, serves a self-signed certificate that carries
+//! `basicConstraints: CA:TRUE` and then presents it as the leaf, which rustls rejects outright
+//! (`CaUsedAsEndEntity`) before trust anchors ever matter — installing that certificate as a root
+//! would not help.
+//!
+//! The only way to reach such a server is to pin the exact certificate the user looked at and
+//! accepted.
+//!
+//! So an account may carry a `cert_pin`: the hex SHA-256 of the leaf DER it is willing to talk to.
+//! When the presented leaf hashes to that pin we accept it without chain or hostname checks;
+//! anything else still goes through webpki, so a rotated bridge certificate re-prompts instead of
+//! silently connecting. [`probe`] fetches the certificate for that prompt.
 
 use anyhow::{Context, Result};
 use std::sync::{Arc, Mutex};

@@ -6,9 +6,9 @@ use super::*;
 
 #[test]
 fn mobile_protocol_routes_rss_accounts_through_mail_shapes() {
-    let data_dir = unique_data_dir("rss-mail-shapes");
-    seed_rss_account(&data_dir, "rss-account", "News");
-    let conn = store::open_at(data_dir.join("meron.db")).unwrap();
+    let data_directory = unique_data_directory("rss-mail-shapes");
+    seed_rss_account(&data_directory, "rss-account", "News");
+    let conn = store::open_at(data_directory.join("meron.db")).unwrap();
     seed_rss_feed(&conn, "rss-account", "feed-a", "Feed A");
     seed_rss_item(
         &conn,
@@ -32,7 +32,7 @@ fn mobile_protocol_routes_rss_accounts_through_mail_shapes() {
 
     let folders = invoke_mobile_protocol_json(
         r#"{"id":86,"method":"mail.folderList","params":{"account_id":"rss-account"}}"#,
-        Some(data_dir.to_str().unwrap()),
+        Some(data_directory.to_str().unwrap()),
     );
     assert_eq!(folders["id"], 86);
     assert_eq!(folders["result"]["folders"][0]["id"], "inbox");
@@ -41,7 +41,7 @@ fn mobile_protocol_routes_rss_accounts_through_mail_shapes() {
 
     let threads = invoke_mobile_protocol_json(
         r#"{"id":87,"method":"mail.threadList","params":{"account_id":"rss-account","folder_id":"inbox","filter":"all"}}"#,
-        Some(data_dir.to_str().unwrap()),
+        Some(data_directory.to_str().unwrap()),
     );
     assert_eq!(threads["id"], 87);
     assert_eq!(threads["result"]["folder_unread"], 2);
@@ -56,7 +56,7 @@ fn mobile_protocol_routes_rss_accounts_through_mail_shapes() {
 
     let read = invoke_mobile_protocol_json(
         r#"{"id":88,"method":"mail.threadRead","params":{"thread_id":"rss-account#rss#feed-a","limit":1}}"#,
-        Some(data_dir.to_str().unwrap()),
+        Some(data_directory.to_str().unwrap()),
     );
     assert_eq!(read["id"], 88);
     assert_eq!(
@@ -74,19 +74,19 @@ fn mobile_protocol_routes_rss_accounts_through_mail_shapes() {
 
     let mark_read = invoke_mobile_protocol_json(
         r#"{"id":89,"method":"mail.markRead","params":{"thread_id":"rss-account#rss#feed-a","seen":true,"message_ids":["rss-account#rss#feed-a#item-new"]}}"#,
-        Some(data_dir.to_str().unwrap()),
+        Some(data_directory.to_str().unwrap()),
     );
     assert_eq!(mark_read["result"]["ok"], true);
 
     let mark_starred = invoke_mobile_protocol_json(
         r#"{"id":90,"method":"mail.markStarred","params":{"thread_id":"rss-account#rss#feed-a","starred":true,"item_keys":["item-new"]}}"#,
-        Some(data_dir.to_str().unwrap()),
+        Some(data_directory.to_str().unwrap()),
     );
     assert_eq!(mark_starred["result"]["ok"], true);
 
     let reread = invoke_mobile_protocol_json(
         r#"{"id":91,"method":"rss.thread","params":{"thread_id":"rss-account#rss#feed-a"}}"#,
-        Some(data_dir.to_str().unwrap()),
+        Some(data_directory.to_str().unwrap()),
     );
     let messages = reread["result"]["messages"].as_array().unwrap();
     let new_item = messages
@@ -98,28 +98,28 @@ fn mobile_protocol_routes_rss_accounts_through_mail_shapes() {
 
     let starred = invoke_mobile_protocol_json(
         r#"{"id":92,"method":"mail.starredItems","params":{"limit":5}}"#,
-        Some(data_dir.to_str().unwrap()),
+        Some(data_directory.to_str().unwrap()),
     );
     assert_eq!(
         starred["result"]["items"][0]["id"],
         "rss-account#rss#feed-a#item-new"
     );
 
-    let _ = std::fs::remove_dir_all(data_dir);
+    let _ = std::fs::remove_dir_all(data_directory);
 }
 
 #[test]
 fn mobile_protocol_exports_and_imports_opml() {
-    let data_dir = unique_data_dir("rss-opml-mobile");
-    seed_rss_account(&data_dir, "rss-source", "Source feeds");
-    seed_rss_account(&data_dir, "rss-target", "Target feeds");
-    let conn = store::open_at(data_dir.join("meron.db")).unwrap();
+    let data_directory = unique_data_directory("rss-opml-mobile");
+    seed_rss_account(&data_directory, "rss-source", "Source feeds");
+    seed_rss_account(&data_directory, "rss-target", "Target feeds");
+    let conn = store::open_at(data_directory.join("meron.db")).unwrap();
     seed_rss_feed(&conn, "rss-source", "feed-a", "Feed A");
     drop(conn);
 
     let exported = invoke_mobile_protocol_json(
         r#"{"id":91,"method":"rss.exportOpml","params":{"account":"rss-source"}}"#,
-        Some(data_dir.to_str().unwrap()),
+        Some(data_directory.to_str().unwrap()),
     );
     assert_eq!(exported["id"], 91);
     let opml = exported["result"]["opml"].as_str().unwrap();
@@ -135,21 +135,21 @@ fn mobile_protocol_exports_and_imports_opml() {
             },
         })
         .to_string();
-    let imported = invoke_mobile_protocol_json(&request, Some(data_dir.to_str().unwrap()));
+    let imported = invoke_mobile_protocol_json(&request, Some(data_directory.to_str().unwrap()));
     assert_eq!(imported["id"], 92);
     assert_eq!(imported["result"]["imported"], 1);
 
-    let _ = std::fs::remove_dir_all(data_dir);
+    let _ = std::fs::remove_dir_all(data_directory);
 }
 
 #[test]
 fn mobile_protocol_syncs_empty_rss_account_without_mail_credentials() {
-    let data_dir = unique_data_dir("rss-sync-empty");
-    seed_rss_account(&data_dir, "rss-empty", "RSS");
+    let data_directory = unique_data_directory("rss-sync-empty");
+    seed_rss_account(&data_directory, "rss-empty", "RSS");
 
     let value = invoke_mobile_protocol_json(
         r#"{"id":93,"method":"mail.sync","params":{"account_id":"rss-empty"}}"#,
-        Some(data_dir.to_str().unwrap()),
+        Some(data_directory.to_str().unwrap()),
     );
 
     assert_eq!(value["id"], 93);
@@ -158,5 +158,5 @@ fn mobile_protocol_syncs_empty_rss_account_without_mail_credentials() {
     assert_eq!(value["result"]["synced"], 0);
     assert_eq!(value["result"]["rss"], true);
 
-    let _ = std::fs::remove_dir_all(data_dir);
+    let _ = std::fs::remove_dir_all(data_directory);
 }

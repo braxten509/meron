@@ -20,13 +20,14 @@ pub fn upsert_folders(conn: &Connection, account: &str, folders: &[Folder]) -> R
     Ok(())
 }
 
-/// Guarantee a folder row exists for a folder we have messages in, without
-/// touching its delimiter. The full folder LIST sync (`upsert_folders`) only
-/// runs when an account is opened directly, so in the unified view a freshly
-/// added account never gets folder rows — and `get_folders` (which JOINs the
-/// folders table) would then report zero unread even with unseen mail in the
-/// store, leaving the tray dot and unread badges dark. Calling this on every
-/// message sync keeps the count honest and self-heals existing accounts.
+/// Guarantee a folder row exists for a folder we have messages in, without touching its delimiter.
+///
+/// The full folder LIST sync (`upsert_folders`) only runs when an account is opened directly, so in
+/// the unified view a freshly added account never gets folder rows — and `get_folders` (which JOINs
+/// the folders table) would then report zero unread even with unseen mail in the store, leaving the
+/// tray dot and unread badges dark.
+///
+/// Calling this on every message sync keeps the count honest and self-heals existing accounts.
 pub fn ensure_folder(conn: &Connection, account: &str, name: &str) -> Result<()> {
     conn.execute(
         "INSERT OR IGNORE INTO folders(account, name, delimiter) VALUES(?1, ?2, NULL)",
@@ -106,11 +107,10 @@ pub fn folder_rename_pairs(
     Ok(pairs)
 }
 
-/// Follow a server-side rename in the folder list. Each folder keeps its row
-/// (delimiter, notify opt-in) under the new name, but its cached mail is
-/// dropped like a deleted folder's: cached bodies point at attachment files
-/// keyed by the old name, and the next sync fetches the folder afresh. One
-/// transaction, so the list never shows a folder under both names.
+/// Follow a server-side rename in the folder list. Each folder keeps its row (delimiter, notify
+/// opt-in) under the new name, but its cached mail is dropped like a deleted folder's: cached
+/// bodies point at attachment files keyed by the old name, and the next sync fetches the folder
+/// afresh. One transaction, so the list never shows a folder under both names.
 pub fn rename_folder(conn: &Connection, account: &str, pairs: &[(String, String)]) -> Result<()> {
     let tx = conn.unchecked_transaction()?;
     for (from, to) in pairs {

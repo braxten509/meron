@@ -1,16 +1,16 @@
 //! One bulk Delete or Move of several conversations.
 //!
-//! Every picked conversation runs the ordinary single action, all at the same
-//! time, as a *member* of one [`BulkRun`]. A single action talks to the mail
-//! server in three steps: it takes the Meron-folder marks off, it moves the
-//! mail, and it finds the copies the move made. A member that reaches one of
-//! those steps waits there until every member still running has reached it
-//! too; the step is then done once, for all of them together, and each member
-//! carries on with its own share of the answer.
+//! Every picked conversation runs the ordinary single action, all at the same time, as a *member*
+//! of one [`BulkRun`]. A single action talks to the mail server in three steps: it takes the
+//! Meron-folder marks off, it moves the mail, and it finds the copies the move made.
 //!
-//! So a run costs about as many trips to the server as one conversation does
-//! alone, however many it holds, while what each conversation resolves, caches
-//! and answers stays the single action's own code.
+//! A member that reaches one of those steps waits there until every member still running has
+//! reached it too; the step is then done once, for all of them together, and each member carries on
+//! with its own share of the answer.
+//!
+//! So a run costs about as many trips to the server as one conversation does alone, however many it
+//! holds, while what each conversation resolves, caches and answers stays the single action's own
+//! code.
 
 use std::collections::HashMap;
 use std::future::Future;

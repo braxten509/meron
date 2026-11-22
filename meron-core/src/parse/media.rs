@@ -109,11 +109,10 @@ pub(super) fn collect_attachments(
     });
 }
 
-/// Write one attachment's bytes to `<root>/<account>/<folder>/<uid>/<index>.<ext>`
-/// and return the relative key, or `None` if the write fails (the part is then
-/// just dropped from the rendered view rather than failing the whole message).
-/// The extension comes from the original filename when present (so downloads keep
-/// a sensible type), falling back to the MIME subtype.
+/// Write one attachment's bytes to `<root>/<account>/<folder>/<uid>/<index>.<ext>` and return the
+/// relative key, or `None` if the write fails (the part is then just dropped from the rendered view
+/// rather than failing the whole message). The extension comes from the original filename when
+/// present (so downloads keep a sensible type), falling back to the MIME subtype.
 fn write_media(
     ctx: &MediaCtx,
     index: usize,
@@ -160,11 +159,13 @@ pub(super) fn write_media_with_cap(
     Some(key)
 }
 
-/// True when every attachment's bytes are still on disk. Used before serving
-/// cached mail rows; when false the caller refetches and re-parses the message.
-/// Two cases force a refetch: a keyed file that pruning removed independently of
-/// SQLite, and a key-less attachment whose bytes were never written — a row
-/// cached before attachments were persisted to disk, or a write that failed.
+/// True when every attachment's bytes are still on disk.
+///
+/// Used before serving cached mail rows; when false the caller refetches and re-parses the message.
+/// Two cases force a refetch: a keyed file that pruning removed independently of SQLite, and a
+/// key-less attachment whose bytes were never written — a row cached before attachments were
+/// persisted to disk, or a write that failed.
+///
 /// An `oversized` attachment is key-less by design and is not one of them.
 pub fn cached_media_available(root: &Path, message: &Message) -> bool {
     missing_media_count(root, message) == 0

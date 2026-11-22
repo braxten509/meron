@@ -6,10 +6,10 @@ use super::*;
 
 #[test]
 fn request_defaults_missing_params_to_null() {
-    let req: Request = serde_json::from_str(r#"{"id":7,"method":"ping"}"#).unwrap();
-    assert_eq!(req.id, 7);
-    assert_eq!(req.method, "ping");
-    assert_eq!(req.params, Value::Null);
+    let request: Request = serde_json::from_str(r#"{"id":7,"method":"ping"}"#).unwrap();
+    assert_eq!(request.id, 7);
+    assert_eq!(request.method, "ping");
+    assert_eq!(request.params, Value::Null);
 }
 
 #[test]

@@ -96,11 +96,13 @@ CREATE INDEX IF NOT EXISTS messages_thread_key_idx
   ON messages(account, lower(COALESCE(thread_key, '')));
 ";
 
-/// Recipient search index (migration v6). `To`/`Cc` live in the `json` catch-all,
-/// which FTS can't index, so `messages.recipients` mirrors them as flat text
-/// (see `store::recipients_index_text`). It gets its own FTS table rather than a
-/// fifth column on `messages_fts`: adding a column there would force a full
-/// rebuild of the body trigram index — minutes of startup for a large mailbox —
+/// Recipient search index (migration v6).
+///
+/// `To`/`Cc` live in the `json` catch-all, which FTS can't index, so `messages.recipients` mirrors
+/// them as flat text (see `store::recipients_index_text`).
+///
+/// It gets its own FTS table rather than a fifth column on `messages_fts`: adding a column there
+/// would force a full rebuild of the body trigram index — minutes of startup for a large mailbox —
 /// while this one indexes a few dozen bytes per row.
 pub(super) const MESSAGES_RECIPIENTS_FTS_DDL: &str = "
 CREATE VIRTUAL TABLE IF NOT EXISTS messages_recipients_fts USING fts5(
@@ -192,11 +194,10 @@ CREATE TABLE IF NOT EXISTS account_secrets (
 );
 ";
 
-/// Optional Tasks feature. Two tables rather than a JSON blob in `settings`:
-/// tasks are user-authored data that grows without bound and is queried by list
-/// and by linked thread, which a blob can serve neither cheaply nor safely.
-/// `json` is the usual catch-all, so subtasks or recurrence can arrive later
-/// without a migration.
+/// Optional Tasks feature. Two tables rather than a JSON blob in `settings`: tasks are
+/// user-authored data that grows without bound and is queried by list and by linked thread, which a
+/// blob can serve neither cheaply nor safely. `json` is the usual catch-all, so subtasks or
+/// recurrence can arrive later without a migration.
 pub(in crate::store) const TASKS_DDL: &str = "
 CREATE TABLE IF NOT EXISTS task_lists (
   id         TEXT PRIMARY KEY,

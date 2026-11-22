@@ -108,12 +108,12 @@ fn kept_threads(
     Ok(kept)
 }
 
-/// The reader's own Sent mail that belonged to the conversation just deleted
-/// from `folder`, grouped by mailbox. `thread_key` is a root thread key (with
-/// `subject` naming its branch) or a sender row's key.
+/// The reader's own Sent mail that belonged to the conversation just deleted from `folder`, grouped by mailbox.
 ///
-/// Only conversations with no kept mail left count: a reply whose conversation
-/// still has mail filed in another folder stays part of that conversation.
+/// `thread_key` is a root thread key (with `subject` naming its branch) or a sender row's key.
+///
+/// Only conversations with no kept mail left count: a reply whose conversation still has mail filed
+/// in another folder stays part of that conversation.
 fn own_replies_of_deleted(
     conn: &Connection,
     account: &str,

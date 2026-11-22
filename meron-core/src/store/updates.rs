@@ -211,11 +211,10 @@ pub fn update_thread_starred(
     Ok(())
 }
 
-/// Collapse multiple cached draft autosave rows in a conversation to the newest
-/// one for display. This is intentionally render-time only: old builds could
-/// mint different Message-IDs for the same quick-reply draft, so Message-ID
-/// dedupe alone cannot hide them, but deleting by thread would be too broad for
-/// a cache repair.
+/// Collapse multiple cached draft autosave rows in a conversation to the newest one for display.
+/// This is intentionally render-time only: old builds could mint different Message-IDs for the same
+/// quick-reply draft, so Message-ID dedupe alone cannot hide them, but deleting by thread would be
+/// too broad for a cache repair.
 pub fn collapse_thread_draft_headers(
     conn: &Connection,
     account: &str,
@@ -255,11 +254,10 @@ pub fn collapse_thread_draft_headers(
         .collect())
 }
 
-/// Delete every locally cached row in `folder` sharing a Message-ID with any of
-/// `uids`. The thread read collapses same-Message-ID copies into one bubble, so
-/// discarding the visible draft must also drop hidden stale autosave siblings —
-/// otherwise the thread card keeps reporting `has_draft`. Call before
-/// `delete_messages_by_uid` (it reads the rows to get their ids).
+/// Delete every locally cached row in `folder` sharing a Message-ID with any of `uids`. The thread
+/// read collapses same-Message-ID copies into one bubble, so discarding the visible draft must also
+/// drop hidden stale autosave siblings — otherwise the thread card keeps reporting `has_draft`.
+/// Call before `delete_messages_by_uid` (it reads the rows to get their ids).
 pub fn delete_draft_sibling_copies(
     conn: &Connection,
     account: &str,
@@ -284,11 +282,10 @@ pub fn delete_draft_sibling_copies(
     Ok(deleted)
 }
 
-/// Remove locally cached copies of a draft (matched by its stable Message-ID),
-/// optionally keeping one UID — the copy that survived the server-side
-/// replace/prune. Autosaves APPEND under a fresh UID each time, so without this
-/// the expunged prior copy lingers locally as a duplicate until the next full
-/// Drafts sync.
+/// Remove locally cached copies of a draft (matched by its stable Message-ID), optionally keeping
+/// one UID — the copy that survived the server-side replace/prune. Autosaves APPEND under a fresh
+/// UID each time, so without this the expunged prior copy lingers locally as a duplicate until the
+/// next full Drafts sync.
 pub fn delete_draft_copies(
     conn: &Connection,
     account: &str,

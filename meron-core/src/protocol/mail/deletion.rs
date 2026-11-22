@@ -246,12 +246,12 @@ pub(crate) fn delete_mobile_thread(data_dir: &str, params: &Value) -> Result<Val
     })
 }
 
-/// A bulk Delete: `items` holds the params of one `mail.delete` per picked
-/// conversation. Each runs as that single delete, all together as one bulk
-/// run, so their server steps are done once for all of them (see
-/// [`crate::engine::bulk`]). `results` answers each item in order: the single
-/// delete's result, or `{ "error": "…" }`: the message as plain text, so the
-/// answer as a whole does not read as a failed command.
+/// A bulk Delete: `items` holds the params of one `mail.delete` per picked conversation.
+///
+/// Each runs as that single delete, all together as one bulk run, so their server steps are done
+/// once for all of them (see [`crate::engine::bulk`]). `results` answers each item in order: the
+/// single delete's result, or `{ "error": "…" }`: the message as plain text, so the answer as a
+/// whole does not read as a failed command.
 pub(crate) fn delete_mobile_threads(data_dir: &str, params: &Value) -> Result<Value, String> {
     let items = params
         .get("items")

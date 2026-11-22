@@ -20,13 +20,25 @@ fn search_messages_matches_subject_sender_and_body_case_insensitively() {
     insert_message(&conn, 4, "Other", "No Match", "other@example.com", None);
 
     let subject = search_messages(&conn, "acct", "INBOX", "quarterly", 10, None).unwrap();
-    assert_eq!(subject.iter().map(|m| m.uid).collect::<Vec<_>>(), vec![1]);
+    assert_eq!(
+        subject
+            .iter()
+            .map(|message| message.uid)
+            .collect::<Vec<_>>(),
+        vec![1]
+    );
 
     let sender = search_messages(&conn, "acct", "INBOX", "launch", 10, None).unwrap();
-    assert_eq!(sender.iter().map(|m| m.uid).collect::<Vec<_>>(), vec![2]);
+    assert_eq!(
+        sender.iter().map(|message| message.uid).collect::<Vec<_>>(),
+        vec![2]
+    );
 
     let body = search_messages(&conn, "acct", "INBOX", "DEPLOY", 10, None).unwrap();
-    assert_eq!(body.iter().map(|m| m.uid).collect::<Vec<_>>(), vec![3]);
+    assert_eq!(
+        body.iter().map(|message| message.uid).collect::<Vec<_>>(),
+        vec![3]
+    );
 }
 
 #[test]
@@ -131,11 +143,17 @@ fn search_messages_matches_substrings_including_cjk() {
 
     // Mid-word Latin substring (trigram, >= 3 chars).
     let latin = search_messages(&conn, "acct", "INBOX", "arter", 10, None).unwrap();
-    assert_eq!(latin.iter().map(|m| m.uid).collect::<Vec<_>>(), vec![1]);
+    assert_eq!(
+        latin.iter().map(|message| message.uid).collect::<Vec<_>>(),
+        vec![1]
+    );
 
     // CJK substring with no surrounding word breaks (>= 3 chars -> FTS).
     let cjk = search_messages(&conn, "acct", "INBOX", "会议通", 10, None).unwrap();
-    assert_eq!(cjk.iter().map(|m| m.uid).collect::<Vec<_>>(), vec![2]);
+    assert_eq!(
+        cjk.iter().map(|message| message.uid).collect::<Vec<_>>(),
+        vec![2]
+    );
 
     let miss = search_messages(&conn, "acct", "INBOX", "zzz", 10, None).unwrap();
     assert!(miss.is_empty());
@@ -150,7 +168,10 @@ fn search_messages_short_query_falls_back_to_like() {
     insert_message(&conn, 2, "Other", "Aki", "aki@example.com", None);
 
     let hit = search_messages(&conn, "acct", "INBOX", "上海", 10, None).unwrap();
-    assert_eq!(hit.iter().map(|m| m.uid).collect::<Vec<_>>(), vec![1]);
+    assert_eq!(
+        hit.iter().map(|message| message.uid).collect::<Vec<_>>(),
+        vec![1]
+    );
 }
 
 #[test]
@@ -163,9 +184,15 @@ fn search_messages_short_query_folds_non_ascii_case() {
     insert_message(&conn, 3, "Other", "Aki", "aki@example.com", None);
 
     let hit = search_messages(&conn, "acct", "INBOX", "ок", 10, None).unwrap();
-    assert_eq!(hit.iter().map(|m| m.uid).collect::<Vec<_>>(), vec![1]);
+    assert_eq!(
+        hit.iter().map(|message| message.uid).collect::<Vec<_>>(),
+        vec![1]
+    );
     let hit = search_messages(&conn, "acct", "INBOX", "ét", 10, None).unwrap();
-    assert_eq!(hit.iter().map(|m| m.uid).collect::<Vec<_>>(), vec![2]);
+    assert_eq!(
+        hit.iter().map(|message| message.uid).collect::<Vec<_>>(),
+        vec![2]
+    );
 }
 
 #[test]
@@ -186,7 +213,10 @@ fn search_messages_reindexes_on_body_update() {
     .unwrap();
 
     let hit = search_messages(&conn, "acct", "INBOX", "deploy", 10, None).unwrap();
-    assert_eq!(hit.iter().map(|m| m.uid).collect::<Vec<_>>(), vec![1]);
+    assert_eq!(
+        hit.iter().map(|message| message.uid).collect::<Vec<_>>(),
+        vec![1]
+    );
 }
 
 #[test]
@@ -219,7 +249,7 @@ fn search_messages_matches_to_and_cc_recipients() {
     for query in ["Ann Baker", "ann@example", "ops@example", "an"] {
         let hits = search_messages(&conn, "acct", "Sent", query, 10, None).unwrap();
         assert_eq!(
-            hits.iter().map(|m| m.uid).collect::<Vec<_>>(),
+            hits.iter().map(|message| message.uid).collect::<Vec<_>>(),
             vec![1],
             "query: {query}"
         );
@@ -248,8 +278,8 @@ fn search_messages_applies_gmail_style_operators() {
         }],
         ..Default::default()
     };
-    let day = |y, m, d| {
-        chrono::NaiveDate::from_ymd_opt(y, m, d)
+    let day = |y, message, date| {
+        chrono::NaiveDate::from_ymd_opt(y, message, date)
             .unwrap()
             .and_hms_opt(12, 0, 0)
             .unwrap()
@@ -273,7 +303,7 @@ fn search_messages_applies_gmail_style_operators() {
         search_messages(&conn, "acct", "INBOX", query, 10, None)
             .unwrap()
             .iter()
-            .map(|m| m.uid)
+            .map(|message| message.uid)
             .collect::<Vec<_>>()
     };
     assert_eq!(uids("from:a@b.c"), [2, 1]);
@@ -326,7 +356,10 @@ fn search_messages_keeps_indexed_recipients_through_a_flag_only_resync() {
     .unwrap();
 
     let hits = search_messages(&conn, "acct", "INBOX", "ann@example", 10, None).unwrap();
-    assert_eq!(hits.iter().map(|m| m.uid).collect::<Vec<_>>(), vec![1]);
+    assert_eq!(
+        hits.iter().map(|message| message.uid).collect::<Vec<_>>(),
+        vec![1]
+    );
 }
 
 #[test]
@@ -347,7 +380,10 @@ fn migration_indexes_recipients_already_cached_before_v6() {
     db::run_migrations(&conn).unwrap();
 
     let hits = search_messages(&conn, "acct", "Sent", "ann@example", 10, None).unwrap();
-    assert_eq!(hits.iter().map(|m| m.uid).collect::<Vec<_>>(), vec![1]);
+    assert_eq!(
+        hits.iter().map(|message| message.uid).collect::<Vec<_>>(),
+        vec![1]
+    );
 }
 
 #[test]

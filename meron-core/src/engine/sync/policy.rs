@@ -19,11 +19,10 @@ pub(in crate::engine) fn parse_background_sync_timeout(value: Option<&str>) -> D
         .unwrap_or(Duration::from_secs(DEFAULT_BACKGROUND_SYNC_TIMEOUT_SECS))
 }
 
-/// Per-folder sync budget, shared by background syncs and each piggybacked
-/// companion sync so one slow mailbox can't hold the post-sync tail (and the
-/// emit that follows it) indefinitely. The 30s default suits direct IMAP
-/// servers; slow gateways (e.g. DavMail bridging Exchange EWS) can need more,
-/// so it can be overridden with `MERON_SYNC_TIMEOUT` (seconds, up to one day).
+/// Per-folder sync budget, shared by background syncs and each piggybacked companion sync so one
+/// slow mailbox can't hold the post-sync tail (and the emit that follows it) indefinitely. The 30s
+/// default suits direct IMAP servers; slow gateways (e.g. DavMail bridging Exchange EWS) can need
+/// more, so it can be overridden with `MERON_SYNC_TIMEOUT` (seconds, up to one day).
 pub fn background_sync_timeout() -> Duration {
     static TIMEOUT: std::sync::OnceLock<Duration> = std::sync::OnceLock::new();
     *TIMEOUT.get_or_init(|| {
@@ -32,11 +31,10 @@ pub fn background_sync_timeout() -> Duration {
     })
 }
 
-/// The companion mailboxes (Sent, then Drafts) to piggyback onto a sync of
-/// another folder, each paired with its role label for the caller's logs.
-/// Callers resolve the names via `cached_sent_folder`/`cached_drafts_folder`,
-/// which already exclude the folder being synced; this only guards against the
-/// two roles resolving to the same mailbox.
+/// The companion mailboxes (Sent, then Drafts) to piggyback onto a sync of another folder, each
+/// paired with its role label for the caller's logs. Callers resolve the names via
+/// `cached_sent_folder`/`cached_drafts_folder`, which already exclude the folder being synced; this
+/// only guards against the two roles resolving to the same mailbox.
 pub(in crate::engine) fn companion_folders(
     sent: Option<String>,
     drafts: Option<String>,
@@ -146,11 +144,10 @@ fn archive_companion(
 /// Most archive-mailbox copies [`fetch_uncached_marked`] reads in one batch.
 const UNCACHED_MARKED_CAP: usize = 200;
 
-/// Archive-mailbox copies whose mark names a Meron folder here but which the
-/// sync didn't cache: read in batches of [`UNCACHED_MARKED_CAP`] (newest
-/// first), stored, and their marks acted on. Answers whether every one was
-/// read; when not, the sync keeps its old CONDSTORE position, so the next one
-/// reports the rest again. Logged.
+/// Archive-mailbox copies whose mark names a Meron folder here but which the sync didn't cache:
+/// read in batches of [`UNCACHED_MARKED_CAP`] (newest first), stored, and their marks acted on.
+/// Answers whether every one was read; when not, the sync keeps its old CONDSTORE position, so the
+/// next one reports the rest again. Logged.
 pub(super) async fn fetch_uncached_marked(
     engine: &Arc<Engine>,
     account: &str,

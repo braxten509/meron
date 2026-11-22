@@ -5,11 +5,10 @@
 
 use super::*;
 
-/// Parse an email `Date` header to Unix epoch seconds, returning 0 when it is
-/// empty or unparseable. Mail dates are RFC 2822 (the IMAP envelope and the
-/// `Date:` header both use it); RFC 3339/ISO is accepted as a fallback for the
-/// occasional non-conformant sender. Storing an epoch lets the DB sort by date
-/// directly and the frontend format it in local time.
+/// Parse an email `Date` header to Unix epoch seconds, returning 0 when it is empty or unparseable.
+/// Mail dates are RFC 2822 (the IMAP envelope and the `Date:` header both use it); RFC 3339/ISO is
+/// accepted as a fallback for the occasional non-conformant sender. Storing an epoch lets the DB
+/// sort by date directly and the frontend format it in local time.
 pub fn parse_date_to_epoch(raw: &str) -> i64 {
     let raw = raw.trim();
     if raw.is_empty() {
@@ -24,16 +23,14 @@ pub fn parse_date_to_epoch(raw: &str) -> i64 {
     0
 }
 
-/// The envelope of an outgoing message, as much of it as identifies the copy
-/// the server files in Sent. Headers only: the body — and the megabytes of
-/// attachments behind it — is never parsed.
+/// The envelope of an outgoing message, as much of it as identifies the copy the server files in Sent.
 ///
-/// It exists because the `Message-ID` we sent is not always the one that comes
-/// back (Proton Bridge replaces it with an id of its own,
-/// `@protonmail.internalid`), so recognising our own copy has to fall back to
-/// what the provider does keep: same sender, same subject, same recipients,
-/// sent at about the same moment. The reader pairs optimistic bubbles to server
-/// copies by the same rule.
+/// Headers only: the body — and the megabytes of attachments behind it — is never parsed.
+///
+/// It exists because the `Message-ID` we sent is not always the one that comes back (Proton Bridge
+/// replaces it with an id of its own, `@protonmail.internalid`), so recognising our own copy has to
+/// fall back to what the provider does keep: same sender, same subject, same recipients, sent at
+/// about the same moment. The reader pairs optimistic bubbles to server copies by the same rule.
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct SentEnvelope {
     /// Normalized `Message-ID`, blank when it could not be read.

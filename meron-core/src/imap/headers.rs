@@ -206,11 +206,10 @@ pub(super) async fn supports_gmail_ext(session: &mut Session) -> bool {
     }
 }
 
-/// Whether the server advertises CONDSTORE (RFC 7162), i.e. accepts
-/// `SELECT ... (CONDSTORE)` and `FETCH ... (CHANGEDSINCE n)`. Absent it, the
-/// flag reconciliation in [`sync_flags`] must not be attempted at all: a server
-/// that rejects the parameter without a properly tagged response leaves the
-/// connection unusable (see the note there).
+/// Whether the server advertises CONDSTORE (RFC 7162), i.e. accepts `SELECT ... (CONDSTORE)` and
+/// `FETCH ... (CHANGEDSINCE n)`. Absent it, the flag reconciliation in [`sync_flags`] must not be
+/// attempted at all: a server that rejects the parameter without a properly tagged response leaves
+/// the connection unusable (see the note there).
 pub(super) async fn supports_condstore(session: &mut Session) -> bool {
     match capabilities_once(session).await {
         Ok(caps) => caps.has_str("CONDSTORE"),
@@ -244,11 +243,11 @@ pub(super) fn thread_key(
     format!("uid:{uid}")
 }
 
-/// Strip angle brackets and whitespace from an RFC Message-ID, preserving the
-/// original casing. Message-IDs are case-sensitive opaque tokens (RFC 5322) and
-/// this value is echoed back on the wire in reply `In-Reply-To`/`References`
-/// headers, where a case change breaks the recipient's threading (e.g. Gmail
-/// matches ids byte-for-byte). Store lookups that compare ids wrap both sides
+/// Strip angle brackets and whitespace from an RFC Message-ID, preserving the original casing.
+///
+/// Message-IDs are case-sensitive opaque tokens (RFC 5322) and this value is echoed back on the
+/// wire in reply `In-Reply-To`/`References` headers, where a case change breaks the recipient's
+/// threading (e.g. Gmail matches ids byte-for-byte). Store lookups that compare ids wrap both sides
 /// in `lower()` instead.
 pub(super) fn normalize_message_id(value: &str) -> String {
     if let Some(start) = value.find('<')

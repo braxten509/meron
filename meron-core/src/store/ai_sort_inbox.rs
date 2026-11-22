@@ -21,11 +21,10 @@ use crate::imap::MessageHeader;
 
 use super::AiSortCandidate;
 
-/// Whether `folder` of `account` is one AI sorting watches besides the Inbox: a
-/// plain mail folder. Sent, Drafts, Trash, Junk, Archive and All Mail are left
-/// alone, as are Gmail's own folders (Important, Starred, All Mail…) and local
-/// folders. The AI's own server targets are left alone too: mail a server
-/// filter put there is already where the AI would put it.
+/// Whether `folder` of `account` is one AI sorting watches besides the Inbox: a plain mail folder.
+/// Sent, Drafts, Trash, Junk, Archive and All Mail are left alone, as are Gmail's own folders
+/// (Important, Starred, All Mail…) and local folders. The AI's own server targets are left alone
+/// too: mail a server filter put there is already where the AI would put it.
 pub fn ai_sort_watches_folder(
     conn: &Connection,
     config: &super::AiSortConfig,
@@ -420,11 +419,10 @@ pub fn ai_sort_inbox_drop_old(conn: &Connection, account: &str, now: i64) -> Res
         .execute(params![account, now, super::ai_sort_age_cutoff(now)])?)
 }
 
-/// At app start, before any list is read: stop showing old mail in the Inbox
-/// for every account ([`ai_sort_inbox_drop_old`], which otherwise only runs
-/// when a folder syncs), and the one-time release of old AI-filed Meron-folder
-/// conversations ([`super::meron_release_old_ai_entries`]). Best effort: a
-/// failure is logged and the app goes on.
+/// At app start, before any list is read: stop showing old mail in the Inbox for every account
+/// ([`ai_sort_inbox_drop_old`], which otherwise only runs when a folder syncs), and the one-time
+/// release of old AI-filed Meron-folder conversations ([`super::meron_release_old_ai_entries`]).
+/// Best effort: a failure is logged and the app goes on.
 pub fn tidy_at_start(conn: &Connection) {
     let now = super::now_unix();
     let accounts: Result<Vec<String>> = (|| {

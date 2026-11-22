@@ -267,14 +267,13 @@ pub fn task(conn: &Connection, id: &str) -> Result<Option<Task>> {
     Ok(conn.query_row(&sql, params![id], read_task).optional()?)
 }
 
-/// Every task linked to a thread, so a mail surface can show "already in Tasks"
-/// without loading a list.
+/// Every task linked to a thread, so a mail surface can show "already in Tasks" without loading a list.
 ///
 /// A task keeps the thread id it was filed with, and that id names the folder
-/// (`account#folder#key`). Mail that was archived or moved since is still the
-/// same conversation, so a `t.` thread key — derived from the messages, not the
-/// mailbox — matches in any folder of the same account. A `uid` key is a
-/// per-folder IMAP UID and only ever matches exactly.
+/// (`account#folder#key`). Mail that was archived or moved since is still the same conversation, so
+/// a `t.` thread key — derived from the messages, not the mailbox — matches in any folder of the
+/// same account. A `uid` key is a per-folder IMAP UID and only ever matches exactly.
+///
 /// Open tasks due in `[from, to)`, soonest first, for the calendar.
 pub fn tasks_due_between(conn: &Connection, from: i64, to: i64) -> Result<Vec<Task>> {
     let sql = format!(

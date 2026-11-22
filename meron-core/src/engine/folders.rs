@@ -7,12 +7,12 @@ use crate::{imap, store};
 
 use super::*;
 
-/// Pick the folder filling a special-use role from a cached folder list. The
-/// server-advertised RFC 6154 attribute (recorded by the folder LIST sync)
-/// wins when present; folders synced before the attribute was recorded — or
-/// servers without the extension — fall back to the name heuristic. `exclude`
-/// (the folder currently being synced/viewed) never matches, so callers don't
-/// handle the same folder twice.
+/// Pick the folder filling a special-use role from a cached folder list.
+///
+/// The server-advertised RFC 6154 attribute (recorded by the folder LIST sync) wins when present;
+/// folders synced before the attribute was recorded — or servers without the extension — fall back
+/// to the name heuristic. `exclude` (the folder currently being synced/viewed) never matches, so
+/// callers don't handle the same folder twice.
 pub(super) fn find_role_folder(
     folders: Vec<imap::Folder>,
     special_use: &str,

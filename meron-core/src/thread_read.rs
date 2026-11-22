@@ -1,9 +1,11 @@
-//! Shared thread reading for both frontends. Desktop (`messages.thread` in the
-//! sidecar) and mobile (`mail.threadRead` over FFI) resolve a thread the same
-//! way: select and paginate its headers, serve message bodies cache-first, pull
-//! the newest uncached body inline, hand older gaps to a deduped background
-//! fetch, and shape the final bridge-ready message JSON. Platform callers only
-//! parse their own id formats and decide how a finished background fetch is
+//! Shared thread reading for both frontends.
+//!
+//! Desktop (`messages.thread` in the sidecar) and mobile (`mail.threadRead` over FFI) resolve a
+//! thread the same way: select and paginate its headers, serve message bodies cache-first, pull the
+//! newest uncached body inline, hand older gaps to a deduped background fetch, and shape the final
+//! bridge-ready message JSON.
+//!
+//! Platform callers only parse their own id formats and decide how a finished background fetch is
 //! announced (sidecar event vs FFI event callback).
 
 use std::collections::{BTreeMap, BTreeSet, HashSet};
@@ -37,11 +39,9 @@ pub struct ThreadReadArgs<'a> {
     pub limit: Option<u32>,
     /// Bounded best-effort body fetch for printing; never fail for missing bodies.
     pub for_print: bool,
-    /// Opaque cursor from a previous page's `next_cursor`: `message:<base64
-    /// folder>:<uid>`, since UIDs are only unique within one mailbox. Legacy
-    /// `uid:N` cursors are still accepted, but match on UID alone and so can
-    /// resolve to the wrong message in a cross-folder thread — never hand-build
-    /// one.
+    /// Opaque cursor from a previous page's `next_cursor`: `message:<base64 folder>:<uid>`, since UIDs
+    /// are only unique within one mailbox. Legacy `uid:N` cursors are still accepted, but match on UID
+    /// alone and so can resolve to the wrong message in a cross-folder thread — never hand-build one.
     pub before_cursor: Option<&'a str>,
     /// Attachment/media directory (env-derived on desktop, `data_dir` on mobile).
     pub media_root: PathBuf,
@@ -180,11 +180,10 @@ pub async fn read_thread_page(
     read_thread_page_inner(engine, args, on_bodies_fetched, false).await
 }
 
-/// [`read_thread_page`] for a reader that scrolls back through the thread a page
-/// at a time (mobile, which stores envelopes only): a UI page also starts
-/// downloading the bodies of the page before it, so that page is readable by
-/// the time the reader scrolls up to it rather than arriving as placeholders
-/// that fill in, and grow, under their finger.
+/// [`read_thread_page`] for a reader that scrolls back through the thread a page at a time (mobile,
+/// which stores envelopes only): a UI page also starts downloading the bodies of the page before
+/// it, so that page is readable by the time the reader scrolls up to it rather than arriving as
+/// placeholders that fill in, and grow, under their finger.
 pub async fn read_thread_page_with_lookahead(
     engine: &Arc<Engine>,
     args: ThreadReadArgs<'_>,
@@ -620,12 +619,10 @@ fn pending_body_recovery(
         .collect()
 }
 
-/// Cached messages whose attachment files are not on disk: pruned, never
-/// written, or cached before their keys were kept.
+/// Cached messages whose attachment files are not on disk: pruned, never written, or cached before their keys were kept.
 ///
-/// A message is left out while its recovery is on hold (see
-/// `Engine::media_recovery_hold`), so the reader is not notified and asked
-/// again for as long as the thread stays open.
+/// A message is left out while its recovery is on hold (see `Engine::media_recovery_hold`), so the
+/// reader is not notified and asked again for as long as the thread stays open.
 fn messages_missing_media(
     hold: &MediaRecoveryHold,
     account: &str,

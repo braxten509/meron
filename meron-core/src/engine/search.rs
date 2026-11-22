@@ -9,12 +9,12 @@ use crate::{imap, store};
 
 use super::*;
 
-/// Live hits fetched per batch, newest first by date across the searched
-/// folders. IMAP SEARCH answers with the full UID set, and a short or common
-/// query ("a", "re") matches most of a mailbox; fetching every header before
-/// painting the first page turned one keystroke into a whole-mailbox download.
-/// The rest of the set is kept with the snapshot and fetched a batch at a time
-/// as paging reaches it.
+/// Live hits fetched per batch, newest first by date across the searched folders.
+///
+/// IMAP SEARCH answers with the full UID set, and a short or common query ("a", "re") matches most
+/// of a mailbox; fetching every header before painting the first page turned one keystroke into a
+/// whole-mailbox download. The rest of the set is kept with the snapshot and fetched a batch at a
+/// time as paging reaches it.
 const LIVE_SEARCH_BATCH: usize = 500;
 
 /// Most cached-only hits one batch appends to a snapshot. Paging past a snapshot
@@ -22,18 +22,19 @@ const LIVE_SEARCH_BATCH: usize = 500;
 /// shares.
 const SEARCH_SNAPSHOT_MAX: u32 = 2_000;
 
-/// Search `account` for `query` across each of `folders` (typically Inbox +
-/// Sent), merging the cached and live-IMAP hits. UIDs are folder-scoped, so
-/// results are keyed by (folder, uid) and ordered newest-first by date — the
-/// only ordering comparable across mailboxes. Each returned header carries its
-/// source `folder` so the bridge can build per-message thread IDs correctly.
+/// Search `account` for `query` across each of `folders` (typically Inbox + Sent), merging the cached and live-IMAP hits.
 ///
-/// A first page resolves the date of every server hit (from the cache where it
-/// can, else a Date-only FETCH), records them with a snapshot, fetches the
-/// newest batch by date, and persists the resolved order. Later pages walk the
-/// snapshot, fetching further batches when they reach its end, so a
-/// sender-controlled Date header cannot move a low UID behind an already-issued
-/// cursor and transient disconnects do not invalidate an in-progress search.
+/// UIDs are folder-scoped, so results are keyed by (folder, uid) and ordered newest-first by date —
+/// the only ordering comparable across mailboxes. Each returned header carries its source `folder`
+/// so the bridge can build per-message thread IDs correctly.
+///
+/// A first page resolves the date of every server hit (from the cache where it can, else a
+/// Date-only FETCH), records them with a snapshot, fetches the newest batch by date, and persists
+/// the resolved order.
+///
+/// Later pages walk the snapshot, fetching further batches when they reach its end, so a
+/// sender-controlled Date header cannot move a low UID behind an already-issued cursor and
+/// transient disconnects do not invalidate an in-progress search.
 pub struct SearchMailPage {
     pub messages: Vec<imap::MessageHeader>,
     pub next_cursor: Option<String>,
@@ -310,11 +311,10 @@ async fn per_folder_live<T: Send + 'static>(
     Some(successes)
 }
 
-/// Fetch the snapshot's next batch of server hits and append it, together with
-/// the cached-only hits it covers, in date order. `Ok(false)` means no pending
-/// hit could be placed (every folder's fetch failed, or those that failed hold
-/// the newest hits), so no progress was made; `Ok(true)` with `incomplete` set
-/// means some folder failed and keeps its pending hits for a later retry.
+/// Fetch the snapshot's next batch of server hits and append it, together with the cached-only hits
+/// it covers, in date order. `Ok(false)` means no pending hit could be placed (every folder's fetch
+/// failed, or those that failed hold the newest hits), so no progress was made; `Ok(true)` with
+/// `incomplete` set means some folder failed and keeps its pending hits for a later retry.
 async fn append_search_batch(
     engine: &Arc<Engine>,
     account: &str,
@@ -481,27 +481,26 @@ async fn append_search_batch(
     Ok(true)
 }
 
-/// Whether a server hit really matches: outside Gmail, `has:attachment` is only
-/// approximated by SEARCH, and a hit's files are known once it is fetched.
-/// `None` means they weren't, so the hit stands. Gmail's own answer is left
-/// alone: it reads the whole query, as in `has:attachment OR from:ann`, which
-/// [`SearchQuery`] does not.
+/// Whether a server hit really matches: outside Gmail, `has:attachment` is only approximated by SEARCH, and a hit's files are known once it is fetched.
 ///
-/// A CID image counts as inline until its body is read, as for the attachments
-/// filter and the list card's paperclip. BODYSTRUCTURE can't tell one the HTML
-/// shows, and keeping them all would list every newsletter with a logo.
+/// `None` means they weren't, so the hit stands. Gmail's own answer is left alone: it reads the
+/// whole query, as in `has:attachment OR from:ann`, which [`SearchQuery`] does not.
+///
+/// A CID image counts as inline until its body is read, as for the attachments filter and the list
+/// card's paperclip. BODYSTRUCTURE can't tell one the HTML shows, and keeping them all would list
+/// every newsletter with a logo.
 pub(super) fn live_hit_matches(query: &SearchQuery, header: &imap::MessageHeader) -> bool {
     !query.has_attachment
         || header.gmail_msg_id.is_some()
         || header.files.as_ref().is_none_or(|files| !files.is_empty())
 }
 
-/// Which of a fetched `batch` can be placed, and the frontier below which
-/// nothing can be yet. Every pending hit's date is known, so the frontier is
-/// exact: the newest hit still pending, being `next` after the batch or any
-/// hit of a folder whose fetch failed (not in `fetched`). Batch hits newer than
-/// it are done; a fetched hit older than a failed folder's stays pending, to be
-/// placed after it. `None` when nothing is left pending.
+/// Which of a fetched `batch` can be placed, and the frontier below which nothing can be yet.
+///
+/// Every pending hit's date is known, so the frontier is exact: the newest hit still pending, being
+/// `next` after the batch or any hit of a folder whose fetch failed (not in `fetched`). Batch hits
+/// newer than it are done; a fetched hit older than a failed folder's stays pending, to be placed
+/// after it. `None` when nothing is left pending.
 pub(super) fn batch_placement<'a>(
     batch: &'a [store::PendingSearchHit],
     next: Option<&'a store::PendingSearchHit>,
@@ -522,12 +521,11 @@ pub(super) fn batch_placement<'a>(
     (frontier, done)
 }
 
-/// Every server hit of `searched` with its date, from the cache where the row
-/// is stored and otherwise from a Date-only FETCH. UID order follows mailbox
-/// insertion, not the Date header, so an imported or moved message can be the
-/// newest match under the lowest UID; ordering batches by date needs the whole
-/// set dated first. Hits whose date could not be had are left out and set
-/// `incomplete`.
+/// Every server hit of `searched` with its date, from the cache where the row is stored and otherwise from a Date-only FETCH.
+///
+/// UID order follows mailbox insertion, not the Date header, so an imported or moved message can be
+/// the newest match under the lowest UID; ordering batches by date needs the whole set dated first.
+/// Hits whose date could not be had are left out and set `incomplete`.
 async fn date_search_hits(
     engine: &Arc<Engine>,
     account: &str,
@@ -711,12 +709,12 @@ pub(super) fn snapshot_next_cursor(
     ))
 }
 
-/// The mailboxes a starred view reads. Gmail keeps every starred message in
-/// its Starred mailbox (special-use `\Flagged`, localized name), so that one
-/// folder answers the whole account. Failing that, All Mail holds each message
-/// exactly once; scanning every label instead listed a message once per label
-/// it carried and SELECTed every folder. Other servers flag per mailbox, so the
-/// open one is the answer.
+/// The mailboxes a starred view reads.
+///
+/// Gmail keeps every starred message in its Starred mailbox (special-use `\Flagged`, localized
+/// name), so that one folder answers the whole account. Failing that, All Mail holds each message
+/// exactly once; scanning every label instead listed a message once per label it carried and
+/// SELECTed every folder. Other servers flag per mailbox, so the open one is the answer.
 pub async fn starred_search_folders(
     engine: &Arc<Engine>,
     account: &str,
@@ -779,11 +777,10 @@ pub async fn starred_search_folders(
     vec![all_mail.unwrap_or_else(|| requested.to_string())]
 }
 
-/// Starred messages across `folders`, newest first. The cache answers at once;
-/// `refresh` asks the server for each folder's full `\Flagged` set, fetches the
-/// newest of those, and drops (and unflags) cached rows the server no longer
-/// has flagged — a star removed in another client otherwise lingered until the
-/// next flag sync.
+/// Starred messages across `folders`, newest first. The cache answers at once; `refresh` asks the
+/// server for each folder's full `\Flagged` set, fetches the newest of those, and drops (and
+/// unflags) cached rows the server no longer has flagged — a star removed in another client
+/// otherwise lingered until the next flag sync.
 pub async fn search_starred_mail_messages(
     engine: &Arc<Engine>,
     account: &str,
@@ -882,13 +879,14 @@ pub async fn search_starred_mail_messages(
     Ok(messages)
 }
 
-/// One cursor-paged page of starred mail across `folders`, newest first, for
-/// a folder's Starred filter. The first page (no cursor) with `refresh` first
-/// brings the store up to date with the server's `\Flagged` set
-/// ([`search_starred_mail_messages`] stores what it fetches); the page itself
-/// is then read from the store, where conversations in a Meron folder are left
-/// out before the LIMIT, so pages stay full and the cursor exact. Later pages
-/// are store reads (`date:<date>:<uid>` cursors).
+/// One cursor-paged page of starred mail across `folders`, newest first, for a folder's Starred filter.
+///
+/// The first page (no cursor) with `refresh` first brings the store up to date with the server's
+/// `\Flagged` set ([`search_starred_mail_messages`] stores what it fetches); the page itself is
+/// then read from the store, where conversations in a Meron folder are left out before the LIMIT,
+/// so pages stay full and the cursor exact.
+///
+/// Later pages are store reads (`date:<date>:<uid>` cursors).
 pub async fn starred_mail_page(
     engine: &Arc<Engine>,
     account: &str,

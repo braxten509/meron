@@ -1,13 +1,12 @@
 //! Tasks: the shape both frontends render.
 //!
-//! Desktop (`tasks.*` in the sidecar) and mobile (the same names over FFI) ask
-//! the same questions of the same tables, so the JSON they get back is built
-//! here rather than twice in the clients. That is the mistake kanban boards
-//! made — stored as an opaque blob and parsed once per platform — and it is not
-//! repeated.
+//! Desktop (`tasks.*` in the sidecar) and mobile (the same names over FFI) ask the same questions
+//! of the same tables, so the JSON they get back is built here rather than twice in the clients.
+//! That is the mistake kanban boards made — stored as an opaque blob and parsed once per platform —
+//! and it is not repeated.
 //!
-//! Everything is local. There is no server, no sync and no network call in this
-//! module; the only route a task takes off the device is the config backup.
+//! Everything is local. There is no server, no sync and no network call in this module; the only
+//! route a task takes off the device is the config backup.
 
 #[cfg(test)]
 mod tests;

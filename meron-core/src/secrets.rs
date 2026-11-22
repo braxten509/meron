@@ -1,10 +1,9 @@
 //! OS keychain storage for per-account secrets (IMAP password + OAuth tokens).
 //!
-//! Secrets live in the platform keychain — Keychain on macOS, Credential Manager
-//! on Windows, and the Secret Service (D-Bus, e.g. gnome-keyring) on native Linux.
-//! Inside Flatpak, oo7 uses the Secret portal to encrypt an app-private keyring.
-//! One entry per account holds a JSON blob; non-secret connection metadata (host,
-//! port, user, ...) stays in SQLite.
+//! Secrets live in the platform keychain — Keychain on macOS, Credential Manager on Windows, and
+//! the Secret Service (D-Bus, e.g. gnome-keyring) on native Linux. Inside Flatpak, oo7 uses the
+//! Secret portal to encrypt an app-private keyring. One entry per account holds a JSON blob;
+//! non-secret connection metadata (host, port, user, ...) stays in SQLite.
 
 use anyhow::{Context, Result};
 use keyring::Entry;
@@ -467,11 +466,10 @@ fn with_service_fallback<T>(
     }
 }
 
-/// The SQLCipher key for the local store (64 hex chars = a raw 32-byte key),
-/// created and persisted in the OS keychain on first use.
+/// The SQLCipher key for the local store (64 hex chars = a raw 32-byte key), created and persisted in the OS keychain on first use.
 ///
-/// Returns `Ok(None)` when the keychain is disabled (`MERON_KEYRING=off`,
-/// tests/headless), so the store falls back to plaintext exactly as before.
+/// Returns `Ok(None)` when the keychain is disabled (`MERON_KEYRING=off`, tests/headless), so the
+/// store falls back to plaintext exactly as before.
 pub fn db_key() -> Result<Option<String>> {
     if keyring_disabled() {
         return Ok(None);

@@ -1,25 +1,24 @@
 //! Meron folders: folders that exist only on this device (and its backup).
 //!
-//! A conversation put in one is an *entry* (`meron_folder_entries`). The entry
-//! finds its messages through *aliases* (`meron_folder_aliases`): the
-//! conversation's thread root key (`lower(COALESCE(thread_key, ''))`, the
-//! expression of `messages_thread_key_idx`) and every member message's tag key
-//! ([`super::tags::TAG_KEY_SQL`]: its Message-ID, or `uid:<folder>:<uid>` for
-//! mail without one, the expression of `messages_tag_key_idx`). A message is in
-//! a Meron folder when either of its two keys is an alias; both checks are
-//! primary-key probes. Listing a folder joins from the aliases into `messages`
-//! over the same two indexes.
+//! A conversation put in one is an *entry* (`meron_folder_entries`).
 //!
-//! The entry follows its conversation: [`meron_adopt`] runs inside every
-//! `upsert_messages`, over the rows it wrote and the rows thread
-//! reconciliation re-keyed, and adds aliases for any row one of whose keys is
-//! already an alias. Message-ID aliases don't depend on cached rows, so they
+//! The entry finds its messages through *aliases* (`meron_folder_aliases`): the conversation's
+//! thread root key (`lower(COALESCE(thread_key, ''))`, the expression of `messages_thread_key_idx`)
+//! and every member message's tag key ([`super::tags::TAG_KEY_SQL`]: its Message-ID, or
+//! `uid:<folder>:<uid>` for mail without one, the expression of `messages_tag_key_idx`).
+//!
+//! A message is in a Meron folder when either of its two keys is an alias; both checks are
+//! primary-key probes. Listing a folder joins from the aliases into `messages` over the same two
+//! indexes.
+//!
+//! The entry follows its conversation: [`meron_adopt`] runs inside every `upsert_messages`, over
+//! the rows it wrote and the rows thread reconciliation re-keyed, and adds aliases for any row one
+//! of whose keys is already an alias. Message-ID aliases don't depend on cached rows, so they
 //! survive a UIDVALIDITY reset's delete and reinsert.
 //!
-//! `meron_folder_uids` remembers the UIDs of member messages so the unread
-//! counts can leave out server-unseen mail the cache doesn't hold. Cache
-//! eviction never deletes from it; release does, and a UIDVALIDITY reset of
-//! that folder.
+//! `meron_folder_uids` remembers the UIDs of member messages so the unread counts can leave out
+//! server-unseen mail the cache doesn't hold. Cache eviction never deletes from it; release does,
+//! and a UIDVALIDITY reset of that folder.
 //!
 //! Nothing here touches the mail server.
 
@@ -441,13 +440,11 @@ pub struct MeronMember {
     pub tag_key: String,
 }
 
-/// The member rows of the entries `filter` (a condition on `e`, the entry)
-/// picks: a UNION of the two indexed joins from the aliases into `messages`.
+/// The member rows of the entries `filter` (a condition on `e`, the entry) picks: a UNION of the two indexed joins from the aliases into `messages`.
 ///
-/// `+al.key` strips the column's TEXT affinity: compared with it as is, the
-/// expression side would take that affinity, and SQLite only uses an
-/// expression index (which has none) for a comparison without one, so it
-/// scanned `messages`. CROSS JOIN keeps the order entries → aliases → mail.
+/// `+al.key` strips the column's TEXT affinity: compared with it as is, the expression side would
+/// take that affinity, and SQLite only uses an expression index (which has none) for a comparison
+/// without one, so it scanned `messages`. CROSS JOIN keeps the order entries → aliases → mail.
 fn members(
     conn: &Connection,
     filter: &str,
@@ -1428,11 +1425,10 @@ const OLD_AI_ENTRIES_DONE_KEY: &str = "meron_old_ai_entries_released";
 /// one transaction.
 const AI_FILED_WINDOW_SECS: i64 = 1;
 
-/// Once per store: find the Meron-folder entries AI sorting filed (before
-/// `source` existed) and mark them `source = 'ai'`; release those whose
-/// newest dated message is past [`super::AI_SORT_MAX_AGE_DAYS`] and none of
-/// whose messages is in the Inbox. Hand-filed entries are never touched. One
-/// transaction. Returns how many were released.
+/// Once per store: find the Meron-folder entries AI sorting filed (before `source` existed) and
+/// mark them `source = 'ai'`; release those whose newest dated message is past
+/// [`super::AI_SORT_MAX_AGE_DAYS`] and none of whose messages is in the Inbox. Hand-filed entries
+/// are never touched. One transaction. Returns how many were released.
 pub fn meron_release_old_ai_entries(conn: &Connection, now: i64) -> Result<usize> {
     if super::db::meta_get(conn, OLD_AI_ENTRIES_DONE_KEY)?.is_some() {
         return Ok(0);
@@ -1768,11 +1764,10 @@ fn uid_is_member(
         .exists(params![account, folder, uid, entry_id])?)
 }
 
-/// Before a built-in Archive entry is released inside an upsert: queue the
-/// unmark of its cached copies in the Inbox and the archive mailbox (see
-/// [`crate::meron_marks::queue_archive_unmark`]). All of them, not only those
-/// this device marked: mail moved back by another app keeps the Archive's
-/// mark, which this device never remembered.
+/// Before a built-in Archive entry is released inside an upsert: queue the unmark of its cached
+/// copies in the Inbox and the archive mailbox (see [`crate::meron_marks::queue_archive_unmark`]).
+/// All of them, not only those this device marked: mail moved back by another app keeps the
+/// Archive's mark, which this device never remembered.
 fn queue_archive_entry_unmarks(conn: &Connection, account: &str, entry_id: &str) -> Result<()> {
     let archive = super::meron_archive_mailbox(conn, account);
     let mut by_folder: BTreeMap<String, Vec<u32>> = BTreeMap::new();
@@ -1890,11 +1885,10 @@ pub fn meron_backup_collect(conn: &Connection) -> Result<Vec<MeronBackupFolder>>
     Ok(out)
 }
 
-/// Restore Meron folders from a backup, never over what is here: a folder
-/// whose id or name already exists is kept and the backup's conversations go
-/// into it; an alias this device already files elsewhere stays there. Entries
-/// of unknown accounts are skipped. Answers with how many folders were added
-/// and the backup id → kept id map (for AI sorting's setting).
+/// Restore Meron folders from a backup, never over what is here: a folder whose id or name already
+/// exists is kept and the backup's conversations go into it; an alias this device already files
+/// elsewhere stays there. Entries of unknown accounts are skipped. Answers with how many folders
+/// were added and the backup id → kept id map (for AI sorting's setting).
 pub fn meron_backup_restore(
     conn: &Connection,
     folders: &[MeronBackupFolder],

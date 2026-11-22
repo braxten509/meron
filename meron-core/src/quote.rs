@@ -19,12 +19,14 @@ pub const HTML_QUOTE_ATTR: &str = "data-meron-quote";
 /// Mail's and Thunderbird's `<blockquote type="cite">`, Yahoo's `yahoo_quoted`.
 const HTML_QUOTE_SELECTOR: &str = "div.gmail_quote, blockquote[type=cite i], div.yahoo_quoted";
 
-/// Where Outlook's quote starts. It writes no container: the earlier mail's
-/// headers ("From: … Sent: … Subject: …") go in a block of their own and the
-/// mail itself follows as that block's siblings, to the end of the message.
-/// Outlook on the web, the new Outlook and Outlook.com give the block an id --
-/// prefixed (`x_divRplyFwdMsg`) once it is quoted again; the Word-based desktop
-/// Outlook only rules it off with a top border (see [`is_outlook_header`]).
+/// Where Outlook's quote starts.
+///
+/// It writes no container: the earlier mail's headers ("From: … Sent: … Subject: …") go in a block
+/// of their own and the mail itself follows as that block's siblings, to the end of the message.
+///
+/// Outlook on the web, the new Outlook and Outlook.com give the block an id -- prefixed
+/// (`x_divRplyFwdMsg`) once it is quoted again; the Word-based desktop Outlook only rules it off
+/// with a top border (see [`is_outlook_header`]).
 const OUTLOOK_HEADER_SELECTOR: &str = r#"div[id$="divRplyFwdMsg"], div[style*="border-top"]"#;
 
 /// What Outlook on the web leaves on the elements the sender typed into. In a
@@ -169,11 +171,10 @@ pub fn is_forward_subject(subject: &str) -> bool {
     )
 }
 
-/// Mark the quoted tail of sanitized email HTML with [`HTML_QUOTE_ATTR`]: the
-/// quote container and the attribution line right above it, or everything from
-/// Outlook's header block on. Returns the input untouched when there is nothing
-/// to fold. `forward` is whether the mail is known to be a forward, which
-/// Outlook's markup -- the same for a reply and a forward -- does not say.
+/// Mark the quoted tail of sanitized email HTML with [`HTML_QUOTE_ATTR`]: the quote container and
+/// the attribution line right above it, or everything from Outlook's header block on. Returns the
+/// input untouched when there is nothing to fold. `forward` is whether the mail is known to be a
+/// forward, which Outlook's markup -- the same for a reply and a forward -- does not say.
 pub fn mark_html_quote(html: &str, forward: bool) -> String {
     find_and_mark_html_quote(html, forward).unwrap_or_else(|| html.to_string())
 }
@@ -305,11 +306,10 @@ fn outlook_quote(doc: &Html, header: ElementRef) -> Option<Vec<NodeId>> {
     Some(marked)
 }
 
-/// Whether `element` is the header block Outlook puts over a quoted mail. The
-/// id is Outlook's own. The desktop one has only its inline style to go by --
-/// `border:none;border-top:solid #E1E1E1 1.0pt;padding:3.0pt 0cm 0cm 0cm`, the
-/// color and the unit varying by version and locale -- so it also has to hold
-/// the header labels.
+/// Whether `element` is the header block Outlook puts over a quoted mail. The id is Outlook's own.
+/// The desktop one has only its inline style to go by --
+/// `border:none;border-top:solid #E1E1E1 1.0pt;padding:3.0pt 0cm 0cm 0cm`, the color and the unit
+/// varying by version and locale -- so it also has to hold the header labels.
 fn is_outlook_header(element: ElementRef) -> bool {
     if element
         .value()
@@ -381,11 +381,10 @@ fn mark(mut doc: Html, marked: Vec<NodeId>) -> Option<String> {
     Some(doc.root_element().inner_html())
 }
 
-/// Whether nothing the reader would see follows `node` in document order but a
-/// signature, which Gmail puts under the quote. Returns the elements after it —
-/// the signature and the empty lines around it (`<div><br></div>`, `<br>`) — to
-/// fold along with the quote, since left behind they are only blank space under
-/// the toggle; `None` when other content follows.
+/// Whether nothing the reader would see follows `node` in document order but a signature, which
+/// Gmail puts under the quote. Returns the elements after it — the signature and the empty lines
+/// around it (`<div><br></div>`, `<br>`) — to fold along with the quote, since left behind they are
+/// only blank space under the toggle; `None` when other content follows.
 fn trailing_elements(node: NodeRef<Node>) -> Option<Vec<NodeId>> {
     let mut elements = Vec::new();
     let mut current = node;

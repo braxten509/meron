@@ -1,10 +1,9 @@
 //! Modified UTF-7 for IMAP mailbox names (RFC 3501 §5.1.3).
 //!
-//! Servers that do not negotiate UTF8=ACCEPT report and accept mailbox names in
-//! this encoding, so a folder called `gds-ää-envoyés` arrives over the wire as
-//! `gds-&AOQA5A--envoy&AOk-s`. The wire form stays the canonical name everywhere
-//! (store rows, message `folder` columns, saved Kanban columns, SELECT/CREATE);
-//! only what the user reads is decoded.
+//! Servers that do not negotiate UTF8=ACCEPT report and accept mailbox names in this encoding, so a
+//! folder called `gds-ää-envoyés` arrives over the wire as `gds-&AOQA5A--envoy&AOk-s`. The wire
+//! form stays the canonical name everywhere (store rows, message `folder` columns, saved Kanban
+//! columns, SELECT/CREATE); only what the user reads is decoded.
 
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD_NO_PAD;

@@ -202,9 +202,9 @@ fn run_migrations_creates_schema_and_bumps_version() {
 
 #[test]
 fn concurrent_first_open_runs_migrations_once() {
-    let dir = std::env::temp_dir().join(format!("meron-store-test-{}", uuid::Uuid::new_v4()));
-    std::fs::create_dir_all(&dir).unwrap();
-    let path = dir.join("meron.db");
+    let directory = std::env::temp_dir().join(format!("meron-store-test-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&directory).unwrap();
+    let path = directory.join("meron.db");
     let barrier = std::sync::Arc::new(std::sync::Barrier::new(6));
     let handles = (0..6)
         .map(|_| {
@@ -227,7 +227,7 @@ fn concurrent_first_open_runs_migrations_once() {
         .unwrap();
     assert_eq!(version, db::SCHEMA_VERSION);
 
-    let _ = std::fs::remove_dir_all(dir);
+    let _ = std::fs::remove_dir_all(directory);
 }
 
 #[test]
@@ -276,9 +276,10 @@ fn schema_version_matches_the_last_migration() {
 
 #[test]
 fn encrypting_a_plaintext_store_is_announced_once_before_it_starts() {
-    let dir = std::env::temp_dir().join(format!("meron-encrypt-notify-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
-    let path = dir.join("meron.db");
+    let directory =
+        std::env::temp_dir().join(format!("meron-encrypt-notify-{}", std::process::id()));
+    std::fs::create_dir_all(&directory).unwrap();
+    let path = directory.join("meron.db");
     let _ = std::fs::remove_file(&path);
     drop(db::open_at(&path).unwrap());
     let key = "ab".repeat(32);
@@ -296,5 +297,5 @@ fn encrypting_a_plaintext_store_is_announced_once_before_it_starts() {
 
     let conn = db::open_at_notifying(&path, Some(&key), || panic!("nothing to upgrade")).unwrap();
     drop(conn);
-    std::fs::remove_dir_all(&dir).unwrap();
+    std::fs::remove_dir_all(&directory).unwrap();
 }

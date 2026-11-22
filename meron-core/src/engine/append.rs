@@ -29,29 +29,26 @@ pub fn should_append_sent_copy(
     })
 }
 
-/// The `mail.sentCopyCached` detail a host emits once the Sent copy of a message
-/// the user just sent is in the local cache — see [`SentCopy`].
+/// The `mail.sentCopyCached` detail a host emits once the Sent copy of a message the user just sent is in the local cache — see [`SentCopy`].
 ///
-/// Caching that copy changes what the thread list shows for the conversation:
-/// a card's message count spans the account's folders, so the reply is one more
-/// message behind the row. Nothing else announces it — the IDLE loop watches
-/// INBOX, where a reply the user sent usually never lands — so the list would
-/// keep its stale count until the user navigated away and back.
+/// Caching that copy changes what the thread list shows for the conversation: a card's message
+/// count spans the account's folders, so the reply is one more message behind the row. Nothing else
+/// announces it — the IDLE loop watches INBOX, where a reply the user sent usually never lands — so
+/// the list would keep its stale count until the user navigated away and back.
 ///
-/// It is its own event rather than a folderless `mail.synced` because it is not
-/// a mailbox sync finishing: the row that changed sits in whichever mailbox
-/// holds the conversation (the inbox, an archive, a label), which the sender
-/// does not know, so this says "re-read this account's cache" and names no
-/// folder. Consumers that key off a synced folder would either drop it (as
-/// unrelated to the mailbox on screen) or, worse, mistake it for the completion
-/// of a folder sync still in flight. Nor does it carry new-mail semantics: no
-/// notification or "new mail" toast fires for the user's own reply.
+/// It is its own event rather than a folderless `mail.synced` because it is not a mailbox sync
+/// finishing: the row that changed sits in whichever mailbox holds the conversation (the inbox, an
+/// archive, a label), which the sender does not know, so this says "re-read this account's cache"
+/// and names no folder.
 ///
-/// Both hosts emit it for every cached copy, immediate or awaited. The mobile
-/// hosts do reload the thread list themselves once `mail.send` returns, which
-/// covers a copy cached inside that call — but only for the mailbox and the
-/// open thread, not for the Kanban board's columns, which read the same counts
-/// and would otherwise stay a message behind.
+/// Consumers that key off a synced folder would either drop it (as unrelated to the mailbox on
+/// screen) or, worse, mistake it for the completion of a folder sync still in flight. Nor does it
+/// carry new-mail semantics: no notification or "new mail" toast fires for the user's own reply.
+///
+/// Both hosts emit it for every cached copy, immediate or awaited. The mobile hosts do reload the
+/// thread list themselves once `mail.send` returns, which covers a copy cached inside that call —
+/// but only for the mailbox and the open thread, not for the Kanban board's columns, which read the
+/// same counts and would otherwise stay a message behind.
 pub fn sent_copy_cached_detail(account: &str) -> serde_json::Value {
     serde_json::json!({ "account": account })
 }
@@ -157,20 +154,17 @@ pub(super) fn store_folder_tail(
 /// not to swallow a genuinely later reply into the same conversation.
 pub(super) const SENT_COPY_MATCH_WINDOW_SECS: i64 = 600;
 
-/// Whether `candidate`, read out of the Sent folder, is the server's copy of the
-/// message described by `sent`.
+/// Whether `candidate`, read out of the Sent folder, is the server's copy of the message described by `sent`.
 ///
-/// The id we sent answers directly when it comes back, but it does not always:
-/// Proton Bridge replaces it with an id of its own (`@protonmail.internalid`),
-/// which is why the reader pairs optimistic bubbles to server copies by
-/// envelope instead. The same rule applies here — same sender, same subject,
-/// same recipients, sent at about the same moment.
+/// The id we sent answers directly when it comes back, but it does not always: Proton Bridge
+/// replaces it with an id of its own (`@protonmail.internalid`), which is why the reader pairs
+/// optimistic bubbles to server copies by envelope instead. The same rule applies here — same
+/// sender, same subject, same recipients, sent at about the same moment.
 ///
-/// A folder-growth test would be cheaper, but it cannot tell this send's copy
-/// from anything else the folder gained: another client's send in the same
-/// seconds would end the wait early, leaving the copy the user is waiting on
-/// unannounced, and a folder with no prior state offers no baseline at all —
-/// which for a rewritten id meant the copy could be cached and never reported.
+/// A folder-growth test would be cheaper, but it cannot tell this send's copy from anything else
+/// the folder gained: another client's send in the same seconds would end the wait early, leaving
+/// the copy the user is waiting on unannounced, and a folder with no prior state offers no baseline
+/// at all — which for a rewritten id meant the copy could be cached and never reported.
 pub(super) fn sent_copy_landed(
     sent: &parse::SentEnvelope,
     candidate: &imap::MessageHeader,

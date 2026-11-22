@@ -305,14 +305,13 @@ pub async fn ai_claim_states(
     read_ai_claims(session, uids).await
 }
 
-/// Claim `uids` of `folder` for the device `id`, and answer who sorts each
-/// now (see [`AiClaimState::won_by`]). `None`, writing nothing, when the
-/// mailbox can't take new keywords: there is no claiming there.
+/// Claim `uids` of `folder` for the device `id`, and answer who sorts each now (see [`AiClaimState::won_by`]).
 ///
-/// Mail that is decided or carries a claim already is left alone. On a
-/// server with CONDSTORE the claim is written "only if nothing changed since
-/// I looked", so of two devices at the same instant the server refuses one.
-/// Elsewhere both may write; each then reads back, the smallest id wins and
+/// `None`, writing nothing, when the mailbox can't take new keywords: there is no claiming there.
+///
+/// Mail that is decided or carries a claim already is left alone. On a server with CONDSTORE the
+/// claim is written "only if nothing changed since I looked", so of two devices at the same instant
+/// the server refuses one. Elsewhere both may write; each then reads back, the smallest id wins and
 /// the other takes its own claim off again.
 pub async fn claim_for_ai_sort(
     session: &mut Session,
@@ -439,11 +438,10 @@ pub async fn uids_with_keyword(
     Ok(uids)
 }
 
-/// The Meron folder id a FETCH response's `$MeronF_<id>` keyword names
-/// (`Some(None)`: no mark). Two devices writing at once can leave two: the
-/// smallest id wins on every device, so they agree. `None` when the response
-/// carries no FLAGS at all (a server's own note of a change, say): that says
-/// nothing about marks and must not read as one taken away.
+/// The Meron folder id a FETCH response's `$MeronF_<id>` keyword names (`Some(None)`: no mark). Two
+/// devices writing at once can leave two: the smallest id wins on every device, so they agree.
+/// `None` when the response carries no FLAGS at all (a server's own note of a change, say): that
+/// says nothing about marks and must not read as one taken away.
 pub(super) fn fetch_meron_mark(fetch: &async_imap::types::Fetch) -> Option<Option<String>> {
     if !fetch_has_flags(fetch) {
         return None;

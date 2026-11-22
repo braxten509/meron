@@ -1,17 +1,17 @@
 //! Config-only backup and restore.
 //!
-//! A backup carries everything that would be tedious to retype — accounts and
-//! their connection settings, per-account prefs, RSS subscriptions, and the
-//! app-wide `settings` rows — but no cached mail. Messages, bodies and folder
-//! sync state are reproducible from the server, so leaving them out keeps the
-//! file small enough to mail to yourself and portable between desktop and
-//! mobile, which do not share a database layout beyond these tables.
+//! A backup carries everything that would be tedious to retype — accounts and their connection
+//! settings, per-account prefs, RSS subscriptions, and the app-wide `settings` rows — but no cached
+//! mail.
 //!
-//! Secrets (IMAP password, OAuth tokens) are opt-in, and asking for them forces
-//! encryption: [`export`] refuses to emit a plaintext file containing them. The
-//! secret store differs per platform (OS keychain on desktop, the keyed DB on
-//! mobile), so the caller passes accessor closures rather than this module
-//! reaching for either one.
+//! Messages, bodies and folder sync state are reproducible from the server, so leaving them out
+//! keeps the file small enough to mail to yourself and portable between desktop and mobile, which
+//! do not share a database layout beyond these tables.
+//!
+//! Secrets (IMAP password, OAuth tokens) are opt-in, and asking for them forces encryption:
+//! [`export`] refuses to emit a plaintext file containing them. The secret store differs per
+//! platform (OS keychain on desktop, the keyed DB on mobile), so the caller passes accessor
+//! closures rather than this module reaching for either one.
 
 use anyhow::{Context, Result, anyhow};
 use base64::{Engine as _, engine::general_purpose::STANDARD};
@@ -38,11 +38,10 @@ const KEY_LEN: usize = 32;
 
 /// Ceiling on the iteration count [`parse`] will honour from a file.
 ///
-/// The count is attacker-controlled: it is read from the envelope *before* the
-/// passphrase can be checked, so a crafted backup could otherwise ask for
-/// billions of rounds and wedge the thread doing the derivation (on mobile,
-/// that is the app). An order of magnitude above what we write leaves room to
-/// raise [`KDF_ITERATIONS`] later while keeping the worst case a few seconds.
+/// The count is attacker-controlled: it is read from the envelope *before* the passphrase can be
+/// checked, so a crafted backup could otherwise ask for billions of rounds and wedge the thread
+/// doing the derivation (on mobile, that is the app). An order of magnitude above what we write
+/// leaves room to raise [`KDF_ITERATIONS`] later while keeping the worst case a few seconds.
 const MAX_KDF_ITERATIONS: u64 = 10_000_000;
 
 /// Bound into every ciphertext as additional data, so a file whose envelope was
@@ -52,13 +51,13 @@ const AAD: &[u8] = b"meron-backup-v1";
 
 /// Who wrote a backup file, stamped into the envelope by [`export`].
 ///
-/// Both fields come from the host because core knows neither: its own crate
-/// version is not the app's, and the same core runs under every host.
-/// [`platform`](Self::platform) is what makes [`app_version`](Self::app_version)
-/// readable — desktop and mobile version independently (desktop 0.2.9 against
-/// mobile 0.2.4 at the time of writing), so a bare number says nothing about
-/// which build wrote the file. Use `desktop`, `android` or `ios`; a blank field
-/// is left out of the envelope rather than recorded as an empty string.
+/// Both fields come from the host because core knows neither: its own crate version is not the
+/// app's, and the same core runs under every host.
+///
+/// [`platform`](Self::platform) is what makes [`app_version`](Self::app_version) readable — desktop
+/// and mobile version independently (desktop 0.2.9 against mobile 0.2.4 at the time of writing), so
+/// a bare number says nothing about which build wrote the file. Use `desktop`, `android` or `ios`;
+/// a blank field is left out of the envelope rather than recorded as an empty string.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Host<'a> {
     pub platform: &'a str,
@@ -87,12 +86,13 @@ fn default_true() -> bool {
     true
 }
 
-/// One account, as stored minus its cached mail. `config` and `prefs` are the
-/// parsed forms of the two JSON columns, kept as free-form `Value` so a backup
-/// written by a newer build round-trips fields this one does not know about.
+/// One account, as stored minus its cached mail.
 ///
-/// Deliberately not `Debug`: it can hold a password, and the whole point of
-/// keeping `Secrets` un-printable is lost if a wrapper re-exposes it.
+/// `config` and `prefs` are the parsed forms of the two JSON columns, kept as free-form `Value` so
+/// a backup written by a newer build round-trips fields this one does not know about.
+///
+/// Deliberately not `Debug`: it can hold a password, and the whole point of keeping `Secrets`
+/// un-printable is lost if a wrapper re-exposes it.
 #[derive(Clone, Default, Serialize, Deserialize)]
 pub struct BackupAccount {
     pub id: String,
@@ -384,11 +384,10 @@ fn parse_json_column(text: &str) -> Value {
     serde_json::from_str(text).unwrap_or_else(|_| json!({}))
 }
 
-/// Strip the credentials that hide inside the non-secret `config` column when
-/// the user asked for a backup without secrets: the proxy password (typed by
-/// the user, and often reused) and the OAuth client secret. An OAuth account
-/// cannot be restored without its tokens anyway, so dropping the client secret
-/// costs nothing — re-authenticating re-supplies it.
+/// Strip the credentials that hide inside the non-secret `config` column when the user asked for a
+/// backup without secrets: the proxy password (typed by the user, and often reused) and the OAuth
+/// client secret. An OAuth account cannot be restored without its tokens anyway, so dropping the
+/// client secret costs nothing — re-authenticating re-supplies it.
 fn redact_account_config(config: &mut Value) {
     let Some(map) = config.as_object_mut() else {
         return;
@@ -414,11 +413,12 @@ fn redact_proxy(proxy: &mut Value) {
     }
 }
 
-/// Serialize a backup to the JSON text written to disk. With a passphrase the
-/// payload is encrypted and only the envelope stays readable.
+/// Serialize a backup to the JSON text written to disk.
 ///
-/// Returns an error if `include_secrets` is set without a passphrase: secrets
-/// never leave the device in the clear.
+/// With a passphrase the payload is encrypted and only the envelope stays readable.
+///
+/// Returns an error if `include_secrets` is set without a passphrase: secrets never leave the
+/// device in the clear.
 ///
 /// `host` stamps the envelope with who wrote the file — see [`Host`].
 pub fn export(
@@ -540,12 +540,13 @@ fn data_from_value(mut value: Value) -> Result<BackupData> {
 
 /// Fold a pre-release `platform` map into `settings`.
 ///
-/// Before mobile preferences became rows in the `settings` table they rode in
-/// their own map, keyed `app:<name>` / `kanban:<name>`. That shape never reached
-/// a release, so this exists only for files written from a development build —
-/// but serde would silently ignore the field, restoring such a backup with every
-/// appearance, language, layout and kanban preference quietly dropped, and a
-/// silent partial restore is worth a dozen lines to avoid.
+/// Before mobile preferences became rows in the `settings` table they rode in their own map, keyed
+/// `app:<name>` / `kanban:<name>`.
+///
+/// That shape never reached a release, so this exists only for files written from a development
+/// build — but serde would silently ignore the field, restoring such a backup with every
+/// appearance, language, layout and kanban preference quietly dropped, and a silent partial restore
+/// is worth a dozen lines to avoid.
 fn migrate_legacy_platform(value: &mut Value) {
     let Some(object) = value.as_object_mut() else {
         return;
@@ -596,11 +597,12 @@ fn decode_b64(envelope: &Value, path: &[&str]) -> Result<Vec<u8>> {
 
 /// Write a parsed backup into the store.
 ///
-/// Accounts are matched by id; one that already exists is left completely alone
-/// (counted in `skipped`) rather than overwritten, so restoring onto a machine
-/// that is already set up cannot break a working connection. Settings, by
-/// contrast, are the backup's whole point and do overwrite. `store_secrets` is
-/// called only for accounts actually created, and only for backups that carry
+/// Accounts are matched by id; one that already exists is left completely alone (counted in
+/// `skipped`) rather than overwritten, so restoring onto a machine that is already set up cannot
+/// break a working connection. Settings, by contrast, are the backup's whole point and do
+/// overwrite.
+///
+/// `store_secrets` is called only for accounts actually created, and only for backups that carry
 /// secrets.
 pub fn apply(
     conn: &Connection,

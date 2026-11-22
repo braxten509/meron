@@ -22,15 +22,14 @@ pub(crate) struct PrefWriteOrder {
 pub(crate) static PREF_WRITES: std::sync::LazyLock<std::sync::Mutex<PrefWriteOrder>> =
     std::sync::LazyLock::new(|| std::sync::Mutex::new(PrefWriteOrder::default()));
 
-/// Make `session` the one whose `app.prefsSet` writes are applied, retiring the
-/// previous one and its sequences. Driven by `app.prefsGet`, which a client
-/// issues once as it boots — including after a WebView reload, which restarts
-/// its counters while this process keeps running.
+/// Make `session` the one whose `app.prefsSet` writes are applied, retiring the previous one and its sequences.
 ///
-/// The caller is the stdin read loop, so activations happen in the order the
-/// requests arrived rather than in whatever order their tasks get scheduled: a
-/// boot read that was already on the wire cannot retire the session that booted
-/// after it.
+/// Driven by `app.prefsGet`, which a client issues once as it boots — including after a WebView
+/// reload, which restarts its counters while this process keeps running.
+///
+/// The caller is the stdin read loop, so activations happen in the order the requests arrived
+/// rather than in whatever order their tasks get scheduled: a boot read that was already on the
+/// wire cannot retire the session that booted after it.
 pub(crate) fn activate_pref_session(session: &str) {
     if session.is_empty() {
         return;
@@ -43,15 +42,15 @@ pub(crate) fn activate_pref_session(session: &str) {
     order.seq.clear();
 }
 
-/// Whether an `app.prefsSet` write is still the newest for its key. Unstamped
-/// writes (mobile, older clients) always apply. A stamped one applies only if it
-/// comes from the active session — a straggler from the session before a reload
-/// is dropped rather than overwriting what replaced it — and is newer than the
-/// last sequence applied to that key.
+/// Whether an `app.prefsSet` write is still the newest for its key.
 ///
-/// Pairs with [`record_pref_write`], which the caller runs only once the write
-/// has actually persisted, holding `order` (and the database lock) across both
-/// so acceptance, the write, and the record are one ordering step.
+/// Unstamped writes (mobile, older clients) always apply. A stamped one applies only if it comes
+/// from the active session — a straggler from the session before a reload is dropped rather than
+/// overwriting what replaced it — and is newer than the last sequence applied to that key.
+///
+/// Pairs with [`record_pref_write`], which the caller runs only once the write has actually
+/// persisted, holding `order` (and the database lock) across both so acceptance, the write, and the
+/// record are one ordering step.
 pub(crate) fn pref_write_is_current(
     order: &PrefWriteOrder,
     key: &str,

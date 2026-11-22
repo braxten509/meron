@@ -167,13 +167,15 @@ fn meron_details(
         .collect()
 }
 
-/// Run the non-gating sync tail. When the caller opted in via `defer_tail`
-/// (the foreground UI, whose process outlives the call) it runs on a detached
-/// thread so `mail.sync` returns as soon as the inbox headers are stored — the
-/// tail costs body prefetch alone up to 20s — and emits `mail.synced` when done
-/// so the UI re-reads the store. Everything else (background workers, the IDLE
-/// watcher) keeps it inline: an OS-granted execution window ends when the
-/// worker returns, so a detached thread could be frozen mid-fetch.
+/// Run the non-gating sync tail.
+///
+/// When the caller opted in via `defer_tail` (the foreground UI, whose process outlives the call)
+/// it runs on a detached thread so `mail.sync` returns as soon as the inbox headers are stored —
+/// the tail costs body prefetch alone up to 20s — and emits `mail.synced` when done so the UI
+/// re-reads the store.
+///
+/// Everything else (background workers, the IDLE watcher) keeps it inline: an OS-granted execution
+/// window ends when the worker returns, so a detached thread could be frozen mid-fetch.
 fn run_mobile_sync_tail(
     data_dir: &str,
     engine: &std::sync::Arc<crate::engine::Engine>,

@@ -62,11 +62,10 @@ pub struct MoveOutcome {
     pub failed: Option<anyhow::Error>,
 }
 
-/// [`move_to_folder`] that may be repeated after being cut off at any point. A
-/// server with MOVE does that by itself. Without it a move is a copy and a
-/// delete, so what `dest` already holds is not copied again, only removed from
-/// the source. `message_ids` lines up with `uids`; a message with `""` can't be
-/// told from its copy, so it stays where it is and the outcome says so.
+/// [`move_to_folder`] that may be repeated after being cut off at any point. A server with MOVE
+/// does that by itself. Without it a move is a copy and a delete, so what `dest` already holds is
+/// not copied again, only removed from the source. `message_ids` lines up with `uids`; a message
+/// with `""` can't be told from its copy, so it stays where it is and the outcome says so.
 pub async fn move_to_folder_once(
     session: &mut Session,
     source_folder: &str,
@@ -149,11 +148,10 @@ async fn message_sizes(
     Ok(sizes)
 }
 
-/// Whether `folder` holds this very message, byte for byte: a caller may give up
-/// the source on a yes. SEARCH only finds candidates, and a resent message can
-/// keep its Message-ID and even its size. In doubt this says no, and the price is
-/// a duplicate. On a yes the copy gets the source's read and starred state, added
-/// to whatever it has, as an APPEND would have given it.
+/// Whether `folder` holds this very message, byte for byte: a caller may give up the source on a
+/// yes. SEARCH only finds candidates, and a resent message can keep its Message-ID and even its
+/// size. In doubt this says no, and the price is a duplicate. On a yes the copy gets the source's
+/// read and starred state, added to whatever it has, as an APPEND would have given it.
 pub async fn folder_holds_message(
     session: &mut Session,
     folder: &str,
@@ -283,11 +281,10 @@ pub async fn fetch_raw_messages_for_copy(
     Ok(out)
 }
 
-/// async-imap's APPEND expects the first response to be a continuation, but
-/// selected pooled sessions may receive unsolicited mailbox updates first.
-/// Drain those updates while waiting for the continuation and tagged completion.
-/// Cache reconciliation uses separate sync/IDLE sessions, so these updates do
-/// not need to be applied here.
+/// async-imap's APPEND expects the first response to be a continuation, but selected pooled
+/// sessions may receive unsolicited mailbox updates first. Drain those updates while waiting for
+/// the continuation and tagged completion. Cache reconciliation uses separate sync/IDLE sessions,
+/// so these updates do not need to be applied here.
 pub(super) async fn append_message(
     session: &mut Session,
     folder: &str,
@@ -455,12 +452,10 @@ pub async fn append_to_sent(session: &mut Session, folder: &str, raw: &[u8]) -> 
     Ok(())
 }
 
-/// Append a draft to `folder`, then prune older copies that share the same
-/// `message_id` so repeated autosaves replace the draft in place instead of
-/// piling up duplicates. `message_id` is the bare id (no angle brackets) that
-/// `smtp::build_message` embedded as the Message-ID header. Pruning is
-/// best-effort — the APPEND is what matters, so search/expunge failures are
-/// logged and swallowed.
+/// Append a draft to `folder`, then prune older copies that share the same `message_id` so repeated
+/// autosaves replace the draft in place instead of piling up duplicates. `message_id` is the bare
+/// id (no angle brackets) that `smtp::build_message` embedded as the Message-ID header. Pruning is
+/// best-effort — the APPEND is what matters, so search/expunge failures are logged and swallowed.
 pub async fn replace_draft(
     session: &mut Session,
     folder: &str,

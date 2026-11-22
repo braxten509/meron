@@ -26,12 +26,12 @@ fn opt_uids(params: &Value) -> Vec<u32> {
         .unwrap_or_default()
 }
 
-/// Finalize the Sent view after a send. For Gmail/Outlook defaults this only
-/// refreshes the provider-created copy; other accounts get Meron's best-effort
-/// APPEND plus refresh. The mail already left via SMTP, so none of this may
-/// hold up the reply: an APPEND re-uploads the whole message, and a host that
-/// times out waiting on it would report a delivered message as failed — and
-/// offer to send it again.
+/// Finalize the Sent view after a send.
+///
+/// For Gmail/Outlook defaults this only refreshes the provider-created copy; other accounts get
+/// Meron's best-effort APPEND plus refresh. The mail already left via SMTP, so none of this may
+/// hold up the reply: an APPEND re-uploads the whole message, and a host that times out waiting on
+/// it would report a delivered message as failed — and offer to send it again.
 fn finish_sent(engine: &Arc<Engine>, out: &Writer, account: String, raw: Vec<u8>) {
     let engine = engine.clone();
     let out = out.clone();

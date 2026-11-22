@@ -17,7 +17,10 @@ fn search_messages_pages_with_a_keyset_cursor() {
     }
 
     let first = search_messages(&conn, "acct", "INBOX", "deploy", 2, None).unwrap();
-    assert_eq!(first.iter().map(|m| m.uid).collect::<Vec<_>>(), vec![3, 2]);
+    assert_eq!(
+        first.iter().map(|message| message.uid).collect::<Vec<_>>(),
+        vec![3, 2]
+    );
     let cursor = crate::thread_list::SearchCursor {
         date: 200,
         uid: 2,
@@ -28,7 +31,10 @@ fn search_messages_pages_with_a_keyset_cursor() {
     };
 
     let second = search_messages(&conn, "acct", "INBOX", "deploy", 2, Some(&cursor)).unwrap();
-    assert_eq!(second.iter().map(|m| m.uid).collect::<Vec<_>>(), vec![1]);
+    assert_eq!(
+        second.iter().map(|message| message.uid).collect::<Vec<_>>(),
+        vec![1]
+    );
     // A short page means the result set is exhausted, so paging stops.
     assert!(search_next_cursor(&second, 2, 4).is_none());
 }
@@ -61,7 +67,7 @@ fn search_messages_in_folders_merges_newest_first_and_tags_the_folder() {
     // the un-searched folder does not.
     assert_eq!(
         hits.iter()
-            .map(|m| (m.folder.as_str(), m.uid))
+            .map(|message| (message.folder.as_str(), message.uid))
             .collect::<Vec<_>>(),
         vec![("Sent", 1), ("INBOX", 1)]
     );
@@ -215,7 +221,10 @@ fn search_batches_consume_pending_hits_and_append_in_order() {
         .unwrap()
         .unwrap();
     assert_eq!(
-        page.messages.iter().map(|m| m.uid).collect::<Vec<_>>(),
+        page.messages
+            .iter()
+            .map(|message| message.uid)
+            .collect::<Vec<_>>(),
         vec![5, 4]
     );
     assert!(page.pending);
@@ -235,7 +244,10 @@ fn search_batches_consume_pending_hits_and_append_in_order() {
         .unwrap()
         .unwrap();
     assert_eq!(
-        page.messages.iter().map(|m| m.uid).collect::<Vec<_>>(),
+        page.messages
+            .iter()
+            .map(|message| message.uid)
+            .collect::<Vec<_>>(),
         vec![5, 4, 3]
     );
     assert!(!page.pending);

@@ -143,11 +143,10 @@ pub(crate) fn stop_idle_watch(engine: &Engine, account: &str, folder: &str) -> b
     removed
 }
 
-/// Watch the folders the user opted in to notifications for (INBOX is started
-/// by the caller). IMAP IDLE covers one mailbox per connection, so only the
-/// plan's live folders get a watcher; [`poll_notify_folders`] covers the rest.
-/// Safe to call again after the opt-ins change: running watches are kept, and
-/// a folder promoted into the live set gets one.
+/// Watch the folders the user opted in to notifications for (INBOX is started by the caller). IMAP
+/// IDLE covers one mailbox per connection, so only the plan's live folders get a watcher;
+/// [`poll_notify_folders`] covers the rest. Safe to call again after the opt-ins change: running
+/// watches are kept, and a folder promoted into the live set gets one.
 pub(crate) fn start_notify_folder_watches(engine: &Arc<Engine>, out: &Writer, account: &str) {
     let plan = store::notify_folder_plan(&engine.db.lock().unwrap(), account).unwrap_or_default();
     for folder in plan.live {
@@ -329,11 +328,9 @@ mod tests {
     }
 }
 
-/// Sync `folder` and surface the result to the UI: a "new mail" toast when
-/// genuine arrivals landed in INBOX or a folder opted in to notifications,
-/// otherwise a silent refresh.
-/// Shared by the IDLE wake path and the post-connect catch-up so both behave
-/// identically.
+/// Sync `folder` and surface the result to the UI: a "new mail" toast when genuine arrivals landed
+/// in INBOX or a folder opted in to notifications, otherwise a silent refresh. Shared by the IDLE
+/// wake path and the post-connect catch-up so both behave identically.
 pub(crate) async fn sync_and_notify(
     engine: &Arc<Engine>,
     out: &Writer,

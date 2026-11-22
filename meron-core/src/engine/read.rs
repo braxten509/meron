@@ -129,11 +129,10 @@ pub async fn fill_thread_gaps(
         .await
 }
 
-/// Cached-only variant of [`read_cached_or_fetch`]: returns the message when
-/// the local cache can serve it in full — body row present, threading headers
-/// extracted, inline media on disk — and `None` otherwise. Never touches the
-/// network, so the thread view can answer instantly from cache and leave
-/// misses to a background fetch.
+/// Cached-only variant of [`read_cached_or_fetch`]: returns the message when the local cache can
+/// serve it in full — body row present, threading headers extracted, inline media on disk — and
+/// `None` otherwise. Never touches the network, so the thread view can answer instantly from cache
+/// and leave misses to a background fetch.
 pub fn read_cached(
     engine: &Arc<Engine>,
     account: &str,

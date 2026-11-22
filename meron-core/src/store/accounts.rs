@@ -86,11 +86,10 @@ impl AccountSignature {
 
 // ---- Accounts ---------------------------------------------------------------
 
-/// A send-as identity for an account: an address the user owns and an optional
-/// From display name. A blank `name` falls back to the account's `sender_name`
-/// when composing. Purely local — meron cannot check whether the provider will
-/// accept the address, and providers that authorize senders themselves (Gmail's
-/// "Send mail as") rewrite the `From` of anything they haven't verified.
+/// A send-as identity for an account: an address the user owns and an optional From display name. A
+/// blank `name` falls back to the account's `sender_name` when composing. Purely local — meron
+/// cannot check whether the provider will accept the address, and providers that authorize senders
+/// themselves (Gmail's "Send mail as") rewrite the `From` of anything they haven't verified.
 #[derive(Clone, Default, Serialize, Deserialize)]
 pub struct Alias {
     pub email: String,
@@ -111,11 +110,10 @@ where
     Ok(serde_json::from_value(value).ok())
 }
 
-/// User-editable per-account preferences, stored as the `prefs` JSON column.
-/// Every field is optional so unset means "use the default" (resolved in code,
-/// e.g. by engine); add a new pref by adding a field — no schema migration.
-/// Every field also decodes leniently (see [`lenient_pref`]), so one unreadable
-/// pref cannot take the rest of the account's settings down with it.
+/// User-editable per-account preferences, stored as the `prefs` JSON column. Every field is
+/// optional so unset means "use the default" (resolved in code, e.g. by engine); add a new pref by
+/// adding a field — no schema migration. Every field also decodes leniently (see [`lenient_pref`]),
+/// so one unreadable pref cannot take the rest of the account's settings down with it.
 #[derive(Default, Deserialize)]
 #[serde(default)]
 struct AccountPrefs {
@@ -482,21 +480,19 @@ pub fn account_aliases(conn: &Connection, id: &str) -> Result<Vec<Alias>> {
     })
 }
 
-/// Resolve the `From` address and display name for an outgoing message, shared
-/// by desktop and mobile so both honor the same send-as rules.
+/// Resolve the `From` address and display name for an outgoing message, shared by desktop and mobile so both honor the same send-as rules.
 ///
-/// An account may send as its own address, as the mailbox login, or as any
-/// configured alias; an empty request means "the account's own address". The
-/// account address and the login are separate fields (a custom IMAP account
-/// carries both, and they differ whenever the server authenticates by user
-/// name), so both count as identities the user owns.
+/// An account may send as its own address, as the mailbox login, or as any configured alias; an
+/// empty request means "the account's own address". The account address and the login are separate
+/// fields (a custom IMAP account carries both, and they differ whenever the server authenticates by
+/// user name), so both count as identities the user owns.
 ///
-/// An address that is none of those is an error rather than a silent
-/// substitution: quietly rewriting the sender is how a message goes out as the
-/// wrong identity without anyone noticing. Note that a provider can still
-/// override the `From` we transmit — Gmail rewrites it to the authenticated
-/// address unless the alias is verified in its own settings — which is outside
-/// what this can enforce.
+/// An address that is none of those is an error rather than a silent substitution: quietly
+/// rewriting the sender is how a message goes out as the wrong identity without anyone noticing.
+///
+/// Note that a provider can still override the `From` we transmit — Gmail rewrites it to the
+/// authenticated address unless the alias is verified in its own settings — which is outside what
+/// this can enforce.
 pub fn resolve_send_from(
     conn: &Connection,
     id: &str,

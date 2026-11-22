@@ -53,11 +53,10 @@ pub(super) fn migrate_v5(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
-/// Searchable `To`/`Cc` text plus the FTS index over it, so a lookup by
-/// recipient finds cached mail the way a lookup by sender already does.
-/// Existing rows are backfilled from `json` through the same formatter the write
-/// path uses, then indexed in one `rebuild` — cheaper than letting the triggers
-/// fire per row.
+/// Searchable `To`/`Cc` text plus the FTS index over it, so a lookup by recipient finds cached mail
+/// the way a lookup by sender already does. Existing rows are backfilled from `json` through the
+/// same formatter the write path uses, then indexed in one `rebuild` — cheaper than letting the
+/// triggers fire per row.
 pub(super) fn migrate_v6(conn: &Connection) -> Result<()> {
     conn.execute_batch("ALTER TABLE messages ADD COLUMN recipients TEXT;")?;
     backfill_recipients(conn)?;
@@ -172,13 +171,13 @@ pub(super) fn migrate_v11(conn: &Connection) -> Result<()> {
 }
 
 /// One row per live search: the identity a snapshot page is validated against.
-/// A first page fetches only the newest hits; the rest wait in
-/// `mail_search_pending`, one row per server hit with its Date header resolved
-/// up front, so batches are taken newest-first by date across every folder
-/// rather than by UID, which orders mailbox insertion and not send time.
-/// `cache_resume` is set when a batch cut off its cached-only hits: the keyset
-/// cursor of the last one it took, from which paging past the snapshot
-/// continues through the cache.
+///
+/// A first page fetches only the newest hits; the rest wait in `mail_search_pending`, one row per
+/// server hit with its Date header resolved up front, so batches are taken newest-first by date
+/// across every folder rather than by UID, which orders mailbox insertion and not send time.
+///
+/// `cache_resume` is set when a batch cut off its cached-only hits: the keyset cursor of the last
+/// one it took, from which paging past the snapshot continues through the cache.
 const MAIL_SEARCH_SNAPSHOTS_DDL: &str = "
 CREATE TABLE IF NOT EXISTS mail_search_snapshots (
   token        TEXT PRIMARY KEY,
@@ -213,12 +212,10 @@ pub(super) fn migrate_v12(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
-/// Unseen server UIDs that the last sync found outside the cached window, so a
-/// folder's unread total covers mail older than what the cache holds. A row is
-/// dropped once its message is cached there, whether inserted or moved in from
-/// another folder: the cached row
-/// then carries the unread state, and deleting or moving it later can't bring
-/// the stale row back into the count.
+/// Unseen server UIDs that the last sync found outside the cached window, so a folder's unread
+/// total covers mail older than what the cache holds. A row is dropped once its message is cached
+/// there, whether inserted or moved in from another folder: the cached row then carries the unread
+/// state, and deleting or moving it later can't bring the stale row back into the count.
 pub(super) fn migrate_v13(conn: &Connection) -> Result<()> {
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS uncached_unseen (

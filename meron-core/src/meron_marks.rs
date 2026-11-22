@@ -1,21 +1,24 @@
 //! Meron-folder filing shared between devices through the mail server.
 //!
-//! Meron folders live on each device, with the same ids on devices set up
-//! from one another ("Copy setup to another device", or a backup restore).
-//! When a conversation is filed into one here (by AI sorting or by hand), its
-//! Inbox copies on the server get the hidden keyword `$MeronF_<id>`; when it
-//! is taken out (moved out, released by Archive/Delete/Move, the folder
-//! deleted), the keyword goes; a move between two Meron folders swaps it.
-//! Another device's sync reads the keyword and files the conversation the
-//! same way, without asking the AI (see [`crate::store::meron_marks_observe`]).
+//! Meron folders live on each device, with the same ids on devices set up from one another ("Copy
+//! setup to another device", or a backup restore).
 //!
-//! Only the copies in the real Inbox and in the account's archive mailbox
-//! carry marks (the *mark folders*, [`mark_folders`]); of the Inbox's, only
-//! mail within [`store::AI_SORT_MAX_AGE_DAYS`] gets one (archived mail and
-//! the built-in Archive's marks have no age limit), and nothing else on the
-//! server changes. Writes are best effort, like `$MeronSorted`: a mailbox that takes
-//! no new keywords (no `\*` in PERMANENTFLAGS) is skipped silently. Applying
-//! a mark read from the server never writes one back, so there is no loop.
+//! When a conversation is filed into one here (by AI sorting or by hand), its Inbox copies on the
+//! server get the hidden keyword `$MeronF_<id>`; when it is taken out (moved out, released by
+//! Archive/Delete/Move, the folder deleted), the keyword goes; a move between two Meron folders
+//! swaps it.
+//!
+//! Another device's sync reads the keyword and files the conversation the same way, without asking
+//! the AI (see [`crate::store::meron_marks_observe`]).
+//!
+//! Only the copies in the real Inbox and in the account's archive mailbox carry marks (the *mark
+//! folders*, [`mark_folders`]); of the Inbox's, only mail within [`store::AI_SORT_MAX_AGE_DAYS`]
+//! gets one (archived mail and the built-in Archive's marks have no age limit), and nothing else on
+//! the server changes.
+//!
+//! Writes are best effort, like `$MeronSorted`: a mailbox that takes no new keywords (no `\*` in
+//! PERMANENTFLAGS) is skipped silently. Applying a mark read from the server never writes one back,
+//! so there is no loop.
 
 use std::collections::{BTreeMap, HashMap};
 use std::sync::{Arc, LazyLock, Mutex};
@@ -369,11 +372,10 @@ pub async fn write(engine: &Arc<Engine>, job: MarkJob) {
     .await;
 }
 
-/// [`write`] for several jobs at once (one per mailbox, say): all are queued,
-/// then waited for together, a few seconds at most.
+/// [`write`] for several jobs at once (one per mailbox, say): all are queued, then waited for together, a few seconds at most.
 ///
-/// Inside a bulk run this is the marks step every member shares (see
-/// [`crate::engine::bulk`]): the marks of all of them are written together.
+/// Inside a bulk run this is the marks step every member shares (see [`crate::engine::bulk`]): the
+/// marks of all of them are written together.
 pub async fn write_all(engine: &Arc<Engine>, jobs: Vec<MarkJob>) {
     if jobs.is_empty() {
         return;

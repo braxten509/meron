@@ -64,11 +64,10 @@ fn insert_message_in(
         .unwrap();
 }
 
-/// The inheritance lookups match rows on `lower(json_extract(...))` and
-/// `lower(thread_key)`, which only hit an index when the query spells the
-/// expression exactly as `MESSAGES_THREAD_KEY_INDEXES_DDL` does. Without them
-/// every upserted reply scans the account's whole message cache, so guard the
-/// access path, not just the result.
+/// The inheritance lookups match rows on `lower(json_extract(...))` and `lower(thread_key)`, which
+/// only hit an index when the query spells the expression exactly as
+/// `MESSAGES_THREAD_KEY_INDEXES_DDL` does. Without them every upserted reply scans the account's
+/// whole message cache, so guard the access path, not just the result.
 
 /// The account address and the mailbox login are separate fields, so both are
 /// identities the user owns — a custom account whose server authenticates by

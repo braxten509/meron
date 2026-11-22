@@ -6,10 +6,10 @@ use super::*;
 
 #[test]
 fn mobile_protocol_lists_starred_items_from_store() {
-    let data_dir = unique_data_dir("starred-items");
-    seed_mobile_account(&data_dir, "a1@example.com");
-    seed_mobile_account(&data_dir, "a2@example.com");
-    let conn = store::open_at(data_dir.join("meron.db")).unwrap();
+    let data_directory = unique_data_directory("starred-items");
+    seed_mobile_account(&data_directory, "a1@example.com");
+    seed_mobile_account(&data_directory, "a2@example.com");
+    let conn = store::open_at(data_directory.join("meron.db")).unwrap();
     store::ensure_folder(&conn, "a1@example.com", "INBOX").unwrap();
     store::ensure_folder(&conn, "a2@example.com", "Sent").unwrap();
     store::upsert_messages(
@@ -61,7 +61,7 @@ fn mobile_protocol_lists_starred_items_from_store() {
 
     let value = invoke_mobile_protocol_json(
         r#"{"id":74,"method":"mail.starredItems","params":{"limit":2}}"#,
-        Some(data_dir.to_str().unwrap()),
+        Some(data_directory.to_str().unwrap()),
     );
     assert_eq!(value["id"], 74);
     let items = value["result"]["items"].as_array().unwrap();
@@ -85,14 +85,14 @@ fn mobile_protocol_lists_starred_items_from_store() {
     // hide an older unread row on the first page.
     let unread = invoke_mobile_protocol_json(
         r#"{"id":75,"method":"mail.starredItems","params":{"filter":"unread","limit":1}}"#,
-        Some(data_dir.to_str().unwrap()),
+        Some(data_directory.to_str().unwrap()),
     );
     let unread_items = unread["result"]["items"].as_array().unwrap();
     assert_eq!(unread_items.len(), 1);
     assert_eq!(unread_items[0]["subject"], "Older starred");
     assert!(unread["result"].get("next_cursor").is_none());
 
-    let _ = std::fs::remove_dir_all(data_dir);
+    let _ = std::fs::remove_dir_all(data_directory);
 }
 
 #[test]
@@ -100,9 +100,9 @@ fn starred_lists_a_thread_once_when_several_folders_cache_it() {
     // Gmail files every message in All Mail as well as its Inbox/label copy, so
     // the same starred thread is cached under several folders. It is one thread
     // and gets one row, in the most specific folder holding it.
-    let data_dir = unique_data_dir("starred-cross-folder");
-    seed_mobile_account(&data_dir, "me@example.com");
-    let conn = store::open_at(data_dir.join("meron.db")).unwrap();
+    let data_directory = unique_data_directory("starred-cross-folder");
+    seed_mobile_account(&data_directory, "me@example.com");
+    let conn = store::open_at(data_directory.join("meron.db")).unwrap();
     store::upsert_folders(
         &conn,
         "me@example.com",
@@ -141,13 +141,13 @@ fn starred_lists_a_thread_once_when_several_folders_cache_it() {
 
     let value = invoke_mobile_protocol_json(
         r#"{"id":76,"method":"mail.starredItems","params":{"limit":10}}"#,
-        Some(data_dir.to_str().unwrap()),
+        Some(data_directory.to_str().unwrap()),
     );
     let items = value["result"]["items"].as_array().unwrap();
     assert_eq!(items.len(), 1);
     assert_eq!(items[0]["folder_id"], "INBOX");
 
-    let _ = std::fs::remove_dir_all(data_dir);
+    let _ = std::fs::remove_dir_all(data_directory);
 }
 
 #[test]
@@ -156,9 +156,9 @@ fn starred_keeps_unthreaded_messages_that_share_a_uid_apart() {
     // IMAP UIDs only mean anything inside their own mailbox. Two unrelated
     // starred messages that happen to be uid 1 in different folders are not one
     // conversation and neither may swallow the other.
-    let data_dir = unique_data_dir("starred-uid-keys");
-    seed_mobile_account(&data_dir, "me@example.com");
-    let conn = store::open_at(data_dir.join("meron.db")).unwrap();
+    let data_directory = unique_data_directory("starred-uid-keys");
+    seed_mobile_account(&data_directory, "me@example.com");
+    let conn = store::open_at(data_directory.join("meron.db")).unwrap();
     for folder in ["INBOX", "Archive"] {
         store::ensure_folder(&conn, "me@example.com", folder).unwrap();
     }
@@ -194,7 +194,7 @@ fn starred_keeps_unthreaded_messages_that_share_a_uid_apart() {
 
     let value = invoke_mobile_protocol_json(
         r#"{"id":77,"method":"mail.starredItems","params":{"limit":10}}"#,
-        Some(data_dir.to_str().unwrap()),
+        Some(data_directory.to_str().unwrap()),
     );
     let items = value["result"]["items"].as_array().unwrap();
     assert_eq!(items.len(), 2, "{value}");
@@ -205,5 +205,5 @@ fn starred_keeps_unthreaded_messages_that_share_a_uid_apart() {
     assert!(subjects.contains(&"Inbox note"), "{value}");
     assert!(subjects.contains(&"Archived note"), "{value}");
 
-    let _ = std::fs::remove_dir_all(data_dir);
+    let _ = std::fs::remove_dir_all(data_directory);
 }

@@ -1,11 +1,9 @@
-//! IMAP read path: TLS connect + login (async-imap over tokio-rustls), folder
-//! listing, recent-message envelopes, and full message reads.
+//! IMAP read path: TLS connect + login (async-imap over tokio-rustls), folder listing, recent-message envelopes, and full message reads.
 //!
-//! `connect` performs a fresh TLS + auth handshake. The request path does not
-//! call it directly per operation — `Engine::with_session` (in `main.rs`) pools
-//! warm authenticated sessions and reuses them, falling back to `connect` only
-//! when no live session is available. IMAP IDLE watchers hold their own
-//! dedicated long-lived connections, separate from that pool.
+//! `connect` performs a fresh TLS + auth handshake. The request path does not call it directly per
+//! operation — `Engine::with_session` (in `main.rs`) pools warm authenticated sessions and reuses
+//! them, falling back to `connect` only when no live session is available. IMAP IDLE watchers hold
+//! their own dedicated long-lived connections, separate from that pool.
 
 use anyhow::{Context, Result, anyhow};
 use futures::StreamExt;

@@ -17,11 +17,10 @@ pub struct RefreshedToken {
     pub access_token: String,
     /// Seconds until `access_token` expires.
     pub expires_in: i64,
-    /// A replacement refresh token, when the provider rotates them. Microsoft
-    /// issues one on every refresh and each has its own fixed lifetime, so the
-    /// caller must keep this one: holding on to the token it sent would see the
-    /// account's sign-in expire that long after it was first connected, however
-    /// often it refreshed. Google usually sends none.
+    /// A replacement refresh token, when the provider rotates them. Microsoft issues one on every
+    /// refresh and each has its own fixed lifetime, so the caller must keep this one: holding on to the
+    /// token it sent would see the account's sign-in expire that long after it was first connected,
+    /// however often it refreshed. Google usually sends none.
     pub refresh_token: Option<String>,
 }
 
@@ -77,16 +76,16 @@ pub(super) fn oauth_refresh_error(status: &str, body: &str) -> anyhow::Error {
     anyhow!("oauth refresh failed ({status}): {body}")
 }
 
-/// Exchange a refresh token for a fresh access token via an OAuth token
-/// endpoint. Uses `ureq` (a minimal blocking HTTP client over the same rustls
-/// stack as IMAP/SMTP) on a blocking task, so we get correct HTTP framing —
-/// status codes, Content-Length/chunked, gzip — instead of hand-parsing bytes.
+/// Exchange a refresh token for a fresh access token via an OAuth token endpoint.
 ///
-/// `token_url` is the provider's token endpoint. `client_secret` may be empty
-/// (Microsoft public clients use PKCE with no secret), in which case it's
-/// omitted. `scope`, when present, requests an access token for that resource —
-/// Microsoft binds tokens to a resource, so the IMAP/SMTP scopes are passed on
-/// refresh; Google ignores it.
+/// Uses `ureq` (a minimal blocking HTTP client over the same rustls stack as IMAP/SMTP) on a
+/// blocking task, so we get correct HTTP framing — status codes, Content-Length/chunked, gzip —
+/// instead of hand-parsing bytes.
+///
+/// `token_url` is the provider's token endpoint. `client_secret` may be empty (Microsoft public
+/// clients use PKCE with no secret), in which case it's omitted. `scope`, when present, requests an
+/// access token for that resource — Microsoft binds tokens to a resource, so the IMAP/SMTP scopes
+/// are passed on refresh; Google ignores it.
 pub async fn refresh_oauth_token(
     token_url: &str,
     client_id: &str,

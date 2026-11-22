@@ -158,11 +158,10 @@ pub fn inbox_backfill_uids(
         .collect())
 }
 
-/// Cache a window `batch` just read from the server's `folder`, marking the
-/// Inbox backfill in it ([`inbox_backfill_uids`]). For the re-reads after a
-/// move, copy, send or undo; call before [`super::set_folder_state`] moves the
-/// folder's UIDNEXT on. The moved or copied mail itself has new UIDs above the
-/// arrival floor, so it always shows.
+/// Cache a window `batch` just read from the server's `folder`, marking the Inbox backfill in it
+/// ([`inbox_backfill_uids`]). For the re-reads after a move, copy, send or undo; call before
+/// [`super::set_folder_state`] moves the folder's UIDNEXT on. The moved or copied mail itself has
+/// new UIDs above the arrival floor, so it always shows.
 pub fn upsert_window_messages(
     conn: &Connection,
     account: &str,
@@ -180,11 +179,10 @@ pub fn upsert_window_messages(
     super::upsert_messages_marking(conn, account, folder, &batch.messages, &backfill)
 }
 
-/// Cache `headers` read from the server's `folder` outside a window read (a
-/// live search, the starred refresh, a conversation read by Message-ID),
-/// marking the Inbox backfill among them as [`upsert_window_messages`] does,
-/// against the folder's stored UIDVALIDITY. Those reads reach mail the Inbox
-/// never saw arrive; it shows where it was asked for, not in the Inbox views.
+/// Cache `headers` read from the server's `folder` outside a window read (a live search, the
+/// starred refresh, a conversation read by Message-ID), marking the Inbox backfill among them as
+/// [`upsert_window_messages`] does, against the folder's stored UIDVALIDITY. Those reads reach mail
+/// the Inbox never saw arrive; it shows where it was asked for, not in the Inbox views.
 pub fn upsert_read_messages(
     conn: &Connection,
     account: &str,

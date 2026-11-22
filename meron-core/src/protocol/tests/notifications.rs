@@ -6,9 +6,9 @@ use super::*;
 
 #[test]
 fn mobile_new_messages_detail_summarizes_new_unread_inbox_mail() {
-    let data_dir = unique_data_dir("new-messages-detail");
-    seed_mobile_account(&data_dir, "me@example.com");
-    let conn = store::open_at(data_dir.join("meron.db")).unwrap();
+    let data_directory = unique_data_directory("new-messages-detail");
+    seed_mobile_account(&data_directory, "me@example.com");
+    let conn = store::open_at(data_directory.join("meron.db")).unwrap();
     store::ensure_folder(&conn, "me@example.com", "INBOX").unwrap();
     let messages = vec![
         MessageHeader {
@@ -42,10 +42,11 @@ fn mobile_new_messages_detail_summarizes_new_unread_inbox_mail() {
         store::classify_inbox_arrivals(&conn, "me@example.com", 2, 4, &messages).unwrap();
     store::upsert_messages(&conn, "me@example.com", "INBOX", &messages).unwrap();
     drop(conn);
-    let dir = data_dir.to_str().unwrap();
+    let directory = data_directory.to_str().unwrap();
 
     let detail =
-        crate::ffi::mobile_new_messages_detail(dir, "me@example.com", "INBOX", &arrivals).unwrap();
+        crate::ffi::mobile_new_messages_detail(directory, "me@example.com", "INBOX", &arrivals)
+            .unwrap();
     assert_eq!(detail["account"], "me@example.com");
     assert_eq!(detail["accountName"], "me@example.com");
     assert_eq!(detail["folder"], "inbox");
@@ -70,12 +71,14 @@ fn mobile_new_messages_detail_summarizes_new_unread_inbox_mail() {
 
     // First sync of a mailbox (no prior uid_next) must not summarize the backlog.
     assert!(
-        crate::ffi::mobile_new_unread_inbox_messages(dir, "me@example.com", 0, 4, &[]).is_none()
+        crate::ffi::mobile_new_unread_inbox_messages(directory, "me@example.com", 0, 4, &[])
+            .is_none()
     );
     // No uid growth means nothing new arrived.
     assert!(
-        crate::ffi::mobile_new_unread_inbox_messages(dir, "me@example.com", 4, 4, &[]).is_none()
+        crate::ffi::mobile_new_unread_inbox_messages(directory, "me@example.com", 4, 4, &[])
+            .is_none()
     );
 
-    let _ = std::fs::remove_dir_all(data_dir);
+    let _ = std::fs::remove_dir_all(data_directory);
 }

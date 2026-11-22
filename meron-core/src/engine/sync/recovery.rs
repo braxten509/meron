@@ -5,13 +5,13 @@
 
 use super::*;
 
-/// [`imap::fetch_recent`] for one folder, recovering from messages whose FETCH
-/// response cannot be parsed instead of failing the whole batch. Prefer this to
-/// calling `imap::fetch_recent` inside a session closure.
+/// [`imap::fetch_recent`] for one folder, recovering from messages whose FETCH response cannot be parsed instead of failing the whole batch.
 ///
-/// Read-only, so it must not share a session with a mutating command: a wedged
-/// connection has to be discarded, and a mutation that already reached the
-/// server must never be retried. Run the mutation first, then call this.
+/// Prefer this to calling `imap::fetch_recent` inside a session closure.
+///
+/// Read-only, so it must not share a session with a mutating command: a wedged connection has to be
+/// discarded, and a mutation that already reached the server must never be retried. Run the
+/// mutation first, then call this.
 pub async fn fetch_recent_resilient(
     engine: &Arc<Engine>,
     account: &str,
@@ -90,19 +90,17 @@ pub(super) async fn read_isolating(
 /// what we have rather than reconnect dozens of times.
 pub(in crate::engine) const ISOLATION_ATTEMPT_LIMIT: usize = 32;
 
-/// Fetch headers for `uids`, working around messages whose FETCH response the
-/// IMAP parser rejects (see [`imap::is_unparseable_response`]).
+/// Fetch headers for `uids`, working around messages whose FETCH response the IMAP parser rejects (see [`imap::is_unparseable_response`]).
 ///
-/// Such a response wedges the connection it arrived on, so it cannot be skipped
-/// mid-stream — the session has to go and the range has to be re-fetched
-/// without it. This halves any failing range until the offending message sits
-/// alone, drops just that one, and keeps its neighbours. Every attempt runs
-/// through `with_read_session`, which discards the failed session and hands the
+/// Such a response wedges the connection it arrived on, so it cannot be skipped mid-stream — the
+/// session has to go and the range has to be re-fetched without it. This halves any failing range
+/// until the offending message sits alone, drops just that one, and keeps its neighbours.
+///
+/// Every attempt runs through `with_read_session`, which discards the failed session and hands the
 /// retry a fresh connection.
 ///
-/// Returns the headers it could read plus the UIDs it gave up on. A genuine
-/// network or server error aborts, since retrying narrower ranges would not
-/// help.
+/// Returns the headers it could read plus the UIDs it gave up on. A genuine network or server error
+/// aborts, since retrying narrower ranges would not help.
 pub(in crate::engine) async fn fetch_headers_isolating_unparseable(
     engine: &Arc<Engine>,
     account: &str,

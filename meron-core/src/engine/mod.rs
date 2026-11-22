@@ -95,12 +95,12 @@ pub struct Engine {
     pub watched: std::sync::Mutex<HashSet<String>>,
     /// In-flight background sync keys, to dedupe concurrent refreshes.
     pub syncing: std::sync::Mutex<HashSet<String>>,
-    /// Per-thread set of referenced-but-missing message-ids we've already tried
-    /// to fetch this session, keyed by `account|thread_key`. A negative cache:
-    /// most gaps are permanent (ancestors that were never delivered to this
-    /// mailbox, e.g. GitHub notification threads), so without this every thread
-    /// open would re-open an IMAP connection to re-search for them. Cleared on
-    /// restart, which lets a genuinely-late ancestor be retried.
+    /// Per-thread set of referenced-but-missing message-ids we've already tried to fetch this session, keyed by `account|thread_key`.
+    ///
+    /// A negative cache: most gaps are permanent (ancestors that were never delivered to this mailbox,
+    /// e.g. GitHub notification threads), so without this every thread open would re-open an IMAP
+    /// connection to re-search for them. Cleared on restart, which lets a genuinely-late ancestor be
+    /// retried.
     pub gap_attempts: std::sync::Mutex<HashMap<String, HashSet<String>>>,
     /// Messages with an in-flight background body fetch, keyed by
     /// [`message_key`], so re-reads cannot duplicate a download while other
@@ -114,13 +114,12 @@ pub struct Engine {
     /// Pulsed when a background body fetch ends, so a read waiting on one of
     /// its messages looks at the cache again.
     pub body_fetch_done: Notify,
-    /// Messages ([`message_key`]) whose attachment files are not to be
-    /// fetched again yet. `None`: a download arrived and the files were still
-    /// missing, or a successful FETCH omitted the UID (expunged). Another
-    /// download is not known to help, and an open thread would
-    /// otherwise refetch, notify and re-read without end. `Some(until)`: the
-    /// download itself failed, so readers stop waiting on it until then.
-    /// Cleared for a message once its files are on disk.
+    /// Messages ([`message_key`]) whose attachment files are not to be fetched again yet.
+    ///
+    /// `None`: a download arrived and the files were still missing, or a successful FETCH omitted the
+    /// UID (expunged). Another download is not known to help, and an open thread would otherwise
+    /// refetch, notify and re-read without end. `Some(until)`: the download itself failed, so readers
+    /// stop waiting on it until then. Cleared for a message once its files are on disk.
     pub media_recovery_hold: std::sync::Mutex<HashMap<String, Option<std::time::Instant>>>,
     /// Messages ([`message_key`]) the prefetcher leaves to the on-demand
     /// reader for the rest of this run: each failed to download, then failed
@@ -150,19 +149,20 @@ pub struct Engine {
     /// that died during suspend and reconnect, instead of blocking up to the
     /// IDLE timeout / TCP keepalive while no new mail is pushed.
     pub resume_signal: Notify,
-    /// Warm, authenticated IMAP sessions reused by the request path so each
-    /// thread open / search / sync doesn't pay a fresh TLS + LOGIN/XOAUTH2
-    /// handshake. Keyed by account; per-account `Vec` is a LIFO free-list
-    /// (reuse the hottest session first). IDLE watcher connections are *not*
-    /// pooled — they have a different, long-lived lifecycle. See `with_session`.
+    /// Warm, authenticated IMAP sessions reused by the request path so each thread open / search / sync
+    /// doesn't pay a fresh TLS + LOGIN/XOAUTH2 handshake. Keyed by account; per-account `Vec` is a LIFO
+    /// free-list (reuse the hottest session first). IDLE watcher connections are *not* pooled — they
+    /// have a different, long-lived lifecycle. See `with_session`.
     pub pool: std::sync::Mutex<HashMap<String, Vec<Pooled<imap::Session>>>>,
-    /// Serialize fresh connection setup per account. Without this, startup's
-    /// folder, inbox, companion and body tasks can all observe an empty pool and
-    /// perform concurrent TLS and authentication handshakes. The lock covers the
-    /// handshake only and is dropped before the caller's IMAP operation runs, so
-    /// a long prefetch cannot block interactive work behind it — and the wait
-    /// for the lock is itself bounded (see `connect_coordination_timeout`), so
-    /// the worst an interactive fresh connect pays is that bound.
+    /// Serialize fresh connection setup per account.
+    ///
+    /// Without this, startup's folder, inbox, companion and body tasks can all observe an empty pool
+    /// and perform concurrent TLS and authentication handshakes.
+    ///
+    /// The lock covers the handshake only and is dropped before the caller's IMAP operation runs, so a
+    /// long prefetch cannot block interactive work behind it — and the wait for the lock is itself
+    /// bounded (see `connect_coordination_timeout`), so the worst an interactive fresh connect pays is
+    /// that bound.
     connect_locks: std::sync::Mutex<HashMap<String, Arc<Mutex<()>>>>,
     /// Platform integration: opens the SQLite store and loads/stores per-account
     /// secrets (OS keychain on desktop, the keyed DB on mobile).
@@ -239,11 +239,10 @@ pub trait EngineHost: Send + Sync {
     }
 }
 
-/// One idle, reusable session plus when it was last returned to the pool, so
-/// stale connections (silently dropped by the server) can be evicted on acquire
-/// instead of failing an operation. Generic over the session type so the
-/// free-list policy ([`pool_take`]/[`pool_return`]) is unit-testable without a
-/// live IMAP `Session`.
+/// One idle, reusable session plus when it was last returned to the pool, so stale connections
+/// (silently dropped by the server) can be evicted on acquire instead of failing an operation.
+/// Generic over the session type so the free-list policy ([`pool_take`]/[`pool_return`]) is
+/// unit-testable without a live IMAP `Session`.
 pub struct Pooled<S> {
     pub session: S,
     pub last_used: std::time::Instant,
@@ -346,13 +345,15 @@ pub const MAX_POOLED: usize = 3;
 /// session is almost always still alive.
 pub const MAX_IDLE: Duration = Duration::from_secs(120);
 
-/// Cap on a single command run against a *pooled* session in a retryable
-/// (read-only) op. A pooled connection the server or a NAT silently dropped
-/// doesn't error — it hangs until TCP keepalive gives up (60s+), well past the
-/// desktop bridge's 30s call timeout, so the user sees a dead UI. Failing the
-/// reuse attempt at 10s leaves room for the stale-retry fresh connection to
-/// still answer within the bridge budget. Write ops are exempt: cutting off a
-/// slow but progressing APPEND/SEND mid-command is worse than waiting.
+/// Cap on a single command run against a *pooled* session in a retryable (read-only) op.
+///
+/// A pooled connection the server or a NAT silently dropped doesn't error — it hangs until TCP
+/// keepalive gives up (60s+), well past the desktop bridge's 30s call timeout, so the user sees a
+/// dead UI. Failing the reuse attempt at 10s leaves room for the stale-retry fresh connection to
+/// still answer within the bridge budget.
+///
+/// Write ops are exempt: cutting off a slow but progressing APPEND/SEND mid-command is worse than
+/// waiting.
 pub const POOLED_READ_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// How long a pooled session gets to answer the NOOP that precedes a transfer.
@@ -435,13 +436,14 @@ enum SessionUse {
     },
 }
 
-/// Do not let a wedged fresh handshake make every later operation wait for the
-/// per-account connection coordinator indefinitely. Normal startup handshakes
-/// serialize; after this, availability wins and the caller connects independently.
-/// The bound is deliberately short: a handshake slower than this is exactly the
-/// case where an interactive open must not queue behind background prefetch, so
-/// coordination is traded away rather than latency. Waiters re-check the pool
-/// after the wait, so a leader that finished in time is still reused.
+/// Do not let a wedged fresh handshake make every later operation wait for the per-account connection coordinator indefinitely.
+///
+/// Normal startup handshakes serialize; after this, availability wins and the caller connects
+/// independently. The bound is deliberately short: a handshake slower than this is exactly the case
+/// where an interactive open must not queue behind background prefetch, so coordination is traded
+/// away rather than latency.
+///
+/// Waiters re-check the pool after the wait, so a leader that finished in time is still reused.
 fn connect_coordination_timeout() -> Duration {
     std::cmp::min(
         Duration::from_secs(2),
@@ -684,13 +686,11 @@ impl Engine {
         }
     }
 
-    /// Return a healthy session to the pool, or drop it if the account is
-    /// paused or already at `MAX_POOLED` (the transient-overflow case).
+    /// Return a healthy session to the pool, or drop it if the account is paused or already at `MAX_POOLED` (the transient-overflow case).
     ///
-    /// The paused check must happen here, not only when `account.setPaused`
-    /// clears the pool: a background sync can already have a session checked
-    /// out when the account is paused and otherwise return that old session
-    /// after the clear.
+    /// The paused check must happen here, not only when `account.setPaused` clears the pool: a
+    /// background sync can already have a session checked out when the account is paused and otherwise
+    /// return that old session after the clear.
     pub fn return_pooled(&self, account: &str, session: imap::Session) {
         if self.is_paused(account) {
             return;
@@ -728,17 +728,17 @@ impl Engine {
             .clone()
     }
 
-    /// Run `f` against a warm pooled session when one is available, otherwise a
-    /// freshly connected one. On success the session is returned to the pool.
+    /// Run `f` against a warm pooled session when one is available, otherwise a freshly connected one.
     ///
-    /// `retry`: when a *pooled* session fails (the likely cause being that the
-    /// server silently dropped it), reconnect fresh and run `f` once more. Only
-    /// safe for read-only operations — a stale pooled connection fails on its
-    /// first command (before any mutation), but a connection that drops *after*
-    /// a mutating command reached the server must not be retried. Use
-    /// [`with_read_session`](Self::with_read_session) /
-    /// [`with_write_session`](Self::with_write_session) instead of calling this
-    /// directly.
+    /// On success the session is returned to the pool.
+    ///
+    /// `retry`: when a *pooled* session fails (the likely cause being that the server silently dropped
+    /// it), reconnect fresh and run `f` once more. Only safe for read-only operations — a stale pooled
+    /// connection fails on its first command (before any mutation), but a connection that drops *after*
+    /// a mutating command reached the server must not be retried.
+    ///
+    /// Use [`with_read_session`](Self::with_read_session) /
+    /// [`with_write_session`](Self::with_write_session) instead of calling this directly.
     pub async fn with_session<T, F>(&self, account: &str, retry: bool, f: F) -> anyhow::Result<T>
     where
         F: FnMut(&mut imap::Session) -> SessionOp<'_, T> + Send,
@@ -956,17 +956,16 @@ impl Engine {
 
     /// Run a read that transfers message bytes (a body FETCH).
     ///
-    /// A reused socket is only given a short NOOP to prove it is alive.
-    /// Wrapping the FETCH itself in [`POOLED_READ_TIMEOUT`] aborts a
-    /// slow-but-alive transfer and starts it over, which is how a large or
-    /// high-latency message ends up taking twice as long to appear.
+    /// A reused socket is only given a short NOOP to prove it is alive. Wrapping the FETCH itself in
+    /// [`POOLED_READ_TIMEOUT`] aborts a slow-but-alive transfer and starts it over, which is how a
+    /// large or high-latency message ends up taking twice as long to appear.
     ///
-    /// `budget` is for the whole call: the probe, the wait for a reconnect,
-    /// the handshake, credential wait and a second run of `f` all come out of
-    /// it. A spawned credential refresh continues if this caller times out.
-    /// Running out mid-transfer fails with [`TransferTimedOut`]. `f` runs
-    /// at most twice on pooled command errors. A session returned during
-    /// coordination can serve the retry; otherwise a fresh connection does.
+    /// `budget` is for the whole call: the probe, the wait for a reconnect, the handshake, credential
+    /// wait and a second run of `f` all come out of it. A spawned credential refresh continues if this
+    /// caller times out. Running out mid-transfer fails with [`TransferTimedOut`]. `f` runs at most
+    /// twice on pooled command errors.
+    ///
+    /// A session returned during coordination can serve the retry; otherwise a fresh connection does.
     pub async fn with_transfer_session<T, F>(
         &self,
         account: &str,
@@ -992,15 +991,14 @@ impl Engine {
         self.with_session(account, false, f).await
     }
 
-    /// Run a mutating operation after a read-only preflight on the same
-    /// session. If the preflight fails on a pooled session, discard that
-    /// session and retry the preflight on a fresh connection. Once the
-    /// mutating closure starts it is never retried.
+    /// Run a mutating operation after a read-only preflight on the same session.
     ///
-    /// This is for commands such as folder deletion, which must first move a
-    /// reused session away from the selected mailbox. Keeping the phases
-    /// separate lets a dead pooled socket recover without risking a replay of
-    /// a mutation whose server-side outcome is unknown.
+    /// If the preflight fails on a pooled session, discard that session and retry the preflight on a
+    /// fresh connection. Once the mutating closure starts it is never retried.
+    ///
+    /// This is for commands such as folder deletion, which must first move a reused session away from
+    /// the selected mailbox. Keeping the phases separate lets a dead pooled socket recover without
+    /// risking a replay of a mutation whose server-side outcome is unknown.
     pub async fn with_preflighted_write_session<T, P, F>(
         &self,
         account: &str,
@@ -1015,11 +1013,10 @@ impl Engine {
         self.preflighted_write(account, false, preflight, f).await
     }
 
-    /// Like [`with_preflighted_write_session`](Self::with_preflighted_write_session),
-    /// for idempotent writes such as `+FLAGS`/`-FLAGS` stores. The server can
-    /// close a pooled connection between the preflight and the write, so when
-    /// the write fails on a pooled session with a dropped connection it is run
-    /// again, preflight included, on a fresh one. Applying it twice is harmless.
+    /// Like [`with_preflighted_write_session`](Self::with_preflighted_write_session), for idempotent
+    /// writes such as `+FLAGS`/`-FLAGS` stores. The server can close a pooled connection between the
+    /// preflight and the write, so when the write fails on a pooled session with a dropped connection
+    /// it is run again, preflight included, on a fresh one. Applying it twice is harmless.
     pub async fn with_flag_write_session<T, P, F>(
         &self,
         account: &str,

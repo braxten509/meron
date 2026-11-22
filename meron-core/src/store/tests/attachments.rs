@@ -22,7 +22,10 @@ fn get_recent_page_can_return_only_messages_with_attachments() {
     // uid 4 keeps no cached body, so nothing is known about its parts.
 
     let (page, cursor) = get_recent_page(&conn, "acct", "INBOX", 1, None, ATTACHMENTS).unwrap();
-    assert_eq!(page.iter().map(|m| m.uid).collect::<Vec<_>>(), vec![3]);
+    assert_eq!(
+        page.iter().map(|message| message.uid).collect::<Vec<_>>(),
+        vec![3]
+    );
     let (rest, cursor) = get_recent_page(
         &conn,
         "acct",
@@ -32,7 +35,10 @@ fn get_recent_page_can_return_only_messages_with_attachments() {
         ATTACHMENTS,
     )
     .unwrap();
-    assert_eq!(rest.iter().map(|m| m.uid).collect::<Vec<_>>(), vec![1]);
+    assert_eq!(
+        rest.iter().map(|message| message.uid).collect::<Vec<_>>(),
+        vec![1]
+    );
     assert_eq!(cursor, None);
 
     // The two narrowings combine: reading uid 3 drops it from "unread with
@@ -44,14 +50,23 @@ fn get_recent_page_can_return_only_messages_with_attachments() {
         attachments_only: true,
     };
     let (page, _) = get_recent_page(&conn, "acct", "INBOX", 10, None, both).unwrap();
-    assert_eq!(page.iter().map(|m| m.uid).collect::<Vec<_>>(), vec![1]);
+    assert_eq!(
+        page.iter().map(|message| message.uid).collect::<Vec<_>>(),
+        vec![1]
+    );
     let (page, _) = get_recent_page(&conn, "acct", "INBOX", 10, None, ATTACHMENTS).unwrap();
-    assert_eq!(page.iter().map(|m| m.uid).collect::<Vec<_>>(), vec![3, 1]);
+    assert_eq!(
+        page.iter().map(|message| message.uid).collect::<Vec<_>>(),
+        vec![3, 1]
+    );
 
     // Re-caching a body without the file clears the flag.
     save_body_with_attachments(&conn, 3, &[], None);
     let (page, _) = get_recent_page(&conn, "acct", "INBOX", 10, None, ATTACHMENTS).unwrap();
-    assert_eq!(page.iter().map(|m| m.uid).collect::<Vec<_>>(), vec![1]);
+    assert_eq!(
+        page.iter().map(|message| message.uid).collect::<Vec<_>>(),
+        vec![1]
+    );
 }
 
 #[test]
@@ -183,7 +198,10 @@ fn attachments_filter_spans_the_thread_not_the_row() {
         attachments_only: true,
     };
     let (page, _) = get_recent_page(&conn, "acct", "INBOX", 10, None, both).unwrap();
-    assert_eq!(page.iter().map(|m| m.uid).collect::<Vec<_>>(), vec![2]);
+    assert_eq!(
+        page.iter().map(|message| message.uid).collect::<Vec<_>>(),
+        vec![2]
+    );
 }
 
 #[test]

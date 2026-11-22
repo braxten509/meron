@@ -89,23 +89,23 @@ fn body_cache_invalidation_works() {
 
     // Save an HTML-only message (body_is_rendered = true)
     let html = "<p>rendered plain</p>";
-    let msg_html = Message {
+    let html_message = Message {
         subject: "HTML only".into(),
         body: "stale render".into(),
         body_html: Some(html.into()),
         body_is_rendered: true,
         ..Default::default()
     };
-    save_cached_message(&conn, "acct", "INBOX", 101, &msg_html).unwrap();
+    save_cached_message(&conn, "acct", "INBOX", 101, &html_message).unwrap();
 
     // Save a plain-text message (body_is_rendered = false)
-    let msg_plain = Message {
+    let plain_message = Message {
         subject: "Plain only".into(),
         body: "original plain".into(),
         body_is_rendered: false,
         ..Default::default()
     };
-    save_cached_message(&conn, "acct", "INBOX", 102, &msg_plain).unwrap();
+    save_cached_message(&conn, "acct", "INBOX", 102, &plain_message).unwrap();
 
     // Verify they are initially saved with their bodies
     let retrieved_html = get_cached_message(&conn, "acct", "INBOX", 101)
@@ -145,7 +145,7 @@ fn body_cache_invalidation_works() {
 
     // FTS still matches the re-rendered html-only message after the bump.
     let hits = search_messages(&conn, "acct", "INBOX", "rendered", 10, None).unwrap();
-    assert!(hits.iter().any(|m| m.subject == "HTML only"));
+    assert!(hits.iter().any(|message| message.subject == "HTML only"));
 }
 
 #[test]

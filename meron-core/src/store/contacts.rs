@@ -141,16 +141,14 @@ pub struct Contact {
     pub addr: String,
 }
 
-/// Suggest contacts for recipient autocomplete, drawn from both the senders and
-/// the To/Cc recipients of cached messages. Results are distinct by address and
-/// ranked by how many messages the address appears on. An empty `query` returns
-/// the top correspondents; otherwise we match the substring against address and
-/// display name. When `account` is empty we search across all accounts (unified
-/// compose).
+/// Suggest contacts for recipient autocomplete, drawn from both the senders and the To/Cc recipients of cached messages.
 ///
-/// Reads the `contacts` directory the `messages` triggers keep (see
-/// `db::contacts_ddl`), matching in Rust so a name's non-ASCII case folds,
-/// which SQLite's `lower()` doesn't.
+/// Results are distinct by address and ranked by how many messages the address appears on. An empty
+/// `query` returns the top correspondents; otherwise we match the substring against address and
+/// display name. When `account` is empty we search across all accounts (unified compose).
+///
+/// Reads the `contacts` directory the `messages` triggers keep (see `db::contacts_ddl`), matching
+/// in Rust so a name's non-ASCII case folds, which SQLite's `lower()` doesn't.
 pub fn suggest_contacts(
     conn: &Connection,
     account: &str,
@@ -183,14 +181,14 @@ impl ContactSort {
     }
 }
 
-/// [`suggest_contacts`] in a chosen order. Only [`ContactSort::Frequent`]
-/// puts the best match first: the Contacts panel's other orders hold while
-/// its search narrows them.
+/// [`suggest_contacts`] in a chosen order.
 ///
-/// A `directory` listing (the Contacts panel) leaves out the user's own
-/// addresses, which every sent message counts, and, until a search asks for
-/// them, automated senders nobody writes back to. Autocomplete keeps both:
-/// mailing yourself is a real use.
+/// Only [`ContactSort::Frequent`] puts the best match first: the Contacts panel's other orders hold
+/// while its search narrows them.
+///
+/// A `directory` listing (the Contacts panel) leaves out the user's own addresses, which every sent
+/// message counts, and, until a search asks for them, automated senders nobody writes back to.
+/// Autocomplete keeps both: mailing yourself is a real use.
 pub fn list_contacts(
     conn: &Connection,
     account: &str,

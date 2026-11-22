@@ -13,11 +13,13 @@ pub struct Trashed {
     pub uid_next_before: Option<u32>,
 }
 
-/// Delete messages on the server. Returns `None` for a permanent expunge
-/// (Drafts, or items already in Trash), or `Some` when moved to Trash.
+/// Delete messages on the server.
 ///
-/// Inside a bulk run this is the move step every member shares (see
-/// [`crate::engine::bulk`]): one command moves the mail of all of them.
+/// Returns `None` for a permanent expunge (Drafts, or items already in Trash), or `Some` when moved
+/// to Trash.
+///
+/// Inside a bulk run this is the move step every member shares (see [`crate::engine::bulk`]): one
+/// command moves the mail of all of them.
 pub async fn delete_to_trash(
     engine: &Engine,
     account: &str,
@@ -159,12 +161,13 @@ pub async fn move_within_account_with(
     Ok(copies)
 }
 
-/// Move `uids` from `folder` to `target` on the server. Gives the target's
-/// UIDNEXT from just before the move (see [`imap::move_to_folder`]). Mutating,
+/// Move `uids` from `folder` to `target` on the server.
+///
+/// Gives the target's UIDNEXT from just before the move (see [`imap::move_to_folder`]). Mutating,
 /// so it never auto-retries.
 ///
-/// Inside a bulk run this is the move step every member shares (see
-/// [`crate::engine::bulk`]): one command moves the mail of all of them.
+/// Inside a bulk run this is the move step every member shares (see [`crate::engine::bulk`]): one
+/// command moves the mail of all of them.
 pub async fn move_on_server(
     engine: &Engine,
     account: &str,

@@ -1,10 +1,11 @@
 //! Which of the reader's lessons are like a new email.
 //!
 //! A lesson is an email the reader moved by hand and where they put it (see
-//! [`crate::store::ai_lessons`]). For each new email AI sorting picks the few
-//! lessons most like it and shows them to the AI next to the email; the AI
-//! decides whether the new email is the same kind. Nothing here decides a
-//! move: this only chooses what the AI gets to see, and when "Spam" may be
+//! [`crate::store::ai_lessons`]). For each new email AI sorting picks the few lessons most like it
+//! and shows them to the AI next to the email; the AI decides whether the new email is the same
+//! kind.
+//!
+//! Nothing here decides a move: this only chooses what the AI gets to see, and when "Spam" may be
 //! among its answers at all.
 
 use std::collections::BTreeSet;
@@ -137,10 +138,9 @@ fn likeness(lesson: &Lesson, from_addr: &str, subject: &str) -> f64 {
     base + subject_likeness(&lesson.subject, subject)
 }
 
-/// Whether a lesson is close enough to back a Spam answer for the email: the
-/// very same address, or the same site with an alike subject (at least
-/// [`CLOSE_WORDS`] shared words, [`CLOSE_SUBJECT`] of all). A lesson from a
-/// shared mail service (two strangers at one big provider) with another
+/// Whether a lesson is close enough to back a Spam answer for the email: the very same address, or
+/// the same site with an alike subject (at least [`CLOSE_WORDS`] shared words, [`CLOSE_SUBJECT`] of
+/// all). A lesson from a shared mail service (two strangers at one big provider) with another
 /// subject, or with one common word alike, never is.
 pub fn close(lesson: &Lesson, from_addr: &str, subject: &str) -> bool {
     same_address(lesson, from_addr)

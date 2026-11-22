@@ -239,13 +239,14 @@ fn rule_copy(account: &str, folder: &str, rule: &Rule) -> Option<RuleCopy> {
     })
 }
 
-/// Run the rules over mail that has just arrived in `folder`: never seen on this
-/// account, in any folder. Only then, so undoing what a rule did by hand sticks.
-/// Mail the user wrote or threw away has not arrived in that sense.
+/// Run the rules over mail that has just arrived in `folder`: never seen on this account, in any folder.
+///
+/// Only then, so undoing what a rule did by hand sticks. Mail the user wrote or threw away has not
+/// arrived in that sense.
 ///
 /// Tags are saved here; what must reach the server first waits in the queue for
-/// [`crate::engine::run_rule_actions`]. Several rules can match one message:
-/// each adds what it does, and the first to move it decides where.
+/// [`crate::engine::run_rule_actions`]. Several rules can match one message: each adds what it
+/// does, and the first to move it decides where.
 pub fn apply_rules(
     conn: &Connection,
     account: &str,
@@ -584,12 +585,12 @@ pub fn count_existing_rule_matches(conn: &Connection, id: &str) -> Result<usize>
     Ok(count)
 }
 
-/// Run a saved rule over mail already in the Inbox, for
-/// [`crate::engine::run_rule_on_existing`] to carry out. Answers with the
-/// accounts and how many messages each queued. Mail this rule already has work
-/// queued for keeps that work; other rules' work runs alongside, under its own
-/// run. And [`crate::engine`] asks the target before each copy, so
-/// running a rule twice doesn't double what it did.
+/// Run a saved rule over mail already in the Inbox, for [`crate::engine::run_rule_on_existing`] to carry out.
+///
+/// Answers with the accounts and how many messages each queued. Mail this rule already has work
+/// queued for keeps that work; other rules' work runs alongside, under its own run. And
+/// [`crate::engine`] asks the target before each copy, so running a rule twice doesn't double what
+/// it did.
 pub fn queue_existing_rule(conn: &Connection, id: &str) -> Result<Vec<(String, usize)>> {
     let folder = EXISTING_RULE_FOLDER;
     let tx = Transaction::new_unchecked(conn, TransactionBehavior::Immediate)?;

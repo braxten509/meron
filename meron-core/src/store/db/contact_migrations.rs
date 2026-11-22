@@ -165,11 +165,10 @@ pub(super) fn migrate_v18(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
-/// The local calendar (migration v19): events the user made, and invitations
-/// they accepted. Like tasks, a table rather than a blob, queried by time.
-/// `recurring` rows are expanded on read from `rrule` (an event made here) or
-/// `ics` (an invitation, whose own rules and exceptions are kept whole), so a
-/// range query takes every recurring row that starts before its end.
+/// The local calendar (migration v19): events the user made, and invitations they accepted. Like
+/// tasks, a table rather than a blob, queried by time. `recurring` rows are expanded on read from
+/// `rrule` (an event made here) or `ics` (an invitation, whose own rules and exceptions are kept
+/// whole), so a range query takes every recurring row that starts before its end.
 pub(super) fn migrate_v19(conn: &Connection) -> Result<()> {
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS events (

@@ -6,10 +6,10 @@ use super::*;
 
 #[test]
 fn mobile_protocol_round_trips_a_plaintext_backup() {
-    let source_dir = unique_data_dir("backup-source");
+    let source_directory = unique_data_directory("backup-source");
     let unique = unique_test_suffix();
     let email = format!("backup+{unique}@example.com");
-    let source = source_dir.to_str().unwrap();
+    let source = source_directory.to_str().unwrap();
     let add = format!(
         r#"{{"id":80,"method":"account.addPassword","params":{{"email":"{email}","display_name":"Work","sender_name":"Ada","imap_host":"imap.example.com","imap_port":993,"smtp_host":"smtp.example.com","smtp_port":465,"username":"{email}","password":"pa55w0rd-plain","tls":true}}}}"#
     );
@@ -29,8 +29,8 @@ fn mobile_protocol_round_trips_a_plaintext_backup() {
     assert!(!text.contains("pa55w0rd-plain"), "{text}");
 
     // Restore into a second, empty data dir.
-    let target_dir = unique_data_dir("backup-target");
-    let target = target_dir.to_str().unwrap();
+    let target_directory = unique_data_directory("backup-target");
+    let target = target_directory.to_str().unwrap();
     let import = json!({
         "id": 82,
         "method": "backup.import",
@@ -54,14 +54,14 @@ fn mobile_protocol_round_trips_a_plaintext_backup() {
     // No secret came across, so the restored account has to be reconnected.
     assert_eq!(listed["result"]["accounts"][0]["needs_reconnect"], true);
 
-    let _ = std::fs::remove_dir_all(source_dir);
-    let _ = std::fs::remove_dir_all(target_dir);
+    let _ = std::fs::remove_dir_all(source_directory);
+    let _ = std::fs::remove_dir_all(target_directory);
 }
 
 #[test]
 fn mobile_settings_restored_from_a_backup_are_readable_as_prefs() {
-    let source_dir = unique_data_dir("mobile-prefs-backup-source");
-    let source = source_dir.to_str().unwrap();
+    let source_directory = unique_data_directory("mobile-prefs-backup-source");
+    let source = source_directory.to_str().unwrap();
     let set = json!({
         "id": 1,
         "method": "app.prefsSet",
@@ -79,8 +79,8 @@ fn mobile_settings_restored_from_a_backup_are_readable_as_prefs() {
     );
     let text = exported["result"]["backup"].as_str().unwrap().to_string();
 
-    let target_dir = unique_data_dir("mobile-prefs-backup-target");
-    let target = target_dir.to_str().unwrap();
+    let target_directory = unique_data_directory("mobile-prefs-backup-target");
+    let target = target_directory.to_str().unwrap();
     let import = json!({ "id": 3, "method": "backup.import", "params": { "backup": text } });
     let imported = invoke_mobile_protocol_json(&import.to_string(), Some(target));
     assert!(imported.get("error").is_none(), "{imported}");
@@ -93,16 +93,16 @@ fn mobile_settings_restored_from_a_backup_are_readable_as_prefs() {
     let value = invoke_mobile_protocol_json(&get.to_string(), Some(target));
     assert_eq!(value["result"]["prefs"]["mobile.app.app_language_v1"], "ja");
 
-    let _ = std::fs::remove_dir_all(source_dir);
-    let _ = std::fs::remove_dir_all(target_dir);
+    let _ = std::fs::remove_dir_all(source_directory);
+    let _ = std::fs::remove_dir_all(target_directory);
 }
 
 #[test]
 fn mobile_protocol_round_trips_an_encrypted_backup_with_secrets() {
-    let source_dir = unique_data_dir("backup-enc-source");
+    let source_directory = unique_data_directory("backup-enc-source");
     let unique = unique_test_suffix();
     let email = format!("enc+{unique}@example.com");
-    let source = source_dir.to_str().unwrap();
+    let source = source_directory.to_str().unwrap();
     let add = format!(
         r#"{{"id":84,"method":"account.addPassword","params":{{"email":"{email}","display_name":"Work","imap_host":"imap.example.com","smtp_host":"smtp.example.com","username":"{email}","password":"hunter2"}}}}"#
     );
@@ -122,8 +122,8 @@ fn mobile_protocol_round_trips_an_encrypted_backup_with_secrets() {
     let text = exported["result"]["backup"].as_str().unwrap().to_string();
     assert!(!text.contains("hunter2"), "{text}");
 
-    let target_dir = unique_data_dir("backup-enc-target");
-    let target = target_dir.to_str().unwrap();
+    let target_directory = unique_data_directory("backup-enc-target");
+    let target = target_directory.to_str().unwrap();
 
     // No passphrase: a prompt request, not a failure.
     let bare = json!({ "id": 86, "method": "backup.import", "params": { "backup": text } });
@@ -158,6 +158,6 @@ fn mobile_protocol_round_trips_an_encrypted_backup_with_secrets() {
     );
     assert_eq!(listed["result"]["accounts"][0]["needs_reconnect"], false);
 
-    let _ = std::fs::remove_dir_all(source_dir);
-    let _ = std::fs::remove_dir_all(target_dir);
+    let _ = std::fs::remove_dir_all(source_directory);
+    let _ = std::fs::remove_dir_all(target_directory);
 }

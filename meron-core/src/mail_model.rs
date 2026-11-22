@@ -22,12 +22,12 @@ pub const NEW_MESSAGES_DETAIL_MAX: usize = 8;
 
 /// The `mail.newMessages` payload for a batch of arrivals, newest first.
 ///
-/// `from`/`from_addr`/`subject`/`threadKey` describe the newest message and are
-/// what a single-notification client (desktop) reads; `messages` carries the same
-/// fields per arrival plus a body snippet, for clients that post one
-/// notification per mail. Snippets come from cached bodies, so a message whose
-/// body hasn't been fetched yet contributes an empty `preview` rather than
-/// holding up the event.
+/// `from`/`from_addr`/`subject`/`threadKey` describe the newest message and are what a
+/// single-notification client (desktop) reads; `messages` carries the same fields per arrival plus
+/// a body snippet, for clients that post one notification per mail.
+///
+/// Snippets come from cached bodies, so a message whose body hasn't been fetched yet contributes an
+/// empty `preview` rather than holding up the event.
 pub fn new_messages_detail(
     conn: &Connection,
     account_id: &str,
@@ -115,11 +115,10 @@ pub fn display_from(header: &MessageHeader) -> String {
     }
 }
 
-/// Gate for deleting a folder on the server. Both clients call this so the rule
-/// lives in one place: special-use mailboxes are off limits (the app routes mail
-/// through Inbox/Sent/Drafts/Trash/Junk/Archive, and the server keeps no copy
-/// once they are gone), and that applies to anything nested under the folder
-/// too, since deleting it takes the whole subtree.
+/// Gate for deleting a folder on the server. Both clients call this so the rule lives in one place:
+/// special-use mailboxes are off limits (the app routes mail through
+/// Inbox/Sent/Drafts/Trash/Junk/Archive, and the server keeps no copy once they are gone), and that
+/// applies to anything nested under the folder too, since deleting it takes the whole subtree.
 pub fn check_folder_deletable(
     conn: &Connection,
     account: &str,
@@ -184,11 +183,10 @@ pub fn format_thread_id(account_id: &str, folder: &str, thread_key: &str) -> Str
     format!("{account_id}#{}#t.{encoded}", canon_folder(folder))
 }
 
-/// Cards for a sender-grouped page (see [`store::get_sender_page`]): one per
-/// correspondent, keyed `sender:<address>`, in the ordinary card shape plus
-/// `group: "sender"` and `automated` (a no-reply style address). Star and tag
-/// state stay with the single messages inside the chat, so the card carries
-/// none of either beyond `starred` (any of their messages starred).
+/// Cards for a sender-grouped page (see [`store::get_sender_page`]): one per correspondent, keyed
+/// `sender:<address>`, in the ordinary card shape plus `group: "sender"` and `automated` (a
+/// no-reply style address). Star and tag state stay with the single messages inside the chat, so
+/// the card carries none of either beyond `starred` (any of their messages starred).
 pub fn sender_cards_json(
     conn: &Connection,
     account_id: &str,
@@ -462,25 +460,25 @@ fn thread_cards_json_keyed(
 
 /// Every starred mail message across all accounts, as ordinary thread cards.
 ///
-/// The starred view used to emit one row per starred *message* (`id` was
-/// `{thread_id}#{uid}`), which made it the only list in the app whose rows were
-/// not threads — hence its own row menu, its own bulk-selection surface and a
-/// `selectedStarredItem` selection model running alongside the normal one.
-/// Building the same cards every other mailbox builds collapses all of that:
-/// star is just another folder whose contents happen to span accounts.
+/// The starred view used to emit one row per starred *message* (`id` was `{thread_id}#{uid}`),
+/// which made it the only list in the app whose rows were not threads — hence its own row menu, its
+/// own bulk-selection surface and a `selectedStarredItem` selection model running alongside the
+/// normal one.
+///
+/// Building the same cards every other mailbox builds collapses all of that: star is just another
+/// folder whose contents happen to span accounts.
 ///
 /// Cards are grouped per (account, folder) rather than in one pass, because
-/// [`store::group_thread_cards_with_drafts`] keys on the thread key alone. A
-/// single pass would merge a thread starred in both Inbox and Archive into one
-/// card and pin it to whichever folder happened to sort first. The per-folder
-/// pass is then collapsed back to one card per thread by
-/// [`starred_folder_rank`], so a thread the server files under several folders
-/// is listed once, in its most specific one.
+/// [`store::group_thread_cards_with_drafts`] keys on the thread key alone. A single pass would
+/// merge a thread starred in both Inbox and Archive into one card and pin it to whichever folder
+/// happened to sort first.
 ///
-/// `max_threads` bounds the conversations read, not the rows: the cards are
-/// what [`starred_page`] then searches, sorts and pages through, so a budget
-/// spent on duplicate folder copies would cut the list short with no cursor
-/// left to reach what it dropped.
+/// The per-folder pass is then collapsed back to one card per thread by [`starred_folder_rank`], so
+/// a thread the server files under several folders is listed once, in its most specific one.
+///
+/// `max_threads` bounds the conversations read, not the rows: the cards are what [`starred_page`]
+/// then searches, sorts and pages through, so a budget spent on duplicate folder copies would cut
+/// the list short with no cursor left to reach what it dropped.
 pub fn starred_thread_cards(conn: &Connection, max_threads: u32) -> anyhow::Result<Vec<Value>> {
     let mut by_location: BTreeMap<(String, String), Vec<MessageHeader>> = BTreeMap::new();
     // The conversations the budget let through. Expanding a starred hit below
@@ -768,12 +766,12 @@ fn decode_meron_cursor(cursor: &str) -> Option<(i64, String)> {
     Some((date.parse().ok()?, entry.to_string()))
 }
 
-/// One page of a Meron folder: thread cards of its conversations, newest
-/// conversation first, keyset paged by (newest message date, entry). Each
-/// conversation's card sits in its best-ranked copy (Inbox, a folder, Sent,
-/// Archive), so its thread id is a real `account#FOLDER#t.…` id; Drafts, Trash
-/// and Junk copies stay out (the draft badge still comes from the drafts).
-/// `filter` is "all", "unread" or "starred"; `query` a plain text search.
+/// One page of a Meron folder: thread cards of its conversations, newest conversation first, keyset paged by (newest message date, entry).
+///
+/// Each conversation's card sits in its best-ranked copy (Inbox, a folder, Sent, Archive), so its
+/// thread id is a real `account#FOLDER#t.…` id; Drafts, Trash and Junk copies stay out (the draft
+/// badge still comes from the drafts). `filter` is "all", "unread" or "starred"; `query` a plain
+/// text search.
 pub fn meron_folder_page(
     conn: &Connection,
     folder_id: &str,

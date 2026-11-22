@@ -1,11 +1,13 @@
-//! Shared mailbox listing for both frontends. Desktop (`messages.recent` in the
-//! sidecar) and mobile (`mail.threadList` over FFI) answer the same question —
-//! which cards belong in this mailbox view — and differ only in how they reach a
-//! page of headers: desktop may go live over IMAP, mobile answers from the
-//! encrypted cache so the list still works offline. The view's inputs, the
-//! filter-to-source decision and the response shape live here so a fix for one
-//! frontend is a fix for both; platform callers keep only the fetch itself and
-//! whatever background sync they spawn afterwards.
+//! Shared mailbox listing for both frontends.
+//!
+//! Desktop (`messages.recent` in the sidecar) and mobile (`mail.threadList` over FFI) answer the
+//! same question — which cards belong in this mailbox view — and differ only in how they reach a
+//! page of headers: desktop may go live over IMAP, mobile answers from the encrypted cache so the
+//! list still works offline.
+//!
+//! The view's inputs, the filter-to-source decision and the response shape live here so a fix for
+//! one frontend is a fix for both; platform callers keep only the fetch itself and whatever
+//! background sync they spawn afterwards.
 
 use anyhow::Result;
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
@@ -18,12 +20,11 @@ use crate::{mail_model, rss, store};
 /// Default page size when a caller does not ask for one.
 pub const DEFAULT_LIMIT: u32 = 50;
 
-/// How many further pages a request reads when the attachments toggle empties
-/// the one it asked for (see [`ThreadListQuery::next_attachment_cursor`]).
-/// Bounded so a long mailbox with no attachments answers in a few reads, not a
-/// walk of the whole folder (a live search pays a server round-trip per page).
-/// Past the bound the empty page still carries its cursor, and both frontends
-/// offer "Load more" on an empty list that has one.
+/// How many further pages a request reads when the attachments toggle empties the one it asked for (see [`ThreadListQuery::next_attachment_cursor`]).
+///
+/// Bounded so a long mailbox with no attachments answers in a few reads, not a walk of the whole
+/// folder (a live search pays a server round-trip per page). Past the bound the empty page still
+/// carries its cursor, and both frontends offer "Load more" on an empty list that has one.
 pub const ATTACHMENT_PAGE_HOPS: u32 = 5;
 
 /// The mailbox-view inputs, as both transports send them. Only the folder key

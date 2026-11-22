@@ -318,11 +318,10 @@ pub(super) fn addressed_to(
     Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
 }
 
-/// The chat a sender row opens, oldest first: their messages in `folder`, the
-/// account's Sent mail to them, and drafts to them. Other folders stay out,
-/// and so do replies to a conversation the reader deleted.
-/// Two copies of one Message-ID (mail to yourself) show once, preferring the
-/// copy in `folder` so the chat's read state follows the row.
+/// The chat a sender row opens, oldest first: their messages in `folder`, the account's Sent mail
+/// to them, and drafts to them. Other folders stay out, and so do replies to a conversation the
+/// reader deleted. Two copies of one Message-ID (mail to yourself) show once, preferring the copy
+/// in `folder` so the chat's read state follows the row.
 pub fn sender_chat_headers(
     conn: &Connection,
     account: &str,

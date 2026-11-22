@@ -100,7 +100,13 @@ fn custom_folder_arrivals_skip_mail_already_seen_elsewhere() {
         },
     ];
     let arrivals = classify_arrivals(&conn, "acct", "Work", 20, 22, &batch).unwrap();
-    assert_eq!(arrivals.iter().map(|m| m.uid).collect::<Vec<_>>(), vec![21]);
+    assert_eq!(
+        arrivals
+            .iter()
+            .map(|message| message.uid)
+            .collect::<Vec<_>>(),
+        vec![21]
+    );
 }
 
 #[test]

@@ -6,26 +6,26 @@ use super::*;
 
 #[test]
 fn mobile_protocol_allocates_stable_format_message_identity() {
-    let data_dir = unique_data_dir("allocate-identity");
+    let data_directory = unique_data_directory("allocate-identity");
     let value = invoke_mobile_protocol_json(
         r#"{"id":44,"method":"mail.allocateIdentity","params":{"account_id":"me@example.com","draft":true}}"#,
-        Some(data_dir.to_str().unwrap()),
+        Some(data_directory.to_str().unwrap()),
     );
     let id = value["result"]["message_id"].as_str().unwrap();
     assert!(id.starts_with("meron-draft-"), "{value}");
     assert!(id.ends_with("@example.com"), "{value}");
-    let _ = std::fs::remove_dir_all(data_dir);
+    let _ = std::fs::remove_dir_all(data_directory);
 }
 
 #[test]
 fn mobile_protocol_persists_password_account_metadata() {
-    let data_dir = unique_data_dir("account");
+    let data_directory = unique_data_directory("account");
     let unique = unique_test_suffix();
     let email = format!("me+{unique}@example.com");
     let request = format!(
         r#"{{"id":60,"method":"account.addPassword","params":{{"email":"{email}","display_name":"Me","sender_name":"Sender","imap_host":"imap.example.com","imap_port":993,"smtp_host":"smtp.example.com","smtp_port":587,"username":"{email}","password":"secret","tls":true}}}}"#
     );
-    let added = invoke_mobile_protocol_json(&request, Some(data_dir.to_str().unwrap()));
+    let added = invoke_mobile_protocol_json(&request, Some(data_directory.to_str().unwrap()));
     assert_eq!(added["id"], 60);
     assert_eq!(added["result"]["account"]["id"], email.as_str());
     assert_eq!(added["result"]["account"]["email"], email.as_str());
@@ -42,25 +42,25 @@ fn mobile_protocol_persists_password_account_metadata() {
 
     let listed = invoke_mobile_protocol_json(
         r#"{"id":61,"method":"account.list","params":{}}"#,
-        Some(data_dir.to_str().unwrap()),
+        Some(data_directory.to_str().unwrap()),
     );
     assert_eq!(listed["id"], 61);
     assert_eq!(listed["result"]["accounts"][0]["id"], email.as_str());
     assert_eq!(listed["result"]["accounts"][0]["needs_reconnect"], false);
 
-    let _ = std::fs::remove_dir_all(data_dir);
+    let _ = std::fs::remove_dir_all(data_directory);
 }
 
 #[test]
 fn mobile_protocol_reconnect_keeps_the_account_proxy_and_certificate_pins() {
-    let data_dir = unique_data_dir("account-reconnect");
-    let dir = data_dir.to_str().unwrap().to_string();
+    let data_directory = unique_data_directory("account-reconnect");
+    let directory = data_directory.to_str().unwrap().to_string();
     let unique = unique_test_suffix();
     let email = format!("bridge+{unique}@example.com");
     let add = format!(
         r#"{{"id":70,"method":"account.addPassword","params":{{"email":"{email}","imap_host":"127.0.0.1","imap_port":1143,"smtp_host":"127.0.0.1","smtp_port":1025,"username":"{email}","password":"secret","tls":false,"starttls":true,"smtp_tls":false,"smtp_starttls":true,"cert_pin":"AA11","smtp_cert_pin":"BB22","proxy":{{"mode":"socks5","host":"127.0.0.1","port":9050}}}}}}"#
     );
-    let added = invoke_mobile_protocol_json(&add, Some(&dir));
+    let added = invoke_mobile_protocol_json(&add, Some(&directory));
     assert_eq!(added["result"]["account"]["cert_pin"], "aa11", "{added}");
     assert_eq!(added["result"]["account"]["proxy"]["mode"], "socks5");
 
@@ -68,45 +68,45 @@ fn mobile_protocol_reconnect_keeps_the_account_proxy_and_certificate_pins() {
     let reconnect = format!(
         r#"{{"id":71,"method":"account.addPassword","params":{{"email":"{email}","imap_host":"127.0.0.1","imap_port":1143,"smtp_host":"127.0.0.1","smtp_port":1025,"username":"{email}","password":"new-secret","tls":false,"starttls":true,"smtp_tls":false,"smtp_starttls":true}}}}"#
     );
-    let reconnected = invoke_mobile_protocol_json(&reconnect, Some(&dir));
+    let reconnected = invoke_mobile_protocol_json(&reconnect, Some(&directory));
     let account = &reconnected["result"]["account"];
     assert_eq!(account["proxy"]["mode"], "socks5", "{reconnected}");
     assert_eq!(account["proxy"]["port"], 9050, "{reconnected}");
     assert_eq!(account["cert_pin"], "aa11", "{reconnected}");
     assert_eq!(account["smtp_cert_pin"], "bb22", "{reconnected}");
 
-    let _ = std::fs::remove_dir_all(data_dir);
+    let _ = std::fs::remove_dir_all(data_directory);
 }
 
 #[test]
 fn mobile_protocol_honors_explicit_password_account_security_modes() {
-    let data_dir = unique_data_dir("account-security");
+    let data_directory = unique_data_directory("account-security");
     let unique = unique_test_suffix();
     let email = format!("self-hosted+{unique}@example.com");
     let request = format!(
         r#"{{"id":62,"method":"account.addPassword","params":{{"email":"{email}","imap_host":"mail.example.com","imap_port":143,"smtp_host":"mail.example.com","smtp_port":2525,"username":"{email}","password":"secret","tls":false,"starttls":true,"smtp_tls":false,"smtp_starttls":false}}}}"#
     );
 
-    let added = invoke_mobile_protocol_json(&request, Some(data_dir.to_str().unwrap()));
+    let added = invoke_mobile_protocol_json(&request, Some(data_directory.to_str().unwrap()));
     let account = &added["result"]["account"];
     assert_eq!(account["tls"], false);
     assert_eq!(account["starttls"], true);
     assert_eq!(account["smtp_tls"], false);
     assert_eq!(account["smtp_starttls"], false);
 
-    let _ = std::fs::remove_dir_all(data_dir);
+    let _ = std::fs::remove_dir_all(data_directory);
 }
 
 #[test]
 fn mobile_protocol_only_overrides_inference_with_unambiguous_security_modes() {
-    let data_dir = unique_data_dir("account-partial-security");
+    let data_directory = unique_data_directory("account-partial-security");
     let unique = unique_test_suffix();
     let email = format!("partial-security+{unique}@example.com");
     let request = format!(
         r#"{{"id":63,"method":"account.addPassword","params":{{"email":"{email}","imap_host":"mail.example.com","imap_port":143,"smtp_host":"mail.example.com","smtp_port":587,"username":"{email}","password":"secret","tls":true,"starttls":false,"smtp_tls":true}}}}"#
     );
 
-    let added = invoke_mobile_protocol_json(&request, Some(data_dir.to_str().unwrap()));
+    let added = invoke_mobile_protocol_json(&request, Some(data_directory.to_str().unwrap()));
     let account = &added["result"]["account"];
     assert_eq!(account["tls"], true);
     assert_eq!(account["starttls"], false);
@@ -117,7 +117,7 @@ fn mobile_protocol_only_overrides_inference_with_unambiguous_security_modes() {
     let request = format!(
         r#"{{"id":64,"method":"account.addPassword","params":{{"email":"{email}","imap_host":"mail.example.com","imap_port":993,"smtp_host":"mail.example.com","smtp_port":587,"username":"{email}","password":"secret","tls":true,"smtp_starttls":false}}}}"#
     );
-    let added = invoke_mobile_protocol_json(&request, Some(data_dir.to_str().unwrap()));
+    let added = invoke_mobile_protocol_json(&request, Some(data_directory.to_str().unwrap()));
     let account = &added["result"]["account"];
     assert_eq!(account["smtp_tls"], false);
     assert_eq!(account["smtp_starttls"], true);
@@ -126,27 +126,27 @@ fn mobile_protocol_only_overrides_inference_with_unambiguous_security_modes() {
     let request = format!(
         r#"{{"id":65,"method":"account.addPassword","params":{{"email":"{email}","imap_host":"mail.example.com","imap_port":143,"smtp_host":"mail.example.com","smtp_port":587,"username":"{email}","password":"secret","tls":true}}}}"#
     );
-    let added = invoke_mobile_protocol_json(&request, Some(data_dir.to_str().unwrap()));
+    let added = invoke_mobile_protocol_json(&request, Some(data_directory.to_str().unwrap()));
     let account = &added["result"]["account"];
     assert_eq!(account["tls"], false);
     assert_eq!(account["starttls"], true);
     assert_eq!(account["smtp_tls"], false);
     assert_eq!(account["smtp_starttls"], true);
 
-    let _ = std::fs::remove_dir_all(data_dir);
+    let _ = std::fs::remove_dir_all(data_directory);
 }
 
 #[test]
 fn mobile_protocol_updates_account_settings_and_aliases() {
-    let data_dir = unique_data_dir("account-settings");
+    let data_directory = unique_data_directory("account-settings");
     let unique = unique_test_suffix();
     let email = format!("settings+{unique}@example.com");
-    let data_dir_str = data_dir.to_str().unwrap();
+    let directory_text = data_directory.to_str().unwrap();
     let add_request = format!(
         r#"{{"id":70,"method":"account.addPassword","params":{{"email":"{email}","display_name":"Old","sender_name":"Old Sender","imap_host":"imap.example.com","smtp_host":"smtp.example.com","username":"{email}","password":"secret"}}}}"#
     );
     assert!(
-        invoke_mobile_protocol_json(&add_request, Some(data_dir_str))
+        invoke_mobile_protocol_json(&add_request, Some(directory_text))
             .get("error")
             .is_none()
     );
@@ -187,13 +187,13 @@ fn mobile_protocol_updates_account_settings_and_aliases() {
         ),
     ];
     for command in commands {
-        let value = invoke_mobile_protocol_json(&command, Some(data_dir_str));
+        let value = invoke_mobile_protocol_json(&command, Some(directory_text));
         assert!(value.get("error").is_none(), "{value}");
     }
 
     let listed = invoke_mobile_protocol_json(
         r#"{"id":82,"method":"account.list","params":{}}"#,
-        Some(data_dir_str),
+        Some(directory_text),
     );
     let account = &listed["result"]["accounts"][0];
     assert_eq!(account["display_name"], "Personal", "{listed}");
@@ -218,38 +218,38 @@ fn mobile_protocol_updates_account_settings_and_aliases() {
 
     let remove = format!(r#"{{"id":83,"method":"account.remove","params":{{"id":"{email}"}}}}"#);
     assert!(
-        invoke_mobile_protocol_json(&remove, Some(data_dir_str))
+        invoke_mobile_protocol_json(&remove, Some(directory_text))
             .get("error")
             .is_none()
     );
     let empty = invoke_mobile_protocol_json(
         r#"{"id":84,"method":"account.list","params":{}}"#,
-        Some(data_dir_str),
+        Some(directory_text),
     );
     assert_eq!(empty["result"]["accounts"].as_array().unwrap().len(), 0);
 
-    seed_rss_account(&data_dir, "rss-settings", "Feeds");
+    seed_rss_account(&data_directory, "rss-settings", "Feeds");
     let interval = invoke_mobile_protocol_json(
         r#"{"id":85,"method":"account.setRSSSyncInterval","params":{"id":"rss-settings","minutes":30}}"#,
-        Some(data_dir_str),
+        Some(directory_text),
     );
     assert!(interval.get("error").is_none(), "{interval}");
     let rss_listed = invoke_mobile_protocol_json(
         r#"{"id":84,"method":"account.list","params":{}}"#,
-        Some(data_dir_str),
+        Some(directory_text),
     );
     assert_eq!(
         rss_listed["result"]["accounts"][0]["rss_sync_interval_minutes"], 30,
         "{rss_listed}"
     );
 
-    let _ = std::fs::remove_dir_all(data_dir);
+    let _ = std::fs::remove_dir_all(data_directory);
 }
 
 #[test]
 fn mobile_protocol_reorders_accounts() {
-    let data_dir = unique_data_dir("account-reorder");
-    let data_dir_str = data_dir.to_str().unwrap();
+    let data_directory = unique_data_directory("account-reorder");
+    let directory_text = data_directory.to_str().unwrap();
     for email in [
         "first@example.com",
         "second@example.com",
@@ -259,7 +259,7 @@ fn mobile_protocol_reorders_accounts() {
             r#"{{"id":90,"method":"account.addPassword","params":{{"email":"{email}","display_name":"{email}","imap_host":"imap.example.com","smtp_host":"smtp.example.com","username":"{email}","password":"secret"}}}}"#
         );
         assert!(
-            invoke_mobile_protocol_json(&add_request, Some(data_dir_str))
+            invoke_mobile_protocol_json(&add_request, Some(directory_text))
                 .get("error")
                 .is_none()
         );
@@ -267,13 +267,13 @@ fn mobile_protocol_reorders_accounts() {
 
     let reorder = invoke_mobile_protocol_json(
         r#"{"id":91,"method":"account.reorder","params":{"accounts":["third@example.com","first@example.com","second@example.com"]}}"#,
-        Some(data_dir_str),
+        Some(directory_text),
     );
     assert_eq!(reorder["result"]["ok"], true, "{reorder}");
 
     let listed = invoke_mobile_protocol_json(
         r#"{"id":92,"method":"account.list","params":{}}"#,
-        Some(data_dir_str),
+        Some(directory_text),
     );
     let accounts = listed["result"]["accounts"].as_array().unwrap();
     let ids: Vec<_> = accounts
@@ -289,13 +289,13 @@ fn mobile_protocol_reorders_accounts() {
         ]
     );
 
-    let _ = std::fs::remove_dir_all(data_dir);
+    let _ = std::fs::remove_dir_all(data_directory);
 }
 
 #[test]
 fn mobile_protocol_appends_new_accounts() {
-    let data_dir = unique_data_dir("account-append");
-    let data_dir_str = data_dir.to_str().unwrap();
+    let data_directory = unique_data_directory("account-append");
+    let directory_text = data_directory.to_str().unwrap();
     for (email, name) in [
         ("z-first@example.com", "Z First"),
         ("a-second@example.com", "A Second"),
@@ -305,14 +305,14 @@ fn mobile_protocol_appends_new_accounts() {
             r#"{{"id":93,"method":"account.addPassword","params":{{"email":"{email}","display_name":"{name}","imap_host":"imap.example.com","smtp_host":"smtp.example.com","username":"{email}","password":"secret"}}}}"#
         );
         assert!(
-            invoke_mobile_protocol_json(&add_request, Some(data_dir_str))
+            invoke_mobile_protocol_json(&add_request, Some(directory_text))
                 .get("error")
                 .is_none()
         );
     }
     let listed = invoke_mobile_protocol_json(
         r#"{"id":95,"method":"account.list","params":{}}"#,
-        Some(data_dir_str),
+        Some(directory_text),
     );
     let accounts = listed["result"]["accounts"].as_array().unwrap();
     let labels: Vec<_> = accounts
@@ -321,15 +321,15 @@ fn mobile_protocol_appends_new_accounts() {
         .collect();
     assert_eq!(labels, vec!["Z First", "A Second", "M Third"]);
 
-    let _ = std::fs::remove_dir_all(data_dir);
+    let _ = std::fs::remove_dir_all(data_directory);
 }
 
 #[test]
 fn mobile_protocol_rejects_invalid_password_account() {
-    let data_dir = unique_data_dir("invalid-account");
+    let data_directory = unique_data_directory("invalid-account");
     let value = invoke_mobile_protocol_json(
         r#"{"id":62,"method":"account.addPassword","params":{"email":"missing-at","imap_host":"imap.example.com","smtp_host":"smtp.example.com","username":"me"}}"#,
-        Some(data_dir.to_str().unwrap()),
+        Some(data_directory.to_str().unwrap()),
     );
     assert_eq!(value["id"], 62);
     assert!(
@@ -338,5 +338,5 @@ fn mobile_protocol_rejects_invalid_password_account() {
             .unwrap()
             .contains("invalid email")
     );
-    let _ = std::fs::remove_dir_all(data_dir);
+    let _ = std::fs::remove_dir_all(data_directory);
 }

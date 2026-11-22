@@ -169,11 +169,11 @@ fn strip_invisible_html(html: &str) -> String {
     strip_html_block(&strip_html_block(html, "style"), "script")
 }
 
-/// Neutralize HTML table layout so the markdown converter doesn't render it as a
-/// markdown table. Emails (Google, newsletters, Outlook) use tables purely for
-/// layout; rendering them as tables crams whole paragraphs into single cells,
-/// strips block structure (text runs together), and emits `| --- |` noise the
-/// reader can't render. Cells/rows become `<div>` to keep block separation;
+/// Neutralize HTML table layout so the markdown converter doesn't render it as a markdown table.
+///
+/// Emails (Google, newsletters, Outlook) use tables purely for layout; rendering them as tables
+/// crams whole paragraphs into single cells, strips block structure (text runs together), and emits
+/// `| --- |` noise the reader can't render. Cells/rows become `<div>` to keep block separation;
 /// table containers are dropped. Tag-only rewrite — inner content is preserved.
 fn flatten_tables(html: &str) -> String {
     const DROP: &[&str] = &[

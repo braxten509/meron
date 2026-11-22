@@ -6,7 +6,7 @@ use super::*;
 
 #[test]
 fn mobile_protocol_exchanges_oauth_code_and_persists_account() {
-    let data_dir = unique_data_dir("oauth-code");
+    let data_directory = unique_data_directory("oauth-code");
     let token_url = one_shot_oauth_token_server();
     let picture_url = one_shot_server("/avatar", "image/png", "png");
     let userinfo_url = one_shot_json_server(
@@ -21,7 +21,7 @@ fn mobile_protocol_exchanges_oauth_code_and_persists_account() {
         r#"{{"id":66,"method":"account.exchangeOAuthCode","params":{{"email":"{email}","provider":"gmail","display_name":"","sender_name":"","code":"auth-code","client_id":"client","client_secret":"secret","redirect_uri":"jp.nonbili.meron.oauth://oauth","code_verifier":"verifier","token_url":"{token_url}","userinfo_url":"{userinfo_url}"}}}}"#
     );
 
-    let exchanged = invoke_mobile_protocol_json(&request, Some(data_dir.to_str().unwrap()));
+    let exchanged = invoke_mobile_protocol_json(&request, Some(data_directory.to_str().unwrap()));
     assert_eq!(exchanged["id"], 66, "{exchanged}");
     assert_eq!(
         exchanged["result"]["account"]["id"],
@@ -54,7 +54,7 @@ fn mobile_protocol_exchanges_oauth_code_and_persists_account() {
         "{exchanged}"
     );
     assert_eq!(
-        std::fs::read(data_dir.join(avatar_url.trim_start_matches('/'))).unwrap(),
+        std::fs::read(data_directory.join(avatar_url.trim_start_matches('/'))).unwrap(),
         b"png"
     );
     assert_eq!(
@@ -64,7 +64,7 @@ fn mobile_protocol_exchanges_oauth_code_and_persists_account() {
 
     let listed = invoke_mobile_protocol_json(
         r#"{"id":67,"method":"account.list","params":{}}"#,
-        Some(data_dir.to_str().unwrap()),
+        Some(data_directory.to_str().unwrap()),
     );
     assert_eq!(
         listed["result"]["accounts"][0]["id"],
@@ -75,7 +75,7 @@ fn mobile_protocol_exchanges_oauth_code_and_persists_account() {
         listed["result"]["accounts"][0]["needs_reconnect"], false,
         "{listed}"
     );
-    let conn = store::open_at(data_dir.join("meron.db")).unwrap();
+    let conn = store::open_at(data_directory.join("meron.db")).unwrap();
     let config: String = conn
         .query_row(
             "SELECT config FROM accounts WHERE id = ?1",
@@ -88,26 +88,26 @@ fn mobile_protocol_exchanges_oauth_code_and_persists_account() {
     assert_eq!(config["oauth_client_secret"], "secret", "{config}");
     assert_eq!(config["oauth_token_url"], token_url.as_str(), "{config}");
 
-    let _ = std::fs::remove_dir_all(data_dir);
+    let _ = std::fs::remove_dir_all(data_directory);
 }
 
 #[test]
 fn mobile_protocol_exchanges_oauth_code_uses_id_token_claims() {
-    let data_dir = unique_data_dir("oauth-code-claims");
+    let data_directory = unique_data_directory("oauth-code-claims");
     let token_url =
         one_shot_oauth_token_server_with_id_token("outlook.user@example.com", "Outlook User");
     let request = format!(
         r#"{{"id":68,"method":"account.exchangeOAuthCode","params":{{"email":"","provider":"outlook","display_name":"","sender_name":"","code":"auth-code","client_id":"client","redirect_uri":"msauth://jp.nonbili.meron/example","code_verifier":"verifier","token_url":"{token_url}"}}}}"#
     );
 
-    let exchanged = invoke_mobile_protocol_json(&request, Some(data_dir.to_str().unwrap()));
+    let exchanged = invoke_mobile_protocol_json(&request, Some(data_directory.to_str().unwrap()));
     assert_eq!(exchanged["id"], 68, "{exchanged}");
     let account = &exchanged["result"]["account"];
     assert_eq!(account["id"], "outlook.user@example.com", "{exchanged}");
     assert_eq!(account["provider"], "outlook", "{exchanged}");
     assert_eq!(account["display_name"], "Outlook User", "{exchanged}");
     assert_eq!(account["sender_name"], "Outlook User", "{exchanged}");
-    let conn = store::open_at(data_dir.join("meron.db")).unwrap();
+    let conn = store::open_at(data_directory.join("meron.db")).unwrap();
     let config: String = conn
         .query_row(
             "SELECT config FROM accounts WHERE id = ?1",
@@ -119,7 +119,7 @@ fn mobile_protocol_exchanges_oauth_code_uses_id_token_claims() {
     assert_eq!(config["oauth_client_id"], "client", "{config}");
     assert_eq!(config["oauth_token_url"], token_url.as_str(), "{config}");
 
-    let _ = std::fs::remove_dir_all(data_dir);
+    let _ = std::fs::remove_dir_all(data_directory);
 }
 
 #[test]
@@ -128,7 +128,7 @@ fn mobile_protocol_exchanges_outlook_code_saves_graph_photo() {
     use std::io::Write;
     use std::net::TcpListener;
 
-    let data_dir = unique_data_dir("oauth-code-photo");
+    let data_directory = unique_data_directory("oauth-code-photo");
     let claims = serde_json::json!({ "preferred_username": "photo.user@example.com" });
     let payload = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(claims.to_string());
     let code_body = format!(
@@ -163,7 +163,7 @@ fn mobile_protocol_exchanges_outlook_code_saves_graph_photo() {
         r#"{{"id":69,"method":"account.exchangeOAuthCode","params":{{"email":"","provider":"outlook","code":"auth-code","client_id":"client","code_verifier":"verifier","token_url":"http://{addr}/token","photo_url":"http://{addr}/photo"}}}}"#
     );
 
-    let exchanged = invoke_mobile_protocol_json(&request, Some(data_dir.to_str().unwrap()));
+    let exchanged = invoke_mobile_protocol_json(&request, Some(data_directory.to_str().unwrap()));
     let avatar_url = exchanged["result"]["account"]["avatar_url"]
         .as_str()
         .unwrap_or_default()
@@ -173,8 +173,8 @@ fn mobile_protocol_exchanges_outlook_code_saves_graph_photo() {
             && avatar_url.ends_with(".jpg"),
         "{exchanged}"
     );
-    let saved = std::fs::read(data_dir.join(avatar_url.trim_start_matches('/'))).unwrap();
+    let saved = std::fs::read(data_directory.join(avatar_url.trim_start_matches('/'))).unwrap();
     assert_eq!(saved, b"\xff\xd8\xff\xe0photo");
 
-    let _ = std::fs::remove_dir_all(data_dir);
+    let _ = std::fs::remove_dir_all(data_directory);
 }

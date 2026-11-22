@@ -5,16 +5,16 @@
 
 use super::*;
 
-/// The UIDs of the copies a move created, among the target's messages at or
-/// above its pre-move UIDNEXT (`arrivals`). `moved` holds the lowercased
-/// Message-ID of each moved message, `""` for one without.
+/// The UIDs of the copies a move created, among the target's messages at or above its pre-move UIDNEXT (`arrivals`).
 ///
-/// Arrivals whose Message-ID the move didn't carry are other mail delivered
-/// meanwhile, and are passed over. Each Message-ID the move did carry — the
-/// empty one included — must account for exactly as many arrivals as moved
-/// messages: fewer means a copy is missing, more means a concurrent delivery
-/// is indistinguishable from it. Either way the answer would be wrong, so none
-/// is given, and no Undo is offered.
+/// `moved` holds the lowercased Message-ID of each moved message, `""` for one without.
+///
+/// Arrivals whose Message-ID the move didn't carry are other mail delivered meanwhile, and are
+/// passed over. Each Message-ID the move did carry — the empty one included — must account for
+/// exactly as many arrivals as moved messages: fewer means a copy is missing, more means a
+/// concurrent delivery is indistinguishable from it.
+///
+/// Either way the answer would be wrong, so none is given, and no Undo is offered.
 pub(in crate::engine) fn moved_copy_uids(
     arrivals: &[imap::MessageHeader],
     moved: &[String],
@@ -100,14 +100,14 @@ pub(crate) struct CopiesAsk {
     pub reread_window: bool,
 }
 
-/// [`refresh_moved_copies`], optionally without re-reading `target`'s recent
-/// window. With `reread_window` false the window is left alone and the moved
-/// count is remembered, so the next re-read of that folder (any later move
-/// into it) reaches back far enough to cover everything that was skipped.
-/// Locating the moved copies is unchanged.
+/// [`refresh_moved_copies`], optionally without re-reading `target`'s recent window.
 ///
-/// Inside a bulk run this is the copies step every member shares (see
-/// [`crate::engine::bulk`]): the target is read once for all of them.
+/// With `reread_window` false the window is left alone and the moved count is remembered, so the
+/// next re-read of that folder (any later move into it) reaches back far enough to cover everything
+/// that was skipped. Locating the moved copies is unchanged.
+///
+/// Inside a bulk run this is the copies step every member shares (see [`crate::engine::bulk`]): the
+/// target is read once for all of them.
 pub async fn refresh_moved_copies_with(
     engine: &Arc<Engine>,
     account: &str,

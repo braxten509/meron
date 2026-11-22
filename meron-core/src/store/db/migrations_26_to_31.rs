@@ -5,11 +5,10 @@
 
 use super::*;
 
-/// Meron folders: folders that exist only on this device. A conversation in
-/// one is an entry; its aliases are the keys that find its messages (thread
-/// root keys and per-message tag keys, see `store::meron_folders`); its UIDs
-/// are remembered so unread counts can leave out server-unseen mail the cache
-/// no longer holds. The AI log learns which Meron folder it filed mail into.
+/// Meron folders: folders that exist only on this device. A conversation in one is an entry; its
+/// aliases are the keys that find its messages (thread root keys and per-message tag keys, see
+/// `store::meron_folders`); its UIDs are remembered so unread counts can leave out server-unseen
+/// mail the cache no longer holds. The AI log learns which Meron folder it filed mail into.
 pub(super) fn migrate_v26(conn: &Connection) -> Result<()> {
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS meron_folders (
@@ -52,12 +51,10 @@ pub(super) fn migrate_v26(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
-/// AI sorting of mail server filters deliver straight into other folders:
-/// where each folder's sorting starts (`ai_sort_watch`, so only mail arriving
-/// after the first look is sorted), and the mail it left, shown in the Inbox
-/// on this device only (`ai_sort_inbox`, by location; the identity lets a row
-/// follow its message across a UIDVALIDITY reset). Nothing here reaches the
-/// server.
+/// AI sorting of mail server filters deliver straight into other folders: where each folder's
+/// sorting starts (`ai_sort_watch`, so only mail arriving after the first look is sorted), and the
+/// mail it left, shown in the Inbox on this device only (`ai_sort_inbox`, by location; the identity
+/// lets a row follow its message across a UIDVALIDITY reset). Nothing here reaches the server.
 pub(super) fn migrate_v27(conn: &Connection) -> Result<()> {
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS ai_sort_watch (
@@ -106,11 +103,10 @@ pub(super) fn migrate_v29(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
-/// The Meron-folder marks (`$MeronF_<id>` keywords) each Inbox copy carries
-/// on the server, as this device last read or wrote them, so a mark another
-/// device added or took away is told apart from one that was always there.
-/// `written_at` is when this device wrote it (0 when read), for the grace
-/// period that ignores a read taken just before its own write.
+/// The Meron-folder marks (`$MeronF_<id>` keywords) each Inbox copy carries on the server, as this
+/// device last read or wrote them, so a mark another device added or took away is told apart from
+/// one that was always there. `written_at` is when this device wrote it (0 when read), for the
+/// grace period that ignores a read taken just before its own write.
 pub(super) fn migrate_v30(conn: &Connection) -> Result<()> {
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS meron_marks (

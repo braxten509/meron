@@ -99,9 +99,9 @@ fn removed_uid_markers_expire_after_the_oldest_sync_finishes() {
 
 #[test]
 fn another_connection_cannot_prune_markers_an_active_sync_needs() {
-    let dir = std::env::temp_dir().join(format!("meron-store-test-{}", uuid::Uuid::new_v4()));
-    std::fs::create_dir_all(&dir).unwrap();
-    let path = dir.join("meron.db");
+    let directory = std::env::temp_dir().join(format!("meron-store-test-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&directory).unwrap();
+    let path = directory.join("meron.db");
     let syncing = db::open_at(&path).unwrap();
     let archiving = db::open_at(&path).unwrap();
     let count = || -> i64 {
@@ -133,14 +133,14 @@ fn another_connection_cannot_prune_markers_an_active_sync_needs() {
 
     drop(syncing);
     drop(archiving);
-    let _ = std::fs::remove_dir_all(dir);
+    let _ = std::fs::remove_dir_all(directory);
 }
 
 #[test]
 fn concurrent_sync_registration_waits_instead_of_failing() {
-    let dir = std::env::temp_dir().join(format!("meron-store-test-{}", uuid::Uuid::new_v4()));
-    std::fs::create_dir_all(&dir).unwrap();
-    let path = dir.join("meron.db");
+    let directory = std::env::temp_dir().join(format!("meron-store-test-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&directory).unwrap();
+    let path = directory.join("meron.db");
     db::open_at(&path).unwrap();
     let barrier = std::sync::Arc::new(std::sync::Barrier::new(4));
     let handles = (0..4u32)
@@ -162,7 +162,7 @@ fn concurrent_sync_registration_waits_instead_of_failing() {
     for handle in handles {
         handle.join().unwrap();
     }
-    let _ = std::fs::remove_dir_all(dir);
+    let _ = std::fs::remove_dir_all(directory);
 }
 
 #[test]

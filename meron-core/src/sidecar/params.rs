@@ -91,18 +91,19 @@ pub(crate) fn req_str_array(params: &Value, key: &str) -> anyhow::Result<Vec<Str
     Ok(out)
 }
 
-/// IMAP APPEND a freshly-sent message to the account's Sent folder, with
-/// `\Seen`. Best-effort: callers log and ignore errors so SMTP success doesn't
-/// surface as "send failed" when the server's Sent folder is unusual.
+/// IMAP APPEND a freshly-sent message to the account's Sent folder, with `\Seen`.
 ///
-/// After the APPEND succeeds we also fetch the most recent envelopes from the
-/// Sent folder and upsert them into the local store. Without this, the just-
-/// sent message would only land in the DB at the next periodic sync — meaning
-/// it wouldn't appear in the thread view until the user reconnects or refreshes.
-/// Resolve the outgoing From address + display name for a send/draft, deferring
-/// to the shared store rule so desktop and mobile accept the same identities.
-/// An unowned address is an error, surfaced to the composer rather than sent
-/// under a substituted sender.
+/// Best-effort: callers log and ignore errors so SMTP success doesn't surface as "send failed" when
+/// the server's Sent folder is unusual.
+///
+/// After the APPEND succeeds we also fetch the most recent envelopes from the Sent folder and
+/// upsert them into the local store. Without this, the just- sent message would only land in the DB
+/// at the next periodic sync — meaning it wouldn't appear in the thread view until the user
+/// reconnects or refreshes.
+///
+/// Resolve the outgoing From address + display name for a send/draft, deferring to the shared store
+/// rule so desktop and mobile accept the same identities. An unowned address is an error, surfaced
+/// to the composer rather than sent under a substituted sender.
 pub(crate) fn resolve_send_from(
     engine: &Arc<Engine>,
     account: &str,

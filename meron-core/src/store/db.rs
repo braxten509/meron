@@ -129,11 +129,10 @@ pub fn open_archive_at(path: impl AsRef<Path>, key: Option<&str>) -> Result<Conn
     Ok(conn)
 }
 
-/// Write a consistent copy of the open archive to `dest`, encrypted with
-/// `passphrase` rather than the keychain's key, so it can be restored on a
-/// computer that never had that key (see `store::restore_local_backup`).
-/// Copying `archive.db` itself while Meron runs is not a backup: recent
-/// commits live in its WAL.
+/// Write a consistent copy of the open archive to `dest`, encrypted with `passphrase` rather than
+/// the keychain's key, so it can be restored on a computer that never had that key (see
+/// `store::restore_local_backup`). Copying `archive.db` itself while Meron runs is not a backup:
+/// recent commits live in its WAL.
 pub fn backup_archive_to(conn: &Connection, dest: &Path, passphrase: &str) -> Result<()> {
     if passphrase.is_empty() {
         anyhow::bail!("A passphrase is required");
@@ -480,17 +479,17 @@ fn upgrade_pending(conn: &Connection) -> bool {
 
 /// Apply schema migrations in order, tracked by SQLite's `PRAGMA user_version`.
 ///
-/// Pending steps run inside one IMMEDIATE transaction that also bumps
-/// `user_version`, so concurrent first-open callers serialize before reading
-/// the version. A crash mid-migration rolls back cleanly and the step re-runs
-/// next launch. Append-only: to evolve the schema, add a new `if version < N`
-/// block; never edit or reorder a shipped one. (Cache-only invalidation lives in
-/// `invalidate_body_cache_if_needed`, kept off this counter so a render change
-/// doesn't look like a schema change.)
+/// Pending steps run inside one IMMEDIATE transaction that also bumps `user_version`, so concurrent
+/// first-open callers serialize before reading the version. A crash mid-migration rolls back
+/// cleanly and the step re-runs next launch. Append-only: to evolve the schema, add a new
+/// `if version < N` block; never edit or reorder a shipped one.
 ///
-/// The local-folder archive runs these too (`open_archive_at`), and there the
-/// `messages` rows are not a cache: a migration may rebuild them, but never
-/// drop cached mail on the assumption that a sync will bring it back.
+/// (Cache-only invalidation lives in `invalidate_body_cache_if_needed`, kept off this counter so a
+/// render change doesn't look like a schema change.)
+///
+/// The local-folder archive runs these too (`open_archive_at`), and there the `messages` rows are
+/// not a cache: a migration may rebuild them, but never drop cached mail on the assumption that a
+/// sync will bring it back.
 pub(super) fn run_migrations(conn: &Connection) -> Result<()> {
     let tx = Transaction::new_unchecked(conn, TransactionBehavior::Immediate)?;
     let version: i64 = tx.query_row("PRAGMA user_version", [], |r| r.get(0))?;
@@ -643,10 +642,9 @@ pub fn now_unix() -> i64 {
 /// Track rendered-body cache format separately from schema version.
 ///
 /// When the render format changes, re-render every HTML-derived body in place
-/// (`body_is_rendered = 1`) from its stored `body_html`. Re-rendering rather than
-/// nulling keeps the FTS `body` column populated, so full-text search over these
-/// messages keeps working across a version bump instead of degrading until each
-/// message is reopened.
+/// (`body_is_rendered = 1`) from its stored `body_html`. Re-rendering rather than nulling keeps the
+/// FTS `body` column populated, so full-text search over these messages keeps working across a
+/// version bump instead of degrading until each message is reopened.
 pub(super) fn invalidate_body_cache_if_needed(conn: &Connection) -> Result<()> {
     let current = meta_get(conn, "body_cache_version")?;
     if current.as_deref() == Some(BODY_CACHE_VERSION) {

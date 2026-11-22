@@ -174,11 +174,10 @@ pub async fn dispatch(
     }
 }
 
-/// What the reader taught by moving mail by hand, newest first. Each lesson:
-/// `sender`, `subject`, `place` (`spam`, `inbox` or `meron`), the Meron
-/// folder's current name in `place_name`, and `used`: false while the AI
-/// can't follow it (its Meron folder isn't on the AI's list, or the account
-/// has no Spam folder).
+/// What the reader taught by moving mail by hand, newest first. Each lesson: `sender`, `subject`,
+/// `place` (`spam`, `inbox` or `meron`), the Meron folder's current name in `place_name`, and
+/// `used`: false while the AI can't follow it (its Meron folder isn't on the AI's list, or the
+/// account has no Spam folder).
 fn lessons(engine: &Arc<Engine>) -> anyhow::Result<Value> {
     let db = engine.db.lock().unwrap();
     let config = store::ai_sort_config(&db)?;

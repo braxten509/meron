@@ -276,10 +276,10 @@ fn resolve_send_from_rejects_an_unowned_address() {
     )
     .unwrap();
 
-    let err = resolve_send_from(&conn, "acct", "me@example.com", "someone@else.com").unwrap_err();
+    let error = resolve_send_from(&conn, "acct", "me@example.com", "someone@else.com").unwrap_err();
     assert!(
-        err.to_string().contains("someone@else.com"),
-        "error should name the rejected address: {err}"
+        error.to_string().contains("someone@else.com"),
+        "error should name the rejected address: {error}"
     );
 }
 

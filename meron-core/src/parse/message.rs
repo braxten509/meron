@@ -52,12 +52,12 @@ pub struct Message {
     /// unparseable). The frontend formats it for display in local time.
     pub date: i64,
     pub body: String,
-    /// The message's original HTML, or `None` when it was plain text (in which case
-    /// `body` already *is* the source). Persisted to the store so a render-logic
-    /// change can re-derive `body` without an IMAP refetch, and so the reader's
-    /// "HTML mode" tab can show the original email. At parse time it holds the raw
-    /// HTML with `cid:` inline images rewritten to `/media/<key>`; the bridge
-    /// handler injects a remote-image CSP `<meta>` on read (see `prepare_html`).
+    /// The message's original HTML, or `None` when it was plain text (in which case `body` already *is* the source).
+    ///
+    /// Persisted to the store so a render-logic change can re-derive `body` without an IMAP refetch,
+    /// and so the reader's "HTML mode" tab can show the original email. At parse time it holds the raw
+    /// HTML with `cid:` inline images rewritten to `/media/<key>`; the bridge handler injects a
+    /// remote-image CSP `<meta>` on read (see `prepare_html`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub body_html: Option<String>,
     #[serde(default)]
@@ -71,11 +71,10 @@ pub struct Message {
 }
 
 impl Message {
-    /// The parts the user would call attachments: every one except those its
-    /// HTML body already shows inline (`cid:` logos and signature images,
-    /// rewritten to `/media/<key>` at parse time). The reader draws the same
-    /// line, and the store's v11 migration mirrors it for rows cached before
-    /// the list was stored.
+    /// The parts the user would call attachments: every one except those its HTML body already shows
+    /// inline (`cid:` logos and signature images, rewritten to `/media/<key>` at parse time). The
+    /// reader draws the same line, and the store's v11 migration mirrors it for rows cached before the
+    /// list was stored.
     pub fn file_attachments(&self) -> impl Iterator<Item = &Attachment> {
         let html = self.body_html.as_deref().unwrap_or_default();
         self.attachments
@@ -199,11 +198,10 @@ pub(crate) fn parse_message_unpruned(raw: &[u8], media: Option<&MediaCtx>) -> Me
     }
 }
 
-/// The event of the message's calendar part. iMIP puts it in a `text/calendar`
-/// alternative (Outlook: that alone; Google: that plus an `application/ics`
-/// copy as a file), so look at every calendar leaf, and take one that names
-/// its iTIP method on the Content-Type first — that is the one the sender
-/// means to be acted on.
+/// The event of the message's calendar part. iMIP puts it in a `text/calendar` alternative
+/// (Outlook: that alone; Google: that plus an `application/ics` copy as a file), so look at every
+/// calendar leaf, and take one that names its iTIP method on the Content-Type first — that is the
+/// one the sender means to be acted on.
 fn calendar_invite(mail: &ParsedMail) -> Option<crate::calendar::Invite> {
     let mut parts = Vec::new();
     collect_calendar_parts(mail, &mut parts);

@@ -6,8 +6,8 @@ use super::*;
 
 #[test]
 fn print_thread_read_keeps_uncached_messages_when_connection_is_unavailable() {
-    let data_dir = unique_data_dir("print-thread-offline");
-    let conn = store::open_at(data_dir.join("meron.db")).unwrap();
+    let data_directory = unique_data_directory("print-thread-offline");
+    let conn = store::open_at(data_directory.join("meron.db")).unwrap();
     store::ensure_folder(&conn, "offline@example.com", "INBOX").unwrap();
     let headers: Vec<_> = (1..=60)
         .map(|uid| MessageHeader {
@@ -29,8 +29,10 @@ fn print_thread_read_keeps_uncached_messages_when_connection_is_unavailable() {
             "params": { "thread_id": "offline@example.com#INBOX#t.dG9waWM",
                 "limit": 50, "for_print": true, "before_cursor": cursor }
         });
-        let response =
-            invoke_mobile_protocol_json(&request.to_string(), Some(data_dir.to_str().unwrap()));
+        let response = invoke_mobile_protocol_json(
+            &request.to_string(),
+            Some(data_directory.to_str().unwrap()),
+        );
         assert!(response.get("error").is_none(), "{response}");
         let messages = response["result"]["messages"].as_array().unwrap();
         assert_eq!(messages.len(), expected);
@@ -44,14 +46,14 @@ fn print_thread_read_keeps_uncached_messages_when_connection_is_unavailable() {
     }
     assert_eq!(count, 60);
     assert!(cursor.is_null());
-    let _ = std::fs::remove_dir_all(data_dir);
+    let _ = std::fs::remove_dir_all(data_directory);
 }
 
 #[test]
 fn mobile_protocol_reads_cached_thread_messages_from_store() {
-    let data_dir = unique_data_dir("thread-read");
-    seed_mobile_account(&data_dir, "me@example.com");
-    let conn = store::open_at(data_dir.join("meron.db")).unwrap();
+    let data_directory = unique_data_directory("thread-read");
+    seed_mobile_account(&data_directory, "me@example.com");
+    let conn = store::open_at(data_directory.join("meron.db")).unwrap();
     store::ensure_folder(&conn, "me@example.com", "INBOX").unwrap();
     store::upsert_messages(
         &conn,
@@ -97,7 +99,7 @@ fn mobile_protocol_reads_cached_thread_messages_from_store() {
 
     let value = invoke_mobile_protocol_json(
         r#"{"id":66,"method":"mail.threadRead","params":{"thread_id":"me@example.com#INBOX#t.dG9waWM"}}"#,
-        Some(data_dir.to_str().unwrap()),
+        Some(data_directory.to_str().unwrap()),
     );
     assert_eq!(value["id"], 66);
     let first = &value["result"]["messages"][0];
@@ -121,14 +123,14 @@ fn mobile_protocol_reads_cached_thread_messages_from_store() {
     assert_eq!(first["unread"], true);
     assert_eq!(first["starred"], true);
 
-    let _ = std::fs::remove_dir_all(data_dir);
+    let _ = std::fs::remove_dir_all(data_directory);
 }
 
 #[test]
 fn mobile_protocol_reads_uid_thread_message_from_store() {
-    let data_dir = unique_data_dir("uid-thread-read");
-    seed_mobile_account(&data_dir, "me@example.com");
-    let conn = store::open_at(data_dir.join("meron.db")).unwrap();
+    let data_directory = unique_data_directory("uid-thread-read");
+    seed_mobile_account(&data_directory, "me@example.com");
+    let conn = store::open_at(data_directory.join("meron.db")).unwrap();
     store::save_cached_message(
         &conn,
         "me@example.com",
@@ -148,20 +150,20 @@ fn mobile_protocol_reads_uid_thread_message_from_store() {
 
     let value = invoke_mobile_protocol_json(
         r#"{"id":67,"method":"mail.threadRead","params":{"thread_id":"me@example.com#Drafts#4"}}"#,
-        Some(data_dir.to_str().unwrap()),
+        Some(data_directory.to_str().unwrap()),
     );
     assert_eq!(value["id"], 67);
     assert_eq!(value["result"]["messages"][0]["subject"], "Draft");
     assert_eq!(value["result"]["messages"][0]["body"], "Draft body");
 
-    let _ = std::fs::remove_dir_all(data_dir);
+    let _ = std::fs::remove_dir_all(data_directory);
 }
 
 #[test]
 fn mobile_protocol_reports_which_notified_messages_are_still_unread() {
-    let data_dir = unique_data_dir("still-unread");
-    seed_mobile_account(&data_dir, "me@example.com");
-    let conn = store::open_at(data_dir.join("meron.db")).unwrap();
+    let data_directory = unique_data_directory("still-unread");
+    seed_mobile_account(&data_directory, "me@example.com");
+    let conn = store::open_at(data_directory.join("meron.db")).unwrap();
     let header = |uid: u32, seen: bool| MessageHeader {
         uid,
         subject: format!("Mail {uid}"),
@@ -189,7 +191,7 @@ fn mobile_protocol_reports_which_notified_messages_are_still_unread() {
             {"account_id":"other@example.com","folder_id":"INBOX","message_id":"1"},
             {"account_id":"me@example.com","folder_id":"","message_id":"1"}
         ]}}"#,
-        Some(data_dir.to_str().unwrap()),
+        Some(data_directory.to_str().unwrap()),
     );
     assert_eq!(
         value["result"]["unread"],
@@ -201,14 +203,14 @@ fn mobile_protocol_reports_which_notified_messages_are_still_unread() {
         ])
     );
 
-    let _ = std::fs::remove_dir_all(data_dir);
+    let _ = std::fs::remove_dir_all(data_directory);
 }
 
 #[test]
 fn mobile_protocol_thread_read_includes_cached_draft_reply() {
-    let data_dir = unique_data_dir("thread-read-draft-reply");
-    seed_mobile_account(&data_dir, "me@example.com");
-    let conn = store::open_at(data_dir.join("meron.db")).unwrap();
+    let data_directory = unique_data_directory("thread-read-draft-reply");
+    seed_mobile_account(&data_directory, "me@example.com");
+    let conn = store::open_at(data_directory.join("meron.db")).unwrap();
     store::ensure_folder(&conn, "me@example.com", "INBOX").unwrap();
     store::ensure_folder(&conn, "me@example.com", "Drafts").unwrap();
 
@@ -287,7 +289,7 @@ fn mobile_protocol_thread_read_includes_cached_draft_reply() {
 
     let read = invoke_mobile_protocol_json(
         r#"{"id":69,"method":"mail.threadRead","params":{"thread_id":"me@example.com#INBOX#t.cm9vdEBtYWlsLmdtYWlsLmNvbQ"}}"#,
-        Some(data_dir.to_str().unwrap()),
+        Some(data_directory.to_str().unwrap()),
     );
     let messages = read["result"]["messages"].as_array().unwrap();
     assert_eq!(messages.len(), 2, "{read}");
@@ -297,5 +299,5 @@ fn mobile_protocol_thread_read_includes_cached_draft_reply() {
     assert_eq!(messages[1]["folder_id"], "Drafts");
     assert_eq!(messages[1]["body"], "draft reply");
 
-    let _ = std::fs::remove_dir_all(data_dir);
+    let _ = std::fs::remove_dir_all(data_directory);
 }

@@ -1,13 +1,11 @@
-//! In-app changelog: fetch the GitHub releases atom feed and present each
-//! release as a version + date + cleaned notes.
+//! In-app changelog: fetch the GitHub releases atom feed and present each release as a version + date + cleaned notes.
 //!
-//! Desktop and mobile ship from the same repo but tag releases differently —
-//! desktop tags are `v*` (e.g. `v0.1.4`), mobile tags are `android/v*` (e.g.
-//! `android/v0.1.3`). The caller passes a [`Variant`] so each platform only
-//! sees its own releases.
+//! Desktop and mobile ship from the same repo but tag releases differently — desktop tags are `v*`
+//! (e.g. `v0.1.4`), mobile tags are `android/v*` (e.g. `android/v0.1.3`). The caller passes a
+//! [`Variant`] so each platform only sees its own releases.
 //!
-//! GitHub's auto-generated notes end with a "Full Changelog: <compare-url>"
-//! line; we drop it so the in-app view shows only the human-written bullets.
+//! GitHub's auto-generated notes end with a "Full Changelog: <compare-url>" line; we drop it so the
+//! in-app view shows only the human-written bullets.
 
 use anyhow::{Context, Result};
 use scraper::{Html, Selector};

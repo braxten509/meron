@@ -59,11 +59,10 @@ impl Stream {
     }
 }
 
-/// The server's capability list, asked for once per connection. A session is
-/// only ever handed out signed in, and a server does not change what it
-/// advertises after that, so every later check on the same connection reuses
-/// the first answer instead of spending a round trip on CAPABILITY (a delete
-/// used to ask five times). A failed ask is not remembered.
+/// The server's capability list, asked for once per connection. A session is only ever handed out
+/// signed in, and a server does not change what it advertises after that, so every later check on
+/// the same connection reuses the first answer instead of spending a round trip on CAPABILITY (a
+/// delete used to ask five times). A failed ask is not remembered.
 pub(crate) async fn capabilities_once(
     session: &mut Session,
 ) -> async_imap::error::Result<std::sync::Arc<async_imap::types::Capabilities>> {
@@ -95,14 +94,12 @@ fn idle_notice_is_new_mail(response: &async_imap::extensions::idle::IdleResponse
     }
 }
 
-/// After the IDLE notice `first`, keep listening on the same IDLE until the
-/// server has said nothing more for `quiet`, or `cap` has passed in all.
+/// After the IDLE notice `first`, keep listening on the same IDLE until the server has said nothing more for `quiet`, or `cap` has passed in all.
 ///
-/// Removals and flag changes come in bursts: a bulk delete here or on another
-/// device is one notice per message, and re-reading the folder after each of
-/// them is all wasted but the last. One re-read after the burst sees the same
-/// result. New mail is not held back: this returns at once when `first`, or
-/// any notice during the wait, announces it.
+/// Removals and flag changes come in bursts: a bulk delete here or on another device is one notice
+/// per message, and re-reading the folder after each of them is all wasted but the last. One
+/// re-read after the burst sees the same result. New mail is not held back: this returns at once
+/// when `first`, or any notice during the wait, announces it.
 pub async fn settle_idle(
     handle: &mut async_imap::extensions::idle::Handle<Stream>,
     first: &async_imap::extensions::idle::IdleResponse,
@@ -175,12 +172,12 @@ impl AsyncWrite for Stream {
 
 pub type Session = async_imap::Session<Stream>;
 
-/// Whether an idle session's socket still looks open. A server that drops an
-/// idle connection leaves its FIN (often behind a BYE or TLS close_notify)
-/// queued on the socket, and the runtime's reactor records that as read-closed
-/// readiness, so a dead pooled session can be spotted without a round trip.
-/// This cannot see a close that lands after the check; callers still need to
-/// handle a command failing on a dropped connection.
+/// Whether an idle session's socket still looks open.
+///
+/// A server that drops an idle connection leaves its FIN (often behind a BYE or TLS close_notify)
+/// queued on the socket, and the runtime's reactor records that as read-closed readiness, so a dead
+/// pooled session can be spotted without a round trip. This cannot see a close that lands after the
+/// check; callers still need to handle a command failing on a dropped connection.
 pub fn session_looks_open(session: &Session) -> bool {
     match session.get_ref() {
         Stream::Plain(stream, _) => tcp_looks_open(stream),

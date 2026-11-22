@@ -3,11 +3,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 use std::collections::BTreeMap;
 
-/// Where one account's next unified page starts: its own page cursor (`None`
-/// for its first page), how many rows that page was read with, and the last of
-/// its rows an earlier unified page showed. Keeping the account's own cursor
-/// instead of minting one from the last row shown works for every cursor
-/// format (cache, search, feeds).
+/// Where one account's next unified page starts: its own page cursor (`None` for its first page),
+/// how many rows that page was read with, and the last of its rows an earlier unified page showed.
+/// Keeping the account's own cursor instead of minting one from the last row shown works for every
+/// cursor format (cache, search, feeds).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AccountCursor {
     #[serde(default, rename = "c", skip_serializing_if = "Option::is_none")]
@@ -43,13 +42,12 @@ impl AccountCursor {
         limit.max(self.depth)
     }
 
-    /// Drop the rows of a page re-read from `cursor` that an earlier unified
-    /// page already showed. The page is re-read rather than resumed, so the
-    /// mailbox may have changed meanwhile: new mail at the top (a first page
-    /// has no cursor to hold it back) shifts every row down, a deletion shifts
-    /// them up. The shown rows therefore end at the last one shown, found by id;
-    /// if that row is gone, or has moved because its thread got newer mail,
-    /// they end at its date.
+    /// Drop the rows of a page re-read from `cursor` that an earlier unified page already showed.
+    ///
+    /// The page is re-read rather than resumed, so the mailbox may have changed meanwhile: new mail at
+    /// the top (a first page has no cursor to hold it back) shifts every row down, a deletion shifts
+    /// them up. The shown rows therefore end at the last one shown, found by id; if that row is gone,
+    /// or has moved because its thread got newer mail, they end at its date.
     fn unshown(&self, items: &[Value]) -> Vec<Value> {
         let Some(last) = &self.last else {
             return items.to_vec();
@@ -135,14 +133,14 @@ fn item_date(item: &Value) -> Option<i64> {
 
 /// Merge per-account pages into one newest-first page.
 ///
-/// Each account pages independently, so their pages end at different dates: a
-/// busy account's 50 rows may reach back a week while a quiet one's reach back
-/// a year. Showing every row would leave a hole — the quiet account's old mail
-/// sits right under the busy one's last row, with the busy account's rows in
-/// between still unread. So the page stops at the newest of the oldest dates
-/// among accounts that have more to give; rows below it are held back and the
-/// account's cursor records the last row shown, to resume after it. `limit` is
-/// the request's own limit, which each page was read with per
+/// Each account pages independently, so their pages end at different dates: a busy account's 50
+/// rows may reach back a week while a quiet one's reach back a year. Showing every row would leave
+/// a hole — the quiet account's old mail sits right under the busy one's last row, with the busy
+/// account's rows in between still unread.
+///
+/// So the page stops at the newest of the oldest dates among accounts that have more to give; rows
+/// below it are held back and the account's cursor records the last row shown, to resume after it.
+/// `limit` is the request's own limit, which each page was read with per
 /// [`AccountCursor::fetch_limit`].
 pub fn merge_pages(pages: Vec<AccountPage>, items_field: &str, limit: u32) -> Value {
     let mut accounts = Vec::new();

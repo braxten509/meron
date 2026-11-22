@@ -581,11 +581,10 @@ pub fn entry_before_action(
         .flatten()
 }
 
-/// Before the server step of an action [`entry_before_action`] found a card
-/// for: take the Meron-folder marks off the card's Inbox copies, so the mail
-/// doesn't carry them to its new folder and other devices take it out too.
-/// Awaited (within a few seconds) so the marks go before the mail moves; best
-/// effort.
+/// Before the server step of an action [`entry_before_action`] found a card for: take the
+/// Meron-folder marks off the card's Inbox copies, so the mail doesn't carry them to its new folder
+/// and other devices take it out too. Awaited (within a few seconds) so the marks go before the
+/// mail moves; best effort.
 pub async fn unmark_before_action(
     engine: &Arc<Engine>,
     account: &str,
@@ -616,11 +615,10 @@ pub fn unmark_before_action_blocking(
 
 // ---- Archive: the built-in Archive Meron folder -----------------------------
 
-/// Before archiving (a move into the account's archive mailbox): the
-/// conversation keys of the moved copies, read before the move, when the
-/// action files them into the built-in Archive. `None` when it doesn't: not
-/// a whole conversation (same rule as [`entry_before_action`]), a sender row,
-/// a local or feed account, or nothing cached.
+/// Before archiving (a move into the account's archive mailbox): the conversation keys of the moved
+/// copies, read before the move, when the action files them into the built-in Archive. `None` when
+/// it doesn't: not a whole conversation (same rule as [`entry_before_action`]), a sender row, a
+/// local or feed account, or nothing cached.
 pub fn archive_filing_keys(
     conn: &Connection,
     account: &str,
@@ -714,16 +712,18 @@ pub async fn move_with_server(
     result
 }
 
-/// Archive of a whole conversation on an account with no archive mailbox:
-/// Meron-only. No server move; the conversation is filed into the built-in
-/// Archive here (hidden from the Inbox view, its mail staying where it is),
-/// and its Inbox copies get the Archive's mark for the other devices (the
-/// returned jobs, for the caller to start). `None` when this doesn't apply:
-/// a single email (a `uid:` id), a sender row, a feed or local account; the
-/// caller keeps its "no archive folder" answer then. The answer has `moved`,
-/// `meron_only: true`, `folder` and `thread_id` (unchanged: the mail didn't
-/// move) and, when it came from another Meron folder, `meron_folder_id` and
-/// `meron_source` for an Undo to put it back there.
+/// Archive of a whole conversation on an account with no archive mailbox: Meron-only.
+///
+/// No server move; the conversation is filed into the built-in Archive here (hidden from the Inbox
+/// view, its mail staying where it is), and its Inbox copies get the Archive's mark for the other
+/// devices (the returned jobs, for the caller to start).
+///
+/// `None` when this doesn't apply: a single email (a `uid:` id), a sender row, a feed or local
+/// account; the caller keeps its "no archive folder" answer then.
+///
+/// The answer has `moved`, `meron_only: true`, `folder` and `thread_id` (unchanged: the mail didn't
+/// move) and, when it came from another Meron folder, `meron_folder_id` and `meron_source` for an
+/// Undo to put it back there.
 pub fn archive_meron_only(
     conn: &Connection,
     thread_id: &str,
@@ -1138,10 +1138,9 @@ async fn archive_again(engine: &Arc<Engine>, params: &Value) -> Result<Value> {
     }))
 }
 
-/// Before the server move of an archive [`archive_filing_keys`] files: the
-/// moved copies get the built-in Archive's mark in their source folder (a
-/// MOVE carries keywords along), and the card's other mark-folder copies
-/// that aren't moved lose theirs. Awaited (a few seconds at most); best
+/// Before the server move of an archive [`archive_filing_keys`] files: the moved copies get the
+/// built-in Archive's mark in their source folder (a MOVE carries keywords along), and the card's
+/// other mark-folder copies that aren't moved lose theirs. Awaited (a few seconds at most); best
 /// effort.
 pub async fn prepare_archive_marks(
     engine: &Arc<Engine>,
@@ -1230,14 +1229,14 @@ pub fn restore_archive_card_marks(
     crate::meron_marks::spawn_writes(engine, jobs);
 }
 
-/// After an archive's server move and caching: file the conversations into
-/// the built-in Archive. `keys` are [`archive_filing_keys`]'s, read before
-/// the move; the archived copies `target_uids` (when known) add their own,
-/// and location keys of the old folder are dropped. A conversation that
-/// still has cached Inbox mail isn't filed (Archive never holds Inbox mail).
-/// The archived copies carry the Archive's mark already: remembered, so this
-/// device's next read doesn't act on it. Answers the mailboxes whose counts
-/// changed.
+/// After an archive's server move and caching: file the conversations into the built-in Archive.
+///
+/// `keys` are [`archive_filing_keys`]'s, read before the move; the archived copies `target_uids`
+/// (when known) add their own, and location keys of the old folder are dropped. A conversation that
+/// still has cached Inbox mail isn't filed (Archive never holds Inbox mail). The archived copies
+/// carry the Archive's mark already: remembered, so this device's next read doesn't act on it.
+///
+/// Answers the mailboxes whose counts changed.
 pub fn file_after_archive(
     conn: &Connection,
     account: &str,

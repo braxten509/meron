@@ -1,10 +1,12 @@
-//! Who a reply addresses and who it merely copies. Desktop and mobile both used
-//! to decide this for themselves, in their own language, and drifted: one kept
-//! display names in the To line, the other reduced it to a bare address, and a
-//! follow-up to our own message addressed us on one platform but not the other.
-//! The rule lives here instead, beside the addresses it has to exclude, and
-//! travels with every message the core serves (see
-//! [`crate::thread_read::thread_message_json`]) so no frontend recomputes it.
+//! Who a reply addresses and who it merely copies.
+//!
+//! Desktop and mobile both used to decide this for themselves, in their own language, and drifted:
+//! one kept display names in the To line, the other reduced it to a bare address, and a follow-up
+//! to our own message addressed us on one platform but not the other.
+//!
+//! The rule lives here instead, beside the addresses it has to exclude, and travels with every
+//! message the core serves (see [`crate::thread_read::thread_message_json`]) so no frontend
+//! recomputes it.
 
 use std::collections::HashSet;
 
@@ -134,11 +136,10 @@ pub fn reply_json(target: &ReplyTarget, ours: &HashSet<String>) -> Value {
     })
 }
 
-/// Whether a plain reply reaches anyone who reads it. False when every address
-/// it goes to or copies is a no-reply mailbox (GitHub's push notifications set Reply-To
-/// noreply@github.com, while the thread's other notifications reply to the
-/// pull request) or a bounce sender. Quick replies answer the newest message
-/// that accepts replies, rather than one whose reply would bounce.
+/// Whether a plain reply reaches anyone who reads it. False when every address it goes to or copies
+/// is a no-reply mailbox (GitHub's push notifications set Reply-To noreply@github.com, while the
+/// thread's other notifications reply to the pull request) or a bounce sender. Quick replies answer
+/// the newest message that accepts replies, rather than one whose reply would bounce.
 pub fn accepts_replies(reply: &ReplyRecipients) -> bool {
     let addresses: Vec<String> = addresses_of(reply).collect();
     addresses.is_empty() || addresses.iter().any(|addr| !unattended_address(addr))
@@ -183,11 +184,10 @@ fn from_entry(target: &ReplyTarget) -> String {
     }
 }
 
-/// A display name as it may appear in an address list. `from_name` is the
-/// decoded header text, so a name holding one of RFC 5322's specials — most
-/// often `Doe, Jane` — has to be quoted before it goes back into a list, or the
-/// comma splits it into a recipient named `Doe` that no address validation
-/// accepts.
+/// A display name as it may appear in an address list. `from_name` is the decoded header text, so a
+/// name holding one of RFC 5322's specials — most often `Doe, Jane` — has to be quoted before it
+/// goes back into a list, or the comma splits it into a recipient named `Doe` that no address
+/// validation accepts.
 fn display_name_entry(name: &str) -> String {
     if !name.contains(|c: char| "()<>[]:;@\\,.\"".contains(c) || c.is_control()) {
         return name.to_string();
@@ -207,15 +207,14 @@ fn display_name_entry(name: &str) -> String {
     quoted
 }
 
-/// Split a `Name <addr>, addr2` list into its entries, keeping each one's own
-/// text and dropping empties.
+/// Split a `Name <addr>, addr2` list into its entries, keeping each one's own text and dropping empties.
 ///
-/// A comma inside a quoted display name (`"Doe, Jane" <jane@x.com>`) or inside
-/// angle brackets does not separate entries: splitting there produces fragments
-/// that match no address, survive the own-address filtering, and go out as
-/// malformed recipients. Only the double quote opens a quoted string (RFC 5322);
-/// an apostrophe is an ordinary character in a name like O'Connor, and treating
-/// it as a delimiter swallows every recipient after it.
+/// A comma inside a quoted display name (`"Doe, Jane" <jane@x.com>`) or inside angle brackets does
+/// not separate entries: splitting there produces fragments that match no address, survive the
+/// own-address filtering, and go out as malformed recipients.
+///
+/// Only the double quote opens a quoted string (RFC 5322); an apostrophe is an ordinary character
+/// in a name like O'Connor, and treating it as a delimiter swallows every recipient after it.
 pub fn split_address_list(raw: &str) -> Vec<String> {
     let mut entries = Vec::new();
     let mut quoted = false;

@@ -3,12 +3,10 @@
 //! Part of the shared message parser used by the IMAP and local mail paths.
 //! The facade keeps its existing entry points for both platform clients.
 
-/// Drop the markup that makes a body readable in the reader but noisy in a
-/// one-line snippet: image markers and their links, link syntax (the text is
-/// worth showing, the URL isn't), emphasis/code markers, and line-leading
-/// quote/list/heading markers. Applies to both bodies we converted from HTML
-/// and text/plain parts, which carry the same conventions (Gmail writes
-/// `[image: alt] <url>`).
+/// Drop the markup that makes a body readable in the reader but noisy in a one-line snippet: image
+/// markers and their links, link syntax (the text is worth showing, the URL isn't), emphasis/code
+/// markers, and line-leading quote/list/heading markers. Applies to both bodies we converted from
+/// HTML and text/plain parts, which carry the same conventions (Gmail writes `[image: alt] <url>`).
 fn strip_preview_markup(body: &str) -> String {
     let mut lines: Vec<String> = Vec::new();
     for line in body.lines() {
@@ -137,11 +135,10 @@ fn is_escaped(before: &str) -> bool {
         == 1
 }
 
-/// Byte offset of the delimiter run that closes an emphasis/code span opened by
-/// `run` copies of `marker`, or `None` when the opener is unpaired. Follows the
-/// CommonMark shape loosely: the span may not start or end on whitespace, and
-/// the closing run must be the same length (so `**bold**` doesn't close on the
-/// first `*`).
+/// Byte offset of the delimiter run that closes an emphasis/code span opened by `run` copies of
+/// `marker`, or `None` when the opener is unpaired. Follows the CommonMark shape loosely: the span
+/// may not start or end on whitespace, and the closing run must be the same length (so `**bold**`
+/// doesn't close on the first `*`).
 fn closing_run(inner: &str, marker: u8, run: usize) -> Option<usize> {
     let bytes = inner.as_bytes();
     if bytes.first().is_none_or(|byte| byte.is_ascii_whitespace()) {

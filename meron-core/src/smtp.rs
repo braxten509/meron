@@ -30,15 +30,14 @@ async fn with_timeout<T>(
         .map_err(|_| anyhow::anyhow!("{what} timed out after {}s", limit.as_secs()))
 }
 
-/// Verify that the submission server presents a certificate we accept, without
-/// authenticating or sending anything. Run when an account is saved, because
-/// the IMAP validation next to it cannot speak for a second server that may
-/// have a certificate of its own.
+/// Verify that the submission server presents a certificate we accept, without authenticating or sending anything.
 ///
-/// Only certificate failures are reported: an unreachable or fussy submission
-/// server is left for the first real send, which is where it has always
-/// surfaced, so saving an account does not start failing on servers that reject
-/// probes.
+/// Run when an account is saved, because the IMAP validation next to it cannot speak for a second
+/// server that may have a certificate of its own.
+///
+/// Only certificate failures are reported: an unreachable or fussy submission server is left for
+/// the first real send, which is where it has always surfaced, so saving an account does not start
+/// failing on servers that reject probes.
 pub async fn check_certificate(creds: &Creds) -> Result<()> {
     let host = if creds.smtp_host.is_empty() {
         creds.host.as_str()
