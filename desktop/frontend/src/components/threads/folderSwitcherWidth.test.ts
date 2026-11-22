@@ -1,3 +1,7 @@
+// Checks the room available for a folder label in the thread
+// header. Moving search to the titlebar changes the header
+// constraint, while an embedded search box retains enough space.
+
 import { describe, expect, it } from 'bun:test'
 import { threadListFolderLabelClass } from './ThreadList'
 

@@ -1,3 +1,7 @@
+// Exercises certificate approval during sending. The
+// frontend must probe the failing submission server, pin
+// only the accepted certificate and retry the original send.
+
 import { beforeEach, describe, expect, it } from 'bun:test'
 import { certTrust$, dismissCertificatePrompt, trustPromptedCertificate } from './certificateTrust'
 import { retrySend } from './quickReplySend'

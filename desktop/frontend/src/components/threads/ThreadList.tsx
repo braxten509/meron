@@ -69,11 +69,10 @@ type ThreadListProps = {
 }
 
 /**
- * Width rule for the folder picker in the list header. With the search box in
- * the header the name is capped so a deep folder name can't crowd it out. With
- * the search in the title bar only a spacer shares the row, so the name takes
- * the room it needs and is cut off only when the row runs out; a fixed share
- * cut off short names ("Unified inbox") with a larger Text size.
+ * Width rule for the folder picker in the list header. With the search box in the header the name is
+ * capped so a deep folder name can't crowd it out. With the search in the title bar only a spacer
+ * shares the row, so the name takes the room it needs and is cut off only when the row runs out; a
+ * fixed share cut off short names ("Unified inbox") with a larger Text size.
  */
 export function threadListFolderLabelClass(searchInTitleBar: boolean): string {
   return `-ml-2 text-xs font-bold ${searchInTitleBar ? 'min-w-0' : 'max-w-[40%] shrink-0'}`
@@ -537,8 +536,8 @@ export function ThreadList({ width, onResizeStart }: ThreadListProps = {}) {
                     size="md"
                     radius="lg"
                     className="min-[769px]:hidden"
-                    onClick={(e) => {
-                      const rect = e.currentTarget.getBoundingClientRect()
+                    onClick={(event) => {
+                      const rect = event.currentTarget.getBoundingClientRect()
                       setQuickMenu({ x: rect.right - 208, y: rect.bottom })
                     }}
                   />

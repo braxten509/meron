@@ -104,14 +104,12 @@ export function isQuickReplyBlank(): boolean {
 }
 
 /**
- * The quick reply as it should be saved and sent: what the box holds, minus
- * only the blank line the signature was seeded under.
+ * The quick reply as it should be saved and sent: what the box holds, minus only the blank line the signature was seeded under.
  *
- * That padding is dropped just when nothing was typed above it — an
- * attachment-only reply, whose body is the untouched signature and would
- * otherwise go out with leading newlines. Whitespace anywhere else is the
- * user's (an indented first line, trailing blank lines they left) and is sent
- * exactly as written, so this is never a blanket trim.
+ * That padding is dropped just when nothing was typed above it — an attachment-only reply, whose body
+ * is the untouched signature and would otherwise go out with leading newlines. Whitespace anywhere
+ * else is the user's (an indented first line, trailing blank lines they left) and is sent exactly as
+ * written, so this is never a blanket trim.
  */
 export function quickReplyOutgoingText(): string {
   const text = compose$.composer.peek()
@@ -695,12 +693,14 @@ export function draftOpenInComposeTab(draftId: string): boolean {
     .some((tab) => !!tab.compose?.draftMessageId && normalizeMessageId(tab.compose.draftMessageId) === id)
 }
 
-/** Hold a draft the user is opening against a send's cleanup until the read that
- * precedes its editor is done. Identify it the way hydration does — by
- * Message-ID when the row has one, else by row id — so a Drafts row whose
- * headers aren't loaded yet is covered too. Returns the release, which is
- * idempotent: an open that resolves into an owner early (a conversation, whose
- * quick reply then hydrates the draft) calls it before its own `finally`. */
+/**
+ * Hold a draft the user is opening against a send's cleanup until the read that precedes its editor is done.
+ *
+ * Identify it the way hydration does — by Message-ID when the row has one, else by row id — so a
+ * Drafts row whose headers aren't loaded yet is covered too. Returns the release, which is idempotent:
+ * an open that resolves into an owner early (a conversation, whose quick reply then hydrates the
+ * draft) calls it before its own `finally`.
+ */
 export function reserveOpeningDraft(draft: Pick<Message, 'id' | 'message_id'>): () => void {
   const ids = [...new Set([draft.message_id ?? '', draft.id ?? ''].map(normalizeMessageId))].filter(Boolean)
   for (const id of ids) openingComposeTabDraftIds.set(id, (openingComposeTabDraftIds.get(id) ?? 0) + 1)
@@ -729,11 +729,12 @@ function draftClaimedElsewhere(draftId: string): boolean {
   return claimedBySend || draftOpenInComposeTab(draftId)
 }
 
-/** Hand a just-landed draft to the send that took the box while it was on the
- * wire — a claim or guard stamped after the save started, still without an id
- * of its own (one is allocated inside the save, so the send couldn't know it).
- * A send that was already under way when the save began is a *previous* reply
- * and must never adopt the text still being written. */
+/**
+ * Hand a just-landed draft to the send that took the box while it was on the wire — a claim or guard
+ * stamped after the save started, still without an id of its own (one is allocated inside the save, so
+ * the send couldn't know it). A send that was already under way when the save began is a *previous*
+ * reply and must never adopt the text still being written.
+ */
 function handOverToOvertakingSend(threadId: string, startTick: number, draftId: string, confirmed: boolean): boolean {
   // A send holding nothing takes the copy; one holding only this same id as
   // unconfirmed has it confirmed. A different id means the send has its own.

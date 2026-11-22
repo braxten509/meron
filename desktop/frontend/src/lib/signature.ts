@@ -52,11 +52,10 @@ const INERT_ATTRIBUTES = new Set(['class', 'id', 'dir', 'lang'])
 const WRAPPERS = new Set(['div', 'span', 'tbody', 'thead', 'tfoot', 'tr', 'td', 'th', 'colgroup', 'col', 'caption'])
 
 /**
- * The markup in hand-written signature HTML that the editor cannot represent,
- * and so drops on save: elements it has no node or mark for (`<table>`,
- * `<font>`, `<style>`), attributes it does not carry (`style`, `bgcolor`), and
- * links around images, which it keeps as a bare image. Empty when what is saved
- * looks the same as what was written.
+ * The markup in hand-written signature HTML that the editor cannot represent, and so drops on save:
+ * elements it has no node or mark for (`<table>`, `<font>`, `<style>`), attributes it does not carry
+ * (`style`, `bgcolor`), and links around images, which it keeps as a bare image. Empty when what is
+ * saved looks the same as what was written.
  */
 export function unsupportedSignatureMarkup(html: string, schema: Schema): string[] {
   const selectors = SchemaParser.fromSchema(schema).rules.flatMap((rule) =>
@@ -106,13 +105,11 @@ export type ComposeBody = { rich: boolean; html: string; text: string }
 export type Signature = { html: string; text: string }
 
 /**
- * A signature's plaintext form: block elements end a line, `<br>` breaks one,
- * and the remaining markup and entities are unwrapped.
+ * A signature's plaintext form: block elements end a line, `<br>` breaks one, and the remaining markup and entities are unwrapped.
  *
- * Deliberately not `lib/html`'s `htmlToText`, which parses arbitrary message
- * HTML through the DOM. A signature is short and comes out of our own editor,
- * and doing it with string work keeps this identical to the mobile
- * implementation — the two platforms share the stored signature, so they had
+ * Deliberately not `lib/html`'s `htmlToText`, which parses arbitrary message HTML through the DOM. A
+ * signature is short and comes out of our own editor, and doing it with string work keeps this
+ * identical to the mobile implementation — the two platforms share the stored signature, so they had
  * better render it the same way.
  */
 export function signatureToText(html: string): string {
@@ -140,11 +137,10 @@ export function signatureForms(html: string): Signature {
 }
 
 /**
- * Where the signature lands relative to whatever the draft was seeded with.
- * 'aboveQuote' for a forward, whose seeded body is the quoted message: the
- * signature belongs between what the user is about to type and the quote, as
- * in Gmail and Apple Mail. 'belowText' for everything else, where the seed is
- * the user's own text (a quick reply carried into the full editor) or nothing.
+ * Where the signature lands relative to whatever the draft was seeded with. 'aboveQuote' for a
+ * forward, whose seeded body is the quoted message: the signature belongs between what the user is
+ * about to type and the quote, as in Gmail and Apple Mail. 'belowText' for everything else, where the
+ * seed is the user's own text (a quick reply carried into the full editor) or nothing.
  */
 export type SignaturePlacement = 'aboveQuote' | 'belowText'
 
@@ -175,11 +171,10 @@ export function noSignatureMark(placement: SignaturePlacement): SignatureMark {
 }
 
 /**
- * Move a draft body to another account's signature, and report what the draft
- * now knows about it (see [[SignatureTracking]]).
+ * Move a draft body to another account's signature, and report what the draft now knows about it (see [[SignatureTracking]]).
  *
- * A signature that is no longer in the body verbatim has been edited — the text
- * is the user's now, so it is neither replaced nor tracked any further.
+ * A signature that is no longer in the body verbatim has been edited — the text is the user's now, so
+ * it is neither replaced nor tracked any further.
  */
 export function bodyWithSwappedSignature(
   body: ComposeBody,
@@ -253,12 +248,12 @@ function trackedIndex(body: ComposeBody, mark: SignatureMark): number {
 /**
  * Every position where `needle` sits in `haystack` as a block of its own.
  *
- * In plaintext that means whole lines, which is what tells an untouched
- * signature apart from one the user has written into: "Ping" must not match
- * inside "Ping, but edited". In HTML the same markup can appear nested inside
- * the user's own content — quoting the signature inside a blockquote, say, puts
- * a byte-identical `<p>Ping</p>` in the body — so a match only counts when it
- * begins at a top-level block and covers whole blocks of the document.
+ * In plaintext that means whole lines, which is what tells an untouched signature apart from one the
+ * user has written into: "Ping" must not match inside "Ping, but edited".
+ *
+ * In HTML the same markup can appear nested inside the user's own content — quoting the signature
+ * inside a blockquote, say, puts a byte-identical `<p>Ping</p>` in the body — so a match only counts
+ * when it begins at a top-level block and covers whole blocks of the document.
  */
 function blockMatches(haystack: string, needle: string, rich: boolean): number[] {
   if (rich) return richBlockMatches(haystack, needle)

@@ -7,7 +7,7 @@ import { CalendarDays, CalendarPlus, CalendarX, Check, Clock, HelpCircle, MapPin
 import { useState } from 'react'
 import { formatEventRange } from '../../lib/date'
 import { useTranslation } from '../../lib/i18n'
-import { clsx } from '../../lib/utils'
+import { clsx } from '../../lib/classNames'
 import { addInviteToCalendar, removeInviteFromCalendar, respondToInvite } from '../../states/calendar'
 import type { Invite, InviteResponse, Message } from '../../types'
 import { Button } from '../button/Button'

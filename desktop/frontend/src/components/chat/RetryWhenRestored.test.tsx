@@ -1,3 +1,7 @@
+// Simulates media recovery arriving before an image or video
+// reports its load result. Failed elements retry once and
+// elements that finish loading keep their existing DOM nodes.
+
 import { afterEach, expect, it } from 'bun:test'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { RetryWhenRestored } from './RetryWhenRestored'

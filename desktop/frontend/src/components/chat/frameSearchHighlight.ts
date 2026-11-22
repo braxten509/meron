@@ -38,11 +38,13 @@ export function collectTextNodes(doc: Document): Text[] {
 }
 
 /**
- * Case-fold one character. Folding per character rather than per string keeps
- * each folded run traceable to its source, at the cost of the one lowercase
- * rule that reads its neighbours: a Greek capital sigma lowercases to final
- * "ς" at the end of a word and to "σ" elsewhere. Folding both forms to "σ"
- * settles that without needing the context — and, because the needle goes
+ * Case-fold one character.
+ *
+ * Folding per character rather than per string keeps each folded run traceable to its source, at the
+ * cost of the one lowercase rule that reads its neighbours: a Greek capital sigma lowercases to final
+ * "ς" at the end of a word and to "σ" elsewhere.
+ *
+ * Folding both forms to "σ" settles that without needing the context — and, because the needle goes
  * through the same function, it settles it the same way on both sides.
  */
 function foldChar(char: string): string {
@@ -58,12 +60,12 @@ function foldQuery(query: string): string {
 }
 
 /**
- * The folded haystack, plus the map back to source offsets. Folding is not
- * length-preserving — U+0130 "İ" becomes two code units — so folding in place
- * would slide every offset after such a character off the source text.
- * `sourceStart[i]` / `sourceEnd[i]` give the bounds of the source character
- * that produced folded position `i`, so a match maps back exactly whether or
- * not the fold expanded, and "İstanbul" still answers to a search for "i".
+ * The folded haystack, plus the map back to source offsets.
+ *
+ * Folding is not length-preserving — U+0130 "İ" becomes two code units — so folding in place would
+ * slide every offset after such a character off the source text. `sourceStart[i]` / `sourceEnd[i]`
+ * give the bounds of the source character that produced folded position `i`, so a match maps back
+ * exactly whether or not the fold expanded, and "İstanbul" still answers to a search for "i".
  */
 function foldWithSourceMap(texts: string[]): { folded: string; sourceStart: number[]; sourceEnd: number[] } {
   let folded = ''
@@ -142,16 +144,16 @@ export function matchRanges(texts: string[], rawNeedle: string): { hits: number;
 }
 
 /**
- * Wrap every case-insensitive occurrence of `query` in a <mark>. `activeHit` is
- * the index of the occurrence the search is currently parked on within this
- * document (-1 when the search is parked elsewhere); it gets the stronger
- * highlight, matching the plain renderer.
+ * Wrap every case-insensitive occurrence of `query` in a <mark>.
  *
- * Matching runs over the concatenation of the body's text nodes rather than
- * each node on its own, so a query spanning markup ("hello world" across
- * `<span>Hello</span> <strong>world</strong>") still highlights — it is cut back
- * into one <mark> per node the match covers. Returns the number of hits and the
- * first <mark> of the active one, which the caller scrolls to.
+ * `activeHit` is the index of the occurrence the search is currently parked on within this document
+ * (-1 when the search is parked elsewhere); it gets the stronger highlight, matching the plain
+ * renderer.
+ *
+ * Matching runs over the concatenation of the body's text nodes rather than each node on its own, so a
+ * query spanning markup ("hello world" across `<span>Hello</span> <strong>world</strong>") still
+ * highlights — it is cut back into one <mark> per node the match covers. Returns the number of hits
+ * and the first <mark> of the active one, which the caller scrolls to.
  */
 export function applyFrameHighlights(
   doc: Document,

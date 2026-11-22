@@ -1,3 +1,7 @@
+// Manages avatar selection for the account settings dialog. The
+// hook coordinates reading a chosen image and updating the account,
+// so the settings fields can reflect the resulting picture.
+
 import { type ChangeEvent, useState } from 'react'
 import { t } from '../../lib/i18n'
 import { readFileData } from '../../lib/readFileData'

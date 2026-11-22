@@ -1,3 +1,7 @@
+// Exercises recipient splitting with quoted display names and
+// angle-bracket addresses. Optional semicolon separators and
+// escaped quote marks must preserve each address as a single entry.
+
 import { describe, expect, it } from 'bun:test'
 import { bareAddr, splitAddressList } from './address'
 

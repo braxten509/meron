@@ -1,3 +1,7 @@
+// Checks reader media sizing against sender-defined
+// limits. Fixtures cover intrinsic sizes, wide images and
+// repeated setup of resize listeners on the same element.
+
 import { describe, expect, it } from 'bun:test'
 import { fitMediaBox } from './mediaSize'
 import { releaseFailedImageBox, restoreImageBox } from './bubbleHtml'

@@ -20,7 +20,7 @@ export function AccountWallpaperCard({ account }: { account: Account }) {
 
   const presetName =
     wallpaper?.kind === 'preset'
-      ? (WALLPAPER_PRESETS.find((p) => p.id === wallpaper.presetId)?.name ?? t('wallpaper.plain'))
+      ? (WALLPAPER_PRESETS.find((preset) => preset.id === wallpaper.presetId)?.name ?? t('wallpaper.plain'))
       : wallpaper?.kind === 'custom'
         ? t('wallpaper.customBackground')
         : t('wallpaper.plainDefault')

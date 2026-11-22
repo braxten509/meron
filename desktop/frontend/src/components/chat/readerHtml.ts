@@ -325,14 +325,14 @@ function applyReaderColumn(body: HTMLElement, zoom: number) {
 }
 
 /**
- * Paint a reader frame with the user's message typography. Mail gets the base
- * size and leading its bubble has, so a message reads the same in a tab as in
- * the conversation; a feed `article` keeps the engine's larger reading size.
- * The base sits in `:where()` so anything the email says about its own text
- * wins. The family and zoom are only emitted when a preference is actually set,
- * and without `!important`: an email that names its own fonts keeps them. The
- * text size arrives as a body `zoom` so it also moves the emails that size
- * their own text.
+ * Paint a reader frame with the user's message typography.
+ *
+ * Mail gets the base size and leading its bubble has, so a message reads the same in a tab as in the
+ * conversation; a feed `article` keeps the engine's larger reading size. The base sits in `:where()`
+ * so anything the email says about its own text wins. The family and zoom are only emitted when a
+ * preference is actually set, and without `!important`: an email that names its own fonts keeps them.
+ *
+ * The text size arrives as a body `zoom` so it also moves the emails that size their own text.
  */
 export function applyReaderFont(doc: Document, font: MessageFrameFont, article = false) {
   if (doc.body) applyReaderColumn(doc.body, font.zoom)

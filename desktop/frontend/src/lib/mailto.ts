@@ -1,3 +1,7 @@
+// Decodes mailto links into fields for a new draft. The
+// desktop composer receives address lists and message
+// content through the same parsed representation.
+
 // Parse a `mailto:` URL into compose fields. Pure — no app/state dependencies.
 
 export type MailtoFields = {

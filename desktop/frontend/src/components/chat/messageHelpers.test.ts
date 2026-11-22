@@ -20,8 +20,8 @@ import {
   isVideo,
   mediaFilename,
   imageSource,
-  mediaKeyFromSrc,
-  mediaSrc,
+  mediaKeyFromSource,
+  mediaSource,
   messageSearchText,
   normalizeBodyText,
   normalizeUrl,
@@ -34,7 +34,7 @@ import {
 } from './messageHelpers'
 
 const NOW = new Date(2026, 5, 10, 15, 30, 0)
-const sec = (d: Date) => Math.floor(d.getTime() / 1000)
+const sec = (date: Date) => Math.floor(date.getTime() / 1000)
 
 beforeEach(() => {
   setSystemTime(NOW)
@@ -58,8 +58,8 @@ describe('messageHelpers file and media helpers', () => {
     expect(isImage({ mime: 'IMAGE/PNG' } as any)).toBe(true)
     expect(isVideo({ mime: 'video/mp4' } as any)).toBe(true)
     expect(isImage({ mime: 'application/pdf' } as any)).toBe(false)
-    expect(mediaSrc({ key: 'acct/file.png' } as any)).toBe('/media/acct/file.png')
-    expect(mediaSrc({ url: 'https://example.com/file.png' } as any)).toBe('https://example.com/file.png')
+    expect(mediaSource({ key: 'acct/file.png' } as any)).toBe('/media/acct/file.png')
+    expect(mediaSource({ url: 'https://example.com/file.png' } as any)).toBe('https://example.com/file.png')
   })
 
   it('detects media already present in html bodies', () => {
@@ -326,15 +326,15 @@ describe('imageSource', () => {
 
 describe('mediaKeyFromSrc', () => {
   it('reads the key from a relative or same-origin media src', () => {
-    expect(mediaKeyFromSrc('/media/a%20b/0.png')).toBe('a b/0.png')
-    expect(mediaKeyFromSrc(`${window.location.origin}/media/msg/1.jpg`)).toBe('msg/1.jpg')
+    expect(mediaKeyFromSource('/media/a%20b/0.png')).toBe('a b/0.png')
+    expect(mediaKeyFromSource(`${window.location.origin}/media/msg/1.jpg`)).toBe('msg/1.jpg')
   })
 
   it('ignores remote and other sources', () => {
-    expect(mediaKeyFromSrc('https://example.com/media/x.png')).toBeNull()
-    expect(mediaKeyFromSrc(`${window.location.origin}/other/x.png`)).toBeNull()
-    expect(mediaKeyFromSrc('data:image/png;base64,AAAA')).toBeNull()
-    expect(mediaKeyFromSrc('not a url')).toBeNull()
+    expect(mediaKeyFromSource('https://example.com/media/x.png')).toBeNull()
+    expect(mediaKeyFromSource(`${window.location.origin}/other/x.png`)).toBeNull()
+    expect(mediaKeyFromSource('data:image/png;base64,AAAA')).toBeNull()
+    expect(mediaKeyFromSource('not a url')).toBeNull()
   })
 })
 

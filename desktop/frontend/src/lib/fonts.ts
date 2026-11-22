@@ -1,9 +1,8 @@
-// Typography settings: which family the interface uses, which family message
-// bodies use, and how large text is drawn overall.
+// Typography settings: which family the interface uses, which family message bodies use, and how large text is drawn overall.
 //
-// A stored font choice is one string: '' for the default, a `FONT_OPTIONS` id
-// for one of the built-in stacks, or any other value — a family name the user
-// typed, matched against the fonts installed on their machine.
+// A stored font choice is one string: '' for the default, a `FONT_OPTIONS` id for one of the built-in
+// stacks, or any other value — a family name the user typed, matched against the fonts installed on
+// their machine.
 
 export type FontOption = {
   id: string
@@ -79,11 +78,11 @@ export function messageFontStack(messageValue: string, uiValue: string): string 
 
 /**
  * How much a sandboxed body frame scales its content, as a CSS `zoom` factor.
- * The frame inherits neither the app's root font size nor the message text
- * scale, and a baked-in `font-size` would only move the bodies that don't set
- * their own — which most HTML mail does. Zooming the body scales the email's
- * own sizes, spacing and images with it. Both percentages apply: the app-wide
- * size scales everything, the message size adjusts bodies on top.
+ *
+ * The frame inherits neither the app's root font size nor the message text scale, and a baked-in
+ * `font-size` would only move the bodies that don't set their own — which most HTML mail does. Zooming
+ * the body scales the email's own sizes, spacing and images with it. Both percentages apply: the
+ * app-wide size scales everything, the message size adjusts bodies on top.
  */
 export function messageFrameZoom(fontScale: number, messageFontScale: number): number {
   const zoom = (clampFontScale(fontScale) / 100) * (clampMessageFontScale(messageFontScale) / 100)

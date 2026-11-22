@@ -6,7 +6,7 @@
 import { forwardRef } from 'react'
 import type { ButtonHTMLAttributes, ReactNode } from 'react'
 import type { LucideIcon } from 'lucide-react'
-import { clsx } from '../../lib/utils'
+import { clsx } from '../../lib/classNames'
 
 type IconButtonVariant = 'ghost' | 'accent' | 'accentSoft' | 'danger'
 type IconButtonSize = 'sm' | 'md' | 'lg'

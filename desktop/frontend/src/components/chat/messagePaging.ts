@@ -1,9 +1,9 @@
-// Keyboard scrolling of the open message: Space / Shift+Space page it, and the
-// arrow keys step it while focus is in an HTML message's frame. The
-// conversation and the reader tab mark their scroll containers with
-// data-message-scroller (and make them focusable, so a click into the message
-// hands the arrow keys to the browser's own scrolling). The conversation stays
-// mounted, hidden, under a reader tab, so the one on screen is the target.
+// Keyboard scrolling of the open message: Space / Shift+Space page it, and the arrow keys step it while focus is in an HTML message's frame.
+//
+// The conversation and the reader tab mark their scroll containers with data-message-scroller (and
+// make them focusable, so a click into the message hands the arrow keys to the browser's own
+// scrolling). The conversation stays mounted, hidden, under a reader tab, so the one on screen is the
+// target.
 
 import { COMPOSER_OVERLAP_VAR } from './conversationScroll'
 

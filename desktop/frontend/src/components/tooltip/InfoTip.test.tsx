@@ -1,3 +1,7 @@
+// Checks the background used behind tooltip text. The test
+// opens the desktop information bubble and verifies that
+// its surface stays opaque when drawn over other content.
+
 import { describe, expect, it } from 'bun:test'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { InfoTip } from './InfoTip'

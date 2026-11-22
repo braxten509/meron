@@ -1,3 +1,7 @@
+// Checks that opening or changing a reader tab preserves each
+// tab's scroll position. The test mounts conversation readers
+// and observes which scrolling container receives the update.
+
 import { afterEach, describe, expect, it } from 'bun:test'
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import '../../states/compose'

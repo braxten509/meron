@@ -88,17 +88,17 @@ export function Composer({ tabId }: { tabId: string }) {
   // that ends its composition, which WebKit reports as keyCode 229 instead of
   // isComposing. defaultPrevented is no sign of either: ProseMirror sets it on
   // every Esc in the rich-text body.
-  const handleSendShortcut = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !e.shiftKey) {
-      e.preventDefault()
+  const handleSendShortcut = (event: React.KeyboardEvent) => {
+    if (event.key === 'Enter' && (event.metaKey || event.ctrlKey) && !event.shiftKey) {
+      event.preventDefault()
       void submit()
       return
     }
-    if (e.nativeEvent.isComposing || e.keyCode === 229) return
-    if (e.key === 'Escape' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
-      e.preventDefault()
+    if (event.nativeEvent.isComposing || event.keyCode === 229) return
+    if (event.key === 'Escape' && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) {
+      event.preventDefault()
       // Not on to the app-wide Esc, which would close the conversation pane.
-      e.stopPropagation()
+      event.stopPropagation()
       void closeKeepingDraft()
     }
   }
@@ -156,7 +156,7 @@ export function Composer({ tabId }: { tabId: string }) {
               ref={textRef}
               autoFocus={focusBody}
               value={draft.text}
-              onChange={(e) => update({ text: e.target.value })}
+              onChange={(event) => update({ text: event.target.value })}
               onPaste={handlePaste}
               placeholder={t('composer.placeholders.message')}
               spellCheck={spellCheck}

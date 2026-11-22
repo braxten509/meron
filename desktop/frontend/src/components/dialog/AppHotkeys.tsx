@@ -258,10 +258,9 @@ function handleRailShortcut(action: ShortcutId): boolean {
 }
 
 /**
- * Mounts the global keyboard shortcuts. Renders nothing. ⌘/Ctrl-modified
- * shortcuts work everywhere (even while typing); bare single-key shortcuts
- * (j/k/e/s/u/#/i/r, Space) fire in the chat and kanban views when not typing and no
- * modal is open. Per-palette navigation (arrows/enter/esc) lives inside
+ * Mounts the global keyboard shortcuts. Renders nothing. ⌘/Ctrl-modified shortcuts work everywhere
+ * (even while typing); bare single-key shortcuts (j/k/e/s/u/#/i/r, Space) fire in the chat and kanban
+ * views when not typing and no modal is open. Per-palette navigation (arrows/enter/esc) lives inside
  * CommandPalette.
  */
 export function AppHotkeys() {

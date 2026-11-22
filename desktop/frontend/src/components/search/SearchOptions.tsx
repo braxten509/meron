@@ -9,7 +9,7 @@ import { BookmarkPlus, ChevronDown, Columns3, SlidersHorizontal } from 'lucide-r
 import { invoke } from '../../lib/bridge'
 import { useTranslation } from '../../lib/i18n'
 import { useEscapeKey } from '../../lib/useEscapeKey'
-import { clsx } from '../../lib/utils'
+import { clsx } from '../../lib/classNames'
 import { kanbanColumnKey, type KanbanColumn } from '../../states/kanban'
 import { Button } from '../button/Button'
 import { RecipientInput } from '../composer/RecipientInput'
@@ -47,11 +47,10 @@ export type SearchOptionsProps = {
 }
 
 /**
- * Gmail-style search options: a form for the operators the core understands
- * (`from:`, `to:`, `subject:`, `is:unread`, …). The query text stays the
- * source of truth — opening reads the current query into the form, searching
- * writes the form back as query text — so typed operators and the form never
- * disagree.
+ * Gmail-style search options: a form for the operators the core understands (`from:`, `to:`,
+ * `subject:`, `is:unread`, …). The query text stays the source of truth — opening reads the current
+ * query into the form, searching writes the form back as query text — so typed operators and the form
+ * never disagree.
  */
 export function SearchOptions({
   query,

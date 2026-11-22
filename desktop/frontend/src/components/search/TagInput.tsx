@@ -47,11 +47,10 @@ export function removeTag(value: string, index: number, tail = '') {
 }
 
 /**
- * The search form's Tags field, suggesting known tags. Its value stays the plain
- * list the search syntax reads: tags ended by a separator show as chips, and the
- * input holds only the one being typed. Away from the field every tag is a chip.
- * Enter searches unless the arrow keys picked a suggestion, as a tag typed in
- * full needs no completing.
+ * The search form's Tags field, suggesting known tags. Its value stays the plain list the search
+ * syntax reads: tags ended by a separator show as chips, and the input holds only the one being typed.
+ * Away from the field every tag is a chip. Enter searches unless the arrow keys picked a suggestion,
+ * as a tag typed in full needs no completing.
  */
 export function TagInput({ value, onChange }: { value: string; onChange: (value: string) => void }) {
   const { t } = useTranslation()

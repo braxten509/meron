@@ -127,7 +127,7 @@ export const HtmlFrame = forwardRef(function HtmlFrame(
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
   const docRef = useRef<Document | null>(null)
   const winRef = useRef<Window | null>(null)
-  const { srcDoc, documentMarker } = useMemo(() => {
+  const { srcDoc: sourceDocument, documentMarker } = useMemo(() => {
     const marker = `meron-frame-${Math.random().toString(36).slice(2)}`
     const prepared = prepareHtml ? prepareHtml(html) : html
     // A leading comment identifies even an already-parsed document without
@@ -253,11 +253,11 @@ export const HtmlFrame = forwardRef(function HtmlFrame(
         if (hasFrameSelection(doc)) return
 
         const target = event.target as Element | null
-        const img = target?.closest?.('img') as HTMLImageElement | null
-        const source = img ? imageSource(img.currentSrc || img.src) : null
+        const imageElement = target?.closest?.('img') as HTMLImageElement | null
+        const source = imageElement ? imageSource(imageElement.currentSrc || imageElement.src) : null
         const blocked = !!source?.url && !allowRemoteImagesRef.current
         const image = blocked ? null : source
-        if (forwardContextMenuRef.current === 'except-images' && img && !image && !blocked) return
+        if (forwardContextMenuRef.current === 'except-images' && imageElement && !image && !blocked) return
         const anchor = target?.closest?.('a[href]') as HTMLAnchorElement | null
         let linkUrl: string | undefined = undefined
         if (anchor) {
@@ -369,7 +369,7 @@ export const HtmlFrame = forwardRef(function HtmlFrame(
   // Wire when srcDoc changes to cover cases where the load event might not fire
   useEffect(() => {
     wire()
-  }, [wire, srcDoc])
+  }, [wire, sourceDocument])
 
   // Discover the committed srcdoc document, then wait for its parsing event.
   // Polling ends at navigation commit, so hanging images cannot keep it running.
@@ -396,7 +396,7 @@ export const HtmlFrame = forwardRef(function HtmlFrame(
       window.cancelAnimationFrame(frame)
       watched?.removeEventListener('DOMContentLoaded', parsed)
     }
-  }, [wire, srcDoc, documentMarker, readyWhenParsed])
+  }, [wire, sourceDocument, documentMarker, readyWhenParsed])
 
   // Stop in-frame media before the document is swapped for new HTML, otherwise
   // its orphaned pipeline keeps a "now playing" notification up.
@@ -405,7 +405,7 @@ export const HtmlFrame = forwardRef(function HtmlFrame(
       stopFrameMedia(docRef.current)
       clearMediaSession(winRef.current)
     }
-  }, [srcDoc])
+  }, [sourceDocument])
 
   // Cleanup on unmount
   useLayoutEffect(() => {
@@ -434,7 +434,7 @@ export const HtmlFrame = forwardRef(function HtmlFrame(
   return (
     <iframe
       ref={iframeRef}
-      srcDoc={srcDoc}
+      srcDoc={sourceDocument}
       // `allow-scripts` is required so our parent-registered click listener
       // actually fires: WebKitGTK disables *all* script execution in a
       // scripting-sandboxed document, including listeners added from the parent

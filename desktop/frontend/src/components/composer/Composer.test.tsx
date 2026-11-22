@@ -283,7 +283,7 @@ describe('Composer', () => {
     const saves = calls.filter((c) => c.command === 'mail.saveDraft').map((c) => c.payload)
     // Only the save already in flight when the switch happened may carry 'a';
     // every later one is 'b', with the body that goes with it.
-    expect(saves.filter((s) => s.account_id === 'a')).toHaveLength(1)
+    expect(saves.filter((savedDraft) => savedDraft.account_id === 'a')).toHaveLength(1)
     const last = saves[saves.length - 1]
     expect(last.account_id).toBe('b')
     expect(last.body).toContain('moved to b')

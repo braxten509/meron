@@ -302,15 +302,14 @@ export async function setAccountProxy(accountId: string, proxy: AccountProxy) {
 /**
  * The signature writes still outstanding for one account.
  *
- * They are chained rather than fired in parallel: the settings editor can start
- * two in quick succession (the mode the user picked, then its editor's pending
- * text), and unordered bridge calls would let the older content land last.
+ * They are chained rather than fired in parallel: the settings editor can start two in quick
+ * succession (the mode the user picked, then its editor's pending text), and unordered bridge calls
+ * would let the older content land last.
  *
- * `persisted` is what the store is known to hold — which is what a failed write
- * rolls back to. The optimistic value is not that: two failures in a row would
- * otherwise leave the screen showing a value that never reached the database.
- * The entry is dropped once the chain drains, so the next edit reads a fresh
- * baseline.
+ * `persisted` is what the store is known to hold — which is what a failed write rolls back to. The
+ * optimistic value is not that: two failures in a row would otherwise leave the screen showing a value
+ * that never reached the database. The entry is dropped once the chain drains, so the next edit reads
+ * a fresh baseline.
  */
 type SignatureWrites = { chain: Promise<void>; persisted: Account['signature'] }
 const signatureWrites = new Map<string, SignatureWrites>()

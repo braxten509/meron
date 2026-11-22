@@ -28,18 +28,18 @@ function collapsedPreview(message: Message): string {
 }
 
 /**
- * Marks an expanded message's header with `data-stuck` while it is pinned over
- * its body, which CSS alone can't tell from resting at the top of its card. The
- * attribute is set on the element directly: scrolling a long message past is
- * no reason to render it again.
+ * Marks an expanded message's header with `data-stuck` while it is pinned over its body, which CSS alone can't tell from resting at the top of its card.
  *
- * What is watched is not the header but a mark that stays where the header
- * rests, raised by the gap a pinned header keeps from the scroller's edge: the
- * header is pinned while that mark is above the edge. The gap is the
- * mark's own CSS, so it scales with the UI text size along with the header's
- * offset. Everything below the edge counts as in view, however far down, so
- * the mark crosses one line only and a jump of a page or more — from under the
- * viewport straight to pinned — can't pass unseen.
+ * The attribute is set on the element directly: scrolling a long message past is no reason to render
+ * it again.
+ *
+ * What is watched is not the header but a mark that stays where the header rests, raised by the gap a
+ * pinned header keeps from the scroller's edge: the header is pinned while that mark is above the
+ * edge. The gap is the mark's own CSS, so it scales with the UI text size along with the header's
+ * offset.
+ *
+ * Everything below the edge counts as in view, however far down, so the mark crosses one line only and
+ * a jump of a page or more — from under the viewport straight to pinned — can't pass unseen.
  */
 function usePinnedHeader(expanded: boolean) {
   const headerRef = useRef<HTMLDivElement | null>(null)

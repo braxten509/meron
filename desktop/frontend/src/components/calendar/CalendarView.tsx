@@ -9,7 +9,7 @@ import { firstDayOfWeek, monthGrid, occursOn, sameDay } from '../../lib/calendar
 import { useEscapeKey } from '../../lib/useEscapeKey'
 import { settings$ } from '../../states/settings'
 import { useTranslation } from '../../lib/i18n'
-import { clsx } from '../../lib/utils'
+import { clsx } from '../../lib/classNames'
 import {
   calendar$,
   closeCalendar,

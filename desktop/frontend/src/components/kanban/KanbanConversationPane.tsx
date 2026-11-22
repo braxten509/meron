@@ -1,3 +1,7 @@
+// Displays the conversation selected from a board column.
+// The board controls its opening and closing, while the pane
+// coordinates transitions with the embedded conversation reader.
+
 import { useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { usePresence } from '../../lib/usePresence'
 

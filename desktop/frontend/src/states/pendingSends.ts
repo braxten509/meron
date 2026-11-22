@@ -40,13 +40,14 @@ export const discardPendingSend = (id: string) => {
   registry.delete(id)
 }
 
-/** A reply whose send died before it ever had a payload to retry, and whose
- * draft rescue has not (yet) put a copy on the server. The bubble is the only
- * copy left, which makes it worth putting back when its thread is loaded
- * again: the message page is replaced wholesale on every navigation. `retry`
- * re-runs the rescue (see sendReply's rescueUnsentQuickReply); `inFlight` is
- * set while it runs, and `cancelled` records that the user deleted the bubble
- * meanwhile — the rescue reads it back and undoes what it wrote. */
+/**
+ * A reply whose send died before it ever had a payload to retry, and whose draft rescue has not (yet) put a copy on the server.
+ *
+ * The bubble is the only copy left, which makes it worth putting back when its thread is loaded again:
+ * the message page is replaced wholesale on every navigation. `retry` re-runs the rescue (see
+ * sendReply's rescueUnsentQuickReply); `inFlight` is set while it runs, and `cancelled` records that
+ * the user deleted the bubble meanwhile — the rescue reads it back and undoes what it wrote.
+ */
 export type UnsentRescue = {
   threadId: string
   bubble: Message

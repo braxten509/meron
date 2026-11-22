@@ -13,18 +13,18 @@ import { compose$ } from './composeState'
 
 // Reply addressing: which message to answer, from which identity, and to whom.
 
-/** Pick the source message to reply to: the most recent loaded message in the
- * active thread that wasn't sent by us — its Reply-To/Cc are the headers we
- * should honor — preferring one that accepts replies, so a no-reply
- * notification or a bounce doesn't take the reply (the core decides which, see
- * `accepts_replies`). Falls back to the thread header when no loaded message
- * matches. */
+/**
+ * Pick the source message to reply to: the most recent loaded message in the active thread that wasn't
+ * sent by us — its Reply-To/Cc are the headers we should honor — preferring one that accepts replies,
+ * so a no-reply notification or a bounce doesn't take the reply (the core decides which, see
+ * `accepts_replies`). Falls back to the thread header when no loaded message matches.
+ */
 export function pickReplyTarget(activeT: Message, excludedId = ''): Message {
   const messages = mail$.messages.get()
   const ownAddrs = ownAddressSet(accounts$.get())
-  const inThread = messages.filter((m) => m.thread_id === activeT.thread_id && m.id !== excludedId)
-  const received = inThread.filter((m) => !sentByUs(m, ownAddrs))
-  const replyable = received.filter((m) => m.reply?.accepts_replies !== false)
+  const inThread = messages.filter((message) => message.thread_id === activeT.thread_id && message.id !== excludedId)
+  const received = inThread.filter((message) => !sentByUs(message, ownAddrs))
+  const replyable = received.filter((message) => message.reply?.accepts_replies !== false)
   return replyable[replyable.length - 1] ?? received[received.length - 1] ?? inThread[inThread.length - 1] ?? activeT
 }
 
@@ -37,17 +37,20 @@ export function replySubject(activeT: Message, target: Message): string {
   return base.startsWith('Re:') ? base : `Re: ${base}`
 }
 
-/** Whether a loaded message is one we sent, as opposed to one we received.
- * The core settles this from the message's own delivery headers whenever it has
- * the body cached. Until then `outgoing` — like the address fallback kept here
- * for rows shaped before that flag existed — falls back to matching From against
- * our identities, which also fires for a colleague's mail from a shared alias;
- * sitting in the inbox vetoes that match. An optimistic send (`send_status`) is
- * ours whatever folder it claims. */
-function sentByUs(m: Message, ownAddrs: Set<string>): boolean {
-  if (m.send_status) return true
-  if (isInboxFolder(m.folder_id, m.account_id)) return false
-  return m.outgoing === true || ownAddrs.has((m.from_addr || '').trim().toLowerCase())
+/**
+ * Whether a loaded message is one we sent, as opposed to one we received.
+ *
+ * The core settles this from the message's own delivery headers whenever it has the body cached. Until
+ * then `outgoing` — like the address fallback kept here for rows shaped before that flag existed —
+ * falls back to matching From against our identities, which also fires for a colleague's mail from a
+ * shared alias; sitting in the inbox vetoes that match.
+ *
+ * An optimistic send (`send_status`) is ours whatever folder it claims.
+ */
+function sentByUs(message: Message, ownAddrs: Set<string>): boolean {
+  if (message.send_status) return true
+  if (isInboxFolder(message.folder_id, message.account_id)) return false
+  return message.outgoing === true || ownAddrs.has((message.from_addr || '').trim().toLowerCase())
 }
 
 /** Every address the user owns across all accounts (primary + aliases),
@@ -69,7 +72,7 @@ export function ownAddressSet(accounts: Account[]): Set<string> {
  * primary should be used (the draft treats "" as the primary). */
 export function detectAliasFrom(target: Message, acc: Account): string {
   const recipients = new Set(
-    [...splitAddressList(target.to), ...splitAddressList(target.cc)].map((e) => bareAddr(e).toLowerCase()),
+    [...splitAddressList(target.to), ...splitAddressList(target.cc)].map((address) => bareAddr(address).toLowerCase()),
   )
   const match = accountIdentities(acc).find((id) => recipients.has(id.email.trim().toLowerCase()))
   // Use the matched address, but leave "" when it's just the primary so the
@@ -116,11 +119,12 @@ export function resolveQuickReplyFrom(target: Message, acc: Account | null | und
   return detectAliasFrom(target, acc)
 }
 
-/** Backs the quick reply's From indicator: the identities the active thread's
- * account can send as, plus the one currently resolved. `identities` is empty
- * when there is nothing to choose between (no thread, an unsendable account, or
- * a single identity) — the indicator hides itself in that case rather than
- * stating the obvious. Reactive: safe to read from a component. */
+/**
+ * Backs the quick reply's From indicator: the identities the active thread's account can send as, plus
+ * the one currently resolved. `identities` is empty when there is nothing to choose between (no
+ * thread, an unsendable account, or a single identity) — the indicator hides itself in that case
+ * rather than stating the obvious. Reactive: safe to read from a component.
+ */
 export function quickReplyFromState(): { identities: Alias[]; selected: Alias | null } {
   const none = { identities: [] as Alias[], selected: null }
   const thread = getActiveThread()
@@ -202,7 +206,7 @@ export function buildReplyThreading(target: Message): {
   if (!parentId) return { in_reply_to: '', references: '' }
   const parentRefs = (target.references || '')
     .split(/\s+/)
-    .map((s) => s.trim())
+    .map((part) => part.trim())
     .filter(Boolean)
   // Append the parent's own Message-ID to its References chain so the reply
   // links to the entire ancestry, not just the immediate parent.

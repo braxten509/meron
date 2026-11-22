@@ -106,8 +106,8 @@ describe('bodyWithSwappedSignature', () => {
   const mine = sig('<p>Mine</p>', 'Mine')
   const theirs = sig('<p>Theirs</p>', 'Theirs')
   const none = sig('', '')
-  const below = (s: { html: string; text: string }) => ({ ...s, placement: 'belowText' as const })
-  const above = (s: { html: string; text: string }) => ({ ...s, placement: 'aboveQuote' as const })
+  const below = (signature: { html: string; text: string }) => ({ ...signature, placement: 'belowText' as const })
+  const above = (signature: { html: string; text: string }) => ({ ...signature, placement: 'aboveQuote' as const })
 
   it('replaces the signature the draft was seeded with', () => {
     const body = { rich: true, html: '<p>typed</p><p></p><p>Mine</p>', text: '' }

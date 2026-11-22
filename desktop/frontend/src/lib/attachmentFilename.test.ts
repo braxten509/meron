@@ -1,3 +1,7 @@
+// Checks the file name offered when saving an attachment.
+// MIME metadata, trusted suffixes and fallbacks for unnamed
+// files determine which extension the user receives.
+
 import { describe, expect, it } from 'bun:test'
 import { attachmentSaveFilename } from './attachmentFilename'
 

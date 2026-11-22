@@ -1,3 +1,7 @@
+// Checks the compact date labels shown in the conversation
+// list. The fixtures distinguish an unknown timestamp, a
+// message from today and one from an earlier calendar day.
+
 import { afterEach, beforeEach, describe, expect, it, setSystemTime } from 'bun:test'
 import { formatEventRange, formatThreadDate, taskIsOverdue, fromDateInputValue } from './date'
 
@@ -5,7 +9,7 @@ import { formatEventRange, formatThreadDate, taskIsOverdue, fromDateInputValue }
 const NOW = new Date(2026, 5, 10, 15, 30, 0)
 
 // Epoch seconds for a local Date.
-const sec = (d: Date) => Math.floor(d.getTime() / 1000)
+const sec = (date: Date) => Math.floor(date.getTime() / 1000)
 
 beforeEach(() => {
   setSystemTime(NOW)

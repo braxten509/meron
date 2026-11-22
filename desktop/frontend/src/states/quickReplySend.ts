@@ -397,7 +397,7 @@ export async function sendReply() {
   // Message-ID. Checking only for *a* loaded message isn't enough — it's
   // satisfied by the header-less copy we need to refetch.
   const hasThreadingTarget = () =>
-    mail$.messages.get().some((m) => m.thread_id === activeT.thread_id && (m.message_id || '').trim())
+    mail$.messages.get().some((message) => message.thread_id === activeT.thread_id && (message.message_id || '').trim())
   if (!hasThreadingTarget()) {
     try {
       await loadThread(activeT.thread_id)
@@ -491,8 +491,8 @@ export async function sendReply() {
 
 // Set the send lifecycle status on the optimistic message with the given id.
 function setSendStatus(tempId: string, status: Message['send_status']) {
-  const idx = mail$.messages.get().findIndex((m) => m.id === tempId)
-  if (idx >= 0) mail$.messages[idx].send_status.set(status)
+  const index = mail$.messages.get().findIndex((message) => message.id === tempId)
+  if (index >= 0) mail$.messages[index].send_status.set(status)
 }
 
 // Fire the `mail.send` bridge call for a pending message and reconcile its

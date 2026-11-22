@@ -26,13 +26,16 @@ const frameDragListeners = new Set<(frame: Element, data: DataTransfer) => void>
 const dragOverListeners = new Set<() => void>()
 let fileDragSeen = false
 
-/** Watches a document's drags. The page's own window is watched by useFileDrop;
- *  message bodies live in iframes, whose drag events never reach it, so
- *  HtmlFrame adds each frame's document, with the `frame` element showing it.
+/**
+ * Watches a document's drags.
  *
- *  Drags that start in it are marked internal. File drags over anything that is
- *  not a drop area (the handlers below accept those first) are refused, or the
- *  webview would open the dropped file in place of the app. */
+ * The page's own window is watched by useFileDrop; message bodies live in iframes, whose drag events
+ * never reach it, so HtmlFrame adds each frame's document, with the `frame` element showing it.
+ *
+ * Drags that start in it are marked internal. File drags over anything that is not a drop area (the
+ * handlers below accept those first) are refused, or the webview would open the dropped file in place
+ * of the app.
+ */
 export function trackInternalDrags(target: Window | Document, frame?: Element | null) {
   if (internalDragTargets.has(target)) return
   internalDragTargets.add(target)
@@ -172,26 +175,28 @@ export function resetFileDropStateForTests(options: { fileAddressDrops?: boolean
 }
 
 /**
- * Lets an element take files dropped onto it. `dragging` is true while files are
- * held over the element, for a drop overlay, and `mayHoldImages` says whether
- * they might be images; `onFiles` receives what was dropped and where: `zoneOf`
- * names the drop area from the drop's target, at the drop itself, since on Linux
- * the files arrive from Go only after the overlay they were dropped on is gone.
- * `scope` names what the files are for (the open conversation): if it changed
- * by the time they arrive, or the element is gone, they are dropped rather than
- * attached to something the reader didn't drop them on.
+ * Lets an element take files dropped onto it.
  *
- * `mayBeLink` is true for a Linux drag that announces only addresses, which a
- * link from another app does too: the overlay then must not cover a text field,
- * so that the link can still be dropped into it.
+ * `dragging` is true while files are held over the element, for a drop overlay, and `mayHoldImages`
+ * says whether they might be images; `onFiles` receives what was dropped and where: `zoneOf` names the
+ * drop area from the drop's target, at the drop itself, since on Linux the files arrive from Go only
+ * after the overlay they were dropped on is gone.
  *
- * Every other drag passes through untouched. Child elements fire their own
- * enter/leave pairs as the pointer moves across them, so a depth count keeps the
- * overlay from flickering. The count alone can be left too high (a child removed
- * mid-drag never reports its leave), so a leave outside the element, and a mouse
- * that moves with no drag under way, also put the overlay away. `dropHandlers`
- * carries a ref to the element: a file drag over a message frame inside it
- * reports to the frame's document only (trackInternalDrags).
+ * `scope` names what the files are for (the open conversation): if it changed by the time they arrive,
+ * or the element is gone, they are dropped rather than attached to something the reader didn't drop
+ * them on.
+ *
+ * `mayBeLink` is true for a Linux drag that announces only addresses, which a link from another app
+ * does too: the overlay then must not cover a text field, so that the link can still be dropped into
+ * it.
+ *
+ * Every other drag passes through untouched. Child elements fire their own enter/leave pairs as the
+ * pointer moves across them, so a depth count keeps the overlay from flickering. The count alone can
+ * be left too high (a child removed mid-drag never reports its leave), so a leave outside the element,
+ * and a mouse that moves with no drag under way, also put the overlay away.
+ *
+ * `dropHandlers` carries a ref to the element: a file drag over a message frame inside it reports to
+ * the frame's document only (trackInternalDrags).
  */
 export function useFileDrop(
   onFiles: FilesHandler,

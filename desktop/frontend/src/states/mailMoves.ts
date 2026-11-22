@@ -12,24 +12,18 @@ import { t } from '../lib/i18n'
 import { mailTransferError } from '../lib/mailTransferErrors'
 import { clearBulkSelection, confirmAction, ui$, showToast, showUndoToast, type BulkSelectionItem } from './ui'
 import { BULK_GROUP_SIZE, bulkJobRunning, runBulkJob, type BulkJobResult } from './bulkProgress'
-import { kanban$ } from './kanban'
 import { MERON_ARCHIVE_ID, scheduleMeronFoldersRefresh } from './meronFolders'
 import { isLocalSendId, discardPendingSend, cancelUnsentRescue } from './pendingSends'
 import {
-  captureKeys,
   findLocalThread,
-  getFilteredThreads,
   kanbanKeysWithThread,
   listFilterKey,
   loadThread,
-  loadThreads,
   mail$,
   normalizeMessageId,
   reloadThreadCards,
   removeKanbanThread,
-  completeRemovedThread,
   releaseRemovedThread,
-  suppressRemovedThread,
   requestThreadReselect,
   threadListViewKey,
   uniqueThreadItems,
@@ -44,6 +38,22 @@ import {
   type MutationResult,
   refreshAccountFoldersCache,
 } from './mailFolders'
+import {
+  type UndoRestore,
+  threadAccountId,
+  threadIdInFolder,
+  type MovedCopiesResult,
+  assertMoveAffected,
+  movedCopyIds,
+  undoRestore,
+  assertCopyAffected,
+  archiveFailureText,
+  assertDeleteAffected,
+  type MeronOnlyArchive,
+  undoMeronOnlyArchive,
+} from './mailMoveResults'
+import { removeThreadLocally, refreshThreadLocation, restoreRemovedThread } from './mailMoveSelection'
+export { removeThreadLocally } from './mailMoveSelection'
 
 // Moving, copying, archiving, and deleting threads and messages.
 
@@ -64,247 +74,6 @@ function reconcileThreadDraftFromLoadedMessages(threadId: string, messages: Mess
 // after the post-action refresh so the toast reflects what the list shows.
 function threadStillListed(threadId: string): boolean {
   return mail$.threads.get().some((item) => item.thread_id === threadId)
-}
-
-function assertDeleteAffected(response: unknown) {
-  if (!response || typeof response !== 'object') return
-  const deleted = (response as { deleted?: unknown }).deleted
-  if (typeof deleted === 'number' && deleted <= 0) {
-    throw new Error('Delete failed: no matching messages found')
-  }
-}
-
-function assertMoveAffected(response: unknown, label = 'Move') {
-  if (!response || typeof response !== 'object') return
-  const moved = (response as { moved?: unknown }).moved
-  if (typeof moved === 'number' && moved <= 0) {
-    throw new Error(`${label} failed: no matching messages found`)
-  }
-}
-
-/** An archive's failure toast. An account with no archive mailbox answers a
- *  single email's Archive with "no archive folder": the plain message then,
- *  not the server's text. */
-function archiveFailureText(error: unknown): string {
-  const detail = error instanceof Error ? error.message : String(error)
-  if (/archive folder not found/i.test(detail)) return t('mail.toast.archiveFailed')
-  return mailTransferError(error, t('mail.toast.archiveFailed'))
-}
-
-/** Archived Meron-only (the account has no archive mailbox): the answer of
- *  the filing into the built-in Archive. */
-type MeronOnlyArchive = {
-  meron_only?: boolean
-  changes?: Array<{ previous_folder_id?: string | null }>
-}
-
-/** Undo of a Meron-only archive: back into the Meron folder it came from, or
- *  out of Meron folders (it never left its mailbox). */
-async function undoMeronOnlyArchive(threadId: string, accountId: string | undefined, response: MeronOnlyArchive) {
-  releaseRemovedThread(threadId)
-  const previous = response.changes?.[0]?.previous_folder_id
-  try {
-    if (previous) await invoke('mail.moveToMeronFolder', { folder_id: previous, thread_ids: [threadId], undo: true })
-    else await invoke('mail.moveOutOfMeronFolder', { thread_ids: [threadId], undo: true })
-  } catch (error) {
-    showToast(error instanceof Error ? error.message : t('notification.undoFailed'), 'error')
-  }
-  scheduleMeronFoldersRefresh()
-  await refreshThreadLocation(accountId, false)
-}
-
-function assertCopyAffected(response: unknown) {
-  if (!response || typeof response !== 'object') return
-  const copied = (response as { copied?: unknown }).copied
-  if (typeof copied === 'number' && copied <= 0) {
-    throw new Error('Copy failed: no matching messages found')
-  }
-}
-
-// UIDs of the copies a move created in its target folder, as the message_ids
-// an undo sends back so it moves exactly those — not every message of the
-// conversation the target already held, and not by a uid: thread key, whose
-// UID the move changed. Undefined when the core couldn't tell the copies apart
-// from other mail there: then no Undo is offered, since any other way back
-// could move mail the action never touched.
-type MovedCopiesResult = { target_uids?: number[]; meron_folder_id?: string; meron_source?: string }
-
-function movedCopyIds(response: MovedCopiesResult): string[] | undefined {
-  return response.target_uids?.length ? response.target_uids.map(String) : undefined
-}
-
-// What an Undo hands the core besides the copies to move back: show them in
-// the Inbox again (mail that was shown there from its own folder), or put them
-// back in the Meron folder the action took the card out of.
-type UndoRestore = { showInInbox?: boolean; meronFolderId?: string; meronSource?: string }
-
-function undoRestore(thread: Message | undefined, response: MovedCopiesResult): UndoRestore {
-  return {
-    showInInbox: !!thread?.shown_in_inbox,
-    ...(response.meron_folder_id
-      ? { meronFolderId: response.meron_folder_id, meronSource: response.meron_source }
-      : {}),
-  }
-}
-
-function threadAccountId(threadId: string): string {
-  const separator = threadId.indexOf('#')
-  return separator > 0 ? threadId.slice(0, separator) : ''
-}
-
-function threadIdInFolder(threadId: string, accountId: string | undefined, folderId: string | undefined): string {
-  const lastHash = threadId.lastIndexOf('#')
-  if (!accountId || !folderId || lastHash <= 0) return threadId
-  return `${accountId}#${folderId}#${threadId.slice(lastHash + 1)}`
-}
-
-// Neighbour of a thread inside the kanban column that holds it (next, or
-// previous if it was last). The chat-view getFilteredThreads list doesn't apply
-// in kanban, where cards live in per-column lists.
-function threadsInPaneColumn(): Message[] {
-  const paneKey = kanban$.paneColumnKey.get()
-  const split = paneKey.indexOf('\n')
-  if (split === -1) return []
-  return kanban$.threads[paneKey.slice(split + 1)].get() ?? []
-}
-
-function kanbanNeighbourThreadId(threadId: string): string {
-  for (const threads of Object.values(kanban$.threads.get())) {
-    const index = threads.findIndex((thread) => thread.thread_id === threadId)
-    if (index === -1) continue
-    const neighbour = threads[index + 1] ?? threads[index - 1]
-    return neighbour?.thread_id ?? ''
-  }
-  // The open card is already off the board (a column reload dropped it). Stay
-  // on a card still in that column instead of closing the conversation.
-  return threadsInPaneColumn().find((thread) => thread.thread_id !== threadId)?.thread_id ?? ''
-}
-
-function restoreRemovedThread(current: Message[], previous: Message[], threadId: string): Message[] {
-  const thread = previous.find((item) => item.thread_id === threadId)
-  if (!thread || current.some((item) => item.thread_id === threadId)) return current
-  const positions = new Map(previous.map((item, index) => [item.thread_id, index]))
-  return [...current, thread].sort(
-    (a, b) =>
-      b.date - a.date ||
-      (positions.get(a.thread_id) ?? previous.length) - (positions.get(b.thread_id) ?? previous.length),
-  )
-}
-
-export function removeThreadLocally(threadId: string) {
-  const previousThreads = mail$.threads.get()
-  const previousMessages = mail$.messages.get()
-  const previousKanbanThreads = captureKeys(kanban$.threads.get(), kanbanKeysWithThread(threadId))
-  const previousSelected = ui$.selectedThread.get()
-  const previousPaneThreadId = kanban$.paneThreadId.get()
-  // When the selected thread is the one leaving, advance to its neighbour in the
-  // visible list (next, or previous if it was last) instead of snapping back to
-  // the top — this keeps keyboard triage (e/# on the j/k selection) in place.
-  // Computed before mutating mail$.threads, since getFilteredThreads reads it.
-  let nextSelected = previousSelected
-  if (previousSelected === threadId) {
-    if (kanban$.activeBoardId.get()) {
-      nextSelected = kanbanNeighbourThreadId(threadId)
-    } else {
-      const visible = getFilteredThreads()
-      const index = visible.findIndex((thread) => thread.thread_id === threadId)
-      // Skip over rows of the deleted thread itself — the unified starred folder
-      // can list the same thread once per folder it is starred in. When the
-      // open row is already gone (a refresh dropped it mid-burst), stay on the
-      // first row still on screen instead of clearing the conversation.
-      const neighbour =
-        index === -1
-          ? visible.find((item) => item.thread_id !== threadId)
-          : (visible.slice(index + 1).find((item) => item.thread_id !== threadId) ??
-            visible
-              .slice(0, index)
-              .reverse()
-              .find((item) => item.thread_id !== threadId))
-      nextSelected = neighbour?.thread_id ?? ''
-    }
-  }
-  const nextThreads = previousThreads.filter((thread) => thread.thread_id !== threadId)
-  const unsuppress = suppressRemovedThread(threadId)
-
-  mail$.threads.set(nextThreads)
-  mail$.messages.set(previousMessages.filter((message) => message.thread_id !== threadId))
-  removeKanbanThread(threadId)
-  if (previousSelected === threadId) {
-    ui$.selectedThread.set(nextSelected)
-    // No neighbour in the list we have: let the fresh list pick the replacement.
-    if (!nextSelected) requestThreadReselect()
-  }
-  // If the kanban conversation pane was open on the deleted card, follow the
-  // selection so it doesn't keep rendering the removed thread.
-  if (previousPaneThreadId === threadId) {
-    kanban$.paneThreadId.set(nextSelected)
-  }
-
-  return {
-    complete: () => completeRemovedThread(threadId),
-    rollback: () => {
-      unsuppress()
-      // Put this thread back only. Restoring the whole list would resurrect
-      // threads archived after this one started, which is what a fast burst
-      // looks like when an earlier move fails.
-      mail$.threads.set(restoreRemovedThread(mail$.threads.get(), previousThreads, threadId))
-      const currentMessages = mail$.messages.get()
-      const seenMessages = new Set(currentMessages.map((message) => message.id))
-      const missingMessages = previousMessages.filter(
-        (message) => message.thread_id === threadId && !seenMessages.has(message.id),
-      )
-      if (missingMessages.length > 0) mail$.messages.set([...currentMessages, ...missingMessages])
-      for (const [key, columnThreads] of previousKanbanThreads) {
-        if (!columnThreads) continue
-        kanban$.threads[key].set(restoreRemovedThread(kanban$.threads[key].get() ?? [], columnThreads, threadId))
-      }
-      // The reader may already have archived the neighbour. Only come back
-      // here when the selection is still the one this removal chose.
-      if (ui$.selectedThread.get() === nextSelected) ui$.selectedThread.set(previousSelected)
-      if (previousPaneThreadId === threadId && kanban$.paneThreadId.get() === nextSelected) {
-        kanban$.paneThreadId.set(previousPaneThreadId)
-      }
-    },
-  }
-}
-
-// One list rewrite for a burst of archives. Each move waits on IMAP for a few
-// seconds and then reloads; letting every one of those land repaints the list
-// out from under the selection the reader has already moved past.
-let backgroundListRefresh: Promise<void> | null = null
-let backgroundListRefreshAgain = false
-
-function coalescedBackgroundListRefresh(): Promise<void> {
-  if (!backgroundListRefresh) backgroundListRefresh = drainBackgroundListRefresh()
-  else backgroundListRefreshAgain = true
-  return backgroundListRefresh
-}
-
-async function drainBackgroundListRefresh() {
-  try {
-    do {
-      backgroundListRefreshAgain = false
-      await loadThreads(false)
-    } while (backgroundListRefreshAgain)
-  } finally {
-    backgroundListRefresh = null
-    if (backgroundListRefreshAgain) {
-      backgroundListRefreshAgain = false
-      void coalescedBackgroundListRefresh()
-    }
-  }
-}
-
-async function refreshThreadLocation(accountId?: string, refresh = false) {
-  if (refresh) await loadThreads(true)
-  else await coalescedBackgroundListRefresh()
-  const selectedAcc = ui$.selectedAccount.get()
-  if (selectedAcc) {
-    void loadFolders(selectedAcc, false)
-  }
-  if (accountId && accountId !== selectedAcc) {
-    void loadFolders(accountId, false)
-  }
 }
 
 export async function moveThreadToFolder(

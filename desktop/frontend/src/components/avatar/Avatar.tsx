@@ -6,7 +6,7 @@ import { useState, useEffect, type ReactNode } from 'react'
 import { useValue } from '@legendapp/state/react'
 import { invoke } from '../../lib/bridge'
 import { settings$ } from '../../states/settings'
-import { useSharpSrc } from '../../lib/sharpImage'
+import { useSharpSource } from '../../lib/sharpImage'
 
 const COLORS = [
   'from-indigo-400 to-indigo-500 shadow-indigo-500/10',
@@ -159,7 +159,7 @@ export function Avatar({ name, email, src, size = 40, className = '', fallback }
   }, [src, email, showRealAvatars, size, nearView])
 
   const faviconSide = Math.round(size * 0.58)
-  const sharpSource = useSharpSrc(
+  const sharpSource = useSharpSource(
     resolvedSource && sourceKind !== 'none' ? resolvedSource : undefined,
     sourceKind === 'favicon' ? faviconSide : size,
     sourceKind === 'favicon' ? 'contain' : 'cover',

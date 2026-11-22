@@ -1,3 +1,7 @@
+// Checks folder selection and labels in a hierarchical mailbox
+// tree. A real parent folder can be selected independently,
+// while a synthetic grouping node represents its descendants.
+
 import { describe, expect, it } from 'bun:test'
 import type { Folder } from '../types'
 import { buildFolderTree, folderLeafName, selectableFolderIds, type TreeNode } from './folderTree'

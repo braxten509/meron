@@ -1,8 +1,7 @@
-// How tall a self-sizing message frame should be, given what its document
-// measures. Kept apart from the frame component so the arithmetic — which no
-// jsdom test can reach through a real iframe, since jsdom has no layout — is
-// directly testable. The mobile apps run the same rules in the height-reporting
-// script injected by `MessageBubbleUi.kt`; keep the two in step.
+// How tall a self-sizing message frame should be, given what its document measures. Kept apart from
+// the frame component so the arithmetic — which no jsdom test can reach through a real iframe, since
+// jsdom has no layout — is directly testable. The mobile apps run the same rules in the
+// height-reporting script injected by `MessageBubbleUi.kt`; keep the two in step.
 
 /** Floor for a measured frame. Just enough to keep an empty body clickable. */
 export const MIN_FRAME_HEIGHT = 20

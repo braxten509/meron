@@ -19,7 +19,7 @@ import {
 } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'
-import { clsx } from '../../lib/utils'
+import { clsx } from '../../lib/classNames'
 import type { BulkSelectionItem } from '../../states/ui'
 import { clearBulkSelection, setBulkSelection, ui$ } from '../../states/ui'
 import { isMeronView } from '../../lib/unifiedFolders'

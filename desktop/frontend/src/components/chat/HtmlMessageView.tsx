@@ -7,7 +7,7 @@ import type { Attachment } from '../../types'
 import { Gallery, type GalleryItem } from './Gallery'
 import { HtmlFrame } from './HtmlFrame'
 import { LinkHoverPreview } from './LinkHoverPreview'
-import { mediaKeyFromSrc, mediaSrc, readerAttachmentImages, readerAttachmentVideos } from './messageHelpers'
+import { mediaKeyFromSource, mediaSource, readerAttachmentImages, readerAttachmentVideos } from './messageHelpers'
 import {
   applyReaderFont,
   applyReaderLayout,
@@ -96,8 +96,8 @@ export function HtmlMessageView({
       {attachmentVideos.map((video, index) => (
         <VideoAttachment
           key={`${scrollKey}-${index}`}
-          src={mediaSrc(video)}
-          externalUrl={video.url ?? mediaSrc(video)}
+          src={mediaSource(video)}
+          externalUrl={video.url ?? mediaSource(video)}
           externalLabel={t('chat.openExternalPlayer')}
         />
       ))}
@@ -108,7 +108,7 @@ export function HtmlMessageView({
     (index: number) => {
       setGalleryItems(
         attachmentImages.map((attachment) => ({
-          src: mediaSrc(attachment),
+          src: mediaSource(attachment),
           filename: attachment.filename,
           mime: attachment.mime,
         })),
@@ -183,34 +183,34 @@ export function HtmlMessageView({
   }, [html, viewMode])
 
   const openImage = useCallback(
-    (doc: Document, img: HTMLImageElement, event: Event) => {
+    (doc: Document, imageElement: HTMLImageElement, event: Event) => {
       event.preventDefault()
       event.stopPropagation()
-      if (!img.currentSrc && !img.src) return
+      if (!imageElement.currentSrc && !imageElement.src) return
       if (
         !allowRemote &&
-        /^https?:\/\//i.test(img.currentSrc || img.src) &&
-        !mediaKeyFromSrc(img.currentSrc || img.src)
+        /^https?:\/\//i.test(imageElement.currentSrc || imageElement.src) &&
+        !mediaKeyFromSource(imageElement.currentSrc || imageElement.src)
       )
         return
-      const imgs = Array.from(doc.querySelectorAll<HTMLImageElement>('img')).filter((el) => {
-        if (!el.currentSrc && !el.src) return false
-        if (!allowRemote && /^https?:\/\//i.test(el.currentSrc || el.src) && !mediaKeyFromSrc(el.currentSrc || el.src))
+      const imageElements = Array.from(doc.querySelectorAll<HTMLImageElement>('img')).filter((element) => {
+        if (!element.currentSrc && !element.src) return false
+        if (!allowRemote && /^https?:\/\//i.test(element.currentSrc || element.src) && !mediaKeyFromSource(element.currentSrc || element.src))
           return false
-        const w = el.getAttribute('width') || ''
-        const h = el.getAttribute('height') || ''
+        const w = element.getAttribute('width') || ''
+        const h = element.getAttribute('height') || ''
         if ((w === '1' || w === '0') && (h === '1' || h === '0')) return false
-        if (el.naturalWidth === 1 || el.naturalHeight === 1) return false
+        if (element.naturalWidth === 1 || element.naturalHeight === 1) return false
         return true
       })
       setGalleryItems(
-        imgs.map((el) => ({
-          src: el.currentSrc || el.src,
-          filename: el.alt || el.title || 'image',
-          mime: attachments?.find((att) => att.key === mediaKeyFromSrc(el.currentSrc || el.src))?.mime,
+        imageElements.map((element) => ({
+          src: element.currentSrc || element.src,
+          filename: element.alt || element.title || 'image',
+          mime: attachments?.find((att) => att.key === mediaKeyFromSource(element.currentSrc || element.src))?.mime,
         })),
       )
-      setGalleryIndex(Math.max(0, imgs.indexOf(img)))
+      setGalleryIndex(Math.max(0, imageElements.indexOf(imageElement)))
     },
     [attachments, allowRemote],
   )
@@ -219,9 +219,9 @@ export function HtmlMessageView({
     (event: MouseEvent, doc: Document) => {
       const target = event.target as Element | null
       if (!target || typeof target.closest !== 'function') return false
-      const img = target.closest('img') as HTMLImageElement | null
-      if (!img || !img.src) return false
-      openImage(doc, img, event)
+      const imageElement = target.closest('img') as HTMLImageElement | null
+      if (!imageElement || !imageElement.src) return false
+      openImage(doc, imageElement, event)
       return true
     },
     [openImage],
@@ -389,11 +389,11 @@ function AttachmentImageGrid({ images, onOpen }: { images: Attachment[]; onOpen:
           onClick={() => onOpen(index)}
           // Read by the reader's context menu to offer save/copy.
           data-media-key={image.key ?? undefined}
-          data-media-src={mediaSrc(image)}
+          data-media-src={mediaSource(image)}
           title={image.filename}
           className="overflow-hidden rounded-lg border border-border bg-black/[0.03] cursor-zoom-in"
         >
-          <img src={mediaSrc(image)} alt={image.filename} className={`w-full object-contain ${imageClass}`} />
+          <img src={mediaSource(image)} alt={image.filename} className={`w-full object-contain ${imageClass}`} />
         </button>
       ))}
     </div>

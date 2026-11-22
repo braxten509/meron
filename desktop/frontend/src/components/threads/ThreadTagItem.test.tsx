@@ -1,3 +1,7 @@
+// Exercises the conversation tag flyout while writes are in
+// flight. The tests cover ordering, repeated clicks and pointer
+// transitions between the parent menu and its nested choices.
+
 import { afterEach, expect, it } from 'bun:test'
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import type { Message } from '../../types'

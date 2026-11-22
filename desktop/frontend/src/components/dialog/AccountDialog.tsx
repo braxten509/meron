@@ -21,7 +21,7 @@ import { AccountProviderRail } from './AccountProviderRail'
 import { PROVIDERS } from './providerIcons'
 import { CertificateTrustPanel } from './CertificateTrustPanel'
 import { SetupCopyDialog } from './SetupCopyDialog'
-import { SharpImg } from '../../lib/sharpImage'
+import { SharpImage } from '../../lib/sharpImage'
 
 type AccountDialogProps = {
   variant?: 'dialog' | 'setup'
@@ -55,7 +55,7 @@ export function AccountDialog({ variant = 'dialog' }: AccountDialogProps) {
       <div className={classes.panelClass}>
         <div>
           <div className="w-16 h-16 mb-4">
-            <SharpImg
+            <SharpImage
               src={logo}
               box={64}
               fit="contain"
@@ -97,7 +97,7 @@ export function AccountDialog({ variant = 'dialog' }: AccountDialogProps) {
 
   // The in-app add-account modal: a provider rail on the left, the form for the
   // selected provider on the right — same shape as the Settings dialog.
-  const active = PROVIDERS.find((p) => p.isActive(mode))
+  const active = PROVIDERS.find((provider) => provider.isActive(mode))
   return (
     <Dialog
       onClose={onClose}

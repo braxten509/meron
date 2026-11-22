@@ -1,3 +1,7 @@
+// Checks how desktop RPC retries recognize a sidecar timeout.
+// Retryable timeouts can precede a successful answer,
+// while other errors follow their ordinary failure path.
+
 import { afterEach, describe, expect, it } from 'bun:test'
 import { invokeRetryingTimeout, isSidecarTimeout } from './bridge'
 

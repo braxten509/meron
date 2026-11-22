@@ -55,11 +55,13 @@ export type ImportOutcome =
   | { status: 'needs-passphrase'; path: string }
 
 /**
- * Restore a backup. Called with no arguments it opens a file dialog; called
- * with a `path` (from a previous 'needs-passphrase' result) it reuses that file.
+ * Restore a backup.
  *
- * On success the app is re-bootstrapped, since restored accounts and settings
- * change essentially every piece of loaded state.
+ * Called with no arguments it opens a file dialog; called with a `path` (from a previous
+ * 'needs-passphrase' result) it reuses that file.
+ *
+ * On success the app is re-bootstrapped, since restored accounts and settings change essentially every
+ * piece of loaded state.
  */
 export async function importBackup(path?: string, passphrase = ''): Promise<ImportOutcome> {
   const response = await invoke<ImportResult>('backup.import', { path: path ?? '', passphrase })

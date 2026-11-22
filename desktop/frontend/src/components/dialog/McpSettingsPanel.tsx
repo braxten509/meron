@@ -78,8 +78,8 @@ export function McpSettingsPanel() {
         (value) => {
           if (active && currentRevision === revision.current) setStatus(value)
         },
-        (err) => {
-          if (active && currentRevision === revision.current) setError(String(err))
+        (error) => {
+          if (active && currentRevision === revision.current) setError(String(error))
         },
       )
     }
@@ -115,8 +115,8 @@ export function McpSettingsPanel() {
     setError('')
     try {
       await action()
-    } catch (err) {
-      setError(String(err))
+    } catch (error) {
+      setError(String(error))
     } finally {
       changing.current = false
       setBusy(false)

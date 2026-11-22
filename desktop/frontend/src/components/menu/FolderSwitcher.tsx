@@ -8,7 +8,7 @@ import { useValue } from '@legendapp/state/react'
 import { Bell, BellOff, Check, ChevronDown, ChevronRight, FolderPen } from 'lucide-react'
 import { folderIcon } from '../../lib/folderIcon'
 import { useTranslation } from '../../lib/i18n'
-import { clsx } from '../../lib/utils'
+import { clsx } from '../../lib/classNames'
 import { accounts$ } from '../../states/accounts'
 import { mail$ } from '../../states/mail'
 import {

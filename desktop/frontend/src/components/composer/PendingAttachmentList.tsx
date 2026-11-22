@@ -8,7 +8,7 @@ import { invoke } from '../../lib/bridge'
 import type { ComposerAttachment } from '../../types'
 import { fileIconFor, formatFileSize } from '../chat/messageHelpers'
 
-export function composerAttachmentSrc(att: ComposerAttachment): string {
+export function composerAttachmentSource(att: ComposerAttachment): string {
   return `data:${att.mime};base64,${att.data}`
 }
 

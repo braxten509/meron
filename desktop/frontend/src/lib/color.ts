@@ -45,9 +45,9 @@ export function parseColor(input: string): Rgba | null {
       if (hue === null || saturation === null || lightness === null) return null
       return hslToRgb(hue, saturation, lightness, clamp01(alpha))
     }
-    const [r, g, b] = args.map((arg) => percentOrNumber(arg, 255))
-    if (r === null || g === null || b === null) return null
-    return { r: clamp255(r), g: clamp255(g), b: clamp255(b), a: clamp01(alpha) }
+    const [red, green, blue] = args.map((arg) => percentOrNumber(arg, 255))
+    if (red === null || green === null || blue === null) return null
+    return { r: clamp255(red), g: clamp255(green), b: clamp255(blue), a: clamp01(alpha) }
   }
 
   return null
@@ -116,12 +116,12 @@ function percentOrNumber(value: string, full: number): number | null {
 }
 
 function hslToRgb(hue: number, saturation: number, lightness: number, a: number): Rgba {
-  const s = clamp01(saturation)
-  const l = clamp01(lightness)
-  const chroma = (1 - Math.abs(2 * l - 1)) * s
+  const saturationValue = clamp01(saturation)
+  const lightnessValue = clamp01(lightness)
+  const chroma = (1 - Math.abs(2 * lightnessValue - 1)) * saturationValue
   const sector = (((hue % 360) + 360) % 360) / 60
   const x = chroma * (1 - Math.abs((sector % 2) - 1))
-  const [r, g, b] = (
+  const [red, green, blue] = (
     [
       [chroma, x, 0],
       [x, chroma, 0],
@@ -131,17 +131,17 @@ function hslToRgb(hue: number, saturation: number, lightness: number, a: number)
       [chroma, 0, x],
     ] as const
   )[Math.floor(sector) % 6]
-  const m = l - chroma / 2
-  return { r: clamp255((r + m) * 255), g: clamp255((g + m) * 255), b: clamp255((b + m) * 255), a }
+  const channelOffset = lightnessValue - chroma / 2
+  return { r: clamp255((red + channelOffset) * 255), g: clamp255((green + channelOffset) * 255), b: clamp255((blue + channelOffset) * 255), a }
 }
 
 /** Serialize as "#rrggbb", or "rgba(r, g, b, a)" when alpha < 1. */
-export function formatColor({ r, g, b, a }: Rgba): string {
+export function formatColor({ r: red, g: green, b: blue, a }: Rgba): string {
   if (a >= 1) {
     const to2 = (n: number) => clamp255(n).toString(16).padStart(2, '0')
-    return `#${to2(r)}${to2(g)}${to2(b)}`
+    return `#${to2(red)}${to2(green)}${to2(blue)}`
   }
-  return `rgba(${clamp255(r)}, ${clamp255(g)}, ${clamp255(b)}, ${Math.round(clamp01(a) * 100) / 100})`
+  return `rgba(${clamp255(red)}, ${clamp255(green)}, ${clamp255(blue)}, ${Math.round(clamp01(a) * 100) / 100})`
 }
 
 /** "#rrggbb", or "#rrggbbaa" when translucent; null if unparseable. */
@@ -156,14 +156,14 @@ export function toHex(input: string): string | null {
 /** Linear blend of two colors: weight 0 -> a, 1 -> b. */
 export function mix(colorA: string, colorB: string, weight: number): string {
   const a = parseColor(colorA)
-  const b = parseColor(colorB)
-  if (!a || !b) return colorA
+  const blue = parseColor(colorB)
+  if (!a || !blue) return colorA
   const w = clamp01(weight)
   return formatColor({
-    r: a.r + (b.r - a.r) * w,
-    g: a.g + (b.g - a.g) * w,
-    b: a.b + (b.b - a.b) * w,
-    a: a.a + (b.a - a.a) * w,
+    r: a.r + (blue.r - a.r) * w,
+    g: a.g + (blue.g - a.g) * w,
+    b: a.b + (blue.b - a.b) * w,
+    a: a.a + (blue.a - a.a) * w,
   })
 }
 
@@ -189,7 +189,7 @@ export function flatten(color: string, base: string): string {
   const top = parseColor(color)
   const bottom = parseColor(base)
   if (!top || !bottom) return color
-  const blend = (a: number, b: number) => a * top.a + b * (1 - top.a)
+  const blend = (a: number, blue: number) => a * top.a + blue * (1 - top.a)
   return formatColor({ r: blend(top.r, bottom.r), g: blend(top.g, bottom.g), b: blend(top.b, bottom.b), a: 1 })
 }
 
@@ -214,27 +214,27 @@ const fromLinear = (value: number) =>
 export function toOklch(color: string): Oklch | null {
   const parsed = parseColor(color)
   if (!parsed) return null
-  const [r, g, b] = [toLinear(parsed.r), toLinear(parsed.g), toLinear(parsed.b)]
-  const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b)
-  const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b)
-  const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b)
-  const lightness = 0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s
-  const a = 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s
-  const bb = 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s
+  const [red, green, blue] = [toLinear(parsed.r), toLinear(parsed.g), toLinear(parsed.b)]
+  const lightnessValue = Math.cbrt(0.4122214708 * red + 0.5363325363 * green + 0.0514459929 * blue)
+  const channelOffset = Math.cbrt(0.2119034982 * red + 0.6806995451 * green + 0.1073969566 * blue)
+  const saturationValue = Math.cbrt(0.0883024619 * red + 0.2817188376 * green + 0.6299787005 * blue)
+  const lightness = 0.2104542553 * lightnessValue + 0.793617785 * channelOffset - 0.0040720468 * saturationValue
+  const a = 1.9779984951 * lightnessValue - 2.428592205 * channelOffset + 0.4505937099 * saturationValue
+  const bb = 0.0259040371 * lightnessValue + 0.7827717662 * channelOffset - 0.808675766 * saturationValue
   return { l: lightness, c: Math.hypot(a, bb), h: ((Math.atan2(bb, a) * 180) / Math.PI + 360) % 360 }
 }
 
 /** "#rrggbb" for OKLCH coordinates, clipped to sRGB. */
 export function fromOklch({ l: lightness, c, h }: Oklch): string {
   const a = c * Math.cos((h * Math.PI) / 180)
-  const b = c * Math.sin((h * Math.PI) / 180)
-  const l = (lightness + 0.3963377774 * a + 0.2158037573 * b) ** 3
-  const m = (lightness - 0.1055613458 * a - 0.0638541728 * b) ** 3
-  const s = (lightness - 0.0894841775 * a - 1.291485548 * b) ** 3
+  const blue = c * Math.sin((h * Math.PI) / 180)
+  const lightnessValue = (lightness + 0.3963377774 * a + 0.2158037573 * blue) ** 3
+  const channelOffset = (lightness - 0.1055613458 * a - 0.0638541728 * blue) ** 3
+  const saturationValue = (lightness - 0.0894841775 * a - 1.291485548 * blue) ** 3
   return formatColor({
-    r: fromLinear(4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s),
-    g: fromLinear(-1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s),
-    b: fromLinear(-0.0041960863 * l - 0.7034186147 * m + 1.7076949135 * s),
+    r: fromLinear(4.0767416621 * lightnessValue - 3.3077115913 * channelOffset + 0.2309699292 * saturationValue),
+    g: fromLinear(-1.2684380046 * lightnessValue + 2.6097574011 * channelOffset - 0.3413193965 * saturationValue),
+    b: fromLinear(-0.0041960863 * lightnessValue - 0.7034186147 * channelOffset + 1.7076949135 * saturationValue),
     a: 1,
   })
 }

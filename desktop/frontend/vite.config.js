@@ -1,3 +1,7 @@
+// Configures the desktop React build and the Wails development server.
+// During development the media middleware reads attachments from the local cache.
+// Production assets go through the Go host when the built frontend is embedded.
+
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
@@ -6,7 +10,7 @@ import os from 'node:os'
 import fs from 'node:fs'
 
 // Where the Go bridge / Rust sidecar write cached attachment + feed images in
-// Wails dev. Must match app.go's mediaDir(): MERON_MEDIA_DIR, else
+// Wails dev. Must match the Go host's mediaDirectory(): MERON_MEDIA_DIR, else
 // $XDG_CACHE_HOME (or ~/.cache) + meron-dev/attachments.
 function mediaRoot() {
   if (process.env.MERON_MEDIA_DIR) return process.env.MERON_MEDIA_DIR
@@ -35,21 +39,24 @@ function meronMedia() {
   return {
     name: 'meron-media',
     configureServer(server) {
-      server.middlewares.use((req, res, next) => {
-        if (!req.url || !req.url.startsWith('/media/')) return next()
-        const rel = decodeURIComponent(req.url.slice('/media/'.length).split('?')[0])
+      server.middlewares.use((request, response, next) => {
+        if (!request.url || !request.url.startsWith('/media/')) return next()
+        const rel = decodeURIComponent(request.url.slice('/media/'.length).split('?')[0])
         const filePath = path.resolve(root, rel)
         if (filePath !== root && !filePath.startsWith(root + path.sep)) {
-          res.statusCode = 403
-          return res.end('forbidden')
+          response.statusCode = 403
+          return response.end('forbidden')
         }
-        fs.readFile(filePath, (err, data) => {
-          if (err) {
-            res.statusCode = 404
-            return res.end('not found')
+        fs.readFile(filePath, (error, data) => {
+          if (error) {
+            response.statusCode = 404
+            return response.end('not found')
           }
-          res.setHeader('Content-Type', MEDIA_MIME[path.extname(filePath).toLowerCase()] || 'application/octet-stream')
-          res.end(data)
+          response.setHeader(
+            'Content-Type',
+            MEDIA_MIME[path.extname(filePath).toLowerCase()] || 'application/octet-stream',
+          )
+          response.end(data)
         })
       })
     },

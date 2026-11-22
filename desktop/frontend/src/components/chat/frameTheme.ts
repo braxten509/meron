@@ -324,14 +324,12 @@ export function declaredBodyBackground(doc: Document): string | null {
 }
 
 /**
- * Whether the message brings colors of its own — a background anywhere, or text
- * colors it expects to sit on one.
+ * Whether the message brings colors of its own — a background anywhere, or text colors it expects to sit on one.
  *
- * This is the gate on dark rendering. Painting the body dark is only safe when
- * the message declares nothing: an email that sets `color: #333` on a background
- * it never declares (assuming the client's is white) would otherwise turn into
- * dark-on-dark, and one that paints its own light card would get light text on
- * it. Those keep their design and are given a canvas to sit on instead.
+ * This is the gate on dark rendering. Painting the body dark is only safe when the message declares
+ * nothing: an email that sets `color: #333` on a background it never declares (assuming the client's
+ * is white) would otherwise turn into dark-on-dark, and one that paints its own light card would get
+ * light text on it. Those keep their design and are given a canvas to sit on instead.
  */
 export function messageIsSelfStyled(doc: Document): boolean {
   // A background only counts as styling if it actually paints: a fully
@@ -368,15 +366,14 @@ export function messageIsSelfStyled(doc: Document): boolean {
 const SKIPPED_TAGS = new Set(['STYLE', 'SCRIPT', 'HEAD', 'TITLE', 'TEMPLATE'])
 
 /**
- * Put the declarations the message wrote on its own `<body>` back where they
- * were, or take them away again.
+ * Put the declarations the message wrote on its own `<body>` back where they were, or take them away again.
  *
- * Sanitising drops the `<body>` tag, so `prepare_html` hoists its colors — and
- * which of them were `!important` — into `<meta>`s. Restoring them as the inline
- * declarations they were keeps the document faithful and lets the engine resolve
- * them against the sender's own stylesheets the way it would have: inline beats
- * a `body { color: … }` rule, and an important one beats a rule that outranks a
- * normal declaration.
+ * Sanitising drops the `<body>` tag, so `prepare_html` hoists its colors — and which of them were
+ * `!important` — into `<meta>`s.
+ *
+ * Restoring them as the inline declarations they were keeps the document faithful and lets the engine
+ * resolve them against the sender's own stylesheets the way it would have: inline beats a
+ * `body { color: … }` rule, and an important one beats a rule that outranks a normal declaration.
  *
  * Only what the frame itself restored is ever removed again.
  */
@@ -419,13 +416,11 @@ export interface FrameCanvas {
 }
 
 /**
- * Decide the canvas, and put the message's own body declarations back only if
- * they are part of it.
+ * Decide the canvas, and put the message's own body declarations back only if they are part of it.
  *
- * The decision needs the declared text color in place — it is what the engine
- * inherits into the message — but the pair only holds together: with no canvas
- * accepted, a restored `color: white` would render on the frame's own light
- * background, so it is taken away again.
+ * The decision needs the declared text color in place — it is what the engine inherits into the
+ * message — but the pair only holds together: with no canvas accepted, a restored `color: white` would
+ * render on the frame's own light background, so it is taken away again.
  */
 export function frameCanvas(
   doc: Document,
@@ -482,15 +477,16 @@ function isHidden(style: CSSStyleDeclaration): boolean {
 }
 
 /**
- * The tone the message's own text colors expect from the canvas under them, or
- * null when it declares none. Dark text wants a light canvas, and vice versa.
+ * The tone the message's own text colors expect from the canvas under them, or null when it declares none.
  *
- * The cascade is not re-implemented here: the document is a real one in a real
- * engine, so each run of text is asked what color it is actually painted in —
- * specificity, importance, inheritance, selector syntax and media queries all
- * resolved by the engine that will render it. Every visible run then counts for
- * its own length, so the colors that cover the message decide it, and the ones
- * on a hidden preheader or an empty wrapper decide nothing.
+ * Dark text wants a light canvas, and vice versa.
+ *
+ * The cascade is not re-implemented here: the document is a real one in a real engine, so each run of
+ * text is asked what color it is actually painted in — specificity, importance, inheritance, selector
+ * syntax and media queries all resolved by the engine that will render it.
+ *
+ * Every visible run then counts for its own length, so the colors that cover the message decide it,
+ * and the ones on a hidden preheader or an empty wrapper decide nothing.
  */
 function* textToneWalk(doc: Document): Generator<void, 'light' | 'dark' | null> {
   const win = doc.defaultView
@@ -547,14 +543,12 @@ export async function frameCanvasAsync(
 }
 
 /**
- * The canvas a self-styled message needs behind it, or null to leave the frame's
- * own background showing.
+ * The canvas a self-styled message needs behind it, or null to leave the frame's own background showing.
  *
- * A message that declares colors authored for another client's canvas has to be
- * given one, or it renders as unreadable same-on-same text: its own declared
- * page color when it has one, otherwise white for the usual dark-text mail. Mail
- * that declares only light text was written for a dark canvas and already has
- * one — the frame's — so it keeps it.
+ * A message that declares colors authored for another client's canvas has to be given one, or it
+ * renders as unreadable same-on-same text: its own declared page color when it has one, otherwise
+ * white for the usual dark-text mail. Mail that declares only light text was written for a dark canvas
+ * and already has one — the frame's — so it keeps it.
  */
 function* canvasBackgroundWalk(doc: Document, appearance: Appearance): Generator<void, string | null> {
   const { background } = declaredCanvas(doc)
@@ -614,8 +608,8 @@ export function darkenedFloor(surface: string): string {
   const color = parseColor(surface)
   if (!color) return '#ffffff'
   const channels = [color.r, color.g, color.b]
-  const [r, g, b] = HUE_TURN.map((row) => 255 - row.reduce((sum, weight, i) => sum + weight * channels[i], 0))
-  return formatColor({ r, g, b, a: 1 })
+  const [red, green, blue] = HUE_TURN.map((row) => 255 - row.reduce((sum, weight, i) => sum + weight * channels[i], 0))
+  return formatColor({ r: red, g: green, b: blue, a: 1 })
 }
 
 /**
@@ -653,11 +647,10 @@ export const darkenedCss = (v: (name: string) => string) => `
 `
 
 /**
- * Whether a frame should draw its body inverted: the reader asked for dark
- * bodies, the theme is dark, and the message was given a light canvas of its
- * own — the one case a dark theme otherwise leaves bright. Mail with no colors
- * of its own is already painted in the theme's palette, and a dark canvas is
- * dark already.
+ * Whether a frame should draw its body inverted: the reader asked for dark bodies, the theme is dark,
+ * and the message was given a light canvas of its own — the one case a dark theme otherwise leaves
+ * bright. Mail with no colors of its own is already painted in the theme's palette, and a dark canvas
+ * is dark already.
  */
 export function darkensCanvas(appearance: Appearance, darkenStyled: boolean, canvas: string | null): boolean {
   return darkenStyled && appearance === 'dark' && !!canvas && colorTone(canvas) === 'light'

@@ -1,7 +1,6 @@
-// Global keyboard shortcuts. The defaults live here as a small static table;
-// users can rebind any of them from the shortcuts dialog, and those overrides
-// are persisted in settings (`shortcut_overrides`) and pushed back in here via
-// setShortcutOverrides. `mod` is ⌘ on macOS and Ctrl elsewhere — the
+// Global keyboard shortcuts. The defaults live here as a small static table; users can rebind any of
+// them from the shortcuts dialog, and those overrides are persisted in settings (`shortcut_overrides`)
+// and pushed back in here via setShortcutOverrides. `mod` is ⌘ on macOS and Ctrl elsewhere — the
 // platform-native "command" modifier.
 
 import { isMacPlatform } from './platform'

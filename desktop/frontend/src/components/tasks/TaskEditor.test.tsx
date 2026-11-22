@@ -1,3 +1,7 @@
+// Checks that inline edits survive closing a task row.
+// Tests edit focused title and multiline note fields
+// and finish through the Done button or the keyboard.
+
 import { afterEach, beforeEach, expect, it } from 'bun:test'
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { useValue } from '@legendapp/state/react'

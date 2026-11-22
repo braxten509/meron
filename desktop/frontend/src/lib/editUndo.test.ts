@@ -1,3 +1,7 @@
+// Exercises the platform's native undo keyboard chord in
+// editable fields. The modifier, redo chord and Alt combinations
+// distinguish editing gestures from unrelated shortcuts.
+
 import { describe, expect, it } from 'bun:test'
 import { isPlainTextField, isRedoChord, isUndoChord, type EditChord } from './editUndo'
 import { isMac } from './shortcuts'

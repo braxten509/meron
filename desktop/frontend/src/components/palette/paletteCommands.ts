@@ -19,22 +19,22 @@ export type Command = {
 
 // Scores 0–3 are direct matches; weaker matches are used only as a fallback.
 function commandMatchScore(command: Command, query: string): number {
-  const q = query.trim().toLowerCase()
-  if (!q) return 0
+  const searchText = query.trim().toLowerCase()
+  if (!searchText) return 0
   const label = command.label.toLowerCase()
-  if (label === q) return 0
-  if (label.includes(q)) return 1
+  if (label === searchText) return 0
+  if (label.includes(searchText)) return 1
   const keywords = (command.keywords ?? '').toLowerCase()
   // Match phrases and word starts, including domains after an email's @.
-  for (let index = keywords.indexOf(q); index !== -1; index = keywords.indexOf(q, index + 1)) {
+  for (let index = keywords.indexOf(searchText); index !== -1; index = keywords.indexOf(searchText, index + 1)) {
     if (index === 0 || /[^a-z0-9]/.test(keywords[index - 1])) return 2
   }
 
   const compactHaystack = label.replace(/[^a-z0-9]/g, '')
-  const compactQuery = q.replace(/[^a-z0-9]/g, '')
+  const compactQuery = searchText.replace(/[^a-z0-9]/g, '')
   if (!compactQuery) return 3
   if (compactHaystack.includes(compactQuery)) return 3
-  if (keywords.includes(q)) return 4
+  if (keywords.includes(searchText)) return 4
   if (isSubsequence(compactHaystack, compactQuery)) return 5
 
   const compactKeywords = keywords.replace(/[^a-z0-9]/g, '')

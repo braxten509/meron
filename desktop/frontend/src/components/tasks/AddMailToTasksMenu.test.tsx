@@ -1,3 +1,7 @@
+// Checks which task list receives a selected message. A
+// single available list can be used directly, multiple lists
+// require a choice, and dismissing the menu creates no task.
+
 import { afterEach, beforeEach, expect, it } from 'bun:test'
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { AddMailToTasksMenu } from './AddMailToTasksMenu'

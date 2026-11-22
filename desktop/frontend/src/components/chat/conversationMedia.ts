@@ -5,7 +5,7 @@
 import type { Account, Message } from '../../types'
 import type { GalleryItem } from './Gallery'
 import type { ConversationMediaItem, ConversationFileItem, Participant } from './ConversationDetailsPanel'
-import { getVisibleMedia, mediaSrc, normalizeBodyText, parseAddressList } from './messageHelpers'
+import { getVisibleMedia, mediaSource, normalizeBodyText, parseAddressList } from './messageHelpers'
 
 // Flat list of every visible image and video across the thread, plus the
 // starting index for each message so a bubble can map its local image index to
@@ -25,13 +25,13 @@ export function buildGalleryItems(
     const { attachmentImages, videos } = getVisibleMedia(message, account, !!revealedRemote[message.id], allowedSenders)
     const caption = normalizeBodyText(message.body).replace(/\s+/g, ' ').trim()
     for (const image of attachmentImages) {
-      items.push({ type: 'image', src: mediaSrc(image), filename: image.filename, mime: image.mime, caption })
+      items.push({ type: 'image', src: mediaSource(image), filename: image.filename, mime: image.mime, caption })
     }
     for (const video of videos) {
       items.push({
         type: 'video',
-        src: mediaSrc(video),
-        url: video.url ?? mediaSrc(video),
+        src: mediaSource(video),
+        url: video.url ?? mediaSource(video),
         filename: video.filename,
         mime: video.mime,
         caption,
@@ -61,15 +61,15 @@ export function buildThreadMedia(
       files: msgFiles,
     } = getVisibleMedia(message, account, !!revealedRemote[message.id], allowedSenders)
     for (const image of attachmentImages) {
-      media.push({ type: 'image', src: mediaSrc(image), filename: image.filename, galleryIndex, messageId: message.id })
+      media.push({ type: 'image', src: mediaSource(image), filename: image.filename, galleryIndex, messageId: message.id })
       galleryIndex++
     }
     for (const video of videos) {
       media.push({
         type: 'video',
-        src: mediaSrc(video),
+        src: mediaSource(video),
         filename: video.filename,
-        url: video.url ?? mediaSrc(video),
+        url: video.url ?? mediaSource(video),
         galleryIndex,
         messageId: message.id,
       })

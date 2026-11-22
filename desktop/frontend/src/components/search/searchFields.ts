@@ -1,3 +1,7 @@
+// Defines the fields used by the desktop search options form.
+// A shared empty value and a single emptiness check keep query
+// construction and the form's initial state in agreement.
+
 /** The search options form, as the core's `search.parse` reads a query. */
 export type SearchFields = {
   from: string

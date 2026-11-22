@@ -1,3 +1,7 @@
+// Checks focus after the search options form closes. The
+// mounted desktop search box should return keyboard input to
+// the query field so the user can immediately continue typing.
+
 import { afterEach, beforeEach, expect, it } from 'bun:test'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { SearchBox } from './SearchBox'

@@ -1,3 +1,7 @@
+// Checks preference refresh after a desktop configuration change.
+// Only affected keys should be hydrated, and a temporarily
+// unavailable core must preserve the accounts already on screen.
+
 import { afterEach, expect, test } from 'bun:test'
 import { configurationRefresh } from './configurationRefresh'
 import { settings$ } from '../states/settings'

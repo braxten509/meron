@@ -1,3 +1,7 @@
+// Connects board synchronization and drag interactions to
+// the desktop board view. The hooks keep column movement and
+// changes to the selected board coordinated with board state.
+
 import { useEffect, useRef, useState } from 'react'
 import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core'
 import { useValue } from '@legendapp/state/react'

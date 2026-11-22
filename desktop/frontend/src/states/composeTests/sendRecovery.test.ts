@@ -64,7 +64,7 @@ describe('quick reply draft sharing', () => {
 
     // The rescue is on the wire when the user deletes the bubble it belongs to.
     await saving
-    const bubble = mail$.messages.get().find((m) => m.send_status === 'failed')
+    const bubble = mail$.messages.get().find((message) => message.send_status === 'failed')
     await deleteMessage(bubble!)
     releaseSave()
     await new Promise((resolve) => setTimeout(resolve, 0))
@@ -76,7 +76,7 @@ describe('quick reply draft sharing', () => {
     // And the deleted bubble stays deleted across a reload of the thread.
     mail$.messages.set([thread])
     await new Promise((resolve) => setTimeout(resolve, 0))
-    expect(mail$.messages.get().some((m) => m.send_status)).toBe(false)
+    expect(mail$.messages.get().some((message) => message.send_status)).toBe(false)
   })
 
   it('lets the autosave it overtook rescue the reply instead of saving a second draft', async () => {
@@ -140,7 +140,7 @@ describe('quick reply draft sharing', () => {
     // discarded it.
     expect(calls.filter((call) => call.command === 'mail.saveDraft')).toHaveLength(1)
     expect(calls.some((call) => call.command === 'mail.discardDraft')).toBe(false)
-    expect(mail$.messages.get().some((m) => m.send_status)).toBe(false)
+    expect(mail$.messages.get().some((message) => message.send_status)).toBe(false)
     expect(compose$.composer.get()).toBe('Next reply')
   })
 

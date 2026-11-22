@@ -3,7 +3,7 @@
 // Callers include BulkActionBar.tsx and RuleFolderPicker.tsx.
 
 import { folderIcon } from '../../lib/folderIcon'
-import { clsx } from '../../lib/utils'
+import { clsx } from '../../lib/classNames'
 import { buildFolderTree, type TreeNode } from '../../lib/folderTree'
 import type { Folder } from '../../types'
 import { menuItemBase } from './menuStyles'

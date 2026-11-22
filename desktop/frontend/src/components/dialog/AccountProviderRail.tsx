@@ -11,25 +11,25 @@ export function AccountProviderRail({ mode, setMode }: { mode: SetupMode; setMod
   const { t } = useTranslation()
   return (
     <nav className="w-44 shrink-0 border-r border-border/70 p-3 flex flex-col gap-1 bg-raised overflow-y-auto">
-      {PROVIDERS.map((p) => {
-        const active = p.isActive(mode)
+      {PROVIDERS.map((provider) => {
+        const active = provider.isActive(mode)
         return (
           <button
-            key={p.id}
-            onClick={() => setMode(p.mode)}
+            key={provider.id}
+            onClick={() => setMode(provider.mode)}
             className={`flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-left transition-colors cursor-pointer ${
               active ? 'bg-accent/10' : 'hover:bg-hover'
             }`}
           >
             <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-border/50 bg-raised">
-              {p.icon(16)}
+              {provider.icon(16)}
             </span>
             <span className="flex min-w-0 flex-col leading-tight">
               <span className={`truncate text-[0.75rem] font-bold ${active ? 'text-accent' : 'text-primary'}`}>
-                {p.label}
+                {provider.label}
               </span>
               <span className="truncate text-[0.59375rem] font-medium text-secondary">
-                {t(p.descriptionKey, { defaultValue: p.defaultDescription })}
+                {t(provider.descriptionKey, { defaultValue: provider.defaultDescription })}
               </span>
             </span>
           </button>

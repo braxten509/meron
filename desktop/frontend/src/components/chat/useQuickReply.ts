@@ -62,11 +62,12 @@ function attachmentSnapshot(attachments: readonly ComposerAttachment[]): Compose
   return attachments.map((attachment) => ({ ...attachment }))
 }
 
-/** Adds files to the chat reply as attachments: from the file picker, a pasted
- *  image, or files dropped onto the conversation (MessagePane). Reading a file
- *  takes a moment; one read after the reader moved to another conversation is
- *  left out, not attached to that conversation's reply. So is what goes over
- *  the size limits. The reader is told. */
+/**
+ * Adds files to the chat reply as attachments: from the file picker, a pasted image, or files dropped
+ * onto the conversation (MessagePane). Reading a file takes a moment; one read after the reader moved
+ * to another conversation is left out, not attached to that conversation's reply. So is what goes over
+ * the size limits. The reader is told.
+ */
 export function addQuickReplyAttachments(files: ArrayLike<File>) {
   const thread = ui$.selectedThread.peek()
   logComposerPaste(

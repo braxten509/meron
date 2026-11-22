@@ -32,13 +32,15 @@ export type Task = {
 }
 
 /**
- * Tasks runtime state. Unlike kanban boards — which the clients each parse out
- * of a settings blob — the lists and their items live in the core's tables and
- * are only cached here, so there is one definition of what a task is.
+ * Tasks runtime state.
  *
- * Whether the panel is showing, and which list it shows, live on `ui$` — the
- * panel is app chrome that sits beside mail or kanban rather than a view that
- * replaces one, so nothing about opening a board or a mailbox disturbs it.
+ * Unlike kanban boards — which the clients each parse out of a settings blob — the lists and their
+ * items live in the core's tables and are only cached here, so there is one definition of what a task
+ * is.
+ *
+ * Whether the panel is showing, and which list it shows, live on `ui$` — the panel is app chrome that
+ * sits beside mail or kanban rather than a view that replaces one, so nothing about opening a board or
+ * a mailbox disturbs it.
  */
 export const tasks$ = observable({
   lists: [] as TaskList[],
@@ -183,14 +185,15 @@ export async function addTaskFromMessage(input: {
 }
 
 /**
- * Open the mail a task was made from. The read resolves the thread across the
- * account's folders, so a message that was merely moved (archived, trashed)
- * still opens; one that is gone for good says so in a toast of its own rather
- * than the notification wording.
+ * Open the mail a task was made from.
  *
- * Nothing is remembered about a read that found nothing: the mail can come back
- * with the next sync, and a link the user can press again — and be told again —
- * beats one this app has quietly decided is dead.
+ * The read resolves the thread across the account's folders, so a message that was merely moved
+ * (archived, trashed) still opens; one that is gone for good says so in a toast of its own rather than
+ * the notification wording.
+ *
+ * Nothing is remembered about a read that found nothing: the mail can come back with the next sync,
+ * and a link the user can press again — and be told again — beats one this app has quietly decided is
+ * dead.
  */
 export async function openTaskMail(threadId: string) {
   if (!threadId) return

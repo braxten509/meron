@@ -25,8 +25,8 @@ const AUTO_LOAD_EARLIER_THRESHOLD_PX = 400
 
 function remoteContextImage(target: Element | null) {
   if (!target?.closest?.('[data-media-src]')) return undefined
-  const img = target?.closest?.('img') as HTMLImageElement | null
-  return img ? (imageSource(img.currentSrc || img.src) ?? undefined) : undefined
+  const imageElement = target?.closest?.('img') as HTMLImageElement | null
+  return imageElement ? (imageSource(imageElement.currentSrc || imageElement.src) ?? undefined) : undefined
 }
 
 function hasSelectedText(): boolean {

@@ -1,8 +1,7 @@
-// The scroll-positioning arithmetic behind useConversationScroll, kept free of
-// DOM lookups so it can be unit-tested. The hook measures the container and its
-// message elements and feeds the numbers in; these functions decide where the
-// view should land. Both conversation layouts (chat bubbles and the traditional
-// rows) share the hook, so they share these rules.
+// The scroll-positioning arithmetic behind useConversationScroll, kept free of DOM lookups so it can
+// be unit-tested. The hook measures the container and its message elements and feeds the numbers in;
+// these functions decide where the view should land. Both conversation layouts (chat bubbles and the
+// traditional rows) share the hook, so they share these rules.
 
 /** Breathing room left above a message the view anchors to: the list's own top
  *  padding (ConversationMessageList's pt-3), so a message brought to the top
@@ -27,12 +26,12 @@ export const OPEN_ANCHOR_WINDOW_MS = 1800
 const SCROLL_MATCH_TOLERANCE_PX = 1
 
 /**
- * Whether a scroll event came from the reader rather than from our own
- * positioning. Scrollbar drags and clicks dispatch no mouse events to the
- * element in Chromium, so the only signal that separates them from the
- * anchoring we do ourselves is the position: anything we did not just set is
- * the reader moving the view. `expectedScrollTop` is null before we have
- * positioned anything, when every scroll is the reader's.
+ * Whether a scroll event came from the reader rather than from our own positioning.
+ *
+ * Scrollbar drags and clicks dispatch no mouse events to the element in Chromium, so the only signal
+ * that separates them from the anchoring we do ourselves is the position: anything we did not just set
+ * is the reader moving the view. `expectedScrollTop` is null before we have positioned anything, when
+ * every scroll is the reader's.
  */
 export function isUserScroll(scrollTop: number, expectedScrollTop: number | null): boolean {
   if (expectedScrollTop === null) return true
@@ -40,12 +39,11 @@ export function isUserScroll(scrollTop: number, expectedScrollTop: number | null
 }
 
 /**
- * Ids of messages that just went from read to unread — the reader picking "Mark
- * as unread" on a message that is very likely still on screen. Scroll-driven
- * read marking has to leave those alone until they scroll away, or the action
- * undoes itself. A message first seen already unread (no entry in
- * `previousUnread`) is not one of these: that is simply an unread message the
- * thread arrived with, and reading it marks it read as usual.
+ * Ids of messages that just went from read to unread — the reader picking "Mark as unread" on a message that is very likely still on screen.
+ *
+ * Scroll-driven read marking has to leave those alone until they scroll away, or the action undoes
+ * itself. A message first seen already unread (no entry in `previousUnread`) is not one of these: that
+ * is simply an unread message the thread arrived with, and reading it marks it read as usual.
  */
 export function collectManualUnreadIds(
   messages: readonly { id: string; unread?: boolean }[],
@@ -71,12 +69,12 @@ export function visibleBounds(container: VerticalBounds, composerOverlap: number
 }
 
 /**
- * Whether a message counts as read from where the view sits. Two ways to have
- * read it: its bottom came into view, so all of it has been on screen, or its
- * top has passed above the container's edge, so the reader scrolled through it
- * — the case for a message taller than the viewport, which would otherwise
- * never show its bottom. Merely peeking in from below is not reading: that is
- * the next message waiting its turn.
+ * Whether a message counts as read from where the view sits.
+ *
+ * Two ways to have read it: its bottom came into view, so all of it has been on screen, or its top has
+ * passed above the container's edge, so the reader scrolled through it — the case for a message taller
+ * than the viewport, which would otherwise never show its bottom. Merely peeking in from below is not
+ * reading: that is the next message waiting its turn.
  */
 export function isMessageRead(message: VerticalBounds, container: VerticalBounds): boolean {
   return message.top < container.top || message.bottom <= container.bottom
@@ -93,13 +91,15 @@ export type ScrollMetrics = {
 export type ScrollGeometry = Pick<ScrollMetrics, 'scrollHeight' | 'clientHeight'>
 
 /**
- * Whether a scroll event should drop the pin, given that it is not one our own
- * positioning caused. A settling pin goes on any position we did not set. A
- * persistent one — an expanded message, whose frame and images can resize it
- * long after — also needs the container to be the size it was when we last
- * looked: a body resizing can clamp the view to a position we never set, and
- * that must not read as the reader leaving. A scrollbar drag, which may reach
- * us as nothing but scroll events, moves the view inside unchanged geometry.
+ * Whether a scroll event should drop the pin, given that it is not one our own positioning caused.
+ *
+ * A settling pin goes on any position we did not set. A persistent one — an expanded message, whose
+ * frame and images can resize it long after — also needs the container to be the size it was when we
+ * last looked: a body resizing can clamp the view to a position we never set, and that must not read
+ * as the reader leaving.
+ *
+ * A scrollbar drag, which may reach us as nothing but scroll events, moves the view inside unchanged
+ * geometry.
  */
 export function scrollReleasesPin({
   persistent,
@@ -153,13 +153,12 @@ function bottomScrollTop(metrics: ScrollMetrics): number {
 }
 
 /**
- * Whether the view counts as parked at the end of the thread — the one rule
- * every "should the view follow the content" decision here asks. `scrollHeight`
- * overrides the measured one so a caller can ask "was the reader at the end"
- * against the height the position was measured against, rather than "is the new
- * content past the fold" against the height that content just created. Getting
- * that backwards is how a reply taller than the stick distance left the reader
- * looking at the message above it.
+ * Whether the view counts as parked at the end of the thread — the one rule every "should the view follow the content" decision here asks.
+ *
+ * `scrollHeight` overrides the measured one so a caller can ask "was the reader at the end" against
+ * the height the position was measured against, rather than "is the new content past the fold" against
+ * the height that content just created. Getting that backwards is how a reply taller than the stick
+ * distance left the reader looking at the message above it.
  */
 export function isAtBottom(metrics: ScrollMetrics, scrollHeight = metrics.scrollHeight): boolean {
   return scrollHeight - metrics.scrollTop - metrics.clientHeight <= BOTTOM_STICK_PX

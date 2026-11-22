@@ -32,12 +32,13 @@ import {
 export const FRAME_GENERATION_MARKER = 'data-meron-generation'
 
 /**
- * Hold the place of a picture that has not loaded, from its width and height
- * attributes. Returns whether it did, so the caller can give the place back.
+ * Hold the place of a picture that has not loaded, from its width and height attributes.
  *
- * `auto`: once the picture loads its own proportions win, so mislabelled
- * attributes only last until then. A sender's inline ratio is preserved;
- * browser-derived ratios still get the same explicit reservation.
+ * Returns whether it did, so the caller can give the place back.
+ *
+ * `auto`: once the picture loads its own proportions win, so mislabelled attributes only last until
+ * then. A sender's inline ratio is preserved; browser-derived ratios still get the same explicit
+ * reservation.
  */
 export function reserveImageBox(image: HTMLImageElement | HTMLVideoElement): boolean {
   const width = plainLength(image.getAttribute('width'))
@@ -490,12 +491,13 @@ export function prepareBubbleHtml(
 /**
  * Paint a live bubble frame with the active theme.
  *
- * The decision needs the rendered document — which colors the message's own CSS
- * actually resolves to, and how much text they cover — so it runs here rather
- * than in `prepareBubbleHtml`, and writes the `--meron-*` properties its
- * stylesheet reads. A message that brings its own colors gets the canvas they
- * were authored for and the palette that goes with it; one that declares nothing
- * is painted in the bubble's colors, so it reads as part of the conversation.
+ * The decision needs the rendered document — which colors the message's own CSS actually resolves to,
+ * and how much text they cover — so it runs here rather than in `prepareBubbleHtml`, and writes the
+ * `--meron-*` properties its stylesheet reads.
+ *
+ * A message that brings its own colors gets the canvas they were authored for and the palette that
+ * goes with it; one that declares nothing is painted in the bubble's colors, so it reads as part of
+ * the conversation.
  */
 export function applyBubbleTheme(doc: Document, theme: BubbleTheme, preparedCanvas?: FrameCanvas) {
   const style = doc.documentElement.style

@@ -3,7 +3,7 @@
 // Callers include FloatingContextMenu.tsx and ComposerToolbar.tsx.
 
 import type { ComponentProps } from 'react'
-import { clsx } from '../../lib/utils'
+import { clsx } from '../../lib/classNames'
 
 /** Shared, animation-free surface for positioned menus and their flyouts. */
 export function MenuSurface({ className, ref, ...props }: ComponentProps<'div'>) {

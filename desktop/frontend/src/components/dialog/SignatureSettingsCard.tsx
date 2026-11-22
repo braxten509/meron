@@ -30,12 +30,13 @@ function signatureState(account: Account): SignatureState {
 /**
  * The rich-text editor behind both signature cards.
  *
- * Seeded once, from the `value` it mounts with: a save echoing back through
- * state must not yank the caret. Switching to another account remounts it (the
- * caller keys it by account id), and every save it reports carries the `owner`
- * it mounted with — the parent has already re-rendered for the new account by
- * the time this one's pending edit is flushed on unmount, so the text can only
- * be filed correctly if the editor says whose it is.
+ * Seeded once, from the `value` it mounts with: a save echoing back through state must not yank the
+ * caret.
+ *
+ * Switching to another account remounts it (the caller keys it by account id), and every save it
+ * reports carries the `owner` it mounted with — the parent has already re-rendered for the new account
+ * by the time this one's pending edit is flushed on unmount, so the text can only be filed correctly
+ * if the editor says whose it is.
  */
 function SignatureEditor({
   owner,
@@ -66,7 +67,7 @@ function SignatureEditor({
   const insertImageFiles = async (files: File[], at?: number) => {
     const sources = await Promise.all(files.map(readAsDataUrl))
     if (!editor || editor.isDestroyed) return
-    const images = sources.map((src, i) => ({ type: 'image', attrs: { src, alt: files[i].name } }))
+    const images = sources.map((source, i) => ({ type: 'image', attrs: { src: source, alt: files[i].name } }))
     const chain = editor.chain().focus()
     if (at === undefined) chain.insertContent(images).run()
     // Reading is quick, but the document may still have changed under it.

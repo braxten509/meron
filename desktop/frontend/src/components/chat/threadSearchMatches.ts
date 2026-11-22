@@ -1,11 +1,12 @@
-// Occurrence counting for the in-thread search. The search bar counts matches,
-// not messages, so it has to know how many <mark>s each message will produce —
-// including HTML bodies, whose marks are placed inside a frame that may not even
-// be mounted yet. Both counts are computed the way their renderer highlights:
-// plain bodies chunk by chunk (MessageBubbleBody), HTML bodies over the
-// concatenated text nodes (frameSearchHighlight). Both go through matchRanges,
-// the matcher the two renderers place their marks with, so bar and body agree
-// on what counts as a match — case folding included.
+// Occurrence counting for the in-thread search.
+//
+// The search bar counts matches, not messages, so it has to know how many <mark>s each message will
+// produce — including HTML bodies, whose marks are placed inside a frame that may not even be mounted
+// yet. Both counts are computed the way their renderer highlights: plain bodies chunk by chunk
+// (MessageBubbleBody), HTML bodies over the concatenated text nodes (frameSearchHighlight).
+//
+// Both go through matchRanges, the matcher the two renderers place their marks with, so bar and body
+// agree on what counts as a match — case folding included.
 
 import type { Message } from '../../types'
 import { collectTextNodes, matchRanges } from './frameSearchHighlight'

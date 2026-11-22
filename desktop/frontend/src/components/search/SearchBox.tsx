@@ -6,7 +6,7 @@ import { useRef } from 'react'
 import type { KeyboardEvent, ReactNode, RefObject } from 'react'
 import { Search, X } from 'lucide-react'
 import { useTranslation } from '../../lib/i18n'
-import { clsx } from '../../lib/utils'
+import { clsx } from '../../lib/classNames'
 import { SearchOptions, type SearchOptionsProps } from './SearchOptions'
 
 type SearchBoxProps = {

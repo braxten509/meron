@@ -9,7 +9,7 @@ import { downloadAttachment, openAttachment } from '../../states/mail'
 import { thread$ } from '../../states/thread'
 import type { Message } from '../../types'
 import { InviteCard } from './InviteCard'
-import { fileIconFor, formatFileSize, mediaSrc } from './messageHelpers'
+import { fileIconFor, formatFileSize, mediaSource } from './messageHelpers'
 import { MessageBubbleBody } from './MessageBubbleBody'
 import { RetryWhenRestored } from './RetryWhenRestored'
 import { VideoAttachment } from './VideoAttachment'
@@ -84,7 +84,7 @@ export function MessageContent({
                 >
                   <RetryWhenRestored mediaMissing={message.media_missing ?? 0}>
                     <img
-                      src={mediaSrc(image)}
+                      src={mediaSource(image)}
                       alt={image.filename}
                       loading="lazy"
                       className="w-full h-full object-cover object-top"
@@ -106,8 +106,8 @@ export function MessageContent({
           {videos.map((video, index) => (
             <RetryWhenRestored key={index} mediaMissing={message.media_missing ?? 0}>
               <VideoAttachment
-                src={mediaSrc(video)}
-                externalUrl={video.url ?? mediaSrc(video)}
+                src={mediaSource(video)}
+                externalUrl={video.url ?? mediaSource(video)}
                 externalLabel={t('chat.openExternalPlayer')}
                 onSave={video.key ? () => downloadAttachment(video) : undefined}
                 saveLabel={t('chat.saveFile', { filename: video.filename })}

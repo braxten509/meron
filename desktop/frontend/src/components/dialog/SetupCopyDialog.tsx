@@ -19,7 +19,7 @@ import { useTranslation } from '../../lib/i18n'
 import { Dialog } from './Dialog'
 import { Button } from '../button/Button'
 import { IconButton } from '../button/IconButton'
-import { clsx } from '../../lib/utils'
+import { clsx } from '../../lib/classNames'
 import {
   cancelSetupCopy,
   reloadAfterReplace,

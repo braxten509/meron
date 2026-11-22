@@ -1,10 +1,9 @@
 // Browser environment for `bun test`.
 //
-// Most of the suite is pure logic, but the parts worth testing hardest — the
-// composer's autosave, the settings editors' ownership of what they save — are
-// React wiring, and wiring only misbehaves once state, effects and unmounts are
-// real. happy-dom gives those tests a DOM to render into; the pure-logic tests
-// neither notice nor pay for it (registration is a few milliseconds).
+// Most of the suite is pure logic, but the parts worth testing hardest — the composer's autosave, the
+// settings editors' ownership of what they save — are React wiring, and wiring only misbehaves once
+// state, effects and unmounts are real. happy-dom gives those tests a DOM to render into; the
+// pure-logic tests neither notice nor pay for it (registration is a few milliseconds).
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 
 if (!(globalThis as any).document) {

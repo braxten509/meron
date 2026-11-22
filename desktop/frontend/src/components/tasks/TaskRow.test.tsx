@@ -1,3 +1,7 @@
+// Exercises task row selection, editable fields and drag
+// gestures. Pointer movement from row space can begin a drag while
+// checkboxes and inline controls keep their own interactions.
+
 import { afterEach, beforeEach, expect, it, jest } from 'bun:test'
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { DndContext } from '@dnd-kit/core'

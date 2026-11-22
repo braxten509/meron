@@ -1,3 +1,7 @@
+// Exercises the six-week calendar grid and occurrence placement.
+// The test ranges include the days surrounding a month so
+// events at its boundaries can be rendered consistently.
+
 import { describe, expect, it } from 'bun:test'
 import { gridRange, localInstant, monthGrid, occursOn, utcDate, utcDateValue } from './calendarGrid'
 

@@ -1,3 +1,7 @@
+// Checks formatting of a contact as a composer recipient.
+// A display name containing address-list separators must be
+// quoted so selecting that contact produces a single recipient.
+
 import { expect, it } from 'bun:test'
 import { splitAddressList } from './address'
 import { formatContact } from './contacts'

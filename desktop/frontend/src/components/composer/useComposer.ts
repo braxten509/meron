@@ -175,15 +175,15 @@ export function useComposer(tabId: string) {
   const [saveError, setSaveError] = useState('')
 
   /**
-   * Esc: close the tab but keep the message in Drafts, unlike the × and
-   * Discard. The tab closes at once, as the × does: a Drafts server can take
-   * seconds and Esc must not seem dead meanwhile. The last save then runs
-   * from a copy of the draft, after any save in flight (which, finding the tab
-   * gone, cleans up a copy it allocated). If it fails, the tab comes back with
-   * the error, so nothing typed is lost; if it lands, a toast says where the
-   * message went and can reopen the tab, as Esc is easily pressed by accident.
-   * A new message with nothing written in it is discarded instead of filling
-   * Drafts with empty mail.
+   * Esc: close the tab but keep the message in Drafts, unlike the × and Discard.
+   *
+   * The tab closes at once, as the × does: a Drafts server can take seconds and Esc must not seem dead
+   * meanwhile. The last save then runs from a copy of the draft, after any save in flight (which,
+   * finding the tab gone, cleans up a copy it allocated).
+   *
+   * If it fails, the tab comes back with the error, so nothing typed is lost; if it lands, a toast says
+   * where the message went and can reopen the tab, as Esc is easily pressed by accident. A new message
+   * with nothing written in it is discarded instead of filling Drafts with empty mail.
    */
   const closeKeepingDraft = async () => {
     const closed = compose$.tabs.peek().find((t) => t.id === tabId)
@@ -323,17 +323,17 @@ export function useComposer(tabId: string) {
   // which is where the message being written belongs.
   const textRef = useRef<HTMLTextAreaElement | null>(null)
   useEffect(() => {
-    const el = textRef.current
-    if (!el || !focusBody) return
+    const element = textRef.current
+    if (!element || !focusBody) return
     const signature = draft?.signature?.text
     if (!signature) {
-      if (aboveQuote) el.setSelectionRange(0, 0)
+      if (aboveQuote) element.setSelectionRange(0, 0)
       return
     }
-    const at = el.value.indexOf(signature)
+    const at = element.value.indexOf(signature)
     if (at < 0) return
-    const caret = el.value.slice(0, at).replace(/\s+$/, '').length
-    el.setSelectionRange(caret, caret)
+    const caret = element.value.slice(0, at).replace(/\s+$/, '').length
+    element.setSelectionRange(caret, caret)
     // Mount only: after that the caret belongs to the user.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -677,14 +677,14 @@ export function useComposer(tabId: string) {
     }
   }
 
-  const handlePaste = (e: React.ClipboardEvent) => {
-    const imageFiles = extractClipboardImages(e.clipboardData)
+  const handlePaste = (event: React.ClipboardEvent) => {
+    const imageFiles = extractClipboardImages(event.clipboardData)
     if (imageFiles.length > 0) {
-      e.preventDefault()
+      event.preventDefault()
       lastImagePasteAtRef.current = Date.now()
       addFiles(imageFiles)
-    } else if (clipboardHasImageMarkup(e.clipboardData)) {
-      e.preventDefault()
+    } else if (clipboardHasImageMarkup(event.clipboardData)) {
+      event.preventDefault()
       pasteImageFromClipboard(Date.now(), { inline: false })
     }
   }
@@ -692,8 +692,8 @@ export function useComposer(tabId: string) {
   // WebKitGTK often doesn't expose pasted images via the synchronous paste
   // event's clipboardData. As a fallback, intercept Ctrl/Cmd+V and read the
   // clipboard asynchronously.
-  const handleKeyDown = async (e: React.KeyboardEvent) => {
-    const isPaste = (e.ctrlKey || e.metaKey) && (e.key === 'v' || e.key === 'V')
+  const handleKeyDown = async (event: React.KeyboardEvent) => {
+    const isPaste = (event.ctrlKey || event.metaKey) && (event.key === 'v' || event.key === 'V')
     if (!isPaste) return
 
     pasteImageFromClipboard(Date.now(), { inline: !!draft?.rich })
@@ -726,8 +726,8 @@ export function useComposer(tabId: string) {
 
   const setLink = () => {
     if (!editor) return
-    const prev = editor.getAttributes('link').href as string | undefined
-    const url = window.prompt('Link URL', prev ?? 'https://')
+    const previousValue = editor.getAttributes('link').href as string | undefined
+    const url = window.prompt('Link URL', previousValue ?? 'https://')
     if (url === null) return
     if (url === '') {
       editor.chain().focus().extendMarkRange('link').unsetLink().run()
@@ -838,10 +838,10 @@ export function useComposer(tabId: string) {
       if (remote) void discardSentDraft(remote)
       showToast(t('chat.messageSent'))
       finishClosingMessageTab(tabId)
-    } catch (err) {
+    } catch (error) {
       // The composer stays open on failure, so autosaving resumes with it.
       session.savesStopped = false
-      setError(contextualErrorMessage(err, t('compose.toast.sendFailed')))
+      setError(contextualErrorMessage(error, t('compose.toast.sendFailed')))
     } finally {
       setSending(false)
     }

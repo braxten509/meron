@@ -117,7 +117,7 @@ interface SortableBoardProps {
   board: Pick<KanbanBoard, 'id' | 'name' | 'avatarUrl' | 'columns' | 'showUnreadBadge'>
   active: boolean
   onSelect: () => void
-  onContextMenu: (e: React.MouseEvent) => void
+  onContextMenu: (event: React.MouseEvent) => void
 }
 
 // The board's unread count when its badge is switched on, else 0. Counts come
@@ -174,9 +174,9 @@ interface SortableAccountProps {
   account: Account
   active: boolean
   onSelect: () => void
-  onContextMenu: (e: React.MouseEvent) => void
-  onFeedDragOver?: (e: DragEvent<HTMLDivElement>, account: Account) => void
-  onFeedDrop?: (e: DragEvent<HTMLDivElement>, account: Account) => void
+  onContextMenu: (event: React.MouseEvent) => void
+  onFeedDragOver?: (event: DragEvent<HTMLDivElement>, account: Account) => void
+  onFeedDrop?: (event: DragEvent<HTMLDivElement>, account: Account) => void
 }
 
 export function SortableAccount({

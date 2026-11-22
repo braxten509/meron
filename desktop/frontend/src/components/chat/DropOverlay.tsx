@@ -5,14 +5,16 @@
 import { ImagePlus, Paperclip } from 'lucide-react'
 import { useTranslation } from '../../lib/i18n'
 
-/** Shown while files are dragged over a drop area (useFileDrop): "attach" over a
- *  conversation or the composer, "inline" over the composer's message body. It
- *  is the drop surface itself: it covers what is beneath, message bodies in
- *  iframes and the reply box included, which would otherwise take the drag away
- *  from the pane. Its events bubble to the area's drop handlers. With
- *  `passThrough` it is only drawn, and the drop lands on what is beneath: for a
- *  drag that may be a link (useFileDrop's `mayBeLink`), over a text field that
- *  should still take the link. */
+/**
+ * Shown while files are dragged over a drop area (useFileDrop): "attach" over a conversation or the composer, "inline" over the composer's message body.
+ *
+ * It is the drop surface itself: it covers what is beneath, message bodies in iframes and the reply
+ * box included, which would otherwise take the drag away from the pane. Its events bubble to the
+ * area's drop handlers.
+ *
+ * With `passThrough` it is only drawn, and the drop lands on what is beneath: for a drag that may be a
+ * link (useFileDrop's `mayBeLink`), over a text field that should still take the link.
+ */
 export function DropOverlay({
   kind = 'attach',
   className = 'inset-2',

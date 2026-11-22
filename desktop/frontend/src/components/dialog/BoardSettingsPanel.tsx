@@ -22,12 +22,12 @@ import { AvatarCropDialog } from './AvatarCropDialog'
 import { RemoveImageBadge } from './RemoveImageBadge'
 import { WallpaperDialog } from './WallpaperDialog'
 import { SettingRow, SettingsGroup, TextRow, ToggleRow } from './AccountSettingsRows'
-import { SharpImg } from '../../lib/sharpImage'
+import { SharpImage } from '../../lib/sharpImage'
 
 function BoardTile({ board, size, className = '' }: { board: KanbanBoard; size: number; className?: string }) {
   if (board.avatarUrl) {
     return (
-      <SharpImg
+      <SharpImage
         src={board.avatarUrl}
         box={size}
         alt=""
@@ -106,7 +106,7 @@ function BoardWallpaperCard({ board }: { board: KanbanBoard }) {
 
   const presetName =
     wallpaper?.kind === 'preset'
-      ? (WALLPAPER_PRESETS.find((p) => p.id === wallpaper.presetId)?.name ?? t('wallpaper.plain'))
+      ? (WALLPAPER_PRESETS.find((preset) => preset.id === wallpaper.presetId)?.name ?? t('wallpaper.plain'))
       : wallpaper?.kind === 'custom'
         ? t('wallpaper.customBackground')
         : t('wallpaper.plainDefault')

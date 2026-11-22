@@ -1,3 +1,7 @@
+// Verifies the arrangement and actions of desktop window
+// buttons. Test layouts include left and right controls,
+// an empty side and a window using its native titlebar.
+
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { windowChrome$ } from '../../lib/windowChrome'

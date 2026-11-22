@@ -1,3 +1,7 @@
+// Verifies the unread count on a board tile. Counts are
+// aggregated by account and folder so repeated columns
+// or unified views do not count the same mailbox twice.
+
 import { describe, expect, it } from 'bun:test'
 import type { Account, Folder } from '../types'
 import { boardBadgeAccountIds, boardBadgeSyncTargets, boardUnreadCount } from './boardUnread'

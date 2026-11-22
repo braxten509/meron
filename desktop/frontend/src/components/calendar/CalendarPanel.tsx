@@ -7,7 +7,7 @@ import { CalendarDays, Check, ChevronLeft, ChevronRight, Maximize2, Plus, Repeat
 import { useMemo } from 'react'
 import { firstDayOfWeek, monthGrid, occursOn, sameDay } from '../../lib/calendarGrid'
 import { useTranslation } from '../../lib/i18n'
-import { clsx } from '../../lib/utils'
+import { clsx } from '../../lib/classNames'
 import {
   AGENDA_DAYS,
   calendar$,

@@ -424,7 +424,7 @@ export function MessagePane() {
         <Gallery
           items={galleryItems}
           index={galleryIndex}
-          onIndexChange={(idx) => thread$.galleryIndex.set(idx)}
+          onIndexChange={(index) => thread$.galleryIndex.set(index)}
           onClose={() => thread$.galleryIndex.set(null)}
         />
       )}

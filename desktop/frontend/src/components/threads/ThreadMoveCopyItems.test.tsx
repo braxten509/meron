@@ -1,3 +1,7 @@
+// Checks the destinations offered for moving or copying a
+// conversation. Recent targets are scoped to the action and account,
+// and choosing a nested folder forwards the selected account.
+
 import { afterEach, expect, it } from 'bun:test'
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import type { Account, Folder } from '../../types'

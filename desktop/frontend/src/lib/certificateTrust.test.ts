@@ -1,3 +1,7 @@
+// Checks the certificate probe payload for account
+// reconnect. Account-level proxy overrides and app-wide
+// proxy settings determine the route used for the probe.
+
 import { describe, expect, it } from 'bun:test'
 import {
   certificateProbePayload,

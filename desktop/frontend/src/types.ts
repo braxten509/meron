@@ -1,3 +1,7 @@
+// Defines the data exchanged by desktop views, state and host
+// commands. Account, message and organizer types retain the
+// field names supplied by the core and its desktop bridge.
+
 // Shared data-model types, mirroring the sidecar's bridge shapes. Imported by
 // both the state modules and the UI; no runtime code lives here.
 
@@ -151,11 +155,12 @@ export type ComposerAttachment = {
   inlineId?: string
 }
 
-/** Both reply forms of one message, as address-list strings: `to`/`cc` for a
- * plain reply, `all_to`/`all_cc` for reply-all, and whether reply-all reaches
- * anyone the plain reply does not — false hides the reply-all actions.
- * `accepts_replies` is false when the reply would go only to a no-reply or
- * bounce address; quick replies then answer an earlier message. */
+/**
+ * Both reply forms of one message, as address-list strings: `to`/`cc` for a plain reply,
+ * `all_to`/`all_cc` for reply-all, and whether reply-all reaches anyone the plain reply does not —
+ * false hides the reply-all actions. `accepts_replies` is false when the reply would go only to a
+ * no-reply or bounce address; quick replies then answer an earlier message.
+ */
 export type ReplyRecipients = {
   to: string
   cc: string

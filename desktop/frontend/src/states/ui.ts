@@ -176,7 +176,7 @@ export function dismissToast() {
 // Success confirmations last ~2.2s; errors stay until dismissed or replaced.
 // An explicit duration overrides this default; 0 disables automatic dismissal.
 export function showToast(
-  msg: string,
+  message: string,
   tone: ToastTone = 'success',
   duration = tone === 'error' ? 0 : 2200,
   placement: ToastPlacement = 'app',
@@ -185,10 +185,10 @@ export function showToast(
   ui$.toastUndo.set(null)
   ui$.toastPlacement.set(placement)
   ui$.toastTone.set(tone)
-  ui$.toast.set(msg)
+  ui$.toast.set(message)
   if (duration === 0) return
   toastTimer = setTimeout(() => {
-    if (ui$.toast.get() === msg) {
+    if (ui$.toast.get() === message) {
       dismissToast()
     }
   }, duration)
@@ -196,18 +196,18 @@ export function showToast(
 
 // Like showToast but pairs the message with an Undo affordance. Given a longer
 // (5s) window since the whole point is to catch an accidental action.
-export function showUndoToast(msg: string, undo: () => void, placement: ToastPlacement = 'app', actionLabel = '') {
+export function showUndoToast(message: string, undo: () => void, placement: ToastPlacement = 'app', actionLabel = '') {
   clearTimeout(toastTimer)
   ui$.toastActionLabel.set(actionLabel)
   ui$.toastTone.set('success')
   ui$.toastPlacement.set(placement)
-  ui$.toast.set(msg)
+  ui$.toast.set(message)
   // Cleared first: over a function already there, the observable would store
   // the updater itself, leaving a button that does nothing.
   ui$.toastUndo.set(null)
   ui$.toastUndo.set(() => undo)
   toastTimer = setTimeout(() => {
-    if (ui$.toast.get() === msg) {
+    if (ui$.toast.get() === message) {
       dismissToast()
     }
   }, 5000)

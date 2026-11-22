@@ -3,7 +3,7 @@
 // Imported by ConversationHeader.tsx.
 
 import { useId, useState } from 'react'
-import { clsx } from '../../lib/utils'
+import { clsx } from '../../lib/classNames'
 
 export function ConversationSubject({
   subject,

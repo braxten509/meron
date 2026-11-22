@@ -1,3 +1,7 @@
+// Converts errors from desktop commands into readable
+// messages. Callers can include the action that failed so
+// a host exception has enough context to display in the UI.
+
 // Wails can reject backend calls with a plain string, not an Error, so callers
 // should normalize unknown failures before showing them in the UI.
 export function errorMessage(error: unknown, fallback: string): string {

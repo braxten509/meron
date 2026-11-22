@@ -15,7 +15,7 @@ const MAX_ENTRIES = 512
 const done = new Map<string, string | null>() // key -> blob URL, or null: use the original
 const running = new Map<string, Promise<string | null>>()
 
-const keyOf = (src: string, px: number, fit: Fit) => `${fit}:${px}:${src}`
+const keyOf = (source: string, px: number, fit: Fit) => `${fit}:${px}:${source}`
 
 function remember(key: string, url: string | null) {
   done.set(key, url)
@@ -67,18 +67,18 @@ function draw(source: CanvasImageSource, width: number, height: number): HTMLCan
 
 /** `src` shrunk smoothly for a `box` css-px box (the original until ready, or
  *  when it is small enough, or can't be read). */
-export function useSharpSrc(src: string | undefined, box: number, fit: Fit = 'cover'): string | undefined {
+export function useSharpSource(source: string | undefined, box: number, fit: Fit = 'cover'): string | undefined {
   // Twice the box's device pixels, as an @2x picture: full detail kept, and
   // the screen's own last step (at most 2x) is smooth.
   const px = Math.ceil(box * (window.devicePixelRatio || 1) * 2)
-  const key = src ? keyOf(src, px, fit) : ''
+  const key = source ? keyOf(source, px, fit) : ''
   const [sharp, setSharp] = useState<{ key: string; url: string | null } | null>(null)
   useEffect(() => {
-    if (!src || done.has(key)) return
+    if (!source || done.has(key)) return
     let cancelled = false
     let job = running.get(key)
     if (!job) {
-      job = shrink(src, px, fit).catch(() => null)
+      job = shrink(source, px, fit).catch(() => null)
       running.set(key, job)
       void job.then((url) => {
         running.delete(key)
@@ -91,18 +91,18 @@ export function useSharpSrc(src: string | undefined, box: number, fit: Fit = 'co
     return () => {
       cancelled = true
     }
-  }, [src, key, px, fit])
-  if (!src) return undefined
+  }, [source, key, px, fit])
+  if (!source) return undefined
   const ready = done.has(key) ? done.get(key) : sharp?.key === key ? sharp.url : null
-  return ready || src
+  return ready || source
 }
 
 /** An `<img>` for a small fixed box (`box` css px), drawn smoothly. */
-export function SharpImg({
-  src,
+export function SharpImage({
+  src: source,
   box,
   fit = 'cover',
   ...props
 }: ImgHTMLAttributes<HTMLImageElement> & { src?: string; box: number; fit?: Fit }) {
-  return <img {...props} src={useSharpSrc(src, box, fit)} />
+  return <img {...props} src={useSharpSource(source, box, fit)} />
 }

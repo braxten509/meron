@@ -5,7 +5,7 @@
 import { useEffect, useRef, type ComponentProps, type ReactNode, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import { useEscapeKey } from '../../lib/useEscapeKey'
-import { clsx } from '../../lib/utils'
+import { clsx } from '../../lib/classNames'
 
 const focusableSelector = 'button, input, select, textarea, a[href], [tabindex], [contenteditable="true"]'
 

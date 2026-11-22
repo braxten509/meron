@@ -20,7 +20,7 @@ import {
   releaseFailedImageBox,
   restoreImageBox,
 } from './bubbleHtml'
-import { bodyContentKey, mediaKeyFromSrc } from './messageHelpers'
+import { bodyContentKey, mediaKeyFromSource } from './messageHelpers'
 import { applyFrameHighlights, clearFrameHighlights } from './frameSearchHighlight'
 import { frameMetrics, measureFrameHeight } from './frameHeight'
 import { useMessageFrameFont } from './useMessageFrameFont'
@@ -135,14 +135,14 @@ export function BubbleHtmlFrame({
   const foldQuoteRef = useRef<((open: boolean) => void) | null>(null)
 
   const openImage = useCallback(
-    (doc: Document, img: HTMLImageElement, event: Event) => {
+    (doc: Document, imageElement: HTMLImageElement, event: Event) => {
       event.preventDefault()
       event.stopPropagation()
-      if (!img.currentSrc && !img.src) return
+      if (!imageElement.currentSrc && !imageElement.src) return
       if (
         !allowRemote &&
-        /^https?:\/\//i.test(img.currentSrc || img.src) &&
-        !mediaKeyFromSrc(img.currentSrc || img.src)
+        /^https?:\/\//i.test(imageElement.currentSrc || imageElement.src) &&
+        !mediaKeyFromSource(imageElement.currentSrc || imageElement.src)
       )
         return
       const images = Array.from(doc.querySelectorAll<HTMLImageElement>('img')).filter((element) => {
@@ -150,7 +150,7 @@ export function BubbleHtmlFrame({
         if (
           !allowRemote &&
           /^https?:\/\//i.test(element.currentSrc || element.src) &&
-          !mediaKeyFromSrc(element.currentSrc || element.src)
+          !mediaKeyFromSource(element.currentSrc || element.src)
         )
           return false
         const w = element.getAttribute('width') || ''
@@ -163,10 +163,10 @@ export function BubbleHtmlFrame({
         images.map((element) => ({
           src: element.currentSrc || element.src,
           filename: element.alt || element.title || 'image',
-          mime: attachments?.find((att) => att.key === mediaKeyFromSrc(element.currentSrc || element.src))?.mime,
+          mime: attachments?.find((att) => att.key === mediaKeyFromSource(element.currentSrc || element.src))?.mime,
         })),
       )
-      setGalleryIndex(Math.max(0, images.indexOf(img)))
+      setGalleryIndex(Math.max(0, images.indexOf(imageElement)))
     },
     [attachments, allowRemote],
   )
@@ -175,9 +175,9 @@ export function BubbleHtmlFrame({
     (event: MouseEvent, doc: Document) => {
       const target = event.target as Element | null
       if (!target || typeof target.closest !== 'function') return false
-      const img = target.closest('img') as HTMLImageElement | null
-      if (!img || !img.src) return false
-      openImage(doc, img, event)
+      const imageElement = target.closest('img') as HTMLImageElement | null
+      if (!imageElement || !imageElement.src) return false
+      openImage(doc, imageElement, event)
       return true
     },
     [openImage],

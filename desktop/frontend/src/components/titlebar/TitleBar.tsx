@@ -22,7 +22,7 @@ import { BoardDialog, type BoardDialogState } from '../sidenav/BoardDialog'
 import { QuickSettingsMenu } from '../sidenav/QuickSettingsMenu'
 import { ThreadSearchInput } from '../threads/ThreadSearchInput'
 import { WindowControls } from './WindowControls'
-import { SharpImg } from '../../lib/sharpImage'
+import { SharpImage } from '../../lib/sharpImage'
 
 /**
  * Whether Meron draws its own title bar: always on macOS (the native one is
@@ -38,12 +38,12 @@ export function useTitleBar(): boolean {
 type MenuPosition = { x: number; y: number } | null
 
 /**
- * The window's top row, in the side navigation's colors so the two read as
- * one frame. It moves the window ([data-titlebar] in index.css) and holds the
- * search box of the thread list or kanban board, the app-wide Tasks and quick-settings buttons, plus
- * the window controls on Linux and Windows.
- * On macOS the native traffic lights float over its left end; the row leaves
- * a little extra room for the search field and app buttons.
+ * The window's top row, in the side navigation's colors so the two read as one frame.
+ *
+ * It moves the window ([data-titlebar] in index.css) and holds the search box of the thread list or
+ * kanban board, the app-wide Tasks and quick-settings buttons, plus the window controls on Linux and
+ * Windows. On macOS the native traffic lights float over its left end; the row leaves a little extra
+ * room for the search field and app buttons.
  */
 export function TitleBar({ tools = true }: { tools?: boolean }) {
   const { t } = useTranslation()
@@ -81,7 +81,7 @@ export function TitleBar({ tools = true }: { tools?: boolean }) {
           the 3.75rem side navigation's tiles: row padding + margin + half the logo,
           all in rem so the two stay aligned at any text size. */}
         {!isMac && startControls.length === 0 && (
-          <SharpImg
+          <SharpImage
             src={logo}
             box={windows ? 16 : 20}
             fit="contain"

@@ -43,8 +43,8 @@ describe('quoting the original in replies', () => {
       body: 'Lunch on Friday?\n\nJane',
       ...overrides,
     })
-  const attribution = (m: Message) => `On ${formatFullTimestamp(m.date)}, Them <them@example.com> wrote:`
-  const htmlAttribution = (m: Message) => attribution(m).replace('<', '&lt;').replace('>', '&gt;')
+  const attribution = (message: Message) => `On ${formatFullTimestamp(message.date)}, Them <them@example.com> wrote:`
+  const htmlAttribution = (message: Message) => attribution(message).replace('<', '&lt;').replace('>', '&gt;')
   const draft = () => compose$.tabs.get()[0]?.compose
 
   beforeEach(() => {
@@ -98,49 +98,49 @@ describe('quoting the original in replies', () => {
   it('folds a plain original away under the signature', () => {
     accounts$.set([{ ...sendable, conversation_html: false }])
     settings$.signature.set('<p>Ping</p>')
-    const m = original()
+    const message = original()
 
-    replyToMessage(m)
+    replyToMessage(message)
 
     expect(draft()?.rich).toBe(false)
     expect(draft()?.text).toBe('\n\nPing')
-    expect(draft()?.quote?.text).toBe(`${attribution(m)}\n> Lunch on Friday?\n>\n> Jane`)
-    expect(composedContent(draft()!)).toBe(`\n\nPing\n\n${attribution(m)}\n> Lunch on Friday?\n>\n> Jane`)
+    expect(draft()?.quote?.text).toBe(`${attribution(message)}\n> Lunch on Friday?\n>\n> Jane`)
+    expect(composedContent(draft()!)).toBe(`\n\nPing\n\n${attribution(message)}\n> Lunch on Friday?\n>\n> Jane`)
   })
 
   it('folds an HTML original away in a cite blockquote', () => {
     accounts$.set([{ ...sendable, conversation_html: false }])
     settings$.signature.set('<p>Ping</p>')
-    const m = original({ body_html: '<p>Lunch on <b>Friday</b>?</p>' })
+    const message = original({ body_html: '<p>Lunch on <b>Friday</b>?</p>' })
 
-    replyToMessage(m)
+    replyToMessage(message)
 
     expect(draft()?.rich).toBe(true)
     expect(draft()?.html).toBe('<p></p><p>Ping</p>')
     expect(composedContent(draft()!)).toBe(
-      `<p></p><p>Ping</p><p>${htmlAttribution(m)}</p><blockquote type="cite"><p>Lunch on <b>Friday</b>?</p></blockquote>`,
+      `<p></p><p>Ping</p><p>${htmlAttribution(message)}</p><blockquote type="cite"><p>Lunch on <b>Friday</b>?</p></blockquote>`,
     )
   })
 
   it('folds the quote under the text carried from the quick reply into the full editor', () => {
-    const m = original()
-    mail$.threads.set([m])
-    mail$.messages.set([m])
+    const message = original()
+    mail$.threads.set([message])
+    mail$.messages.set([message])
     ui$.selectedThread.set('t-1')
     compose$.composer.set('Sounds good')
 
     openReplyInFullEditor()
 
     expect(draft()?.text).toBe('Sounds good')
-    expect(composedContent(draft()!)).toBe(`Sounds good\n\n${attribution(m)}\n> Lunch on Friday?\n>\n> Jane`)
+    expect(composedContent(draft()!)).toBe(`Sounds good\n\n${attribution(message)}\n> Lunch on Friday?\n>\n> Jane`)
   })
 
   it('does not quote a saved quoted reply carried back into a reply twice', async () => {
-    const m = original()
-    mail$.threads.set([m])
-    mail$.messages.set([m])
+    const message = original()
+    mail$.threads.set([message])
+    mail$.messages.set([message])
     ui$.selectedThread.set('t-1')
-    const saved = `Sounds good\n\n${attribution(m)}\n> Lunch on`
+    const saved = `Sounds good\n\n${attribution(message)}\n> Lunch on`
     compose$.composer.set(saved)
 
     openReplyInFullEditor()
@@ -223,17 +223,17 @@ describe('quoting the original in replies', () => {
   })
 
   it('sends an HTML quote with a quick reply to an HTML original', async () => {
-    const m = original({ body_html: '<p>Lunch on <b>Friday</b>?</p>' })
-    mail$.threads.set([m])
-    mail$.messages.set([m])
+    const message = original({ body_html: '<p>Lunch on <b>Friday</b>?</p>' })
+    mail$.threads.set([message])
+    mail$.messages.set([message])
     ui$.selectedThread.set('t-1')
     compose$.composer.set('Sounds good')
 
     await sendReply()
 
     const sent = calls.find((call) => call.command === 'mail.send')?.payload as { body: string; html: string }
-    expect(sent.body).toBe(`Sounds good\n\n${attribution(m)}\n> Lunch on Friday?\n>\n> Jane`)
-    expect(sent.html).toStartWith(`<p>Sounds good</p><p>${htmlAttribution(m)}</p><blockquote `)
+    expect(sent.body).toBe(`Sounds good\n\n${attribution(message)}\n> Lunch on Friday?\n>\n> Jane`)
+    expect(sent.html).toStartWith(`<p>Sounds good</p><p>${htmlAttribution(message)}</p><blockquote `)
     expect(sent.html).toContain('type="cite"')
     expect(sent.html).toContain('<p>Lunch on <b>Friday</b>?</p></blockquote>')
   })

@@ -8,10 +8,9 @@ import { isNarrowWindow } from '../lib/useNarrowWindow'
 import type { Account, Attachment, ComposeDraft, ComposerAttachment, Message, MessageTab } from '../types'
 import { invoke } from '../lib/bridge'
 import { CONVERSATION_PAGE_SIZE } from '../lib/pagination'
-import { senderThreadIdLike } from '../lib/senderThread'
 import { ui$, showToast } from './ui'
 import { unifiedFolderRole } from '../lib/unifiedFolders'
-import { accounts$, isSendableAccount, accountIdentities } from './accounts'
+import { accounts$, isSendableAccount } from './accounts'
 import { getActiveThread, loadThreads, normalizeMessageId } from './mail'
 // From the leaf module: this one subscribes to it while loading, which can be
 // inside an import cycle through mail.ts.
@@ -33,7 +32,6 @@ import {
 import { settings$ } from './settings'
 import { closeCurrentConversation, kanban$ } from './kanban'
 import { resolveConversationMode, revealRemote, thread$ } from './thread'
-import { formatFullTimestamp } from '../components/chat/messageHelpers'
 import {
   closeComposeSession,
   draftSavesSettled,
@@ -56,7 +54,6 @@ import {
   COMPOSE_TABS_KEY,
   hasExtraComposeHeaders,
   newDraftMessageId,
-  TAB_VIEW_KEY,
   type PersistedComposeTab,
   type PersistedMailTab,
 } from './composeState'
@@ -73,203 +70,40 @@ import {
   unconfirmedQuickReplyDraftId,
   seedQuickReplySignature,
 } from './quickReply'
+import {
+  tabHistory,
+  persistTabView,
+  readerTab,
+  newestMessage,
+  popToPreviousTab,
+  activateConversationTab,
+} from './readerTabs'
+import {
+  textToHtml,
+  replyQuote,
+  bodyHasReplyQuote,
+  foldDraftQuote,
+  forwardedHtmlBody,
+  forwardedSubject,
+  forwardedPlainBody,
+} from './composeContent'
+export { escapeHtml, textToHtml, replyQuote, bodyHasReplyQuote, composedContent } from './composeContent'
+export {
+  activateConversationTab,
+  pruneComposerMedia,
+  openMessageTab,
+  openThreadTab,
+  newestMessage,
+  openThreadTabById,
+  openNotificationThread,
+} from './readerTabs'
 
-// Reader and compose tabs: opening threads and drafts, the full editor, forwarding,
-// and saving or sending composed messages.
-
-export function escapeHtml(value: string): string {
-  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
-}
-
-export function textToHtml(text: string): string {
-  if (!text.trim()) return ''
-  return text
-    .split(/\n{2,}/)
-    .map((para) => `<p>${para.split('\n').map(escapeHtml).join('<br>')}</p>`)
-    .join('')
-}
-
-function headerLine(label: string, value?: string): string {
-  const trimmed = value?.trim()
-  return trimmed ? `${label}: ${trimmed}` : ''
-}
-
-function formatMessageFrom(message: Message): string {
-  return message.from_name ? `${message.from_name} <${message.from_addr}>` : message.from_addr
-}
-
-function forwardedSubject(subject: string): string {
-  const trimmed = subject.trim()
-  if (!trimmed) return 'Fwd: (no subject)'
-  return /^fwd?:/i.test(trimmed) ? trimmed : `Fwd: ${trimmed}`
-}
-
-function forwardedPlainBody(message: Message): string {
-  const header = [
-    '---------- Forwarded message ---------',
-    headerLine('From', formatMessageFrom(message)),
-    headerLine('Date', formatFullTimestamp(message.date)),
-    headerLine('Subject', message.subject || '(no subject)'),
-    headerLine('To', message.to),
-    headerLine('Cc', message.cc),
-  ].filter(Boolean)
-  return `\n\n${header.join('\n')}\n\n${message.body ?? ''}`
-}
-
-function forwardedHtmlBody(message: Message): string {
-  const rows: Array<[string, string | undefined]> = [
-    ['From', formatMessageFrom(message)],
-    ['Date', formatFullTimestamp(message.date)],
-    ['Subject', message.subject || '(no subject)'],
-    ['To', message.to],
-    ['Cc', message.cc],
-  ]
-  const presentRows = rows.filter((row): row is [string, string] => !!row[1]?.trim())
-  const header = presentRows
-    .map(([label, value]) => `<div><strong>${escapeHtml(label)}:</strong> ${escapeHtml(value)}</div>`)
-    .join('')
-  const body = message.body_html || textToHtml(message.body ?? '')
-  return `<p><br></p><div class="meron-forwarded-message"><p>---------- Forwarded message ---------</p>${header}<br>${body}</div>`
-}
-
-/**
- * The message a reply answers, quoted under it, when the user quotes replies
- * (`settings.quoteReplies`): an "On …, Jane wrote:" line over the original,
- * `> `-prefixed in plain text and in a `<blockquote type="cite">` in HTML —
- * the Apple Mail and Thunderbird shape, which the conversation view folds in
- * our own sent replies as it does in theirs. `rich` says whether the original
- * was HTML. Undefined when quoting is off or the original has no body loaded.
- */
-export function replyQuote(message: Message): ComposeBody | undefined {
-  if (!settings$.quoteReplies.peek()) return undefined
-  const body = message.body ?? ''
-  if (!message.body_html && !body.trim()) return undefined
-  const attribution = `On ${formatFullTimestamp(message.date)}, ${formatMessageFrom(message)} wrote:`
-  const quoted = body
-    .replace(/\s+$/, '')
-    .split('\n')
-    .map((line) => (line ? `> ${line}` : '>'))
-    .join('\n')
-  return {
-    rich: !!message.body_html,
-    html: `<p>${escapeHtml(attribution)}</p><blockquote type="cite">${message.body_html || textToHtml(body)}</blockquote>`,
-    text: `${attribution}\n${quoted}`,
-  }
-}
-
-/** Whether a body already quotes the message `quote` answers — a saved quoted
- * reply carried back into a reply — by the attribution line it opens with. */
-export function bodyHasReplyQuote(body: string, quote: ComposeBody): boolean {
-  const attribution = quote.text.split('\n', 1)[0]
-  return !!attribution && body.includes(attribution)
-}
-
-/** What a draft sends and saves: its body, with a folded quote under it. */
-export function composedContent(draft: Pick<ComposeDraft, 'rich' | 'html' | 'text' | 'quote'>): string {
-  const own = draft.rich ? draft.html : draft.text
-  if (!draft.quote) return own
-  if (draft.rich) return `${own}${draft.quote.html}`
-  return own.trim() ? `${own.replace(/\s+$/, '')}\n\n${draft.quote.text}` : draft.quote.text
-}
-
-/**
- * A reopened draft's body with the quote at its tail folded away again, as it
- * was while the reply was being written. The core marks that tail when it reads
- * the draft back: `data-meron-quote` on the HTML elements, `body_quote_start`
- * in the plain body. A draft without one comes back whole.
- */
-function foldDraftQuote(message: Message): ComposeBody & { quote?: ComposeDraft['quote'] } {
-  if (message.body_html) {
-    const doc = new DOMParser().parseFromString(message.body_html, 'text/html')
-    // The core marks only a quote that ends the message, so everything from the
-    // first marked element to the end of the document is the quote — at the top
-    // level, inside a wrapper the reply shares with it, or (Outlook) running on
-    // past that wrapper. The range splits whatever wrappers it crosses.
-    const first = doc.body.querySelector('[data-meron-quote]')
-    if (!first) return { rich: true, html: message.body_html, text: '' }
-    const from = (node: Node) => {
-      const siblings: Node[] = []
-      for (let at: Node | null = node; at; at = at.nextSibling) siblings.push(at)
-      return siblings
-    }
-    let tail = from(first)
-    for (let wrapper = first.parentNode; wrapper && wrapper !== doc.body; wrapper = wrapper.parentNode) {
-      const following = wrapper.nextSibling ? from(wrapper.nextSibling) : []
-      const part = wrapper.cloneNode(false)
-      for (const node of tail) part.appendChild(node)
-      tail = [part, ...following]
-    }
-    const folded = doc.createElement('div')
-    for (const node of tail) folded.appendChild(node)
-    for (const element of Array.from(folded.querySelectorAll('[data-meron-quote]'))) {
-      element.removeAttribute('data-meron-quote')
-    }
-    const html = folded.innerHTML.trim()
-    return { rich: true, html: doc.body.innerHTML, text: '', quote: { html, text: htmlToText(html) } }
-  }
-  const body = message.body ?? ''
-  const start = message.body_quote_start
-  if (start == null || start <= 0 || start >= body.length) return { rich: false, html: '', text: body }
-  const text = body.slice(start)
-  return {
-    rich: false,
-    html: '',
-    text: body.slice(0, start).replace(/\s+$/, ''),
-    quote: { html: `<blockquote type="cite">${textToHtml(text)}</blockquote>`, text },
-  }
-}
-
-// Return to the Current conversation tab, restoring the thread it was showing
-// before a thread tab took over selectedThread.
-export function activateConversationTab() {
-  ui$.selectedThread.set(compose$.conversationThread.peek())
-  compose$.activeTab.set('')
-}
-
-// Activation trail of tab ids ("" = Current), oldest first. Closing the active
-// tab walks this back to the tab you were on before opening it — e.g. opening a
-// message in a new tab from a thread tab and closing it returns to that thread
-// tab, not whatever happens to sit next in the strip.
-const tabHistory: string[] = []
 compose$.activeTab.onChange(({ value }) => {
   // Collapse immediate repeats so re-activating the current tab is a no-op.
   if (tabHistory[tabHistory.length - 1] === value) return
   tabHistory.push(value)
   if (tabHistory.length > 50) tabHistory.shift()
 })
-
-// Drop the closed tab from the trail, then return the most recent entry that's
-// still a live tab (or "" for Current). Pops dead entries as it goes.
-function popToPreviousTab(closedId: string, remaining: MessageTab[]): string {
-  for (let i = tabHistory.length - 1; i >= 0; i--) {
-    if (tabHistory[i] === closedId) tabHistory.splice(i, 1)
-  }
-  while (tabHistory.length > 0) {
-    const candidate = tabHistory[tabHistory.length - 1]
-    if (candidate === '' || remaining.some((tab) => tab.id === candidate)) return candidate
-    tabHistory.pop()
-  }
-  return ''
-}
-
-// Delete orphaned inline-image files from earlier sessions. writeMediaFile
-// writes one loose file per inline paste into the media root and nothing ever
-// reclaims them, so a discarded or sent draft leaks its images. On boot we
-// collect the `/media/<key>` keys still referenced by the rehydrated compose
-// tabs and let the backend remove every other loose file. Fire-and-forget.
-export function pruneComposerMedia() {
-  const keys = new Set<string>()
-  // Match a root-level media key (no slash) — exactly writeMediaFile's output.
-  // Per-account refs look like /media/<account>/… and are skipped by the regex
-  // (and ignored by the backend, which only deletes regular files at the root).
-  const re = /\/media\/([^/"'\s)>\\]+)/g
-  for (const tab of compose$.tabs.get()) {
-    const html = tab.compose?.html
-    if (!html) continue
-    for (const m of html.matchAll(re)) keys.add(m[1])
-  }
-  invoke('composer.pruneMedia', { keys: [...keys] }).catch(() => {})
-}
 
 // Persist the tabs on every tab change. We only store the text portion of each
 // compose draft — attachments are dropped because their base64 payloads can blow
@@ -291,20 +125,6 @@ compose$.tabs.onChange(({ value: tabs }) => {
     // localStorage quota exceeded — drop silently.
   }
 })
-
-function persistTabView() {
-  try {
-    localStorage.setItem(
-      TAB_VIEW_KEY,
-      JSON.stringify({
-        activeTab: compose$.activeTab.peek(),
-        conversationThread: compose$.conversationThread.peek(),
-      }),
-    )
-  } catch {
-    // localStorage quota exceeded — drop silently.
-  }
-}
 compose$.activeTab.onChange(persistTabView)
 compose$.conversationThread.onChange(persistTabView)
 
@@ -333,67 +153,6 @@ mail$.messages.onChange(({ value: messages }) => {
     }
   }
 })
-
-// Open a single message in its own reader tab. The HTML is already on the
-// message (shipped with threadRead), so this is instant — no fetch. Re-opening
-// an already-open message just re-activates its tab.
-// What the tab strip's avatar needs, as ThreadListItem draws it: a feed item
-// shows its feed's icon rather than resolving the sender address.
-function tabAvatar(message: Message): Pick<MessageTab, 'fromAddr' | 'feedIcon'> {
-  if (message.feed_url) return { feedIcon: message.feed_icon }
-  return { fromAddr: message.from_addr }
-}
-
-function readerTab(message: Message): MessageTab {
-  const account = accounts$.get().find((acc) => acc.id === message.account_id)
-  const preferHtml = account?.conversation_html ?? true
-  return {
-    id: message.id,
-    kind: 'reader',
-    messageId: message.id,
-    threadId: message.thread_id,
-    // Carried so the tab can resolve this message's remote-content policy.
-    accountId: message.account_id,
-    revealRemote: !!thread$.revealedRemote.peek()[message.id],
-    // Snapshotted at open time: the From address alone misses an alias or a
-    // send still in flight (the same rule useMessageView applies in the
-    // conversation).
-    outgoing:
-      !!message.send_status ||
-      message.outgoing === true ||
-      (!!account &&
-        accountIdentities(account).some(
-          (identity) => identity.email.trim().toLowerCase() === message.from_addr.trim().toLowerCase(),
-        )),
-    subject: message.subject || '(no subject)',
-    from: message.from_name || message.from_addr,
-    ...tabAvatar(message),
-    fromRaw: message.from_name ? `${message.from_name} <${message.from_addr}>` : message.from_addr,
-    to: message.to,
-    cc: message.cc,
-    bcc: message.bcc,
-    replyTo: message.reply_to,
-    date: message.date,
-    body: message.body,
-    bodyHtml: message.body_html,
-    bodyMissing: message.body_missing,
-    attachments: message.attachments,
-    viewMode: message.body_html && preferHtml ? 'html' : 'plain',
-    message,
-  }
-}
-
-export function openMessageTab(message: Message) {
-  if (isNarrowWindow()) ui$.contactsOpen.set(false)
-  const existing = compose$.tabs.get().find((tab) => tab.messageId === message.id)
-  if (existing) {
-    compose$.activeTab.set(existing.id)
-    return
-  }
-  const tab = readerTab(message)
-  compose$.tabs.push(tab)
-  compose$.activeTab.set(tab.id)
-}
 
 // Put the persisted view back on screen. Call once at boot, after the kanban
 // session: a board's conversation is its open card. The conversation behind a
@@ -470,109 +229,6 @@ async function reconcileRestoredTabs() {
       console.error('restoring tab failed', error)
     }
   }
-}
-
-// Open a conversation itself as a tab. The tab stores enough thread metadata to
-// render even when the current mailbox/rail selection does not contain it.
-export function openThreadTab(thread: Message) {
-  if (isNarrowWindow()) ui$.contactsOpen.set(false)
-  // The conversation shows in the mail pane, which the calendar replaces —
-  // even when its tab is the active one already, so no tab change says so.
-  ui$.calendarOpen.set(false)
-  const id = `thread-${thread.thread_id}`
-  const existing = compose$.tabs.get().find((tab) => tab.id === id)
-  if (!existing) {
-    const tab: MessageTab = {
-      id,
-      kind: 'thread',
-      messageId: '',
-      threadId: thread.thread_id,
-      accountId: thread.account_id,
-      folderId: thread.folder_id,
-      subject: thread.subject || '(no subject)',
-      from: thread.from_name || thread.from_addr,
-      ...tabAvatar(thread),
-      body: '',
-      viewMode: 'plain',
-    }
-    compose$.tabs.push(tab)
-  }
-  // Activate the tab before retargeting selectedThread so the conversationThread
-  // mirror skips this change and the Current tab keeps its own thread.
-  compose$.activeTab.set(id)
-  ui$.selectedThread.set(thread.thread_id)
-  ui$.mobilePane.set('conversation')
-}
-
-export function newestMessage(messages: Message[]): Message | null {
-  return messages.reduce<Message | null>((newest, message) => {
-    if (!newest) return message
-    return message.date > newest.date ? message : newest
-  }, null)
-}
-
-/**
- * Open a thread in its own tab from an id alone — a notification tap, a task's
- * mail link. `notFoundMessage` is the toast for a thread the read cannot find
- * (deleted, expunged), since each caller knows what the user was pointing at.
- */
-export async function openThreadTabById(
-  threadId: string,
-  notFoundMessage = t('compose.toast.couldNotOpenNotificationThread'),
-) {
-  if (!threadId) return
-  if (isNarrowWindow()) ui$.contactsOpen.set(false)
-  // The conversation shows in the mail pane, which the calendar replaces —
-  // even when its tab is the active one already, so no tab change says so.
-  ui$.calendarOpen.set(false)
-  const id = `thread-${threadId}`
-  const existing = compose$.tabs.get().find((tab) => tab.id === id)
-  if (existing) {
-    compose$.activeTab.set(id)
-    ui$.selectedThread.set(threadId)
-    ui$.mobilePane.set('conversation')
-    return
-  }
-
-  try {
-    const result = await invoke<{ messages: Message[] }>('mail.threadRead', {
-      thread_id: threadId,
-      limit: CONVERSATION_PAGE_SIZE,
-    })
-    const message = newestMessage(result.messages ?? [])
-    if (!message) {
-      showToast(notFoundMessage, 'error')
-      return
-    }
-    openThreadTab(message)
-    // Seed the conversation with the messages we just fetched so the reply target
-    // (and its Message-ID) is available immediately. Without this, a reply sent
-    // before the selectedThread effect re-fetches falls back to the thread card,
-    // which carries no Message-ID, and the reply lands unthreaded.
-    if (ui$.selectedThread.get() === message.thread_id) {
-      mail$.messages.set(result.messages ?? [])
-    }
-  } catch (error) {
-    showToast(error instanceof Error ? error.message : notFoundMessage, 'error')
-  }
-}
-
-/**
- * Open what a new-mail notification points at. With group by sender on, that
- * is the sender's chat in the same folder rather than the thread, built from
- * the notified message's own sender address (`fromAddr`). Falls back to the
- * thread when the address is missing.
- */
-export async function openNotificationThread(threadId: string, fromAddr?: string) {
-  if (!threadId) return
-  if (ui$.groupBySender.peek() && fromAddr && !threadId.includes('#rss#')) {
-    const senderId = senderThreadIdLike(threadId, fromAddr)
-    if (senderId) {
-      await openThreadTabById(senderId)
-      return
-    }
-  }
-  await openThreadTabById(threadId)
 }
 
 /**
@@ -885,11 +541,10 @@ function activateOpenDraftCompose(draft: Message): boolean {
 }
 
 /**
- * Before opening a Drafts row, let this draft's Esc save finish. The row can be
- * the copy that save is replacing, and a tab opened from it would autosave the
- * older text over the newer. The tab comes back as it closed, as the store may
- * not hold the new copy yet; when the save failed, the tab is already back.
- * True when a tab now holds the draft.
+ * Before opening a Drafts row, let this draft's Esc save finish. The row can be the copy that save is
+ * replacing, and a tab opened from it would autosave the older text over the newer. The tab comes back
+ * as it closed, as the store may not hold the new copy yet; when the save failed, the tab is already
+ * back. True when a tab now holds the draft.
  */
 async function reopenAfterDraftSaves(draft: Message): Promise<boolean> {
   const [saved] = await draftSavesSettled((compose) => composeHoldsDraft(compose, draft))
@@ -1192,11 +847,12 @@ export async function closeMessageTab(id: string) {
   })
 }
 
-/** The tab strip's ×, Ctrl+W and the palette's Close tab: a compose tab goes
- *  to Drafts (with an "Open draft" toast), like Esc. Throwing a message away
- *  is the composer's own Discard button; a × that did it silently lost work.
- *  A compose tab that isn't on screen has no mounted composer to do the last
- *  save, so it is brought forward first. */
+/**
+ * The tab strip's ×, Ctrl+W and the palette's Close tab: a compose tab goes to Drafts (with an "Open
+ * draft" toast), like Esc. Throwing a message away is the composer's own Discard button; a × that did
+ * it silently lost work. A compose tab that isn't on screen has no mounted composer to do the last
+ * save, so it is brought forward first.
+ */
 export async function closeMessageTabKeepingDraft(id: string) {
   const tab = compose$.tabs.peek().find((candidate) => candidate.id === id)
   if (tab?.kind !== 'compose') return closeMessageTab(id)

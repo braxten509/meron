@@ -1,3 +1,7 @@
+// Displays the placeholder used when a desktop pane has no
+// content. The component owns the common presentation and
+// callers supply the information relevant to the empty view.
+
 import type { ReactNode } from 'react'
 import { AtSign } from 'lucide-react'
 

@@ -48,11 +48,10 @@ export function useFlyoutPosition(open: boolean, anchorRef: RefObject<HTMLDivEle
 }
 
 /**
- * The "Move to" and "Copy to" rows of a mail thread's menu, each opening a
- * flyout: recent targets for that action, then one row per account (the
- * thread's own first) opening its folders a level further out. Shared by the thread list's right-click menu and the open
- * conversation's actions menu, which style their rows differently — hence
- * `itemClassName` and `iconSize`.
+ * The "Move to" and "Copy to" rows of a mail thread's menu, each opening a flyout: recent targets for
+ * that action, then one row per account (the thread's own first) opening its folders a level further
+ * out. Shared by the thread list's right-click menu and the open conversation's actions menu, which
+ * style their rows differently — hence `itemClassName` and `iconSize`.
  */
 export function ThreadMoveCopyItems({
   threadId,

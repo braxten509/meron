@@ -147,12 +147,12 @@ export function Gallery({ items, index, onIndexChange, onClose }: GalleryProps) 
   }
 
   const onPointerMove = (event: React.PointerEvent) => {
-    const p = pan.current
-    if (!p?.active) return
-    const dx = event.clientX - p.startX
-    const dy = event.clientY - p.startY
-    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) p.moved = true
-    setOffset({ x: p.originX + dx, y: p.originY + dy })
+    const panState = pan.current
+    if (!panState?.active) return
+    const dx = event.clientX - panState.startX
+    const dy = event.clientY - panState.startY
+    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) panState.moved = true
+    setOffset({ x: panState.originX + dx, y: panState.originY + dy })
   }
 
   const onPointerUp = (event: React.PointerEvent) => {

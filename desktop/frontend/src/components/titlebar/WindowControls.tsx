@@ -31,15 +31,15 @@ const CAPTION_GLYPHS: Record<WindowButton | 'restore', string> = {
 const COMMAND = { minimize: 'minimise', maximize: 'toggleMaximise', close: 'close' } as const
 
 /**
- * Window controls for one side of the integrated title bar, in the desktop's
- * button layout. Renders nothing with the system title bar. On Windows they
- * are the system's caption buttons: 46px wide, the title bar's full height,
- * flush with the corner. On Linux they are laid out like GNOME's (libadwaita
- * 1.8 default.css, windowcontrols: a 24px hover circle in a button padded
- * 5px, 3px apart) but drawn like the title bar's own flat buttons: lucide
- * icons in their colors (index.css). The icon is nested in the circle's SVG:
- * as separate boxes the circle landed on fractional pixels while the icon was
- * snapped to whole ones, leaving it visibly off-centre.
+ * Window controls for one side of the integrated title bar, in the desktop's button layout.
+ *
+ * Renders nothing with the system title bar. On Windows they are the system's caption buttons: 46px
+ * wide, the title bar's full height, flush with the corner. On Linux they are laid out like GNOME's
+ * (libadwaita 1.8 default.css, windowcontrols: a 24px hover circle in a button padded 5px, 3px apart)
+ * but drawn like the title bar's own flat buttons: lucide icons in their colors (index.css).
+ *
+ * The icon is nested in the circle's SVG: as separate boxes the circle landed on fractional pixels
+ * while the icon was snapped to whole ones, leaving it visibly off-centre.
  */
 export function WindowControls({ side }: { side: 'start' | 'end' }) {
   const { t } = useTranslation()

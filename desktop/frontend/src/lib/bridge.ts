@@ -17,11 +17,10 @@ export function isSidecarTimeout(error: unknown): boolean {
 }
 
 /**
- * `invoke` for a read the app cannot start without, retried while the core is
- * too busy to answer in time — at startup it may still be opening or migrating
- * the store. Only timeouts are retried; the core's own errors are returned
- * as-is. Callers must only pass requests that are safe to send twice, since a
- * timed-out request may still be answered (and discarded) later.
+ * `invoke` for a read the app cannot start without, retried while the core is too busy to answer in
+ * time — at startup it may still be opening or migrating the store. Only timeouts are retried; the
+ * core's own errors are returned as-is. Callers must only pass requests that are safe to send twice,
+ * since a timed-out request may still be answered (and discarded) later.
  */
 export async function invokeRetryingTimeout<T>(command: string, payload: unknown = {}, attempts = 6): Promise<T> {
   for (let attempt = 1; ; attempt++) {

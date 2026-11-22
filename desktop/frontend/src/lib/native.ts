@@ -1,3 +1,7 @@
+// Routes external links and clipboard writes to the Wails
+// runtime. Browser fallbacks support web contexts, and the native
+// clipboard path also works when a message iframe has focus.
+
 // Native shell helpers that route through the Wails runtime.
 
 // Open a URL in the user's default browser. A bare `<a target="_blank">` does

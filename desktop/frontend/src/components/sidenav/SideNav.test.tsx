@@ -1,3 +1,7 @@
+// Checks the desktop navigation rail's geometry and board
+// unread badges. Changes to folder counts and the badge
+// preference must appear on the corresponding board tile.
+
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import { act, cleanup, render } from '@testing-library/react'
 import { mail$ } from '../../states/mail'

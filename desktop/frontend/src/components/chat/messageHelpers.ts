@@ -84,33 +84,33 @@ export function fileIconFor(filename: string, mime: string): FileIconComponent {
 
   // Specific types before the `text/` catch-all: invites and contact cards are
   // text/calendar and text/vcard.
-  const m = (mime ?? '').toLowerCase().split(';')[0].trim()
-  if (m === 'text/calendar' || m === 'application/ics') return Calendar
-  if (m === 'text/vcard' || m === 'text/x-vcard' || m === 'text/directory') return Contact
-  if (m === 'message/rfc822' || m === 'application/vnd.ms-outlook') return Mail
-  if (m.includes('pkcs7') || m.includes('pgp') || m.includes('x509')) return FileKey
-  if (m.startsWith('image/')) return FileImage
-  if (m.startsWith('video/')) return FileVideo
-  if (m.startsWith('audio/')) return FileAudio
-  if (m.startsWith('font/')) return FileType
-  if (m.startsWith('text/')) return FileText
-  if (m === 'application/pdf') return PdfIcon
-  if (m.includes('spreadsheet') || m.includes('excel')) return FileSpreadsheet
-  if (m.includes('presentation') || m.includes('powerpoint')) return Presentation
-  if (m.includes('wordprocessing') || m.includes('msword') || m.includes('opendocument.text')) return FileText
-  if (m.includes('zip') || m.includes('compressed') || m.includes('tar')) return FileArchive
-  if (m.includes('android.package') || m.includes('x-msdownload') || m.includes('diskimage')) return Package
-  if (m.includes('json') || m.includes('javascript') || m.includes('xml')) return FileCode
+  const mediaType = (mime ?? '').toLowerCase().split(';')[0].trim()
+  if (mediaType === 'text/calendar' || mediaType === 'application/ics') return Calendar
+  if (mediaType === 'text/vcard' || mediaType === 'text/x-vcard' || mediaType === 'text/directory') return Contact
+  if (mediaType === 'message/rfc822' || mediaType === 'application/vnd.ms-outlook') return Mail
+  if (mediaType.includes('pkcs7') || mediaType.includes('pgp') || mediaType.includes('x509')) return FileKey
+  if (mediaType.startsWith('image/')) return FileImage
+  if (mediaType.startsWith('video/')) return FileVideo
+  if (mediaType.startsWith('audio/')) return FileAudio
+  if (mediaType.startsWith('font/')) return FileType
+  if (mediaType.startsWith('text/')) return FileText
+  if (mediaType === 'application/pdf') return PdfIcon
+  if (mediaType.includes('spreadsheet') || mediaType.includes('excel')) return FileSpreadsheet
+  if (mediaType.includes('presentation') || mediaType.includes('powerpoint')) return Presentation
+  if (mediaType.includes('wordprocessing') || mediaType.includes('msword') || mediaType.includes('opendocument.text')) return FileText
+  if (mediaType.includes('zip') || mediaType.includes('compressed') || mediaType.includes('tar')) return FileArchive
+  if (mediaType.includes('android.package') || mediaType.includes('x-msdownload') || mediaType.includes('diskimage')) return Package
+  if (mediaType.includes('json') || mediaType.includes('javascript') || mediaType.includes('xml')) return FileCode
   return File
 }
 
-export function mediaSrc(media: Attachment): string {
+export function mediaSource(media: Attachment): string {
   return media.key ? `/media/${media.key}` : media.url!
 }
 
 /** The media key behind an image src served from the media cache: `/media/<key>`,
  * or that path made absolute, as a frame document's `img.src` reports it. */
-export function mediaKeyFromSrc(source: string): string | null {
+export function mediaKeyFromSource(source: string): string | null {
   const prefix = '/media/'
   if (source.startsWith(prefix)) return decodeURIComponent(source.slice(prefix.length))
   try {
@@ -131,7 +131,7 @@ export function mediaFilename(key: string, attachments: Attachment[] | undefined
 
 /** Sources the native save/copy flow can handle. Do not fetch until selected. */
 export function imageSource(source: string): { key: string | null; url?: string; filename: string } | null {
-  const key = mediaKeyFromSrc(source)
+  const key = mediaKeyFromSource(source)
   if (key) return { key, filename: mediaFilename(key, undefined) }
   try {
     const url = new URL(source)
@@ -490,11 +490,12 @@ export function messageSearchText(message: Message): string {
   return [message.subject, message.from_name, message.from_addr, message.body].join('\n').toLowerCase()
 }
 
-/** Gmail-style recipient summary for a bubble header ("to nonbili/meron, Comment").
- * Display name when the address carries one, otherwise the local part. To and Cc
- * are merged and de-duplicated: an outgoing reply and an outgoing forward can
- * carry the same subject and the same text, so who received it is what tells
- * them apart. */
+/**
+ * Gmail-style recipient summary for a bubble header ("to nonbili/meron, Comment"). Display name when
+ * the address carries one, otherwise the local part. To and Cc are merged and de-duplicated: an
+ * outgoing reply and an outgoing forward can carry the same subject and the same text, so who received
+ * it is what tells them apart.
+ */
 export function formatRecipientSummary(...lists: (string | undefined | null)[]): string {
   const seen = new Set<string>()
   const names: string[] = []

@@ -226,11 +226,12 @@ export function useConversationScroll(
     [pinMessage],
   )
 
-  /** Brings a message's header to the top of the viewport, pinned so a body
-   *  still growing from its placeholder height doesn't push it back out of
-   *  view. Used when the reader expands a collapsed message: expanding in place
-   *  leaves the body wherever the click happened to be, when the point of the
-   *  click is to read it from its beginning. */
+  /**
+   * Brings a message's header to the top of the viewport, pinned so a body still growing from its
+   * placeholder height doesn't push it back out of view. Used when the reader expands a collapsed
+   * message: expanding in place leaves the body wherever the click happened to be, when the point of the
+   * click is to read it from its beginning.
+   */
   const scrollMessageToTop = useCallback(
     (messageId: string) => {
       const container = scrollRef.current

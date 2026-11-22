@@ -1,17 +1,16 @@
 // Undo/redo for plain text fields.
 //
-// WebKitGTK (the Linux webview) delivers Ctrl+Z to the page as an ordinary
-// keydown and maps it to no editing command, so <input>/<textarea> fields have
-// no undo there. WebKit does record the edits — queryCommandEnabled('undo')
-// reports true and execCommand('undo') replays them — so running the command
-// ourselves is enough. That keeps WebKit's own per-field history: keystroke
-// coalescing, caret restoration, and a reset whenever the value is written
-// programmatically (thread switch, draft hydration, clear-after-send), none of
-// which a hand-rolled history would match.
+// WebKitGTK (the Linux webview) delivers Ctrl+Z to the page as an ordinary keydown and maps it to no
+// editing command, so <input>/<textarea> fields have no undo there. WebKit does record the edits —
+// queryCommandEnabled('undo') reports true and execCommand('undo') replays them — so running the
+// command ourselves is enough.
 //
-// execCommand fires a real input event, so controlled React fields stay in sync
-// through their normal onChange. Rich text keeps its own history (Tiptap) and is
-// left alone.
+// That keeps WebKit's own per-field history: keystroke coalescing, caret restoration, and a reset
+// whenever the value is written programmatically (thread switch, draft hydration, clear-after-send),
+// none of which a hand-rolled history would match.
+//
+// execCommand fires a real input event, so controlled React fields stay in sync through their normal
+// onChange. Rich text keeps its own history (Tiptap) and is left alone.
 
 import { isMac } from './shortcuts'
 

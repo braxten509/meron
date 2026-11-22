@@ -1,3 +1,7 @@
+// Exercises the tag search field with typed fragments and
+// completed chips. Suggestions follow usage, omit selected
+// tags and replace only the fragment currently being edited.
+
 import { afterEach, expect, it } from 'bun:test'
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { useState } from 'react'

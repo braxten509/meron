@@ -522,8 +522,8 @@ describe('dark message bodies in a bubble', () => {
 describe('the color a darkened body is capped at', () => {
   // The darkening filter, run forwards: invert, then hue-rotate(180deg).
   const darkenedTo = (color: string) => {
-    const { r, g, b } = parseColor(color)!
-    const [ir, ig, ib] = [255 - r, 255 - g, 255 - b]
+    const { r: red, g: green, b: blue } = parseColor(color)!
+    const [ir, ig, ib] = [255 - red, 255 - green, 255 - blue]
     return formatColor({
       r: -0.574 * ir + 1.43 * ig + 0.144 * ib,
       g: 0.426 * ir + 0.43 * ig + 0.144 * ib,
@@ -531,8 +531,8 @@ describe('the color a darkened body is capped at', () => {
       a: 1,
     })
   }
-  const near = (a: string, b: string, tolerance: number) => {
-    const [x, y] = [parseColor(a)!, parseColor(b)!]
+  const near = (a: string, blue: string, tolerance: number) => {
+    const [x, y] = [parseColor(a)!, parseColor(blue)!]
     return Math.max(Math.abs(x.r - y.r), Math.abs(x.g - y.g), Math.abs(x.b - y.b)) <= tolerance
   }
 

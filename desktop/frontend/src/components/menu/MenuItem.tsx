@@ -6,11 +6,10 @@ import type { ReactNode } from 'react'
 import { menuItemClass, menuItemDangerClass } from './menuStyles'
 
 /**
- * A row in a popover / context menu: leading icon, label, optional trailing
- * slot (chevron, spinner, shortcut). Owns the shared typography/layout via
- * {@link menuItemClass}; pass `danger` for destructive actions. For rows that
- * need bespoke behaviour (submenu hover/refs, active toggles) compose
- * `menuItemClass` directly instead of using this component.
+ * A row in a popover / context menu: leading icon, label, optional trailing slot (chevron, spinner,
+ * shortcut). Owns the shared typography/layout via {@link menuItemClass}; pass `danger` for
+ * destructive actions. For rows that need bespoke behaviour (submenu hover/refs, active toggles)
+ * compose `menuItemClass` directly instead of using this component.
  */
 export function MenuItem({
   icon,

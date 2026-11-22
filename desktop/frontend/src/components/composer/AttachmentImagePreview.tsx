@@ -7,7 +7,7 @@ import { X } from 'lucide-react'
 import { useTranslation } from '../../lib/i18n'
 import { useEscapeKey } from '../../lib/useEscapeKey'
 import type { ComposerAttachment } from '../../types'
-import { composerAttachmentSrc } from './PendingAttachmentList'
+import { composerAttachmentSource } from './PendingAttachmentList'
 
 export function AttachmentImagePreview({
   attachment,
@@ -42,7 +42,7 @@ export function AttachmentImagePreview({
       </div>
       <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden px-4 pb-4">
         <img
-          src={composerAttachmentSrc(attachment)}
+          src={composerAttachmentSource(attachment)}
           alt={attachment.filename}
           draggable={false}
           onClick={(event) => event.stopPropagation()}

@@ -1,14 +1,20 @@
+// Parses the address lists used by the desktop composer and
+// reader. Separators outside quoted names divide recipients, and
+// callers can extract the bare mailbox from a display address.
+
 // Pure helpers for email address-list strings ("Name <addr>, addr2").
 
-/** Split a "Name <addr>, addr2" list into individual entries, trimming empties.
+/**
+ * Split a "Name <addr>, addr2" list into individual entries, trimming empties.
  *
- * Commas inside a quoted display name ("Doe, Jane" <jane@x.com>) or inside
- * angle brackets do not separate entries: splitting on those produces fragments
- * that match no address, which then survive our own-address filtering and go
- * out as malformed recipients. Only the double quote opens a quoted string
- * (RFC 5322): an apostrophe is an ordinary character in a name like O'Connor,
- * and treating it as a delimiter swallows every recipient after it. Mirrors the
- * mobile splitter. Display parsers can opt into semicolon separators too. */
+ * Commas inside a quoted display name ("Doe, Jane" <jane@x.com>) or inside angle brackets do not
+ * separate entries: splitting on those produces fragments that match no address, which then survive
+ * our own-address filtering and go out as malformed recipients.
+ *
+ * Only the double quote opens a quoted string (RFC 5322): an apostrophe is an ordinary character in a
+ * name like O'Connor, and treating it as a delimiter swallows every recipient after it. Mirrors the
+ * mobile splitter. Display parsers can opt into semicolon separators too.
+ */
 export function splitAddressList(raw: string | undefined | null, allowSemicolon = false): string[] {
   if (!raw) return []
   const entries: string[] = []

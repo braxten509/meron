@@ -1,3 +1,7 @@
+// Exercises parsing of CSS colors encountered in HTML
+// mail. Fixtures cover short hex values, hue units,
+// case variations and modern space-separated RGB syntax.
+
 import { describe, expect, it } from 'bun:test'
 import { darken, formatColor, isValidColor, lighten, luminance, mix, parseColor, toHex, withAlpha } from './color'
 

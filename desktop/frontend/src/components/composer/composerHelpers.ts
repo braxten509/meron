@@ -65,13 +65,13 @@ function blobToBase64(blob: Blob): Promise<string> {
 export async function prepareInlineImages(html: string, initialAttachments: ComposerAttachment[]) {
   const parser = new DOMParser()
   const doc = parser.parseFromString(html, 'text/html')
-  const imgs = Array.from(doc.querySelectorAll('img'))
-  if (imgs.length === 0) return { html, attachments: initialAttachments }
+  const imageElements = Array.from(doc.querySelectorAll('img'))
+  if (imageElements.length === 0) return { html, attachments: initialAttachments }
 
   const attachments = [...initialAttachments]
   const usedInlineIds = new Set<string>()
 
-  for (const image of imgs) {
+  for (const image of imageElements) {
     const source = image.getAttribute('src')
     if (!source) continue
 

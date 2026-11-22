@@ -406,10 +406,10 @@ export function SideNav() {
                     shortcut={railShortcut(Number(showUnifiedInbox) + boards.length + index)}
                     active={!calendarOpen && !activeBoardId && account.id === selectedAccount}
                     onSelect={() => selectAccount(account.id)}
-                    onContextMenu={(e) => {
-                      e.preventDefault()
-                      e.stopPropagation()
-                      setMenu({ id: account.id, x: e.clientX, y: e.clientY })
+                    onContextMenu={(event) => {
+                      event.preventDefault()
+                      event.stopPropagation()
+                      setMenu({ id: account.id, x: event.clientX, y: event.clientY })
                     }}
                     onFeedDragOver={handleFeedDragOver}
                     onFeedDrop={handleFeedDrop}
@@ -440,10 +440,10 @@ export function SideNav() {
                       shortcut={railShortcut(Number(showUnifiedInbox) + index)}
                       active={!calendarOpen && board.id === activeBoardId}
                       onSelect={() => selectKanbanBoard(board.id)}
-                      onContextMenu={(e) => {
-                        e.preventDefault()
-                        e.stopPropagation()
-                        setBoardMenu({ id: board.id, x: e.clientX, y: e.clientY })
+                      onContextMenu={(event) => {
+                        event.preventDefault()
+                        event.stopPropagation()
+                        setBoardMenu({ id: board.id, x: event.clientX, y: event.clientY })
                       }}
                     />
                   ))}
@@ -525,8 +525,8 @@ export function SideNav() {
           <button
             type="button"
             className={`${utilityButton(!!moreMenu)} ml-auto`}
-            onClick={(e) => {
-              const rect = e.currentTarget.getBoundingClientRect()
+            onClick={(event) => {
+              const rect = event.currentTarget.getBoundingClientRect()
               setMoreMenu({ x: rect.right + 8, y: rect.top })
             }}
             title={t('common.more')}

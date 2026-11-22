@@ -75,9 +75,9 @@ export function AccountDialogCustom({
             type={showPassword ? 'text' : 'password'}
             value={form.password}
             onChange={(event) => setForm((f) => ({ ...f, password: event.target.value }))}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !saveDisabled) {
-                e.preventDefault()
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && !saveDisabled) {
+                event.preventDefault()
                 void save()
               }
             }}

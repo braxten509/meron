@@ -5,7 +5,7 @@
 import { forwardRef } from 'react'
 import type { InputHTMLAttributes, SelectHTMLAttributes } from 'react'
 import { ChevronDown } from 'lucide-react'
-import { clsx } from '../../lib/utils'
+import { clsx } from '../../lib/classNames'
 
 interface FieldProps {
   label: string

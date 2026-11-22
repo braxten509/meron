@@ -1,3 +1,7 @@
+// Reads desktop release notes through the host bridge.
+// The sidecar selects the desktop release stream and
+// returns dated notes for display in the app's changelog.
+
 // In-app changelog: the GitHub releases atom feed, fetched + parsed by the core
 // and filtered to this platform's `v*` tags (mobile uses the `android/v*` ones).
 import { invoke } from './bridge'

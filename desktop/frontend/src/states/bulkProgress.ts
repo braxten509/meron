@@ -73,12 +73,10 @@ function moveSelectionOff(targetIds: Set<string>) {
 }
 
 /**
- * Run `step` for each group of `groupSize` targets in order, publishing
- * progress for the strip. `step` calls `done` for each conversation of its
- * group that went through, and throws when one did not. Stops before the next
- * group when the reader presses Stop or a step throws; whatever was not done
- * is left exactly as it was. Never throws: the caller words the outcome from
- * the result.
+ * Run `step` for each group of `groupSize` targets in order, publishing progress for the strip. `step`
+ * calls `done` for each conversation of its group that went through, and throws when one did not.
+ * Stops before the next group when the reader presses Stop or a step throws; whatever was not done is
+ * left exactly as it was. Never throws: the caller words the outcome from the result.
  */
 export async function runBulkJob<T extends { threadId: string }>(
   kind: BulkJobKind,

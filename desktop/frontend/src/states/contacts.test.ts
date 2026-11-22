@@ -1,3 +1,7 @@
+// Checks contact navigation, pinned addresses and state
+// restoration. Opening a contact shares the side panel while
+// background mailbox changes preserve the current contact view.
+
 import { afterEach, expect, it } from 'bun:test'
 import { contacts$, openContact, restoreContacts, toggleContactPin, toggleContactsPanel } from './contacts'
 import { ui$ } from './ui'

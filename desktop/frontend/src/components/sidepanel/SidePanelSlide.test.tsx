@@ -1,3 +1,7 @@
+// Exercises the lifetime of content during side-panel
+// transitions. The departing list stays mounted until the slide
+// finishes, including when the parent removes its content.
+
 import { afterEach, beforeEach, describe, expect, it, jest } from 'bun:test'
 import { act, cleanup, render } from '@testing-library/react'
 import { PANE_ANIMATION_MS } from '../kanban/KanbanConversationPane'

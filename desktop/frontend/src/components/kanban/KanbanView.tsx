@@ -53,7 +53,7 @@ import {
 } from '../../lib/kanbanData'
 import { boardWallpaper, wallpaperCss } from '../../lib/wallpapers'
 import { useKanbanBoardSync, useKanbanDnd } from './useKanbanBoard'
-import { SharpImg } from '../../lib/sharpImage'
+import { SharpImage } from '../../lib/sharpImage'
 
 /**
  * `aside`: the board's conversation pane (App builds it). It opens beside the
@@ -217,7 +217,7 @@ export function KanbanView({ boardId, aside }: { boardId: string; aside?: ReactN
       >
         <div className="flex min-w-0 flex-1 items-center gap-2.5">
           {board?.avatarUrl ? (
-            <SharpImg
+            <SharpImage
               src={board.avatarUrl}
               box={32}
               alt=""

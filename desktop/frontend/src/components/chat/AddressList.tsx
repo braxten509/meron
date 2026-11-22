@@ -14,8 +14,8 @@ export function AddressPill({ name, original, email }: AddressItem) {
   const { t } = useTranslation()
   const [copied, setCopied] = useState(false)
 
-  const handleCopy = (e: React.MouseEvent) => {
-    e.stopPropagation()
+  const handleCopy = (event: React.MouseEvent) => {
+    event.stopPropagation()
     copyText(original).catch(() => undefined)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)

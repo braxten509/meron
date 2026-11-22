@@ -196,12 +196,12 @@ export async function loadCalendar() {
   const to = Math.max(grid.to, week.to)
   calendar$.loading.set(true)
   try {
-    const res = await invoke<{ events?: CalendarItem[] }>('calendar.events', {
+    const response = await invoke<{ events?: CalendarItem[] }>('calendar.events', {
       from,
       to,
       include_tasks: settings$.tasksEnabled.peek(),
     })
-    if (seq === loadSeq) calendar$.items.set(res?.events ?? [])
+    if (seq === loadSeq) calendar$.items.set(response?.events ?? [])
   } catch (error) {
     if (seq === loadSeq) showToast(errorMessage(error, t('calendar.loadFailed')), 'error')
   } finally {
@@ -265,8 +265,8 @@ export async function updateEvent(eventId: string, input: EventInput): Promise<b
 export async function deleteEvent(eventId: string) {
   let restore: unknown = null
   try {
-    const res = await invoke<{ restore?: unknown }>('calendar.delete', { event_id: eventId })
-    restore = res?.restore ?? null
+    const response = await invoke<{ restore?: unknown }>('calendar.delete', { event_id: eventId })
+    restore = response?.restore ?? null
   } catch (error) {
     showToast(errorMessage(error, t('calendar.saveFailed')), 'error')
     return
@@ -358,11 +358,11 @@ export async function addInviteToCalendar(message: Message) {
   if (!invite) return
   let eventId = ''
   try {
-    const res = await invoke<{ event_id?: string }>('invite.addToCalendar', {
+    const response = await invoke<{ event_id?: string }>('invite.addToCalendar', {
       message: message.id,
       thread_id: message.thread_id,
     })
-    eventId = res?.event_id ?? ''
+    eventId = response?.event_id ?? ''
   } catch (error) {
     showToast(errorMessage(error, t('calendar.saveFailed')), 'error')
     return

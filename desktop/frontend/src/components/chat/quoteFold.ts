@@ -1,9 +1,8 @@
-// Folding a message's quoted tail — the conversation a reply pastes under its
-// new text — behind a "•••" toggle, the way Gmail does. The core finds the
-// quote: HTML bodies arrive with it marked by `data-meron-quote`, plain bodies
-// with the UTF-16 offset it starts at (`body_quote_start`). Which bodies the
-// user unfolded is kept for the session, so a bubble that scrolls out of view
-// and back comes back the way it was left.
+// Folding a message's quoted tail — the conversation a reply pastes under its new text — behind a "•••" toggle, the way Gmail does.
+//
+// The core finds the quote: HTML bodies arrive with it marked by `data-meron-quote`, plain bodies with
+// the UTF-16 offset it starts at (`body_quote_start`). Which bodies the user unfolded is kept for the
+// session, so a bubble that scrolls out of view and back comes back the way it was left.
 
 export const HTML_QUOTE_SELECTOR = '[data-meron-quote]'
 export const QUOTE_FOLDED_CLASS = 'meron-quote-folded'

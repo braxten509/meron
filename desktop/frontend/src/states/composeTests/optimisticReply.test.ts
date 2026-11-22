@@ -48,7 +48,7 @@ describe('quick reply draft sharing', () => {
 
     const send = sendReply()
     // Synchronously at the click: the bubble is up and the box is empty.
-    const bubble = mail$.messages.get().find((m) => m.send_status === 'sending')
+    const bubble = mail$.messages.get().find((message) => message.send_status === 'sending')
     expect(bubble?.body).toBe('Instant reply')
     expect(bubble?.to).toBe('Sender <them@example.com>')
     expect(bubble?.message_id).toBe('')
@@ -58,7 +58,7 @@ describe('quick reply draft sharing', () => {
     await send
 
     // Once allocated, the bubble carries the identity the send went out under.
-    const settled = mail$.messages.get().find((m) => m.id === bubble?.id)
+    const settled = mail$.messages.get().find((message) => message.id === bubble?.id)
     expect(settled?.message_id).toBe('sent@example.com')
     expect(settled?.send_status).toBe('sent')
     const sent = calls.find((call) => call.command === 'mail.send')
@@ -136,7 +136,7 @@ describe('quick reply draft sharing', () => {
 
     await expect(sendReply()).rejects.toThrow('offline')
 
-    expect(mail$.messages.get().some((m) => m.send_status)).toBe(false)
+    expect(mail$.messages.get().some((message) => message.send_status)).toBe(false)
     expect(compose$.composer.get()).toBe('Never left')
     expect(calls.some((call) => call.command === 'mail.send')).toBe(false)
   })
@@ -186,7 +186,7 @@ describe('quick reply draft sharing', () => {
     // It went to Drafts rather than disappearing with the bubble.
     const saved = calls.find((call) => call.command === 'mail.saveDraft')
     expect((saved?.payload as { body?: string })?.body).toBe('Never left')
-    expect(mail$.messages.get().some((m) => m.send_status)).toBe(false)
+    expect(mail$.messages.get().some((message) => message.send_status)).toBe(false)
     expect(compose$.composer.get()).toBe('Next reply')
     expect(calls.some((call) => call.command === 'mail.send')).toBe(false)
   })
@@ -296,7 +296,7 @@ describe('quick reply draft sharing', () => {
     // The rescue couldn't reach the backend either, so the bubble stays as the
     // last copy of the reply — marked failed, with Retry live.
     expect(calls.some((call) => call.command === 'mail.saveDraft')).toBe(false)
-    const bubble = mail$.messages.get().find((m) => m.send_status === 'failed')
+    const bubble = mail$.messages.get().find((message) => message.send_status === 'failed')
     expect(bubble?.body).toBe('Never left')
 
     backendDown = false
@@ -304,7 +304,7 @@ describe('quick reply draft sharing', () => {
 
     const saved = calls.find((call) => call.command === 'mail.saveDraft')
     expect((saved?.payload as { body?: string })?.body).toBe('Never left')
-    expect(mail$.messages.get().some((m) => m.send_status)).toBe(false)
+    expect(mail$.messages.get().some((message) => message.send_status)).toBe(false)
   })
 
   it('brings a failed rescue bubble back when its thread is reopened', async () => {
@@ -359,7 +359,7 @@ describe('quick reply draft sharing', () => {
     failIdentity()
     await expect(send).rejects.toThrow('offline')
     await new Promise((resolve) => setTimeout(resolve, 0))
-    expect(mail$.messages.get().some((m) => m.send_status === 'failed')).toBe(true)
+    expect(mail$.messages.get().some((message) => message.send_status === 'failed')).toBe(true)
 
     // Off to another thread and back: the message page is rebuilt from the
     // server, which knows nothing about this reply.
@@ -370,7 +370,7 @@ describe('quick reply draft sharing', () => {
     mail$.messages.set([thread])
     await new Promise((resolve) => setTimeout(resolve, 0))
 
-    const restored = mail$.messages.get().find((m) => m.send_status === 'failed')
+    const restored = mail$.messages.get().find((message) => message.send_status === 'failed')
     expect(restored?.body).toBe('Never left')
 
     // And it is still the live rescue, not just a rendering of the text.
@@ -378,6 +378,6 @@ describe('quick reply draft sharing', () => {
     await retrySend(restored!.id)
     const saved = calls.find((call) => call.command === 'mail.saveDraft')
     expect((saved?.payload as { body?: string })?.body).toBe('Never left')
-    expect(mail$.messages.get().some((m) => m.send_status)).toBe(false)
+    expect(mail$.messages.get().some((message) => message.send_status)).toBe(false)
   })
 })

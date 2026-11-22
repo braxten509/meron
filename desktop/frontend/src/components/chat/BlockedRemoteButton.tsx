@@ -12,10 +12,10 @@ import { FloatingContextMenu } from '../menu/FloatingContextMenu'
 import { MenuItem } from '../menu/MenuItem'
 
 /**
- * The whole blocked-remote-content affordance for one message: a tinted icon in
- * the header that opens the two reveal actions. It replaces the banner that
- * used to sit above every newsletter body — on a newsletter-heavy inbox that
- * banner showed on nearly every message.
+ * The whole blocked-remote-content affordance for one message: a tinted icon in the header that opens the two reveal actions.
+ *
+ * It replaces the banner that used to sit above every newsletter body — on a newsletter-heavy inbox
+ * that banner showed on nearly every message.
  *
  * Renders nothing when the message has no blocked remote content.
  */

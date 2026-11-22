@@ -1,3 +1,7 @@
+// Mounts the quit hotkey without the rest of the app shortcuts.
+// Keyboard events exercise the platform modifier, user
+// overrides and the command delivered to the Wails host.
+
 import { afterEach, beforeEach, expect, test } from 'bun:test'
 import { cleanup, render } from '@testing-library/react'
 import { isMac, setShortcutOverrides } from '../../lib/shortcuts'

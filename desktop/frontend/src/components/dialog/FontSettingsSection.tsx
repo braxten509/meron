@@ -54,10 +54,9 @@ function CustomFontRow({ value, onChange }: { value: string; onChange: (value: s
 }
 
 /**
- * A percentage row that holds what's in the field while it's focused, so
- * clearing it to retype doesn't snap the value to the minimum mid-edit. Only an
- * in-range number is committed as it's typed. A number outside the range flags
- * the field and spells the range out next to it while it's still being typed,
+ * A percentage row that holds what's in the field while it's focused, so clearing it to retype doesn't
+ * snap the value to the minimum mid-edit. Only an in-range number is committed as it's typed. A number
+ * outside the range flags the field and spells the range out next to it while it's still being typed,
  * so the clamp that lands on blur is one the row already announced.
  */
 function ScaleRow({
