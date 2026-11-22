@@ -218,7 +218,7 @@ fn run_mobile_sync_tail(
 }
 
 pub(crate) fn sync_mobile_mail(data_directory: &str, params: &Value) -> Result<Value, String> {
-    let account_id = req_account_id(params)?;
+    let account_id = required_account_id(params)?;
     let folder = params
         .get("folder_id")
         .or_else(|| params.get("folder"))

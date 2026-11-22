@@ -76,14 +76,18 @@ fn alternatives_in_gmail_syntax() {
 
     // `OR` that can't merge stays a word: lowercase, across keys, or
     // between words.
-    let q = SearchQuery::parse("from:a or from:b");
+    let parsed_query = SearchQuery::parse("from:a or from:b");
     assert_eq!(
-        (q.from.len(), q.text.as_slice()),
+        (parsed_query.from.len(), parsed_query.text.as_slice()),
         (2, &["or".to_string()][..])
     );
-    let q = SearchQuery::parse("from:a OR to:b");
+    let parsed_query = SearchQuery::parse("from:a OR to:b");
     assert_eq!(
-        (q.from.len(), q.to.len(), q.text.as_slice()),
+        (
+            parsed_query.from.len(),
+            parsed_query.to.len(),
+            parsed_query.text.as_slice()
+        ),
         (1, 1, &["OR".to_string()][..])
     );
     assert_eq!(SearchQuery::parse("cats OR dogs").text, ["cats OR dogs"]);
@@ -170,22 +174,22 @@ fn has_attachment_is_an_operator() {
 
 #[test]
 fn and_joins_queries_that_must_all_match() {
-    let q = SearchQuery::parse("invoice  due AND paid");
-    assert_eq!(q.text, ["invoice  due", "paid"]);
-    let q = SearchQuery::parse("from:boss budget AND from:ann notes");
-    assert_eq!(q.from, [["boss"], ["ann"]]);
-    assert_eq!(q.text, ["budget", "notes"]);
+    let parsed_query = SearchQuery::parse("invoice  due AND paid");
+    assert_eq!(parsed_query.text, ["invoice  due", "paid"]);
+    let parsed_query = SearchQuery::parse("from:boss budget AND from:ann notes");
+    assert_eq!(parsed_query.from, [["boss"], ["ann"]]);
+    assert_eq!(parsed_query.text, ["budget", "notes"]);
     // Each side's dates and read state narrow the other's.
-    let q = SearchQuery::parse(
+    let parsed_query = SearchQuery::parse(
         "after:2026/10/01 before:2026/12/01 AND after:2026/01/01 before:2026/11/01",
     );
-    assert_eq!(q.after, NaiveDate::from_ymd_opt(2026, 10, 1));
-    assert_eq!(q.before, NaiveDate::from_ymd_opt(2026, 11, 1));
-    let q = SearchQuery::parse("is:unread AND is:read");
-    assert!(q.read && q.unread);
+    assert_eq!(parsed_query.after, NaiveDate::from_ymd_opt(2026, 10, 1));
+    assert_eq!(parsed_query.before, NaiveDate::from_ymd_opt(2026, 11, 1));
+    let parsed_query = SearchQuery::parse("is:unread AND is:read");
+    assert!(parsed_query.read && parsed_query.unread);
     // Within a side the last read state still wins.
-    let q = SearchQuery::parse("is:unread is:read AND x");
-    assert!(q.read && !q.unread);
+    let parsed_query = SearchQuery::parse("is:unread is:read AND x");
+    assert!(parsed_query.read && !parsed_query.unread);
     // Lowercase or quoted `and` is a word; an empty side is nothing.
     assert_eq!(
         SearchQuery::parse("salt and pepper").text,
@@ -197,16 +201,16 @@ fn and_joins_queries_that_must_all_match() {
     );
     assert_eq!(SearchQuery::parse("AND budget AND").text, ["budget"]);
     // An unclosed group or quote ends at the `AND`, not swallowing the rest.
-    let q = SearchQuery::parse("from:{boss ann AND budget");
-    assert_eq!(q.from, [["boss", "ann"]]);
-    assert_eq!(q.text, ["budget"]);
-    let q = SearchQuery::parse(r#"subject:"Q3 plan AND budget"#);
-    assert_eq!(q.subject, [["Q3 plan"]]);
-    assert_eq!(q.text, ["budget"]);
+    let parsed_query = SearchQuery::parse("from:{boss ann AND budget");
+    assert_eq!(parsed_query.from, [["boss", "ann"]]);
+    assert_eq!(parsed_query.text, ["budget"]);
+    let parsed_query = SearchQuery::parse(r#"subject:"Q3 plan AND budget"#);
+    assert_eq!(parsed_query.subject, [["Q3 plan"]]);
+    assert_eq!(parsed_query.text, ["budget"]);
     // A closed one keeps its `AND`.
     // A group never takes in a bare `AND`, closed or not.
-    let q = SearchQuery::parse("from:{boss ann AND from:{c d}");
-    assert_eq!(q.from, [vec!["boss", "ann"], vec!["c", "d"]]);
+    let parsed_query = SearchQuery::parse("from:{boss ann AND from:{c d}");
+    assert_eq!(parsed_query.from, [vec!["boss", "ann"], vec!["c", "d"]]);
     // Closing what a saved query leaves open, as narrowing it does, reads
     // the same, so the narrowed search can be flattened onto one line.
     assert_eq!(
@@ -223,14 +227,14 @@ fn and_joins_queries_that_must_all_match() {
     );
     // A quote may hold one, but doesn't run past a line, where a line left
     // open reads as it would alone.
-    let q = SearchQuery::parse("subject:\"Q3 plan\nAND subject:\"x\"");
-    assert_eq!(q.subject, [["Q3 plan"], ["x"]]);
+    let parsed_query = SearchQuery::parse("subject:\"Q3 plan\nAND subject:\"x\"");
+    assert_eq!(parsed_query.subject, [["Q3 plan"], ["x"]]);
     let alone = SearchQuery::parse(r#"subject:"Q3 AND budget"#);
     let mut narrowed = SearchQuery::parse("subject:\"Q3 AND budget\nAND paid");
     assert_eq!(narrowed.text.pop().as_deref(), Some("paid"));
     assert_eq!(narrowed, alone);
-    let q = SearchQuery::parse("27\" monitor\nAND 24\" monitor");
-    assert_eq!(q.text, ["27\" monitor", "24\" monitor"]);
+    let parsed_query = SearchQuery::parse("27\" monitor\nAND 24\" monitor");
+    assert_eq!(parsed_query.text, ["27\" monitor", "24\" monitor"]);
 }
 
 #[test]
@@ -244,8 +248,8 @@ fn fields_hold_the_first_side_of_an_and() {
         ..SearchFields::parse("from:boss AND is:read")
     };
     assert_eq!(ticked.to_query(), "from:boss is:unread AND is:read");
-    let q = SearchQuery::parse(&ticked.to_query());
-    assert!(q.read && q.unread);
+    let parsed_query = SearchQuery::parse(&ticked.to_query());
+    assert!(parsed_query.read && parsed_query.unread);
     for query in [
         "from:boss is:read AND from:ann is:unread budget",
         "a  b AND c",

@@ -19,12 +19,13 @@ fn local_after_server_change<T>(action: &str, account: &str, result: anyhow::Res
     }
 }
 
-/// Cache a server move within one account the way
-/// [`crate::engine::move_within_account`] does: store the target's re-read
-/// window (the real copies, under their new UIDs), then drop the source rows.
-/// Source rows are never relabelled into the target, since their UIDs name
-/// other messages there. Failures are logged and the affected folders resynced,
-/// as is the target when the move's copies could not be read or identified.
+/// Reconcile the cached source and destination after moving mail within one account.
+///
+/// Cache a server move within one account the way [`crate::engine::move_within_account`] does: store the target's
+/// re-read window (the real copies, under their new UIDs), then drop the source rows. Source rows are never
+/// relabelled into the target, since their UIDs name other messages there. Failures are logged and the affected
+/// folders resynced, as is the target when the move's copies could not be read or identified.
+///
 /// Returns whether the cache now holds the move, so its unread counts are real.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn cache_server_move(
@@ -65,7 +66,7 @@ pub(super) fn cache_server_move(
 }
 
 pub(crate) fn delete_mobile_thread(data_directory: &str, params: &Value) -> Result<Value, String> {
-    let thread_id = req_str(params, "thread_id")?;
+    let thread_id = required_string(params, "thread_id")?;
     let parsed = parse_thread_id_with_request_folder(&thread_id, params)
         .ok_or_else(|| "invalid thread_id".to_string())?;
     let engine = crate::ffi::engine_for(data_directory)?;
@@ -267,13 +268,13 @@ pub(crate) fn delete_mobile_threads(data_directory: &str, params: &Value) -> Res
             delete_mobile_thread(data_directory, &items[index])
         })
         .into_iter()
-        .map(|result| result.unwrap_or_else(|err| json!({ "error": err })))
+        .map(|result| result.unwrap_or_else(|failure| json!({ "error": failure })))
         .collect();
     Ok(json!({ "ok": true, "results": results }))
 }
 
 pub(crate) fn archive_mobile_thread(data_directory: &str, params: &Value) -> Result<Value, String> {
-    let thread_id = req_str(params, "thread_id")?;
+    let thread_id = required_string(params, "thread_id")?;
     let parsed = parse_thread_id(&thread_id).ok_or_else(|| "invalid thread_id".to_string())?;
     let engine = crate::ffi::engine_for(data_directory)?;
     with_mobile_db(data_directory, |conn| {

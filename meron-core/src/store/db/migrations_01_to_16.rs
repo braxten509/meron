@@ -155,15 +155,15 @@ pub(super) fn migrate_v10(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
-/// `messages.files`: the cached body's real attachments as a JSON array of
-/// `{filename, mime}`, NULL when it has none, so list cards can name them and
-/// the attachments filter can page without parsing every row's `json`. Written
-/// with header BODYSTRUCTURE metadata and refined by `save_cached_message`.
+/// Record the attachment metadata read from a cached message body.
 ///
-/// Rows cached before this are filled by [`crate::store::backfill_files_batch`] after
-/// startup, not here: deriving them parses every row's `json` (HTML bodies
-/// included), which on a large cache holds the store long enough for the
-/// frontend's first requests to time out.
+/// `messages.files`: the cached body's real attachments as a JSON array of `{filename, mime}`, NULL when it
+/// has none, so list cards can name them and the attachments filter can page without parsing every row's
+/// `json`. Written with header BODYSTRUCTURE metadata and refined by `save_cached_message`.
+///
+/// Rows cached before this are filled by [`crate::store::backfill_files_batch`] after startup, not here:
+/// deriving them parses every row's `json` (HTML bodies included), which on a large cache holds the store
+/// long enough for the frontend's first requests to time out.
 pub(super) fn migrate_v11(conn: &Connection) -> Result<()> {
     conn.execute_batch("ALTER TABLE messages ADD COLUMN files TEXT;")?;
     conn.execute_batch("PRAGMA user_version = 11;")?;

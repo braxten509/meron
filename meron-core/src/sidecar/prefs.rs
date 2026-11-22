@@ -90,11 +90,11 @@ pub(crate) fn record_pref_write(
 /// Handle the `app.prefs*` requests.
 pub(crate) async fn dispatch(
     engine: &Arc<Engine>,
-    req: &Request,
+    command_request: &Request,
     _out: &Writer,
 ) -> anyhow::Result<Value> {
-    let parameters = &req.params;
-    match req.method.as_str() {
+    let parameters = &command_request.params;
+    match command_request.method.as_str() {
         "app.prefsGet" => {
             let keys = parameters
                 .get("keys")
@@ -112,7 +112,7 @@ pub(crate) async fn dispatch(
         }
 
         "app.prefsSet" => {
-            let key = req_str(parameters, "key")?;
+            let key = required_string(parameters, "key")?;
             let value = parameters.get("value").cloned().unwrap_or(Value::Null);
             // Each request runs on its own task, so two writes to one key can
             // reach here out of order. A client that stamps its writes with a

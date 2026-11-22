@@ -23,7 +23,7 @@ Read this guide before changing a shared feature. Keep its behavior in the lowes
 
 A change to which messages belong in a thread starts in Rust. How a thread looks belongs to the desktop or mobile UI. A background notification depends on platform APIs and belongs to its native host. Keep protocol keys, database columns, preference keys and OS entry points compatible across releases.
 
-Prefer feature names that explain where to look. Preserve Go package and build-tag conventions, Rust snake case, Kotlin and React component names, the existing `MeronMobileState+Feature.kt` naming scheme for Kotlin extensions, and established protocol terms such as IMAP, UID and TLS. Keep imports, related types, the public entry point and its helpers together.
+Prefer feature names that explain where to look. Preserve Go package and build-tag conventions, Rust snake case, Kotlin and React component names, the existing `MeronMobileState+Feature.kt` naming scheme for Kotlin extensions, and established protocol terms such as IMAP, UID and TLS. Use Rust’s conventional `as_str` conversion and integer type names, such as `u32`, when they describe the interface. The iOS build uses Apple’s `DEVELOPER_DIR` environment key. Keep imports, related types, the public entry point and its helpers together.
 
 Aim for at most 600 code lines per file. Split by responsibility with its tests. Document any cohesive exception in the table below. Open each source file with three lines that identify its job and its callers. Keep documentation paragraphs to four lines.
 
@@ -33,6 +33,8 @@ Run `python3 scripts/structure/check_structure.py` from the repository. The exis
 
 | File | Reason |
 | --- | --- |
+| `mobile/ui/src/commonMain/kotlin/jp/nonbili/meron/ui/MeronApp.kt` | The app host owns the navigation stack and the live thread overlay. Both share the transition lifecycle so returning from Compose restores the same underlying route and scroll position. Settings actions, file pickers and mailbox routes have separate owners. |
+| `mobile/ui/src/commonMain/kotlin/jp/nonbili/meron/ui/ThreadUi.kt` | The thread screen coordinates one lazy list with keyboard movement, expansion, pending sends and scroll restoration. These effects share per-thread Compose state and row geometry. Message rendering, read tracking and media presentation live in separate files. |
 
 ```settings
 conventional_paths: src res

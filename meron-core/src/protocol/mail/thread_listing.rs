@@ -11,11 +11,11 @@ pub(crate) fn list_mobile_contact_threads(
     data_directory: &str,
     params: &Value,
 ) -> Result<Value, String> {
-    let addr = req_str(params, "addr")?;
+    let addr = required_string(params, "addr")?;
     if addr.trim().is_empty() {
         return Err("addr is required".to_string());
     }
-    let limit = opt_u32(params, "limit").unwrap_or(50).clamp(1, 200) as usize;
+    let limit = optional_u32(params, "limit").unwrap_or(50).clamp(1, 200) as usize;
     let cursor = params.get("before_cursor").and_then(Value::as_str);
     with_mobile_db(data_directory, |conn| {
         store::contact_thread_page(&conn, &addr, cursor, limit)
@@ -24,7 +24,7 @@ pub(crate) fn list_mobile_contact_threads(
 }
 
 pub(crate) fn list_mobile_threads(data_directory: &str, params: &Value) -> Result<Value, String> {
-    let account_id = req_str(params, "account_id")?;
+    let account_id = required_string(params, "account_id")?;
     if account_id == "unified" {
         return list_mobile_unified_threads(data_directory, params);
     }
@@ -68,7 +68,8 @@ fn list_mobile_account_threads(
     .unwrap_or(false);
     if is_rss {
         return with_mobile_db(data_directory, |conn| {
-            thread_list::rss_page(&conn, &account_id, &request).map_err(|err| format!("{err:#}"))
+            thread_list::rss_page(&conn, &account_id, &request)
+                .map_err(|operation_error| format!("{operation_error:#}"))
         });
     }
 
@@ -76,9 +77,10 @@ fn list_mobile_account_threads(
     let sender_page = with_mobile_db(data_directory, |conn| {
         if request
             .sender_grouping_in(&conn, &account_id)
-            .map_err(|err| format!("{err:#}"))?
+            .map_err(|operation_error| format!("{operation_error:#}"))?
         {
-            thread_list::sender_page(&conn, &account_id, &request).map_err(|err| format!("{err:#}"))
+            thread_list::sender_page(&conn, &account_id, &request)
+                .map_err(|operation_error| format!("{operation_error:#}"))
         } else {
             Ok(Value::Null)
         }
@@ -160,11 +162,11 @@ fn list_mobile_account_threads(
                         search_incomplete = page.incomplete;
                         (page.messages, page.next_cursor)
                     }
-                    Err(err) => {
+                    Err(operation_error) => {
                         crate::mlog!(
                             crate::log::Level::Warn,
                             "mail.search",
-                            "live search failed for account={account_id} folder={folder_id}: {err}"
+                            "live search failed for account={account_id} folder={folder_id}: {operation_error}"
                         );
                         search_incomplete = true;
                         let messages = search_cached_mobile_mail_messages(
@@ -201,7 +203,7 @@ fn list_mobile_account_threads(
             // A mobile mailbox view is always a thread list.
             true,
         )
-        .map_err(|err| format!("{err:#}"))?;
+        .map_err(|operation_error| format!("{operation_error:#}"))?;
         if search_incomplete {
             page.as_object_mut()
                 .unwrap()
@@ -220,7 +222,8 @@ fn list_mobile_unified_threads(data_directory: &str, params: &Value) -> Result<V
         .and_then(crate::unified::decode_cursor)
         .unwrap_or_default();
     let accounts = with_mobile_db(data_directory, |conn| {
-        let accounts = store::list_accounts(&conn).map_err(|err| err.to_string())?;
+        let accounts =
+            store::list_accounts(&conn).map_err(|operation_error| operation_error.to_string())?;
         Ok(json!(
             accounts
                 .into_iter()
@@ -262,13 +265,13 @@ fn list_mobile_unified_threads(data_directory: &str, params: &Value) -> Result<V
             match store::folder_for_role(&conn, account_id, &role) {
                 Ok(Some(folder)) => resolved.push((account_id.clone(), folder)),
                 Ok(None) => {}
-                Err(err) => return Err(err.to_string()),
+                Err(operation_error) => return Err(operation_error.to_string()),
             }
         }
         Ok(json!(resolved))
     })?;
     let folders = serde_json::from_value::<Vec<(String, String)>>(folders)
-        .map_err(|err| format!("{err:#}"))?;
+        .map_err(|operation_error| format!("{operation_error:#}"))?;
 
     let mut pages = Vec::new();
     for (account_id, folder) in folders {

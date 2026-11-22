@@ -1,16 +1,18 @@
-//! AI sorting of folders other than the Inbox: mail a server filter delivered
-//! straight into a folder (Runbox's "Notifications", say) goes through the same
-//! sorting as new Inbox mail. What the AI files goes into a Meron folder; what
-//! it leaves is *shown in the Inbox*: listed and counted there, and left out of
-//! its own folder's list, on this device only. The server copy never moves, so
-//! opening, replying or deleting acts on the real message where it is.
+//! Tracks arrivals sorted out of watched mailboxes into the app's Inbox view.
 //!
-//! `ai_sort_watch` says where each folder's sorting starts: only mail that
-//! arrives after Meron first looked at the folder is sorted. `ai_sort_inbox`
-//! holds the shown mail by location; a row goes when its message leaves the
-//! folder (deleted or moved, here or on the server), when the user files it
-//! into a Meron folder, or when the same message turns up in the Inbox itself
-//! (Gmail shows one message in INBOX and in each of its labels).
+//! AI sorting of folders other than the Inbox: mail a server filter delivered straight into a folder
+//! (Runbox's "Notifications", say) goes through the same sorting as new Inbox mail. What the AI files goes
+//! into a Meron folder; what it leaves is *shown in the Inbox*: listed and counted there, and left out of
+//! its own folder's list, on this device only.
+//!
+//! The server copy never moves, so opening, replying or deleting acts on the real message where it is.
+//!
+//! `ai_sort_watch` says where each folder's sorting starts: only mail that arrives after Meron first looked
+//! at the folder is sorted.
+//!
+//! `ai_sort_inbox` holds the shown mail by location; a row goes when its message leaves the folder (deleted
+//! or moved, here or on the server), when the user files it into a Meron folder, or when the same message
+//! turns up in the Inbox itself (Gmail shows one message in INBOX and in each of its labels).
 
 use std::collections::BTreeSet;
 
@@ -204,12 +206,14 @@ pub fn ai_sort_inbox_ids_sql(account: &str) -> String {
     )
 }
 
-/// Unread mail shown in the Inbox from other folders, of the account `account`
-/// names, or only of `folder` when given (both SQL expressions): what the
-/// Inbox count adds and the folder's count takes off. Mail in a Meron folder,
-/// or held while the AI decides, counts in neither, as in the folder counts.
-/// The Inbox (`folder` `None`) adds only mail it lists: newer than the age
-/// limit ([`super::inbox_listed_sql`]); its own folder still leaves it out.
+/// Count unread arrivals shown in the Inbox on behalf of another folder.
+///
+/// Unread mail shown in the Inbox from other folders, of the account `account` names, or only of `folder`
+/// when given (both SQL expressions): what the Inbox count adds and the folder's count takes off. Mail in a
+/// Meron folder, or held while the AI decides, counts in neither, as in the folder counts.
+///
+/// The Inbox (`folder` `None`) adds only mail it lists: newer than the age limit
+/// ([`super::inbox_listed_sql`]); its own folder still leaves it out.
 pub fn ai_sort_inbox_unread_sql(account: &str, folder: Option<&str>) -> String {
     let in_folder = match folder {
         Some(folder) => format!(" AND x.folder = {folder}"),

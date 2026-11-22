@@ -60,12 +60,12 @@ pub(crate) async fn dispatch(
         .into_iter()
         .zip(&items)
         .map(|(result, item)| {
-            result.unwrap_or_else(|err| {
+            result.unwrap_or_else(|operation_error| {
                 eprintln!(
-                    "meron-core: {} (in a bulk run) failed: {err:#}",
+                    "meron-core: {} (in a bulk run) failed: {operation_error:#}",
                     item.method
                 );
-                serde_json::json!({ "error": format!("{err:#}") })
+                serde_json::json!({ "error": format!("{operation_error:#}") })
             })
         })
         .collect();
@@ -73,12 +73,16 @@ pub(crate) async fn dispatch(
 }
 
 /// Route one request to its domain handler.
-async fn dispatch_one(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::Result<Value> {
-    let parameters = &req.params;
-    if crate::sidecar::local::handles(req) {
-        return crate::sidecar::local::dispatch(engine, req, out).await;
+async fn dispatch_one(
+    engine: &Arc<Engine>,
+    command_request: &Request,
+    out: &Writer,
+) -> anyhow::Result<Value> {
+    let parameters = &command_request.params;
+    if crate::sidecar::local::handles(command_request) {
+        return crate::sidecar::local::dispatch(engine, command_request, out).await;
     }
-    match req.method.as_str() {
+    match command_request.method.as_str() {
         "mcp.prepareDelete" => {
             meron_core::mcp_mail::prepare_delete(engine, parameters.clone()).await
         }
@@ -86,11 +90,15 @@ async fn dispatch_one(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyh
         "mcp.organize" => meron_core::mcp_mail::organize(engine, parameters.clone()).await,
         "ping" => Ok(ping_response()),
         "reminders.list" | "reminders.claim" | "reminders.skipPast" | "reminders.acknowledge" => {
-            meron_core::reminders::dispatch(&engine.db.lock().unwrap(), &req.method, parameters)
+            meron_core::reminders::dispatch(
+                &engine.db.lock().unwrap(),
+                &command_request.method,
+                parameters,
+            )
         }
         "search.parse" | "search.build" => {
-            meron_core::search_query::handle_request(&req.method, parameters)
-                .ok_or_else(|| anyhow::anyhow!("bad {} request", req.method))
+            meron_core::search_query::handle_request(&command_request.method, parameters)
+                .ok_or_else(|| anyhow::anyhow!("bad {} request", command_request.method))
         }
         "avatar.resolve" => {
             let params = parameters.clone();
@@ -112,13 +120,13 @@ async fn dispatch_one(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyh
             Ok(releases)
         }
 
-        "app.prefsGet" | "app.prefsSet" => prefs::dispatch(engine, req, out).await,
+        "app.prefsGet" | "app.prefsSet" => prefs::dispatch(engine, command_request, out).await,
 
         "oauth.authorizeUrl" | "oauth.exchangeCode" | "oauth.fetchPhoto" => {
-            oauth::dispatch(req).await
+            oauth::dispatch(command_request).await
         }
 
-        "backup.export" | "backup.import" => backup::dispatch(engine, req, out).await,
+        "backup.export" | "backup.import" => backup::dispatch(engine, command_request, out).await,
 
         "account.list"
         | "account.connect"
@@ -139,11 +147,11 @@ async fn dispatch_one(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyh
         | "account.setPaused"
         | "account.setSaveSentCopy"
         | "account.setRSSSyncInterval"
-        | "account.reorder" => accounts::dispatch(engine, req, out).await,
+        | "account.reorder" => accounts::dispatch(engine, command_request, out).await,
 
         "account.addRss" | "feed.add" | "feed.remove" | "feed.move" | "rss.exportOpml"
         | "rss.importOpml" | "rss.thread" | "rss.markRead" | "rss.markAllRead"
-        | "rss.markStarred" => feeds::dispatch(engine, req, out).await,
+        | "rss.markStarred" => feeds::dispatch(engine, command_request, out).await,
 
         "tasks.lists"
         | "tasks.listCreate"
@@ -158,7 +166,7 @@ async fn dispatch_one(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyh
         | "tasks.reorder"
         | "tasks.clearCompleted"
         | "tasks.restore"
-        | "tasks.forThread" => tasks::dispatch(engine, req, out).await,
+        | "tasks.forThread" => tasks::dispatch(engine, command_request, out).await,
 
         "calendar.events"
         | "calendar.get"
@@ -167,7 +175,7 @@ async fn dispatch_one(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyh
         | "calendar.delete"
         | "calendar.restore"
         | "invite.removeFromCalendar"
-        | "invite.addToCalendar" => calendar::dispatch(engine, req, out).await,
+        | "invite.addToCalendar" => calendar::dispatch(engine, command_request, out).await,
 
         "folders.list"
         | "folders.create"
@@ -175,7 +183,7 @@ async fn dispatch_one(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyh
         | "folders.rename"
         | "folders.setNotify"
         | "folders.archive"
-        | "messages.emptyFolder" => folders::dispatch(engine, req, out).await,
+        | "messages.emptyFolder" => folders::dispatch(engine, command_request, out).await,
 
         "messages.unifiedRecent"
         | "messages.recent"
@@ -187,7 +195,7 @@ async fn dispatch_one(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyh
         | "messages.sync"
         | "messages.read"
         | "messages.thread"
-        | "messages.threadHeaders" => messages::dispatch(engine, req, out).await,
+        | "messages.threadHeaders" => messages::dispatch(engine, command_request, out).await,
 
         "send"
         | "invite.respond"
@@ -195,7 +203,7 @@ async fn dispatch_one(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyh
         | "discard_draft"
         | "messages.saveRaw"
         | "messages.exportUids"
-        | "messages.saveRawBatch" => compose::dispatch(engine, req, out).await,
+        | "messages.saveRawBatch" => compose::dispatch(engine, command_request, out).await,
 
         "messages.markRead"
         | "messages.markStarred"
@@ -205,12 +213,14 @@ async fn dispatch_one(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyh
         | "messages.move"
         | "messages.copy"
         | "messages.markAllRead"
-        | "messages.markAllReadUnified" => actions::dispatch(engine, req, out).await,
+        | "messages.markAllReadUnified" => actions::dispatch(engine, command_request, out).await,
 
         "tags.list" | "rules.list" | "rules.set" | "rules.matches" | "rules.run"
-        | "rules.status" | "rules.stop" => messages::dispatch(engine, req, out).await,
+        | "rules.status" | "rules.stop" => messages::dispatch(engine, command_request, out).await,
 
-        "watch.start" | "watch.stop" | "system.resumed" => watch::dispatch(engine, req, out).await,
+        "watch.start" | "watch.stop" | "system.resumed" => {
+            watch::dispatch(engine, command_request, out).await
+        }
 
         // AI sorting: aiSort.get, .set, .setKey, .checkKey, .models, .estimate,
         // .run, .stop, .status, .moveBack.
@@ -241,7 +251,7 @@ async fn dispatch_one(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyh
         "meronFolders.moveIn" | "meronFolders.moveOut" => {
             meron_core::meron_folders::move_with_server(
                 engine,
-                &req.method["meronFolders.".len()..],
+                &command_request.method["meronFolders.".len()..],
                 parameters,
             )
             .await

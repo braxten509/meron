@@ -81,14 +81,15 @@ CREATE TRIGGER IF NOT EXISTS messages_au AFTER UPDATE OF subject, from_name, fro
 END;
 ";
 
-/// Thread-key inheritance (migration v8) looks a message up by its cached
-/// Message-ID, and looks up the rows whose thread key names one — both compared
-/// case-insensitively, and neither a plain column, since the id lives in the
-/// `json` catch-all. Without these expression indexes every reply upsert scanned
-/// the account's whole message cache, `json_extract`ing each row. The index
-/// expressions must stay character-identical to the ones in
-/// `store::resolve_message_thread_key` / `store::reconcile_thread_keys_from`, or
-/// SQLite won't match a query to them.
+/// Index the references needed to reconcile inherited conversation keys.
+///
+/// Thread-key inheritance (migration v8) looks a message up by its cached Message-ID, and looks up the rows
+/// whose thread key names one — both compared case-insensitively, and neither a plain column, since the id
+/// lives in the `json` catch-all. Without these expression indexes every reply upsert scanned the account's
+/// whole message cache, `json_extract`ing each row.
+///
+/// The index expressions must stay character-identical to the ones in `store::resolve_message_thread_key` /
+/// `store::reconcile_thread_keys_from`, or SQLite won't match a query to them.
 pub(super) const MESSAGES_THREAD_KEY_INDEXES_DDL: &str = "
 CREATE INDEX IF NOT EXISTS messages_message_id_idx
   ON messages(account, lower(COALESCE(json_extract(json, '$.message_id'), '')));

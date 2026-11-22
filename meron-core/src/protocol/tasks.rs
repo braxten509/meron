@@ -15,12 +15,12 @@ pub(crate) fn dispatch_mobile_tasks(
 ) -> Option<Result<Value, String>> {
     let mutates = !matches!(method, "tasks.lists" | "tasks.items" | "tasks.forThread");
     let result = match method {
-        "tasks.lists" => {
-            with_mobile_db(data_directory, |conn| err_str(tasks::lists_payload(&conn)))
-        }
+        "tasks.lists" => with_mobile_db(data_directory, |conn| {
+            string_error(tasks::lists_payload(&conn))
+        }),
 
         "tasks.items" => {
-            let list_id = match req_str(params, "list_id") {
+            let list_id = match required_string(params, "list_id") {
                 Ok(value) => value,
                 Err(error) => return Some(Err(error)),
             };
@@ -29,68 +29,68 @@ pub(crate) fn dispatch_mobile_tasks(
                 .and_then(Value::as_bool)
                 .unwrap_or(false);
             with_mobile_db(data_directory, |conn| {
-                err_str(tasks::tasks_payload(&conn, &list_id, include_completed))
+                string_error(tasks::tasks_payload(&conn, &list_id, include_completed))
             })
         }
 
         "tasks.forThread" => {
-            let thread_id = match req_str(params, "thread_id") {
+            let thread_id = match required_string(params, "thread_id") {
                 Ok(value) => value,
                 Err(error) => return Some(Err(error)),
             };
             with_mobile_db(data_directory, |conn| {
-                err_str(tasks::thread_tasks_payload(&conn, &thread_id))
+                string_error(tasks::thread_tasks_payload(&conn, &thread_id))
             })
         }
 
         "tasks.listCreate" => {
-            let title = opt_str(params, "title");
+            let title = optional_string(params, "title");
             with_mobile_db(data_directory, |conn| {
-                err_str(tasks::create_list(&conn, &title))
+                string_error(tasks::create_list(&conn, &title))
             })
         }
 
         "tasks.listRename" => {
-            let list_id = match req_str(params, "list_id") {
+            let list_id = match required_string(params, "list_id") {
                 Ok(value) => value,
                 Err(error) => return Some(Err(error)),
             };
-            let title = opt_str(params, "title");
+            let title = optional_string(params, "title");
             with_mobile_db(data_directory, |conn| {
-                err_str(tasks::rename_list(&conn, &list_id, &title))
+                string_error(tasks::rename_list(&conn, &list_id, &title))
             })
         }
 
         "tasks.listDelete" => {
-            let list_id = match req_str(params, "list_id") {
+            let list_id = match required_string(params, "list_id") {
                 Ok(value) => value,
                 Err(error) => return Some(Err(error)),
             };
             with_mobile_db(data_directory, |mut conn| {
-                err_str(tasks::delete_list(&mut conn, &list_id))
+                string_error(tasks::delete_list(&mut conn, &list_id))
             })
         }
 
         "tasks.listReorder" => {
-            let list_ids = match req_str_array(params, "list_ids") {
+            let list_ids = match required_strings(params, "list_ids") {
                 Ok(value) => value,
                 Err(error) => return Some(Err(error)),
             };
             with_mobile_db(data_directory, |mut conn| {
-                err_str(tasks::reorder_lists(&mut conn, &list_ids))
+                string_error(tasks::reorder_lists(&mut conn, &list_ids))
             })
         }
 
         "tasks.create" => {
-            let list_id = opt_str(params, "list_id");
-            let title = opt_str(params, "title");
-            let notes = opt_str(params, "notes");
+            let list_id = optional_string(params, "list_id");
+            let title = optional_string(params, "title");
+            let notes = optional_string(params, "notes");
             let due_at = params.get("due_at").and_then(Value::as_i64).unwrap_or(0);
-            let account = opt_str(params, "account");
-            let thread_id = opt_str(params, "thread_id");
-            let message_id = opt_str(params, "message_id");
+            let account = optional_string(params, "account");
+            let thread_id = optional_string(params, "thread_id");
+            let message_id = optional_string(params, "message_id");
             with_mobile_db(data_directory, |conn| {
-                err_str(tasks::mutate_with_due_time(&conn, params, |conn| {
+                string_error(tasks::mutate_with_due_time(&conn, params, |conn| {
                     tasks::create_task(
                         conn,
                         &list_id,
@@ -106,7 +106,7 @@ pub(crate) fn dispatch_mobile_tasks(
         }
 
         "tasks.update" => {
-            let task_id = match req_str(params, "task_id") {
+            let task_id = match required_string(params, "task_id") {
                 Ok(value) => value,
                 Err(error) => return Some(Err(error)),
             };
@@ -115,61 +115,61 @@ pub(crate) fn dispatch_mobile_tasks(
             let due_at = params.get("due_at").and_then(Value::as_i64);
             let list_id = params.get("list_id").and_then(Value::as_str);
             with_mobile_db(data_directory, |conn| {
-                err_str(tasks::mutate_with_due_time(&conn, params, |conn| {
+                string_error(tasks::mutate_with_due_time(&conn, params, |conn| {
                     tasks::update_task(conn, &task_id, title, notes, due_at, list_id)
                 }))
             })
         }
 
         "tasks.setDone" => {
-            let task_id = match req_str(params, "task_id") {
+            let task_id = match required_string(params, "task_id") {
                 Ok(value) => value,
                 Err(error) => return Some(Err(error)),
             };
             let done = params.get("done").and_then(Value::as_bool).unwrap_or(true);
             with_mobile_db(data_directory, |conn| {
-                err_str(tasks::set_done(&conn, &task_id, done))
+                string_error(tasks::set_done(&conn, &task_id, done))
             })
         }
 
         "tasks.delete" => {
-            let task_id = match req_str(params, "task_id") {
+            let task_id = match required_string(params, "task_id") {
                 Ok(value) => value,
                 Err(error) => return Some(Err(error)),
             };
             with_mobile_db(data_directory, |conn| {
-                err_str(tasks::delete_task(&conn, &task_id))
+                string_error(tasks::delete_task(&conn, &task_id))
             })
         }
 
         "tasks.reorder" => {
-            let list_id = match req_str(params, "list_id") {
+            let list_id = match required_string(params, "list_id") {
                 Ok(value) => value,
                 Err(error) => return Some(Err(error)),
             };
-            let task_ids = match req_str_array(params, "task_ids") {
+            let task_ids = match required_strings(params, "task_ids") {
                 Ok(value) => value,
                 Err(error) => return Some(Err(error)),
             };
             with_mobile_db(data_directory, |mut conn| {
-                err_str(tasks::reorder_tasks(&mut conn, &list_id, &task_ids))
+                string_error(tasks::reorder_tasks(&mut conn, &list_id, &task_ids))
             })
         }
 
         "tasks.restore" => {
             let payload = params.get("restore").cloned().unwrap_or(Value::Null);
             with_mobile_db(data_directory, |conn| {
-                err_str(tasks::restore(&conn, &payload))
+                string_error(tasks::restore(&conn, &payload))
             })
         }
 
         "tasks.clearCompleted" => {
-            let list_id = match req_str(params, "list_id") {
+            let list_id = match required_string(params, "list_id") {
                 Ok(value) => value,
                 Err(error) => return Some(Err(error)),
             };
             with_mobile_db(data_directory, |conn| {
-                err_str(tasks::clear_completed(&conn, &list_id))
+                string_error(tasks::clear_completed(&conn, &list_id))
             })
         }
 
@@ -199,6 +199,6 @@ pub(crate) fn stub_mobile_tasks(method: &str) -> Option<Value> {
     })
 }
 
-fn err_str(result: anyhow::Result<Value>) -> Result<Value, String> {
+fn string_error(result: anyhow::Result<Value>) -> Result<Value, String> {
     result.map_err(|error| format!("{error:#}"))
 }

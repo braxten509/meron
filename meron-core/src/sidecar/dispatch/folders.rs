@@ -31,7 +31,7 @@ pub(crate) async fn dispatch(
         // RSS accounts return final Folder JSON (one synthetic Inbox); mail
         // returns raw rows the bridge formats. Routed by the account's engine.
         "folders.list" => {
-            let account = req_str(parameters, "account")?;
+            let account = required_string(parameters, "account")?;
             if is_rss(engine, &account)? {
                 let folders = rss::folders(&engine.db.lock().unwrap(), &account)?;
                 return Ok(json!({ "folders": folders }));
@@ -48,11 +48,11 @@ pub(crate) async fn dispatch(
         }
 
         "folders.create" => {
-            let account = req_str(parameters, "account")?;
+            let account = required_string(parameters, "account")?;
             if is_rss(engine, &account)? {
                 return Err(anyhow::anyhow!("RSS accounts do not support folders"));
             }
-            let display_name = req_str(parameters, "name")?.trim().to_string();
+            let display_name = required_string(parameters, "name")?.trim().to_string();
             if display_name.is_empty() {
                 return Err(anyhow::anyhow!("Folder name is required"));
             }
@@ -86,12 +86,12 @@ pub(crate) async fn dispatch(
         // unless a view (a kanban column showing it) still wants it, and may
         // promote a polled folder into the freed live slot.
         "folders.setNotify" => {
-            let account = req_str(parameters, "account")?;
+            let account = required_string(parameters, "account")?;
             if is_rss(engine, &account)? {
                 return Err(anyhow::anyhow!("RSS accounts do not support folders"));
             }
-            let folder = canon_folder(&req_str(parameters, "folder")?);
-            let enabled = req_bool(parameters, "enabled")?;
+            let folder = canon_folder(&required_string(parameters, "folder")?);
+            let enabled = required_boolean(parameters, "enabled")?;
             let folders = {
                 let db = engine.db.lock().unwrap();
                 if !store::set_folder_notify(&db, &account, &folder, enabled)? {
@@ -114,12 +114,13 @@ pub(crate) async fn dispatch(
         // forget the whole subtree's cache. Unrecoverable, so the special-use
         // gate is re-checked here rather than trusted from the caller.
         "folders.delete" => {
-            let account = req_str(parameters, "account")?;
+            let account = required_string(parameters, "account")?;
             if is_rss(engine, &account)? {
                 return Err(anyhow::anyhow!("RSS accounts do not support folders"));
             }
             let folder = canon_folder(
-                &req_str(parameters, "folder").or_else(|_| req_str(parameters, "name"))?,
+                &required_string(parameters, "folder")
+                    .or_else(|_| required_string(parameters, "name"))?,
             );
             let targets = {
                 let db = engine.db.lock().unwrap();
@@ -185,12 +186,12 @@ pub(crate) async fn dispatch(
         // is the folder's new full path as the user reads it. Special-use
         // folders are refused here rather than trusted from the caller.
         "folders.rename" => {
-            let account = req_str(parameters, "account")?;
+            let account = required_string(parameters, "account")?;
             if is_rss(engine, &account)? {
                 return Err(anyhow::anyhow!("RSS accounts do not support folders"));
             }
-            let folder = canon_folder(&req_str(parameters, "folder")?);
-            let display_name = req_str(parameters, "name")?.trim().to_string();
+            let folder = canon_folder(&required_string(parameters, "folder")?);
+            let display_name = required_string(parameters, "name")?.trim().to_string();
             if display_name.is_empty() {
                 return Err(anyhow::anyhow!("Folder name is required"));
             }
@@ -266,7 +267,7 @@ pub(crate) async fn dispatch(
         }
 
         "folders.archive" => {
-            let account = req_str(parameters, "account")?;
+            let account = required_string(parameters, "account")?;
             // The saved folder list answers without a server round trip (a
             // whole LIST, once per archived conversation). Only an account it
             // names no archive mailbox for still asks the server.
@@ -303,8 +304,8 @@ pub(crate) async fn dispatch(
         // store. Restricted to Trash and Junk: the operation is unrecoverable,
         // so an arbitrary folder must never reach it even if a caller asks.
         "messages.emptyFolder" => {
-            let account = req_str(parameters, "account")?;
-            let folder = canon_folder(&req_str(parameters, "folder")?);
+            let account = required_string(parameters, "account")?;
+            let folder = canon_folder(&required_string(parameters, "folder")?);
             let role = {
                 let db = engine.db.lock().unwrap();
                 store::folder_role(&db, &account, &folder)?

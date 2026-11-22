@@ -5,11 +5,13 @@
 
 use super::*;
 
-/// New mail of a folder AI sorting watches (besides the Inbox) that a sync's
-/// window couldn't hold, because more arrived at once than it reads: the
-/// oldest `max` of it not cached yet, from the folder's watch up, read and put
-/// through the same steps as a sync's new mail (held, stored, rules, then the
-/// AI). The watch moves past what was read; the rest waits for the next check.
+/// Find new mail that fell outside the most recent synchronization window.
+///
+/// New mail of a folder AI sorting watches (besides the Inbox) that a sync's window couldn't hold, because
+/// more arrived at once than it reads: the oldest `max` of it not cached yet, from the folder's watch up,
+/// read and put through the same steps as a sync's new mail (held, stored, rules, then the AI). The watch
+/// moves past what was read; the rest waits for the next check.
+///
 /// Answers with what it filed into Meron folders with notifications on.
 pub(in crate::engine) async fn sort_carried_mail(
     engine: &Arc<Engine>,

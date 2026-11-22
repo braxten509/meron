@@ -41,74 +41,8 @@ pub async fn sync_background_messages(
     .await
 }
 
-/// A cache refresh after a successful server write. Keep the guard until the
-/// returned batch has been persisted, so cleanup cannot release stale UIDs.
-pub struct WrittenFolderRefresh {
-    pub batch: imap::RecentBatch,
-    _guard: MessageSyncGuard,
-}
-
-/// Cache warming must not turn a completed APPEND/save into a failed write.
-/// Registration and network failures skip the refresh; callers retain success.
-pub async fn refresh_written_folder(
-    engine: &Arc<Engine>,
-    account: &str,
-    folder: &str,
-    limit: u32,
-) -> Option<WrittenFolderRefresh> {
-    let result = async {
-        let guard = MessageSyncGuard::begin(engine)?;
-        let batch = fetch_recent_resilient(engine, account, folder, limit).await?;
-        anyhow::Ok(WrittenFolderRefresh {
-            batch,
-            _guard: guard,
-        })
-    }
-    .await;
-    match result {
-        Ok(refresh) => Some(refresh),
-        Err(err) => {
-            crate::mlog!(
-                crate::log::Level::Warn,
-                "mail.sync",
-                "account={account} folder={folder}: post-write refresh skipped: {err:#}"
-            );
-            None
-        }
-    }
-}
-
-// Keep registration alive through persistence, including when the caller drops
-// its future after spawn_blocking has started. Drop also covers network errors
-// and cancellation without leaving markers protected by a dead snapshot.
-pub struct MessageSyncGuard {
-    engine: Arc<Engine>,
-    id: i64,
-}
-
-impl MessageSyncGuard {
-    pub fn begin(engine: &Arc<Engine>) -> anyhow::Result<Self> {
-        let db = engine.db.lock().unwrap();
-        let (id, _) = store::begin_message_sync(&db)?;
-        Ok(Self {
-            engine: engine.clone(),
-            id,
-        })
-    }
-}
-
-impl Drop for MessageSyncGuard {
-    fn drop(&mut self) {
-        let db = self.engine.db.lock().unwrap();
-        if let Err(err) = store::end_message_sync(&db, self.id) {
-            crate::mlog!(
-                crate::log::Level::Warn,
-                "mail.sync",
-                "removal marker cleanup failed: {err:#}"
-            );
-        }
-    }
-}
+mod refresh;
+pub use refresh::{MessageSyncGuard, WrittenFolderRefresh, refresh_written_folder};
 
 const ATTACHMENT_CATCHUP_BUDGET: Duration = Duration::from_secs(5);
 
@@ -240,12 +174,12 @@ pub(super) async fn sync_messages_with_policy(
         // narrower range at a time so the rest of the folder still syncs.
         let state = match attempt {
             Ok(state) => Ok(state),
-            Err(err) if imap::is_unparseable_response(&err) => {
+            Err(operation_error) if imap::is_unparseable_response(&operation_error) => {
                 crate::mlog!(
                     crate::log::Level::Warn,
                     "mail.sync",
                     "account={account} folder={folder}: unparseable FETCH response, \
-                 re-reading the window message by message: {err:#}"
+                 re-reading the window message by message: {operation_error:#}"
                 );
                 sync_state_isolating_unparseable(
                     engine,
@@ -259,7 +193,7 @@ pub(super) async fn sync_messages_with_policy(
                 )
                 .await
             }
-            Err(err) => Err(err),
+            Err(operation_error) => Err(operation_error),
         }?;
         Ok(state)
     };
@@ -339,7 +273,9 @@ pub(super) async fn sync_messages_with_policy(
          uidvalidity={} uid_next={} prior_validity={prior_validity} server_uids={}",
         batch.uidvalidity,
         batch.uid_next,
-        server_uids.as_ref().map_or(-1, |u| u.len() as i64)
+        server_uids
+            .as_ref()
+            .map_or(-1, |message_uid| message_uid.len() as i64)
     );
     // AI sorting of new Inbox mail, when it is on and set up for this account.
     let ai_plan = ai_sort::plan_for(engine, account, folder).await;
@@ -385,8 +321,8 @@ pub(super) async fn sync_messages_with_policy(
     // New Inbox copies (Gmail) of mail the AI already sent to a server folder
     // from a label: they get that move, without asking the AI again.
     if ai_hold && folder.eq_ignore_ascii_case("INBOX") {
-        if let Err(err) = store::ai_sort_reuse_for_inbox(&db, account, batch.uidvalidity, &batch.messages, store::now_unix()) {
-            crate::mlog!(crate::log::Level::Warn, "mail.aiSort", "account={account}: reusing decisions skipped: {err:#}");
+        if let Err(operation_error) = store::ai_sort_reuse_for_inbox(&db, account, batch.uidvalidity, &batch.messages, store::now_unix()) {
+            crate::mlog!(crate::log::Level::Warn, "mail.aiSort", "account={account}: reusing decisions skipped: {operation_error:#}");
         }
     }
     // Synced while sorting is off for it: as in the Inbox, that mail is never
@@ -396,8 +332,8 @@ pub(super) async fn sync_messages_with_policy(
     }
     let mut ai_candidates = if ai_hold {
         hold()
-            .unwrap_or_else(|err| {
-                crate::mlog!(crate::log::Level::Warn, "mail.aiSort", "account={account}: hold skipped: {err:#}");
+            .unwrap_or_else(|operation_error| {
+                crate::mlog!(crate::log::Level::Warn, "mail.aiSort", "account={account}: hold skipped: {operation_error:#}");
                 Vec::new()
             })
     } else {
@@ -454,8 +390,8 @@ pub(super) async fn sync_messages_with_policy(
     let prune_time = phase_started.elapsed();
     // Mail the AI shows in the Inbox from another folder follows what this
     // sync stored: gone from its folder, or now in the Inbox itself.
-    if let Err(err) = store::ai_sort_inbox_after_sync(&db, account, folder, batch.uidvalidity, batch.uid_next, &batch.messages) {
-        crate::mlog!(crate::log::Level::Warn, "mail.aiSort", "account={account} folder={folder}: shown-in-Inbox upkeep skipped: {err:#}");
+    if let Err(operation_error) = store::ai_sort_inbox_after_sync(&db, account, folder, batch.uidvalidity, batch.uid_next, &batch.messages) {
+        crate::mlog!(crate::log::Level::Warn, "mail.aiSort", "account={account} folder={folder}: shown-in-Inbox upkeep skipped: {operation_error:#}");
     }
     // Meron folder releases a failed write left behind, from any account.
     crate::meron_folders::retry_pending_releases(&db);
@@ -519,8 +455,8 @@ pub(super) async fn sync_messages_with_policy(
                     reached_modseq = 0;
                 }
             }
-            Err(err) => {
-                crate::mlog!(crate::log::Level::Warn, "mail.meronMarks", "account={account}: reading Meron folder marks skipped: {err:#}");
+            Err(operation_error) => {
+                crate::mlog!(crate::log::Level::Warn, "mail.meronMarks", "account={account}: reading Meron folder marks skipped: {operation_error:#}");
                 reached_modseq = 0;
             }
         }
@@ -535,11 +471,11 @@ pub(super) async fn sync_messages_with_policy(
     if let Some(unseen) = server_unseen.as_ref() {
         store::set_uncached_unseen(&db, account, folder, unseen)?;
     }
-    if let Err(err) = store::apply_rules(&db, account, folder, batch.uidvalidity, &first_seen) {
+    if let Err(operation_error) = store::apply_rules(&db, account, folder, batch.uidvalidity, &first_seen) {
         crate::mlog!(
             crate::log::Level::Warn,
             "mail.rules",
-            "account={account} folder={folder}: rules skipped: {err:#}"
+            "account={account} folder={folder}: rules skipped: {operation_error:#}"
         );
     }
     // The user's rules come first: what they queued work for isn't the AI's.
@@ -547,8 +483,8 @@ pub(super) async fn sync_messages_with_policy(
         let candidates = std::mem::take(&mut ai_candidates);
         let uids: Vec<u32> = candidates.iter().map(|candidate| candidate.uid).collect();
         ai_candidates = store::ai_sort_skip_rule_actions(&db, account, folder, candidates)
-            .unwrap_or_else(|err| {
-                crate::mlog!(crate::log::Level::Warn, "mail.aiSort", "account={account}: sort skipped: {err:#}");
+            .unwrap_or_else(|operation_error| {
+                crate::mlog!(crate::log::Level::Warn, "mail.aiSort", "account={account}: sort skipped: {operation_error:#}");
                 let _ = store::ai_sort_release(&db, account, folder, &uids);
                 Vec::new()
             });
@@ -559,8 +495,8 @@ pub(super) async fn sync_messages_with_policy(
         let candidates = std::mem::take(&mut ai_candidates);
         let uids: Vec<u32> = candidates.iter().map(|candidate| candidate.uid).collect();
         ai_candidates = store::ai_sort_skip_meron_foldered(&db, account, folder, candidates)
-            .unwrap_or_else(|err| {
-                crate::mlog!(crate::log::Level::Warn, "mail.aiSort", "account={account}: sort skipped: {err:#}");
+            .unwrap_or_else(|operation_error| {
+                crate::mlog!(crate::log::Level::Warn, "mail.aiSort", "account={account}: sort skipped: {operation_error:#}");
                 let _ = store::ai_sort_release(&db, account, folder, &uids);
                 Vec::new()
             });
@@ -603,13 +539,13 @@ pub(super) async fn sync_messages_with_policy(
             let db = tag_engine.db.lock().unwrap();
             let stored = store::get_folder_modseq(&db, &tag_account, &rule_folder).unwrap_or(0);
             if stored < deferred_modseq
-                && let Err(err) =
+                && let Err(operation_error) =
                     store::set_folder_modseq(&db, &tag_account, &rule_folder, deferred_modseq)
             {
                 crate::mlog!(
                     crate::log::Level::Warn,
                     "mail.meronMarks",
-                    "account={tag_account}: keeping the sync position skipped: {err:#}"
+                    "account={tag_account}: keeping the sync position skipped: {operation_error:#}"
                 );
             }
         }
@@ -653,21 +589,21 @@ pub(super) async fn sync_messages_with_policy(
                     anyhow::Ok(())
                 })
                 .await;
-                if let Err(err) = persist
+                if let Err(operation_error) = persist
                     .map_err(anyhow::Error::from)
                     .and_then(|result| result)
                 {
                     crate::mlog!(
                         crate::log::Level::Warn,
                         "mail.sync",
-                        "attachment metadata persistence skipped: {err:#}"
+                        "attachment metadata persistence skipped: {operation_error:#}"
                     );
                 }
             }
-            Err(err) => crate::mlog!(
+            Err(operation_error) => crate::mlog!(
                 crate::log::Level::Warn,
                 "mail.sync",
-                "attachment metadata catch-up skipped: {err:#}"
+                "attachment metadata catch-up skipped: {operation_error:#}"
             ),
         }
     }
@@ -708,10 +644,10 @@ pub(super) async fn sync_messages_with_policy(
     .await;
     match rules_ran {
         Ok(Ok(())) => {}
-        Ok(Err(err)) => crate::mlog!(
+        Ok(Err(operation_error)) => crate::mlog!(
             crate::log::Level::Warn,
             "mail.rules",
-            "account={tag_account}: rule actions skipped: {err:#}"
+            "account={tag_account}: rule actions skipped: {operation_error:#}"
         ),
         // A large message can take longer to copy than any sync may wait.
         Err(_) => spawn_rule_worker(&tag_engine, &tag_account, &rule_folder),

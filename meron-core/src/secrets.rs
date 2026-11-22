@@ -33,8 +33,14 @@ impl Secrets {
     pub fn from_creds(c: &Creds) -> Self {
         Secrets {
             password: c.password.clone(),
-            access_token: c.access_token.clone().filter(|s| !s.is_empty()),
-            refresh_token: c.refresh_token.clone().filter(|s| !s.is_empty()),
+            access_token: c
+                .access_token
+                .clone()
+                .filter(|secret_value| !secret_value.is_empty()),
+            refresh_token: c
+                .refresh_token
+                .clone()
+                .filter(|secret_value| !secret_value.is_empty()),
         }
     }
 
@@ -276,12 +282,15 @@ fn delete_chunks(account: &str, generation: u8, range: std::ops::Range<usize>) -
     let mut failure = None;
     for index in range {
         let name = chunk_account(account, generation, index);
-        let deleted = entry(&name).and_then(|e| match e.delete_credential() {
-            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-            Err(e) => Err(e).with_context(|| format!("delete keychain entry for {name}")),
-        });
-        if let Err(e) = deleted {
-            failure.get_or_insert(e);
+        let deleted =
+            entry(&name).and_then(|keyring_entry| match keyring_entry.delete_credential() {
+                Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+                Err(keyring_entry) => {
+                    Err(keyring_entry).with_context(|| format!("delete keychain entry for {name}"))
+                }
+            });
+        if let Err(keyring_entry) = deleted {
+            failure.get_or_insert(keyring_entry);
         }
     }
     failure.map_or(Ok(()), Err)
@@ -342,7 +351,9 @@ fn read_entry(account: &str) -> Result<Option<String>> {
     match entry(account)?.get_password() {
         Ok(blob) => Ok(Some(blob)),
         Err(keyring::Error::NoEntry) => Ok(None),
-        Err(e) => Err(e).with_context(|| format!("read keychain entry for {account}")),
+        Err(keyring_entry) => {
+            Err(keyring_entry).with_context(|| format!("read keychain entry for {account}"))
+        }
     }
 }
 
@@ -382,7 +393,9 @@ fn backend_delete(account: &str) -> Result<()> {
 fn delete_entry(account: &str) -> Result<()> {
     match entry(account)?.delete_credential() {
         Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-        Err(e) => Err(e).with_context(|| format!("delete keychain entry for {account}")),
+        Err(keyring_entry) => {
+            Err(keyring_entry).with_context(|| format!("delete keychain entry for {account}"))
+        }
     }
 }
 
@@ -497,8 +510,8 @@ fn generate_db_key() -> String {
     hex
 }
 
-fn is_hex_key(s: &str) -> bool {
-    s.len() == 64 && s.bytes().all(|b| b.is_ascii_hexdigit())
+fn is_hex_key(secret_value: &str) -> bool {
+    secret_value.len() == 64 && secret_value.bytes().all(|b| b.is_ascii_hexdigit())
 }
 
 /// Remove an account's secrets from the keychain. A missing entry is not an error.

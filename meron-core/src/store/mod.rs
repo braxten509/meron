@@ -15,8 +15,8 @@
 mod db;
 
 pub use db::{
-    app_dir, backup_archive_to, now_unix, open, open_archive, open_archive_at, open_at_notifying,
-    open_notifying,
+    application_directory as app_dir, application_directory, backup_archive_to, now_unix, open,
+    open_archive, open_archive_at, open_at_notifying, open_notifying,
 };
 
 #[allow(dead_code)]

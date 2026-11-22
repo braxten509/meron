@@ -20,20 +20,22 @@ pub struct FlagSync {
     pub complete: bool,
 }
 
-/// Reconcile \Seen and \Flagged across an entire folder using CONDSTORE so updates made
-/// on other devices are reflected even for messages older than the recent
-/// window. Selects with `(CONDSTORE)` to learn HIGHESTMODSEQ, then fetches only
-/// the messages whose flags changed since `since_modseq` (CHANGEDSINCE).
+/// Refresh cached read and star flags using the folder's modification sequence.
 ///
-/// Returns no changes (but still reports HIGHESTMODSEQ) when there's no prior
-/// baseline or UIDVALIDITY changed, and is a no-op on servers that do not
-/// advertise CONDSTORE — the capability must be checked rather than probed.
-/// Proton Mail Bridge answers `SELECT "INBOX" (CONDSTORE)` with an *untagged*
-/// `BAD` (" BAD [Error offset=17]: expected CR"), so the client never matches a
-/// response to its tag: instead of erroring, every later command on that
-/// connection reads the previous command's reply. The desynced session then
-/// reports empty mailboxes and an empty folder LIST while still looking
-/// healthy, so it goes back into the pool and poisons the account's syncs.
+/// Reconcile \Seen and \Flagged across an entire folder using CONDSTORE so updates made on other devices are
+/// reflected even for messages older than the recent window. Selects with `(CONDSTORE)` to learn
+/// HIGHESTMODSEQ, then fetches only the messages whose flags changed since `since_modseq` (CHANGEDSINCE).
+///
+/// Returns no changes (but still reports HIGHESTMODSEQ) when there's no prior baseline or UIDVALIDITY
+/// changed, and is a no-op on servers that do not advertise CONDSTORE — the capability must be checked
+/// rather than probed.
+///
+/// Proton Mail Bridge answers `SELECT "INBOX" (CONDSTORE)` with an *untagged* `BAD` (" BAD [Error
+/// offset=17]: expected CR"), so the client never matches a response to its tag: instead of erroring, every
+/// later command on that connection reads the previous command's reply.
+///
+/// The desynced session then reports empty mailboxes and an empty folder LIST while still looking healthy,
+/// so it goes back into the pool and poisons the account's syncs.
 pub async fn sync_flags(
     session: &mut Session,
     folder: &str,
@@ -506,7 +508,7 @@ pub async fn store_meron_marks(
     if !remove.is_empty() {
         let list = remove
             .iter()
-            .map(|k| k.as_str())
+            .map(|tag_keyword| tag_keyword.as_str())
             .collect::<Vec<_>>()
             .join(" ");
         store_flag(session, uids, &format!("-FLAGS.SILENT ({list})")).await?;

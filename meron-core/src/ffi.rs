@@ -4,6 +4,23 @@
 //! from the desktop sidecar binary. Android/JNI and iOS can use these functions
 //! to assert protocol compatibility before calling the future command API.
 
+mod initialization;
+use initialization::{configure_mobile_core, init_mobile_core, prepare_mobile_store};
+
+mod foreground;
+use foreground::{
+    emit_mobile_sync_result, engine_background, engine_foreground, ensure_notify_poller,
+    set_watch_interest, sync_mobile_folder, watch_interest, watch_is_running,
+};
+pub(crate) use foreground::{
+    forget_deleted_folder_watch, start_live_notify_watches, sync_foreground_notify_watch,
+};
+mod mobile_idle;
+use mobile_idle::{
+    dispatch_mobile_watch_request, mobile_db, start_mobile_idle_watch, stop_mobile_idle_watch,
+    watch_key,
+};
+
 use std::collections::HashMap;
 use std::ffi::CStr;
 use std::ffi::CString;
@@ -24,7 +41,7 @@ use crate::engine::{Engine, OAuthDefaults, set_oauth_defaults};
 use crate::protocol::{
     MobileHost, PROTOCOL_VERSION, Request, account_needs_reconnect, canon_folder,
     invoke_mobile_protocol_json, is_rss_account, load_mobile_account_creds, mobile_db_key,
-    ping_response, ready_event, req_account_id, req_str, sync_mobile_mail,
+    ping_response, ready_event, required_account_id, required_string, sync_mobile_mail,
 };
 
 type EventCallback = unsafe extern "C" fn(event_json: *const c_char, user_data: *mut c_void);
@@ -125,12 +142,12 @@ where
 /// in meanwhile, so that folder syncs once more after the current run.
 static FOLDER_RESYNCS: Mutex<Option<HashMap<String, bool>>> = Mutex::new(None);
 
-/// Sync `folders` in the background: after a server move or delete whose
-/// local cache could not follow, the sync prunes the rows the server no longer
-/// has and caches the moved copies. The same one-folder sync the notify poller
-/// runs, telling listeners with the same event when it is done, so lists and
-/// counts refresh. Per account and folder at most one runs and one waits;
-/// further requests fold into the waiting one.
+/// Schedule a folder refresh after a server mutation.
+///
+/// Sync `folders` in the background: after a server move or delete whose local cache could not follow, the sync
+/// prunes the rows the server no longer has and caches the moved copies. The same one-folder sync the notify
+/// poller runs, telling listeners with the same event when it is done, so lists and counts refresh. Per account
+/// and folder at most one runs and one waits; further requests fold into the waiting one.
 pub(crate) fn spawn_folder_resync(data_directory: &str, account: &str, folders: &[&str]) {
     for folder in folders {
         let key = watch_key(account, folder);
@@ -245,191 +262,6 @@ static WATCH_OWNERSHIP: Mutex<()> = Mutex::new(());
 /// left running with nothing to tear it down.
 static FOREGROUND_SESSION: AtomicBool = AtomicBool::new(false);
 
-/// Record or drop one side's interest in a watch. Returns whether it changed.
-fn set_watch_interest(
-    interests: &Mutex<Vec<(String, String)>>,
-    account: &str,
-    folder: &str,
-    wanted: bool,
-) -> bool {
-    let mut interests = interests.lock().unwrap();
-    let position = interests
-        .iter()
-        .position(|(a, f)| a == account && f == folder);
-    match (position, wanted) {
-        (None, true) => interests.push((account.to_string(), folder.to_string())),
-        (Some(index), false) => {
-            interests.remove(index);
-        }
-        _ => return false,
-    }
-    true
-}
-
-fn watch_interest(interests: &Mutex<Vec<(String, String)>>, account: &str, folder: &str) -> bool {
-    interests
-        .lock()
-        .unwrap()
-        .iter()
-        .any(|(a, f)| a == account && f == folder)
-}
-
-/// Build and host the Engine for the foreground session (idempotent), then start
-/// foreground IMAP IDLE on each active account's INBOX so new mail lands in the
-/// open view live. The Engine holds its own DB connection and warm session pool
-/// for the lifetime of the foreground state.
-fn engine_foreground() -> Result<Value, String> {
-    let data_directory = MOBILE_CONFIG
-        .lock()
-        .unwrap()
-        .as_ref()
-        .map(|config| config.data_dir.clone())
-        .ok_or_else(|| "mobile core is not initialized".to_string())?;
-    // Make sure the runtime is ready so the first routed op doesn't pay for it.
-    engine_runtime().ok_or_else(|| "engine runtime unavailable".to_string())?;
-    {
-        let mut slot = ENGINE.lock().unwrap();
-        if slot.is_none() {
-            let host = Box::new(MobileHost {
-                data_dir: data_directory.clone(),
-            });
-            let engine = Engine::new(host).map_err(|error| format!("{error:#}"))?;
-            let _ = engine.rule_progress.set(Arc::new(|account, folder| {
-                emit_event(
-                    "mail.synced",
-                    json!({ "account": account, "folder": folder, "synced": 0 }),
-                );
-            }));
-            *slot = Some(Arc::new(engine));
-        }
-    }
-    {
-        let _ownership = WATCH_OWNERSHIP.lock().unwrap();
-        FOREGROUND_SESSION.store(true, Ordering::SeqCst);
-    }
-    ensure_notify_poller(&data_directory);
-    start_foreground_idle(&data_directory);
-    Ok(json!({ "ok": true }))
-}
-
-/// Park the Engine for the background state: stop the foreground IDLE watches and
-/// drop warm pooled sockets (the OS freezes/reclaims them anyway). The Engine
-/// itself (DB + creds) is kept so the next foreground transition resumes fast.
-fn engine_background() -> Result<Value, String> {
-    {
-        let _ownership = WATCH_OWNERSHIP.lock().unwrap();
-        FOREGROUND_SESSION.store(false, Ordering::SeqCst);
-        let owned: Vec<(String, String)> = ENGINE_OWNED_WATCHES.lock().unwrap().drain(..).collect();
-        for (account, folder) in owned {
-            if !watch_interest(&HOST_WATCHES, &account, &folder) {
-                let _ = stop_mobile_idle_watch(&account, &folder);
-            }
-        }
-    }
-    if let Some(engine) = ENGINE.lock().unwrap().as_ref() {
-        engine.clear_all_pools();
-    }
-    Ok(json!({ "ok": true }))
-}
-
-/// Start IDLE for each active (non-RSS, non-paused) account on INBOX, the
-/// account's Sent folder and any folder opted in to notifications — INBOX so
-/// received mail appears live, Sent so mail sent from another client (each IDLE
-/// connection watches a single mailbox) also shows up live in the cross-folder
-/// conversation view. Records the watches we actually
-/// started so `engine_background` stops exactly those, leaving any opt-in
-/// live-push watches alone.
-fn start_foreground_idle(data_directory: &str) {
-    let accounts = match mobile_db(data_directory) {
-        Ok(conn) => crate::store::load_accounts(&conn).unwrap_or_default(),
-        Err(_) => return,
-    };
-    for (id, _creds) in accounts {
-        let (skip, sent, notify) = match mobile_db(data_directory) {
-            Ok(conn) => {
-                let skip = is_rss_account(&conn, &id).unwrap_or(false)
-                    || crate::store::account_paused(&conn, &id).unwrap_or(false);
-                let sent = crate::store::get_folders(&conn, &id)
-                    .ok()
-                    .and_then(|folders| {
-                        folders
-                            .into_iter()
-                            .map(|folder| folder.name)
-                            .find(|name| crate::imap::looks_like_sent(name))
-                    });
-                // The rest of the opted-in folders are polled; see
-                // `poll_notify_folders_once`.
-                let notify = crate::store::notify_folder_plan(&conn, &id)
-                    .map(|plan| plan.live)
-                    .unwrap_or_default();
-                (skip, sent, notify)
-            }
-            Err(_) => (true, None, Vec::new()),
-        };
-        if skip {
-            continue;
-        }
-        start_owned_watch(data_directory, &id, "INBOX");
-        if let Some(sent) = sent
-            && !sent.eq_ignore_ascii_case("INBOX")
-        {
-            start_owned_watch(data_directory, &id, &sent);
-        }
-        // Already-running watches (Sent, above) are skipped by the dedupe.
-        for folder in notify {
-            start_owned_watch(data_directory, &id, &folder);
-        }
-    }
-}
-
-/// Stop watching a folder that no longer exists, whoever wanted the watch.
-pub(crate) fn forget_deleted_folder_watch(account: &str, folder: &str) {
-    let _ownership = WATCH_OWNERSHIP.lock().unwrap();
-    set_watch_interest(&ENGINE_OWNED_WATCHES, account, folder, false);
-    set_watch_interest(&HOST_WATCHES, account, folder, false);
-    let _ = stop_mobile_idle_watch(account, folder);
-}
-
-/// Apply a folder's notification opt-in to the running foreground session:
-/// start watching it now, or drop the foreground session's interest in it. A
-/// no-op in the background, where the host decides what is watched.
-pub(crate) fn sync_foreground_notify_watch(
-    data_directory: &str,
-    account: &str,
-    folder: &str,
-    enabled: bool,
-) {
-    if folder.eq_ignore_ascii_case("INBOX") {
-        return;
-    }
-    // Sent stays watched for the conversation view whatever its opt-in says.
-    if !enabled && !crate::imap::looks_like_sent(folder) {
-        // A watch the host also wants is the host's to stop once it re-reads the flags.
-        let _ownership = WATCH_OWNERSHIP.lock().unwrap();
-        if set_watch_interest(&ENGINE_OWNED_WATCHES, account, folder, false)
-            && !watch_interest(&HOST_WATCHES, account, folder)
-        {
-            let _ = stop_mobile_idle_watch(account, folder);
-        }
-    }
-    start_live_notify_watches(data_directory, account);
-}
-
-/// Watch an account's live opted-in folders for the foreground session.
-/// Called whenever the opt-ins change: an enabled folder inside the live set
-/// starts now, and one that was polled moves into a slot a disable or delete
-/// freed. Skipped while the session is in the background.
-pub(crate) fn start_live_notify_watches(data_directory: &str, account: &str) {
-    let live = mobile_db(data_directory)
-        .ok()
-        .and_then(|conn| crate::store::notify_folder_plan(&conn, account).ok())
-        .map(|plan| plan.live)
-        .unwrap_or_default();
-    for folder in live {
-        start_owned_watch(data_directory, account, &folder);
-    }
-}
-
 /// How often opted-in folders past the live set are checked for new mail.
 const NOTIFY_POLL_INTERVAL: Duration = Duration::from_secs(120);
 
@@ -437,144 +269,6 @@ const NOTIFY_POLL_INTERVAL: Duration = Duration::from_secs(120);
 /// the interests that keep it alive are set, so a start cannot be lost to an
 /// exit decided a moment earlier.
 static NOTIFY_POLLER_RUNNING: AtomicBool = AtomicBool::new(false);
-
-/// Make sure the poller runs. Call after recording the interest (foreground
-/// session or host watch) that needs it.
-fn ensure_notify_poller(data_directory: &str) {
-    if NOTIFY_POLLER_RUNNING.swap(true, Ordering::SeqCst) {
-        return;
-    }
-    let data_directory = data_directory.to_string();
-    let spawned = std::thread::Builder::new()
-        .name("meron-notify-poll".to_string())
-        .spawn(move || {
-            loop {
-                std::thread::sleep(NOTIFY_POLL_INTERVAL);
-                {
-                    let _ownership = WATCH_OWNERSHIP.lock().unwrap();
-                    if !FOREGROUND_SESSION.load(Ordering::SeqCst)
-                        && HOST_WATCHES.lock().unwrap().is_empty()
-                    {
-                        NOTIFY_POLLER_RUNNING.store(false, Ordering::SeqCst);
-                        return;
-                    }
-                }
-                poll_notify_folders_once(&data_directory);
-            }
-        });
-    if spawned.is_err() {
-        NOTIFY_POLLER_RUNNING.store(false, Ordering::SeqCst);
-    }
-}
-
-/// Check the opted-in folders that have no IDLE connection of their own, over
-/// pooled sessions. Covers every active account while the app is in the
-/// foreground, and otherwise the accounts the host (live push) is watching.
-fn poll_notify_folders_once(data_directory: &str) {
-    let Ok(conn) = mobile_db(data_directory) else {
-        return;
-    };
-    let accounts = crate::store::load_accounts(&conn).unwrap_or_default();
-    let mut targets = Vec::new();
-    for (account, _creds) in accounts {
-        if is_rss_account(&conn, &account).unwrap_or(true)
-            || crate::store::account_paused(&conn, &account).unwrap_or(true)
-        {
-            continue;
-        }
-        let wanted = FOREGROUND_SESSION.load(Ordering::SeqCst)
-            || HOST_WATCHES
-                .lock()
-                .unwrap()
-                .iter()
-                .any(|(a, _)| *a == account);
-        if !wanted {
-            continue;
-        }
-        let polled = crate::store::notify_folder_plan(&conn, &account)
-            .map(|plan| plan.polled)
-            .unwrap_or_default();
-        targets.extend(polled.into_iter().map(|folder| (account.clone(), folder)));
-    }
-    drop(conn);
-    for (account, folder) in targets {
-        let watched = MOBILE_IDLE_WATCHES
-            .lock()
-            .unwrap()
-            .as_ref()
-            .is_some_and(|watches| watches.contains_key(&watch_key(&account, &folder)));
-        if watched {
-            continue;
-        }
-        match sync_mobile_folder(data_directory, &account, &folder) {
-            Ok(sync) => emit_mobile_sync_result(&account, &folder, &sync),
-            Err(err) => crate::mlog!(
-                crate::log::Level::Warn,
-                "mail.sync",
-                "poll of {account}/{folder} failed: {err}"
-            ),
-        }
-    }
-}
-
-/// One folder's `mail.sync`, without relisting the account's folders.
-fn sync_mobile_folder(data_directory: &str, account: &str, folder: &str) -> Result<Value, String> {
-    sync_mobile_mail(
-        data_directory,
-        &json!({
-            "account_id": account,
-            "folder_id": folder,
-            "limit": 50,
-            "folders": false,
-        }),
-    )
-}
-
-/// Tell listeners what a sync found: the arrivals, or just that it ran.
-fn emit_mobile_sync_result(account: &str, folder: &str, sync: &Value) {
-    // New mail AI sorting filed into Meron folders with notifications on.
-    for detail in sync
-        .get("meron_new_messages")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter(|value| value.is_object())
-    {
-        emit_event("mail.newMessages", detail.clone());
-    }
-    if let Some(detail) = sync.get("new_messages").filter(|value| value.is_object()) {
-        emit_event("mail.newMessages", detail.clone());
-    } else {
-        let synced = sync.get("synced").and_then(Value::as_u64).unwrap_or(0);
-        emit_event(
-            "mail.synced",
-            json!({ "account": account, "folder": folder, "synced": synced }),
-        );
-    }
-}
-
-/// Start one IDLE watch for the foreground session and, unless it was skipped
-/// as rss/paused, record the session's interest in it — also when the host
-/// already had it running, so it survives the host letting go. Does nothing
-/// once the session has gone to the background.
-fn start_owned_watch(data_directory: &str, account: &str, folder: &str) {
-    let _ownership = WATCH_OWNERSHIP.lock().unwrap();
-    if !FOREGROUND_SESSION.load(Ordering::SeqCst) {
-        return;
-    }
-    if let Ok(result) =
-        start_mobile_idle_watch(data_directory, account.to_string(), folder.to_string())
-        && watch_is_running(&result)
-    {
-        set_watch_interest(&ENGINE_OWNED_WATCHES, account, folder, true);
-    }
-}
-
-/// Whether a `start_mobile_idle_watch` answer means the watch is up, rather
-/// than skipped for an RSS or paused account.
-fn watch_is_running(result: &Value) -> bool {
-    result.get("rss").is_none() && result.get("paused").is_none()
-}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct MobileConfig {
@@ -903,119 +597,6 @@ static STORE_PREPARED: Mutex<Option<String>> = Mutex::new(None);
 /// `core.status`, which must answer without waiting on it.
 static STORE_UPGRADING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
-/// Everything a host needs to set up without touching the store: safe on a main
-/// thread, where a migration would stall the launch until the OS kills it and
-/// rolls the migration back. The first command prepares the store.
-fn configure_mobile_core(data_directory: &str, db_key: Option<&str>) -> serde_json::Value {
-    let data_directory = data_directory.trim();
-    if data_directory.is_empty() {
-        return serde_json::json!({ "error": { "message": "data_dir is required" } });
-    }
-    let db_key = db_key.map(str::trim).unwrap_or_default();
-    *MOBILE_CONFIG.lock().unwrap() = Some(MobileConfig {
-        data_dir: data_directory.to_string(),
-        db_key: db_key.to_string(),
-    });
-    // Publish the key so `with_mobile_db` opens the encrypted store. An empty
-    // key (unkeyed init) leaves the store plaintext.
-    crate::protocol::set_mobile_db_key(if db_key.is_empty() {
-        None
-    } else {
-        Some(db_key.to_string())
-    });
-    // Route core logs to the platform over the event channel; the host forwards
-    // `log` events to os_log / Logcat. Without this the core's logs (which use
-    // `eprintln!` on desktop) are invisible on device.
-    crate::log::set_sink(Box::new(|level, tag, message| {
-        let _ = emit_event(
-            "log",
-            json!({ "level": level.as_str(), "tag": tag, "message": message }),
-        );
-    }));
-    // A panic unwinding out of an `extern "C"` entry point aborts the process,
-    // so the host never sees a Kotlin/Swift exception. The hook runs first and
-    // gets the panic into the diagnostic log before the abort.
-    crate::log::install_panic_hook();
-    serde_json::json!({
-        "ok": true,
-        "protocol": PROTOCOL_VERSION,
-        "data_dir": data_directory,
-    })
-}
-
-/// [`configure_mobile_core`] plus the store, for hosts already off the main
-/// thread that want it ready before their first command.
-fn init_mobile_core(data_directory: &str, db_key: Option<&str>) -> serde_json::Value {
-    let configured = configure_mobile_core(data_directory, db_key);
-    if configured.get("error").is_none() {
-        prepare_mobile_store(data_directory.trim());
-    }
-    configured
-}
-
-/// Upgrade the store and load what commands assume is loaded. Once per process
-/// and data dir; every command comes through here, so none can run ahead of it,
-/// and a failure is retried by the next one, which then reports its own error.
-fn prepare_mobile_store(data_directory: &str) {
-    let mut prepared = STORE_PREPARED
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-    if prepared.as_deref() == Some(data_directory) {
-        return;
-    }
-    let db_path = Path::new(data_directory).join("meron.db");
-    let key = crate::protocol::mobile_db_key();
-    let opened = crate::store::open_at_notifying(&db_path, key.as_deref(), || {
-        STORE_UPGRADING.store(true, Ordering::SeqCst);
-    });
-    STORE_UPGRADING.store(false, Ordering::SeqCst);
-    let conn = match opened {
-        Ok(conn) => conn,
-        Err(err) => {
-            crate::mlog!(crate::log::Level::Warn, "store", "prepare: {err:#}");
-            return;
-        }
-    };
-    // Publish the app-wide proxy before any command can open a socket. Mobile
-    // has stateless command paths that connect without ever building an Engine
-    // (background syncs, one-off sends).
-    if let Err(err) = crate::proxy::load_global(&conn) {
-        crate::mlog!(crate::log::Level::Warn, "store", "proxy: {err:#}");
-    }
-    crate::store::tidy_at_start(&conn);
-    drop(conn);
-    *prepared = Some(data_directory.to_string());
-    drop(prepared);
-    // List cards name attachments from a column older caches lack. Fill it on
-    // its own connection, a batch at a time, so commands opening the store in
-    // the meantime only ever wait on one short transaction. Once per process.
-    static FILES_BACKFILL_STARTED: std::sync::atomic::AtomicBool =
-        std::sync::atomic::AtomicBool::new(false);
-    if !FILES_BACKFILL_STARTED.swap(true, Ordering::SeqCst) {
-        let data_directory = data_directory.to_string();
-        std::thread::spawn(move || {
-            let result = crate::protocol::with_mobile_db(&data_directory, |conn| {
-                while !crate::store::backfill_files_batch(
-                    &conn,
-                    crate::engine::FILES_BACKFILL_BATCH,
-                )
-                .map_err(|err| format!("{err:#}"))?
-                {
-                    std::thread::sleep(std::time::Duration::from_millis(20));
-                }
-                Ok(json!({ "ok": true }))
-            });
-            if let Err(err) = result {
-                crate::mlog!(
-                    crate::log::Level::Warn,
-                    "store",
-                    "attachment backfill: {err}"
-                );
-            }
-        });
-    }
-}
-
 fn invoke_mobile_request_json(request: &str) -> serde_json::Value {
     let data_directory = MOBILE_CONFIG
         .lock()
@@ -1023,11 +604,13 @@ fn invoke_mobile_request_json(request: &str) -> serde_json::Value {
         .as_ref()
         .map(|config| config.data_dir.clone());
     // Neither needs the store, and they are what a host can ask while it waits.
-    let req = serde_json::from_str::<Request>(request).ok();
-    let method = req.as_ref().map(|req| req.method.as_str());
+    let command_request = serde_json::from_str::<Request>(request).ok();
+    let method = command_request
+        .as_ref()
+        .map(|command_request| command_request.method.as_str());
     if method == Some("core.status") {
         let migrating = STORE_UPGRADING.load(Ordering::SeqCst);
-        return json!({ "id": req.map(|req| req.id), "result": { "migrating": migrating } });
+        return json!({ "id": command_request.map(|command_request| command_request.id), "result": { "migrating": migrating } });
     }
     if method != Some("ping")
         && let Some(data_directory) = data_directory.as_deref()
@@ -1035,20 +618,20 @@ fn invoke_mobile_request_json(request: &str) -> serde_json::Value {
         prepare_mobile_store(data_directory);
     }
     if let Some(data_directory) = data_directory.as_deref()
-        && let Some(req) = req
+        && let Some(command_request) = command_request
         && matches!(
-            req.method.as_str(),
+            command_request.method.as_str(),
             "watch.start" | "watch.stop" | "engine.foreground" | "engine.background"
         )
     {
-        let result = match req.method.as_str() {
+        let result = match command_request.method.as_str() {
             "engine.foreground" => engine_foreground(),
             "engine.background" => engine_background(),
-            _ => dispatch_mobile_watch_request(data_directory, &req),
+            _ => dispatch_mobile_watch_request(data_directory, &command_request),
         };
         return match result {
-            Ok(result) => json!({ "id": req.id, "result": result }),
-            Err(message) => json!({ "id": req.id, "error": { "message": message } }),
+            Ok(result) => json!({ "id": command_request.id, "result": result }),
+            Err(message) => json!({ "id": command_request.id, "error": { "message": message } }),
         };
     }
     invoke_mobile_protocol_json(request, data_directory.as_deref())
@@ -1070,226 +653,6 @@ pub(crate) fn emit_event(name: &str, detail: serde_json::Value) -> bool {
         (sink.callback)(event_json.as_ptr(), sink.user_data as *mut c_void);
     }
     true
-}
-
-fn dispatch_mobile_watch_request(data_directory: &str, request: &Request) -> Result<Value, String> {
-    let account = req_account_id(&request.params)?;
-    let folder =
-        canon_folder(&req_str(&request.params, "folder").unwrap_or_else(|_| "INBOX".to_string()));
-    match request.method.as_str() {
-        "watch.start" => {
-            let _ownership = WATCH_OWNERSHIP.lock().unwrap();
-            let result = start_mobile_idle_watch(data_directory, account.clone(), folder.clone())?;
-            // The host (the live-push service) now counts on this watch, even
-            // one `engine.foreground` started first; going to the background
-            // must not stop it.
-            if watch_is_running(&result) {
-                set_watch_interest(&HOST_WATCHES, &account, &folder, true);
-                ensure_notify_poller(data_directory);
-            }
-            Ok(result)
-        }
-        "watch.stop" => {
-            let _ownership = WATCH_OWNERSHIP.lock().unwrap();
-            set_watch_interest(&HOST_WATCHES, &account, &folder, false);
-            // The open app keeps the watches its foreground session wants.
-            if watch_interest(&ENGINE_OWNED_WATCHES, &account, &folder) {
-                return Ok(json!({ "ok": true, "stopped": false }));
-            }
-            stop_mobile_idle_watch(&account, &folder)
-        }
-        _ => Err(format!("unknown watch method: {}", request.method)),
-    }
-}
-
-fn watch_key(account: &str, folder: &str) -> String {
-    format!("{account}\n{folder}")
-}
-
-fn mobile_db(data_directory: &str) -> Result<rusqlite::Connection, String> {
-    let db_path = Path::new(data_directory.trim()).join("meron.db");
-    match mobile_db_key() {
-        Some(key) => crate::store::open_at_keyed(&db_path, &key),
-        None => crate::store::open_at(&db_path),
-    }
-    .map_err(|error| format!("{error:#}"))
-}
-
-fn start_mobile_idle_watch(
-    data_directory: &str,
-    account: String,
-    folder: String,
-) -> Result<Value, String> {
-    {
-        let conn = mobile_db(data_directory)?;
-        if is_rss_account(&conn, &account)? {
-            return Ok(json!({ "ok": true, "rss": true }));
-        }
-        if crate::store::account_paused(&conn, &account).map_err(|error| format!("{error:#}"))? {
-            return Ok(json!({ "ok": true, "paused": true }));
-        }
-        let creds = load_mobile_account_creds(&conn, &account)?;
-        if account_needs_reconnect(&creds) {
-            return Err(format!("account needs reconnect: {account}"));
-        }
-    }
-
-    let key = watch_key(&account, &folder);
-    let mut watches = MOBILE_IDLE_WATCHES.lock().unwrap();
-    let watches = watches.get_or_insert_with(HashMap::new);
-    if watches.contains_key(&key) {
-        return Ok(json!({ "ok": true, "already": true }));
-    }
-    let stop = Arc::new(AtomicBool::new(false));
-    watches.insert(key, stop.clone());
-    let data_directory = data_directory.to_string();
-    std::thread::Builder::new()
-        .name(format!("meron-idle-{account}-{folder}"))
-        .spawn({
-            let account = account.clone();
-            let folder = folder.clone();
-            move || mobile_idle_thread(data_directory, account, folder, stop)
-        })
-        .map_err(|error| format!("spawn idle watcher: {error}"))?;
-    Ok(json!({ "ok": true, "already": false }))
-}
-
-fn stop_mobile_idle_watch(account: &str, folder: &str) -> Result<Value, String> {
-    let key = watch_key(account, folder);
-    let removed = MOBILE_IDLE_WATCHES
-        .lock()
-        .unwrap()
-        .as_mut()
-        .and_then(|watches| watches.remove(&key));
-    if let Some(stop) = removed.as_ref() {
-        stop.store(true, Ordering::SeqCst);
-    }
-    Ok(json!({ "ok": true, "stopped": removed.is_some() }))
-}
-
-fn mobile_idle_thread(
-    data_directory: String,
-    account: String,
-    folder: String,
-    stop: Arc<AtomicBool>,
-) {
-    let runtime = match tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-    {
-        Ok(runtime) => runtime,
-        Err(err) => {
-            emit_event(
-                "error",
-                json!({ "message": format!("idle runtime: {err}") }),
-            );
-            return;
-        }
-    };
-    runtime.block_on(async {
-        while !stop.load(Ordering::SeqCst) {
-            match mobile_idle_once(&data_directory, &account, &folder, &stop).await {
-                Ok(()) => {}
-                Err(err) => {
-                    if let Some((name, detail)) =
-                        crate::engine::needs_reconnect_event(&account, &err)
-                    {
-                        emit_event(name, detail);
-                    }
-                    emit_event(
-                        "error",
-                        json!({ "message": format!("idle {account}/{folder}: {err:#}") }),
-                    );
-                    tokio::time::sleep(Duration::from_secs(15)).await;
-                }
-            }
-        }
-        // Only our own entry: a stop followed by a quick restart leaves a
-        // replacement watcher under the same key, which must stay findable.
-        if let Some(watches) = MOBILE_IDLE_WATCHES.lock().unwrap().as_mut() {
-            let key = watch_key(&account, &folder);
-            if watches
-                .get(&key)
-                .is_some_and(|current| Arc::ptr_eq(current, &stop))
-            {
-                watches.remove(&key);
-            }
-        }
-    });
-}
-
-async fn mobile_idle_once(
-    data_directory: &str,
-    account: &str,
-    folder: &str,
-    stop: &AtomicBool,
-) -> anyhow::Result<()> {
-    {
-        let conn = mobile_db(data_directory).map_err(|error| anyhow::anyhow!(error))?;
-        if crate::store::account_paused(&conn, account).unwrap_or(false) {
-            return Ok(());
-        }
-    }
-    // IDLE used to load the stored credentials directly and authenticate before
-    // entering the normal Engine sync path. An expired browser-flow OAuth token
-    // therefore failed the connection before Engine::ensure_valid_creds could
-    // refresh it. Use the same credential path as every other live IMAP op.
-    // Platform-managed Android Gmail is refreshed by the host before it invokes
-    // engine.foreground/watch.start; ensure_valid_creds then picks up that token.
-    let engine = engine_for(data_directory).map_err(|error| anyhow::anyhow!(error))?;
-    let creds = engine.ensure_valid_creds(account).await?;
-    if account_needs_reconnect(&creds) {
-        anyhow::bail!("account needs reconnect: {account}");
-    }
-    let mut session = crate::imap::connect(&creds).await?;
-    session.select(folder).await?;
-    mobile_sync_and_notify(data_directory, account, folder).await?;
-
-    while !stop.load(Ordering::SeqCst) {
-        let mut handle = session.idle();
-        handle.init().await?;
-        let response = {
-            let (idle_fut, _stop) = handle.wait_with_timeout(Duration::from_secs(15 * 60));
-            tokio::select! {
-                biased;
-                // Stopped: give the connection back now, without waiting for
-                // DONE. A quiet mailbox would otherwise hold it until the IDLE
-                // timeout, alongside whatever watch replaced this one.
-                _ = wait_for_mobile_watch_stop(stop) => return Ok(()),
-                response = idle_fut => response,
-            }
-        };
-        session = handle.done().await?;
-        if let async_imap::extensions::idle::IdleResponse::NewData(_) = response? {
-            mobile_sync_and_notify(data_directory, account, folder).await?;
-        }
-    }
-    Ok(())
-}
-
-/// Resolves once a watch's stop flag is set. The flag is a plain atomic set
-/// from other threads, so it is checked on a short tick.
-async fn wait_for_mobile_watch_stop(stop: &AtomicBool) {
-    while !stop.load(Ordering::SeqCst) {
-        tokio::time::sleep(Duration::from_millis(500)).await;
-    }
-}
-
-async fn mobile_sync_and_notify(
-    data_directory: &str,
-    account: &str,
-    folder: &str,
-) -> anyhow::Result<()> {
-    let data_dir_owned = data_directory.to_string();
-    let account_owned = account.to_string();
-    let folder_owned = folder.to_string();
-    let sync = tokio::task::spawn_blocking(move || {
-        sync_mobile_folder(&data_dir_owned, &account_owned, &folder_owned)
-    })
-    .await?
-    .map_err(|error| anyhow::anyhow!(error))?;
-    emit_mobile_sync_result(account, folder, &sync);
-    Ok(())
 }
 
 /// `mail.newMessages` detail for `headers` (the arrivals from

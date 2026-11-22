@@ -6,7 +6,7 @@
 use super::*;
 
 pub(crate) fn read_mobile_thread(data_directory: &str, params: &Value) -> Result<Value, String> {
-    let thread_id = req_str(params, "thread_id")?;
+    let thread_id = required_string(params, "thread_id")?;
     if is_rss_thread_id(&thread_id) {
         return read_mobile_rss_thread(data_directory, params);
     }
@@ -20,7 +20,7 @@ pub(crate) fn read_mobile_thread(data_directory: &str, params: &Value) -> Result
         Some(uid) => format!("uid:{uid}"),
         None => parsed.thread_key.clone(),
     };
-    let limit = opt_u32(params, "limit");
+    let limit = optional_u32(params, "limit");
     let before_cursor = params
         .get("before_cursor")
         .and_then(Value::as_str)
@@ -60,7 +60,7 @@ pub(crate) fn list_mobile_starred_items(
     data_directory: &str,
     params: &Value,
 ) -> Result<Value, String> {
-    let limit = opt_u32(params, "limit").unwrap_or(200);
+    let limit = optional_u32(params, "limit").unwrap_or(200);
     with_mobile_db(data_directory, |conn| {
         let mut items = crate::mail_model::starred_thread_cards(&conn, 2_000)
             .map_err(|error| format!("{error:#}"))?;

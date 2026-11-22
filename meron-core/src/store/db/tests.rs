@@ -7,7 +7,7 @@ use super::*;
 
 const TEST_KEY: &str = "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff";
 
-fn tmp_db_path() -> PathBuf {
+fn temporary_database_path() -> PathBuf {
     let directory = std::env::temp_dir().join(format!("meron-db-test-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&directory).unwrap();
     directory.join("meron.db")
@@ -15,7 +15,7 @@ fn tmp_db_path() -> PathBuf {
 
 #[test]
 fn keyed_open_round_trips() {
-    let path = tmp_db_path();
+    let path = temporary_database_path();
     {
         let conn = open_at_keyed(&path, TEST_KEY).unwrap();
         conn.execute("INSERT INTO settings(key, value) VALUES('k', 'v')", [])
@@ -33,7 +33,7 @@ fn keyed_open_round_trips() {
 
 #[test]
 fn legacy_plaintext_is_migrated_to_encrypted() {
-    let path = tmp_db_path();
+    let path = temporary_database_path();
     // Simulate a pre-encryption store: create it plaintext with some data.
     {
         let conn = open_at(&path).unwrap();
@@ -61,7 +61,7 @@ fn legacy_plaintext_is_migrated_to_encrypted() {
 
 #[test]
 fn wrong_key_on_an_encrypted_store_is_named_not_migrated() {
-    let path = tmp_db_path();
+    let path = temporary_database_path();
     {
         let conn = open_at_keyed(&path, TEST_KEY).unwrap();
         conn.execute("INSERT INTO settings(key, value) VALUES('k', 'v')", [])
@@ -86,7 +86,7 @@ fn wrong_key_on_an_encrypted_store_is_named_not_migrated() {
 
 #[test]
 fn plaintext_and_missing_files_are_not_taken_for_encrypted() {
-    let path = tmp_db_path();
+    let path = temporary_database_path();
     assert!(!is_encrypted_database(&path), "missing file");
     drop(open_at(&path).unwrap());
     assert!(!is_encrypted_database(&path), "plaintext file");

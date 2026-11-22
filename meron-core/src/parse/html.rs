@@ -19,19 +19,19 @@ pub(super) fn rewrite_cid_refs(html: &str, cid_keys: &[(String, String)]) -> Str
 }
 
 /// Strip script-bearing markup from email HTML while preserving layout/styling.
-/// This is the independent second boundary behind the iframe's `default-src 'none'`
-/// CSP: even if the CSP fails to apply, the markup itself carries no `<script>`,
-/// no `on*` handlers, no `javascript:`/`vbscript:` URLs, and no embedding tags
-/// (`<iframe>`/`<object>`/`<embed>`/`<form>`/`<meta>`/`<base>`/`<link>`), so the
+///
+/// This is the independent second boundary behind the iframe's `default-src 'none'` CSP: even if the CSP
+/// fails to apply, the markup itself carries no `<script>`, no `on*` handlers, no `javascript:`/`vbscript:`
+/// URLs, and no embedding tags (`<iframe>`/`<object>`/`<embed>`/`<form>`/`<meta>`/`<base>`/`<link>`), so the
 /// `allow-same-origin allow-scripts` iframe can't be turned into an XSS vector.
 ///
-/// CSS is intentionally preserved — both `<style>` blocks and inline `style=`
-/// attributes — because the CSP already permits `style-src 'unsafe-inline'` and
-/// email layout depends on it; CSS carries no script execution in WebKit. Inline
-/// `data:image/...` sources are kept on `<img>` only; `data:` is stripped from
-/// every other slot so a `data:text/html` href can't navigate the frame to an
-/// un-CSP'd document. `cid:` refs are already rewritten to `/media/<key>` by the
-/// time this runs, so relative URLs must pass through untouched.
+/// CSS is intentionally preserved — both `<style>` blocks and inline `style=` attributes — because the CSP
+/// already permits `style-src 'unsafe-inline'` and email layout depends on it; CSS carries no script execution
+/// in WebKit. Inline `data:image/...` sources are kept on `<img>` only; `data:` is stripped from every other
+/// slot so a `data:text/html` href can't navigate the frame to an un-CSP'd document.
+///
+/// `cid:` refs are already rewritten to `/media/<key>` by the time this runs, so relative URLs must pass
+/// through untouched.
 fn sanitize_email_html(source: &str) -> String {
     use std::borrow::Cow;
 
@@ -346,12 +346,14 @@ fn split_important(value: &str) -> (&str, bool) {
     }
 }
 
-/// Wrap stored HTML for safe iframe rendering: inject a CSP `<meta>` that allows
-/// same-origin (`/media`), data, and blob images/media always, and remote (`https:`)
-/// images/media only when the account opts in. The reader renders this in a `sandbox`ed
-/// iframe with `allow-scripts` (needed so the host's link-click listener fires under
-/// WebKitGTK); the `default-src 'none'` CSP still blocks all email JS, so the
-/// CSP also gates remote image/media loads.
+/// Prepare stored message HTML for display inside the reader's iframe.
+///
+/// Wrap stored HTML for safe iframe rendering: inject a CSP `<meta>` that allows same-origin (`/media`),
+/// data, and blob images/media always, and remote (`https:`) images/media only when the account opts in.
+///
+/// The reader renders this in a `sandbox`ed iframe with `allow-scripts` (needed so the host's link-click
+/// listener fires under WebKitGTK); the `default-src 'none'` CSP still blocks all email JS, so the CSP also
+/// gates remote image/media loads.
 pub fn prepare_html(source: &str, load_remote_images: bool) -> String {
     prepare_message_html(source, load_remote_images, "")
 }
@@ -369,7 +371,7 @@ pub fn prepare_message_html(source: &str, load_remote_images: bool, subject: &st
         &sanitize_email_html(source),
         crate::quote::is_forward_subject(subject),
     );
-    let (img, media) = if load_remote_images {
+    let (image, media) = if load_remote_images {
         (
             "'self' data: http: https:",
             "'self' data: blob: http: https:",
@@ -384,7 +386,7 @@ pub fn prepare_message_html(source: &str, load_remote_images: bool, subject: &st
     let csp = format!(
         "default-src 'none'; script-src 'none'; object-src 'none'; frame-src 'none'; \
          base-uri 'none'; form-action 'none'; \
-         img-src {img}; media-src {media}; style-src 'unsafe-inline'; font-src 'self' data:;"
+         img-src {image}; media-src {media}; style-src 'unsafe-inline'; font-src 'self' data:;"
     );
     // Keep oversized inline images within the reader width (preserving aspect), and
     // hint that they open the gallery. `style-src 'unsafe-inline'` covers this block.

@@ -149,16 +149,16 @@ pub fn close(lesson: &Lesson, from_addr: &str, subject: &str) -> bool {
             && subject_likeness(&lesson.subject, subject) >= CLOSE_SUBJECT)
 }
 
-/// The lessons most like an email from `from_addr` about `subject`: from the
-/// same address first, then the same site, alike subjects first, at most
-/// [`ALIKE_MAX`]. Answered newest first, the order the AI is told they are in.
+/// Rank stored filing lessons for the current sender and subject.
 ///
-/// Spam is the careful place, and the reader's latest word on such mail
-/// decides whether it is open at all: a Spam lesson is only among them when
-/// it is [`close`] and the newest close lesson, of any place, is a Spam one
-/// (of two as new as each other, the one that isn't Spam counts). Once the
-/// reader moved such mail back to the Inbox, their older Spam lessons for it
-/// stay out until they send such mail to Spam again.
+/// The lessons most like an email from `from_addr` about `subject`: from the same address first, then the
+/// same site, alike subjects first, at most [`ALIKE_MAX`]. Answered newest first, the order the AI is told
+/// they are in.
+///
+/// Spam is the careful place, and the reader's latest word on such mail decides whether it is open at all: a Spam
+/// lesson is only among them when it is [`close`] and the newest close lesson, of any place, is a Spam one (of two
+/// as new as each other, the one that isn't Spam counts). Once the reader moved such mail back to the Inbox, their
+/// older Spam lessons for it stay out until they send such mail to Spam again.
 pub fn alike<'a>(lessons: &'a [Lesson], from_addr: &str, subject: &str) -> Vec<&'a Lesson> {
     let spam_open = lessons
         .iter()

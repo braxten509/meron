@@ -9,8 +9,8 @@ pub(crate) fn mark_mobile_thread_starred(
     data_directory: &str,
     params: &Value,
 ) -> Result<Value, String> {
-    let thread_id = req_str(params, "thread_id")?;
-    let starred = req_bool(params, "starred")?;
+    let thread_id = required_string(params, "thread_id")?;
+    let starred = required_boolean(params, "starred")?;
     if is_rss_thread_id(&thread_id) {
         return mark_mobile_rss_thread_starred(data_directory, params);
     }
@@ -67,7 +67,7 @@ pub(crate) fn set_mobile_thread_tags(
     data_directory: &str,
     params: &Value,
 ) -> Result<Value, String> {
-    let thread_id = req_str(params, "thread_id")?;
+    let thread_id = required_string(params, "thread_id")?;
     let parsed = parse_thread_id_with_request_folder(&thread_id, params)
         .ok_or_else(|| "invalid thread_id".to_string())?;
     let add = crate::tags::parse_tag_list(params.get("add"))?;

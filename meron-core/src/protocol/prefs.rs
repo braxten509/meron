@@ -29,7 +29,7 @@ pub(crate) fn get_mobile_prefs(data_directory: &str, params: &Value) -> Result<V
 /// Mobile `app.prefsSet`. Writes a single setting; the host has already updated
 /// its own cache, so this is the durable half of a write-through.
 pub(crate) fn set_mobile_pref(data_directory: &str, params: &Value) -> Result<Value, String> {
-    let key = req_str(params, "key")?;
+    let key = required_string(params, "key")?;
     let value = params.get("value").cloned().unwrap_or(Value::Null);
     with_mobile_db(data_directory, |conn| {
         store::setting_set(&conn, &key, &value).map_err(|error| format!("{error:#}"))?;

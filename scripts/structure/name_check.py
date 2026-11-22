@@ -178,7 +178,13 @@ def name_problems(path: Path, language: Language, short_words: set[str], cut_wor
     for number, name in declared_names(path, language):
         if name in seen:
             continue
-        if any(word_problem(word, short_words, cut_words) for word in name_words(name)):
+        # Keep standard conversion APIs and the environment key read by Apple's SDK tools.
+        if (language.family, name) in {("rust", "as_str"), ("shell", "DEVELOPER_DIR")}:
+            continue
+        words = name_words(name)
+        if language.family == "rust":
+            words = [word for word in words if not re.fullmatch(r"[iu](?:8|16|32|64|128)", word)]
+        if any(word_problem(word, short_words, cut_words) for word in words):
             seen.add(name)
             bad.append(f"'{name}' line {number}")
     if not bad:

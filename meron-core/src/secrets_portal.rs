@@ -64,7 +64,7 @@ pub fn local_forced() -> bool {
 /// database key has been stored here, silently returning to Secret Service on a
 /// later launch would mint a different key and make the database unreadable.
 pub fn local_keyring_exists() -> bool {
-    local_keyring_exists_in(&crate::store::app_dir().join("keyring"))
+    local_keyring_exists_in(&crate::store::application_directory().join("keyring"))
 }
 
 fn local_keyring_exists_in(directory: &Path) -> bool {
@@ -282,7 +282,7 @@ async fn open_backend() -> Result<Backend> {
 /// about as well as the SQLCipher key it also holds — strictly weaker than a
 /// real Secret Service, and only used when there is none.
 async fn open_local() -> Result<oo7::file::UnlockedKeyring> {
-    let directory = local_dir()?;
+    let directory = local_directory()?;
     let secret = local_secret(&directory)?;
     oo7::file::UnlockedKeyring::load(directory.join("meron.keyring"), oo7::Secret::text(&secret))
         .await
@@ -291,8 +291,8 @@ async fn open_local() -> Result<oo7::file::UnlockedKeyring> {
 
 /// `<app dir>/keyring`, created 0700. Deliberately *not* oo7's default path
 /// (`~/.local/share/keyrings`), which belongs to gnome-keyring.
-fn local_dir() -> Result<PathBuf> {
-    let directory = crate::store::app_dir().join("keyring");
+fn local_directory() -> Result<PathBuf> {
+    let directory = crate::store::application_directory().join("keyring");
     std::fs::create_dir_all(&directory)
         .with_context(|| format!("create keyring dir {}", directory.display()))?;
     #[cfg(unix)]

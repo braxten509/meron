@@ -5,14 +5,15 @@
 
 use super::*;
 
-/// Recipient autocomplete's directory (migration v17): one row per account,
-/// address and display name seen as a mail message's sender, To or Cc,
-/// counting the messages it appears on. Keeping each name apart means a name
-/// leaves with the last message carrying it. Suggesting from the messages
-/// themselves meant reading and parsing every cached row's recipient lists per
-/// keystroke. Triggers on `messages` keep it in step with every write path;
-/// the update trigger only fires when the addresses could have changed, as an
-/// envelope upsert rewrites `json` on every resync.
+/// Create the local recipient directory used for autocomplete.
+///
+/// Recipient autocomplete's directory (migration v17): one row per account, address and display name seen as
+/// a mail message's sender, To or Cc, counting the messages it appears on. Keeping each name apart means a
+/// name leaves with the last message carrying it. Suggesting from the messages themselves meant reading and
+/// parsing every cached row's recipient lists per keystroke.
+///
+/// Triggers on `messages` keep it in step with every write path; the update trigger only fires when the
+/// addresses could have changed, as an envelope upsert rewrites `json` on every resync.
 fn contacts_ddl() -> String {
     format!(
         "CREATE TABLE IF NOT EXISTS contacts (
@@ -34,7 +35,7 @@ fn contacts_ddl() -> String {
 /// address's mail, so it only ever moves forward until the entry goes.
 pub(super) fn contacts_triggers(track_date: bool) -> String {
     let add = |row: &str| {
-        let (date_col, date_val, date_set) = if track_date {
+        let (date_col, date_value, date_set) = if track_date {
             (
                 ", last_date",
                 format!(", {row}.date"),
@@ -45,7 +46,7 @@ pub(super) fn contacts_triggers(track_date: bool) -> String {
         };
         format!(
             "INSERT INTO contacts(account, addr_key, name, addr, count{date_col})
-               SELECT {row}.account, lower(trim(addr)), trim(COALESCE(name, '')), max(trim(addr)), 1{date_val}
+               SELECT {row}.account, lower(trim(addr)), trim(COALESCE(name, '')), max(trim(addr)), 1{date_value}
                FROM ({occurrences}) WHERE {row}.uid <> 0 AND trim(COALESCE(addr, '')) <> ''
                GROUP BY lower(trim(addr)), trim(COALESCE(name, ''))
              ON CONFLICT(account, addr_key, name) DO UPDATE SET count = count + 1{date_set};",

@@ -6,7 +6,7 @@
 use super::*;
 
 pub(crate) fn list_mobile_folders(data_directory: &str, params: &Value) -> Result<Value, String> {
-    let account_id = req_str(params, "account_id")?;
+    let account_id = required_string(params, "account_id")?;
     with_mobile_db(data_directory, |conn| {
         if is_rss_account(&conn, &account_id)? {
             let folders = rss::folders(&conn, &account_id).map_err(|error| format!("{error:#}"))?;
@@ -53,8 +53,8 @@ pub(crate) fn set_mobile_folder_notify(
     data_directory: &str,
     params: &Value,
 ) -> Result<Value, String> {
-    let account_id = req_str(params, "account_id")?;
-    let folder = canon_folder(&req_str(params, "folder_id")?);
+    let account_id = required_string(params, "account_id")?;
+    let folder = canon_folder(&required_string(params, "folder_id")?);
     let enabled = params
         .get("enabled")
         .and_then(Value::as_bool)
@@ -75,8 +75,8 @@ pub(crate) fn set_mobile_folder_notify(
 }
 
 pub(crate) fn create_mobile_folder(data_directory: &str, params: &Value) -> Result<Value, String> {
-    let account_id = req_str(params, "account_id")?;
-    let display_name = req_str(params, "name")?.trim().to_string();
+    let account_id = required_string(params, "account_id")?;
+    let display_name = required_string(params, "name")?.trim().to_string();
     if display_name.is_empty() {
         return Err("Folder name is required".to_string());
     }
@@ -110,7 +110,7 @@ pub(crate) fn create_mobile_folder(data_directory: &str, params: &Value) -> Resu
 // whole subtree's cache. The special-use gate is re-checked here rather than
 // trusted from the caller: the delete takes the folders' mail with it.
 pub(crate) fn delete_mobile_folder(data_directory: &str, params: &Value) -> Result<Value, String> {
-    let account_id = req_account_id(params)?;
+    let account_id = required_account_id(params)?;
     let folder = params
         .get("folder_id")
         .or_else(|| params.get("folder"))
@@ -183,7 +183,7 @@ pub(crate) fn delete_mobile_folder(data_directory: &str, params: &Value) -> Resu
 // folder's new full path as the user reads it. Special-use folders are refused
 // here rather than trusted from the caller, like a delete.
 pub(crate) fn rename_mobile_folder(data_directory: &str, params: &Value) -> Result<Value, String> {
-    let account_id = req_account_id(params)?;
+    let account_id = required_account_id(params)?;
     let folder = params
         .get("folder_id")
         .or_else(|| params.get("folder"))

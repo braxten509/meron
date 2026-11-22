@@ -5,6 +5,9 @@
 //! pointed at that engine; writes never leave the machine, except an upload back to a server
 //! account.
 
+mod mailbox;
+use mailbox::local_mail;
+
 use serde_json::{Value, json};
 use std::sync::{Arc, Mutex};
 
@@ -124,14 +127,14 @@ pub(crate) fn handles(request: &Request) -> bool {
 
 pub(crate) async fn dispatch(
     main: &Arc<Engine>,
-    req: &Request,
+    command_request: &Request,
     out: &Writer,
 ) -> anyhow::Result<Value> {
-    let parameters = &req.params;
-    match req.method.as_str() {
+    let parameters = &command_request.params;
+    match command_request.method.as_str() {
         // Create the local account (once) and its archive.
         "account.addLocal" => {
-            let name = req_str(parameters, "name")
+            let name = required_string(parameters, "name")
                 .ok()
                 .map(|name| name.trim().to_string())
                 .filter(|name| !name.is_empty())
@@ -141,7 +144,7 @@ pub(crate) async fn dispatch(
             // Start with one folder, so there is somewhere to move mail and a
             // folder to open. The UI names it in the user's language.
             if created {
-                let folder = req_str(parameters, "folder")
+                let folder = required_string(parameters, "folder")
                     .ok()
                     .filter(|folder| !folder.trim().is_empty())
                     .unwrap_or_else(|| "Archive".to_string());
@@ -161,8 +164,8 @@ pub(crate) async fn dispatch(
         }
 
         "account.localBackup" => {
-            let path = req_str(parameters, "path")?;
-            let passphrase = req_str(parameters, "passphrase")?;
+            let path = required_string(parameters, "path")?;
+            let passphrase = required_string(parameters, "passphrase")?;
             let archive = archive(main)?;
             let db = archive.db.lock().unwrap();
             store::backup_archive_to(&db, std::path::Path::new(&path), &passphrase)?;
@@ -171,8 +174,8 @@ pub(crate) async fn dispatch(
 
         // Merge a backup into the local folders, creating them if needed.
         "account.localRestore" => {
-            let path = req_str(parameters, "path")?;
-            let passphrase = req_str(parameters, "passphrase")?;
+            let path = required_string(parameters, "path")?;
+            let passphrase = required_string(parameters, "passphrase")?;
             store::add_local_account(&main.db.lock().unwrap(), "Local Folders")?;
             let archive = archive(main)?;
             let restored = {
@@ -227,14 +230,14 @@ pub(crate) async fn dispatch(
         }
 
         "messages.move" | "messages.copy"
-            if req_str(parameters, "account").ok().as_deref() != Some(LOCAL_ACCOUNT_ID) =>
+            if required_string(parameters, "account").ok().as_deref() != Some(LOCAL_ACCOUNT_ID) =>
         {
-            archive_from_server(main, req).await
+            archive_from_server(main, command_request).await
         }
 
         _ => {
             let archive = archive(main)?;
-            local_mail(main, &archive, req, out).await
+            local_mail(main, &archive, command_request, out).await
         }
     }
 }
@@ -242,7 +245,7 @@ pub(crate) async fn dispatch(
 fn archive_file() -> std::path::PathBuf {
     std::env::var("MERON_ARCHIVE_DB")
         .map(std::path::PathBuf::from)
-        .unwrap_or_else(|_| store::app_dir().join("archive.db"))
+        .unwrap_or_else(|_| store::application_directory().join("archive.db"))
 }
 
 /// The UIDs a mail request names: explicit `uids`, one `uid`, or every message
@@ -253,22 +256,9 @@ fn request_uids(
     folder: &str,
 ) -> anyhow::Result<Vec<u32>> {
     let (thread_key, subject_filter) =
-        store::split_thread_key(&req_str(parameters, "thread_key").unwrap_or_default());
-    let uid = parameters
-        .get("uid")
-        .and_then(Value::as_u64)
-        .map(|n| n as u32);
-    let explicit_uids = parameters
-        .get("uids")
-        .and_then(Value::as_array)
-        .map(|items| {
-            items
-                .iter()
-                .filter_map(Value::as_u64)
-                .map(|n| n as u32)
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default();
+        store::split_thread_key(&required_string(parameters, "thread_key").unwrap_or_default());
+    let uid = optional_message_uid(parameters)?;
+    let explicit_uids = explicit_message_uids(parameters)?;
     store::resolve_message_uids(
         conn,
         parameters
@@ -286,7 +276,7 @@ fn request_uids(
 /// The thread id a mutation reports as changed, built as the server path does.
 fn changed_thread_id(parameters: &Value, account: &str, folder: &str) -> String {
     let (thread_key, subject_filter) =
-        store::split_thread_key(&req_str(parameters, "thread_key").unwrap_or_default());
+        store::split_thread_key(&required_string(parameters, "thread_key").unwrap_or_default());
     if thread_key.is_empty() {
         return parameters
             .get("uid")
@@ -302,488 +292,9 @@ fn changed_thread_id(parameters: &Value, account: &str, folder: &str) -> String 
 }
 
 fn request_folder(parameters: &Value) -> anyhow::Result<String> {
-    let folder = req_str(parameters, "folder").or_else(|_| req_str(parameters, "name"))?;
+    let folder =
+        required_string(parameters, "folder").or_else(|_| required_string(parameters, "name"))?;
     store::normalize_local_folder_name(&folder)
-}
-
-async fn local_mail(
-    main: &Arc<Engine>,
-    archive: &Arc<Engine>,
-    req: &Request,
-    out: &Writer,
-) -> anyhow::Result<Value> {
-    let parameters = &req.params;
-    let account = LOCAL_ACCOUNT_ID;
-    let media_root = parse::media_root();
-    match req.method.as_str() {
-        "folders.list" => {
-            let folders = store::get_folders(&archive.db.lock().unwrap(), account)?;
-            Ok(json!({ "folders": serde_json::to_value(folders)? }))
-        }
-
-        "folders.create" => {
-            let folder = store::create_local_folder(
-                &archive.db.lock().unwrap(),
-                &req_str(parameters, "name")?,
-            )?;
-            Ok(json!({ "folders": serde_json::to_value(vec![folder])? }))
-        }
-
-        "folders.delete" => {
-            let folder = request_folder(parameters)?;
-            let db = archive.db.lock().unwrap();
-            let (removed, deleted) = store::delete_local_folder(&db, &folder)?;
-            for target in &removed {
-                parse::remove_folder_media(&media_root, account, target);
-            }
-            Ok(json!({
-                "ok": true,
-                "folder": folder,
-                "removed": removed,
-                "deleted": deleted,
-                "folders": serde_json::to_value(store::get_folders(&db, account)?)?,
-            }))
-        }
-
-        "folders.rename" => {
-            let folder = request_folder(parameters)?;
-            let db = archive.db.lock().unwrap();
-            let renamed = store::rename_local_folder(
-                &db,
-                &folder,
-                &req_str(parameters, "name")?,
-                &media_root,
-            )?;
-            Ok(json!({
-                "ok": true,
-                "folder": folder,
-                "renamed": renamed,
-                "folders": serde_json::to_value(store::get_folders(&db, account)?)?,
-            }))
-        }
-
-        "folders.setNotify" => Err(anyhow::anyhow!(
-            "Local folders get no new mail to notify about"
-        )),
-        "folders.archive" => Err(anyhow::anyhow!("Local folders have no Archive folder")),
-        "messages.emptyFolder" => Err(anyhow::anyhow!(
-            "Only Trash and Junk folders can be emptied"
-        )),
-        // .eml export: the kept originals, byte for byte.
-        "messages.exportUids" => {
-            let folder = canon_local(parameters);
-            let db = archive.db.lock().unwrap();
-            let mut uids = if parameters
-                .get("all")
-                .and_then(Value::as_bool)
-                .unwrap_or(false)
-            {
-                store::local_folder_uids(&db, &folder)?
-            } else {
-                request_uids(&db, parameters, &folder)?
-            };
-            uids.sort_unstable();
-            uids.dedup();
-            Ok(json!({ "uids": uids }))
-        }
-
-        "messages.saveRaw" => {
-            let folder = canon_local(parameters);
-            let uid = req_u32(parameters, "uid")?;
-            let path = req_str(parameters, "path")?;
-            let raw = store::raw_message(&archive.db.lock().unwrap(), &folder, uid)?
-                .ok_or_else(|| anyhow::anyhow!("message {uid} not found in {folder}"))?;
-            write_private(std::path::Path::new(&path), &raw)?;
-            Ok(json!({ "saved": true, "size": raw.len() }))
-        }
-
-        "messages.saveRawBatch" => {
-            let folder = canon_local(parameters);
-            let directory = std::path::PathBuf::from(req_str(parameters, "dir")?);
-            let uids = parameters
-                .get("uids")
-                .and_then(Value::as_array)
-                .map(|items| {
-                    items
-                        .iter()
-                        .filter_map(Value::as_u64)
-                        .map(|n| n as u32)
-                        .collect::<Vec<_>>()
-                })
-                .unwrap_or_default();
-            let db = archive.db.lock().unwrap();
-            let mut saved = Vec::with_capacity(uids.len());
-            for uid in uids {
-                let Some(raw) = store::raw_message(&db, &folder, uid)? else {
-                    continue;
-                };
-                write_private(&directory.join(format!("{uid}.eml")), &raw)?;
-                saved.push(uid);
-            }
-            Ok(json!({ "saved": saved }))
-        }
-
-        // Nothing to sync or watch: a local folder changes only through Meron.
-        "messages.sync" | "watch.start" | "watch.stop" => Ok(json!({ "ok": true })),
-
-        "messages.recent" => {
-            let request = thread_list::ThreadListQuery::from_params(parameters, "folder");
-            let folder = request.folder.clone();
-            let db = archive.db.lock().unwrap();
-            let (messages, next_cursor) = match request.source() {
-                thread_list::MailSource::Starred => (
-                    store::get_starred(&db, account, &folder, request.limit)?,
-                    None,
-                ),
-                thread_list::MailSource::Recent { filter } => store::get_recent_page(
-                    &db,
-                    account,
-                    &folder,
-                    request.limit,
-                    request.before_cursor,
-                    filter,
-                )?,
-                thread_list::MailSource::Search => {
-                    let folders = engine::query_folders(&db, account, &folder, &request.query);
-                    let messages = store::search_messages_in_folders(
-                        &db,
-                        account,
-                        &folders,
-                        &request.query,
-                        request.limit,
-                        request.search_before_cursor.as_ref(),
-                    )?;
-                    let next_cursor = store::search_next_cursor(&messages, request.limit, 0);
-                    (messages, next_cursor)
-                }
-            };
-            let mut page = thread_list::mail_page(
-                &db,
-                account,
-                &folder,
-                messages,
-                next_cursor,
-                parameters
-                    .get("group")
-                    .and_then(Value::as_bool)
-                    .unwrap_or(false),
-            )?;
-            page["folder_synced"] = Value::Bool(true);
-            request.retain_attachment_threads(&mut page);
-            Ok(page)
-        }
-
-        "messages.read" | "messages.threadHeaders" => {
-            if req.method == "messages.read" {
-                let folder = canon_local(parameters);
-                let uid = req_u32(parameters, "uid")?;
-                store::restore_local_media(
-                    &archive.db.lock().unwrap(),
-                    &[(folder, uid)],
-                    &media_root,
-                )?;
-            }
-            refresh_identity(main, archive);
-            Box::pin(crate::sidecar::dispatch::messages::dispatch(
-                archive, req, out,
-            ))
-            .await
-        }
-
-        "messages.thread" => {
-            let folder = canon_local(parameters);
-            let (thread_key, subject_filter) =
-                store::split_thread_key(&req_str(parameters, "thread_key")?);
-            let limit = parameters
-                .get("limit")
-                .and_then(Value::as_u64)
-                .map(|n| n as u32);
-            let thread_id = req_str(parameters, "thread_id")
-                .unwrap_or_else(|_| mail_model::format_thread_id(account, &folder, &thread_key));
-            // Only the page being read: an old conversation may be long.
-            {
-                let db = archive.db.lock().unwrap();
-                let (headers, _) = thread_read::thread_page_headers(
-                    &db,
-                    account,
-                    &folder,
-                    &thread_key,
-                    subject_filter.as_deref(),
-                    limit,
-                    parameters.get("before_cursor").and_then(Value::as_str),
-                )?;
-                let messages = headers
-                    .into_iter()
-                    .map(|header| {
-                        let folder = if header.folder.is_empty() {
-                            folder.clone()
-                        } else {
-                            header.folder
-                        };
-                        (folder, header.uid)
-                    })
-                    .collect::<Vec<_>>();
-                store::restore_local_media(&db, &messages, &media_root)?;
-            }
-            refresh_identity(main, archive);
-            thread_read::read_thread_page(
-                archive,
-                thread_read::ThreadReadArgs {
-                    account,
-                    folder: &folder,
-                    thread_id: &thread_id,
-                    thread_key: &thread_key,
-                    subject_filter: subject_filter.as_deref(),
-                    limit,
-                    for_print: parameters
-                        .get("for_print")
-                        .and_then(Value::as_bool)
-                        .unwrap_or(false),
-                    before_cursor: parameters.get("before_cursor").and_then(Value::as_str),
-                    media_root,
-                },
-                None,
-            )
-            .await
-        }
-
-        "messages.markRead" | "messages.markStarred" => {
-            let folder = canon_local(parameters);
-            let read = req.method == "messages.markRead";
-            let value = parameters
-                .get(if read { "seen" } else { "starred" })
-                .and_then(Value::as_bool)
-                .unwrap_or(true);
-            let db = archive.db.lock().unwrap();
-            let explicit = parameters.get("uids").is_some() || parameters.get("uid").is_some();
-            let (thread_key, subject_filter) =
-                store::split_thread_key(&req_str(parameters, "thread_key").unwrap_or_default());
-            // A whole thread is flagged in every local folder it spans.
-            let by_folder = if !explicit && !thread_key.is_empty() {
-                store::thread_uids_by_folder(
-                    &db,
-                    account,
-                    &folder,
-                    &thread_key,
-                    subject_filter.as_deref(),
-                    false,
-                )?
-            } else {
-                std::collections::BTreeMap::from([(
-                    folder.clone(),
-                    request_uids(&db, parameters, &folder)?,
-                )])
-            };
-            for (marked_folder, uids) in &by_folder {
-                let (seen, starred) = if read {
-                    (Some(value), None)
-                } else {
-                    (None, Some(value))
-                };
-                store::set_local_flags(&db, marked_folder, uids, seen, starred)?;
-            }
-            let mut result = mail_model::mutation_result(
-                json!({ "ok": true }),
-                &db,
-                account,
-                &changed_thread_id(parameters, account, &folder),
-                &folder,
-                None,
-                read.then_some(!value),
-                (!read).then_some(value),
-                false,
-            )?;
-            mail_model::add_folder_unreads(&mut result, &db, account, by_folder.keys())?;
-            Ok(result)
-        }
-
-        "tags.list" => {
-            let counts = store::tag_counts(&archive.db.lock().unwrap(), Some(account))?;
-            Ok(store::tag_counts_json(counts))
-        }
-
-        "messages.setTags" => {
-            let folder = canon_local(parameters);
-            let add = meron_core::tags::parse_tag_list(parameters.get("add"))
-                .map_err(anyhow::Error::msg)?;
-            let remove = meron_core::tags::parse_tag_list(parameters.get("remove"))
-                .map_err(anyhow::Error::msg)?;
-            let db = archive.db.lock().unwrap();
-            let targets = store::tag_targets(
-                &db,
-                account,
-                &folder,
-                &req_str(parameters, "thread_key").unwrap_or_default(),
-                &tag_uids(parameters),
-            )?;
-            let tags = store::retag(&db, account, &targets, &add, &remove, false)?;
-            Ok(json!({ "ok": true, "tags": tags }))
-        }
-
-        "messages.markAllRead" => {
-            let folder = canon_local(parameters);
-            let db = archive.db.lock().unwrap();
-            let updated = store::set_local_folder_seen(&db, &folder, true)?;
-            mail_model::mutation_result(
-                json!({ "ok": true, "updated": updated, "folder": folder }),
-                &db,
-                account,
-                "",
-                &folder,
-                None,
-                Some(false),
-                None,
-                false,
-            )
-        }
-
-        // Local folders have no Trash: a delete is permanent, and the UI says so.
-        "messages.delete" => {
-            let folder = canon_local(parameters);
-            let db = archive.db.lock().unwrap();
-            let uids = request_uids(&db, parameters, &folder)?;
-            let deleted = store::delete_local_messages(&db, &folder, &uids)?;
-            for uid in &uids {
-                parse::remove_message_media(&media_root, account, &folder, *uid);
-            }
-            mail_model::mutation_result(
-                json!({ "ok": true, "deleted": deleted, "permanent": true }),
-                &db,
-                account,
-                &changed_thread_id(parameters, account, &folder),
-                &folder,
-                None,
-                None,
-                None,
-                true,
-            )
-        }
-
-        "messages.move" | "messages.copy" => {
-            let moving = req.method == "messages.move";
-            let folder = canon_local(parameters);
-            let target_account =
-                req_str(parameters, "target_account").unwrap_or_else(|_| account.to_string());
-            let target_folder = req_str(parameters, "target_folder")?;
-            let thread_id = changed_thread_id(parameters, account, &folder);
-            if target_account == account {
-                let target_folder = store::normalize_local_folder_name(&target_folder)?;
-                let db = archive.db.lock().unwrap();
-                let uids = request_uids(&db, parameters, &folder)?;
-                if target_folder == folder {
-                    return Ok(json!({ "ok": true, "moved": 0 }));
-                }
-                let target_uids = if moving {
-                    store::move_local_messages(&db, &folder, &target_folder, &uids, &media_root)?
-                } else {
-                    store::copy_local_messages(&db, &folder, &target_folder, &uids, &media_root)?
-                };
-                if moving {
-                    for uid in &uids {
-                        parse::remove_message_media(&media_root, account, &folder, *uid);
-                    }
-                }
-                let count = target_uids.len();
-                return mail_model::mutation_result(
-                    json!({
-                        "ok": true,
-                        "moved": if moving { count } else { 0 },
-                        "copied": if moving { 0 } else { count },
-                        "source_folder": folder,
-                        "target_account": account,
-                        "target_folder": target_folder,
-                        "target_uids": target_uids,
-                    }),
-                    &db,
-                    account,
-                    &thread_id,
-                    &folder,
-                    Some(&target_folder),
-                    None,
-                    None,
-                    moving,
-                );
-            }
-
-            // Back to a server: upload the originals, then forget the local
-            // copies only once every APPEND was acknowledged.
-            let target_folder = engine::canon_folder(&target_folder);
-            let (uids, messages) = {
-                let db = archive.db.lock().unwrap();
-                let uids = request_uids(&db, parameters, &folder)?;
-                let messages = store::raw_messages_for_copy(&db, &folder, &uids)?;
-                (uids, messages)
-            };
-            engine::require_complete_fetch(&uids, &messages)?;
-            if messages.is_empty() {
-                return Ok(json!({ "ok": true, "moved": 0, "copied": 0 }));
-            }
-            main.with_write_session(&target_account, |session| {
-                let target_folder = target_folder.clone();
-                let messages = messages.clone();
-                Box::pin(async move {
-                    imap::append_copied_messages(session, &target_folder, &messages).await
-                })
-            })
-            .await?;
-            let copies = std::collections::BTreeMap::from([(folder.clone(), uids.clone())]);
-            let tags = store::carried_tags(&archive.db.lock().unwrap(), account, &copies)?;
-            store::apply_carried_tags(&main.db.lock().unwrap(), &target_account, tags, true)?;
-            if moving {
-                let db = archive.db.lock().unwrap();
-                store::delete_local_messages(&db, &folder, &uids)?;
-                for uid in &uids {
-                    parse::remove_message_media(&media_root, account, &folder, *uid);
-                }
-            }
-            // Best effort: the uploads are done either way.
-            if let Some(refresh) = engine::refresh_written_folder(
-                main,
-                &target_account,
-                &target_folder,
-                50.max(messages.len() as u32),
-            )
-            .await
-            {
-                let batch = &refresh.batch;
-                let db = main.db.lock().unwrap();
-                let _ = store::ensure_folder(&db, &target_account, &target_folder)
-                    .and_then(|_| {
-                        store::upsert_window_messages(&db, &target_account, &target_folder, batch)
-                    })
-                    .and_then(|_| {
-                        store::set_folder_state(
-                            &db,
-                            &target_account,
-                            &target_folder,
-                            batch.uidvalidity,
-                            batch.uid_next,
-                        )
-                    });
-            }
-            let count = messages.len();
-            mail_model::mutation_result(
-                json!({
-                    "ok": true,
-                    "moved": if moving { count } else { 0 },
-                    "copied": if moving { 0 } else { count },
-                    "source_folder": folder,
-                    "target_account": target_account,
-                    "target_folder": target_folder,
-                }),
-                &archive.db.lock().unwrap(),
-                account,
-                &thread_id,
-                &folder,
-                None,
-                None,
-                None,
-                moving,
-            )
-        }
-
-        other => Err(anyhow::anyhow!("unknown method: {other}")),
-    }
 }
 
 /// Write an exported message readable by the user only, as the server export does.
@@ -807,7 +318,7 @@ fn write_private(path: &std::path::Path, bytes: &[u8]) -> anyhow::Result<()> {
 /// The folder a local request names, in the form local folders are stored
 /// under (see `store::normalize_local_folder_name`).
 fn canon_local(parameters: &Value) -> String {
-    store::canon_local_folder(&req_str(parameters, "folder").unwrap_or_default())
+    store::canon_local_folder(&required_string(parameters, "folder").unwrap_or_default())
 }
 
 /// Tag counts in local folders, for the tag list.
@@ -859,11 +370,12 @@ fn refresh_identity(main: &Arc<Engine>, archive: &Arc<Engine>) {
 async fn archive_from_server(main: &Arc<Engine>, request: &Request) -> anyhow::Result<Value> {
     let parameters = &request.params;
     let moving = request.method == "messages.move";
-    let account = req_str(parameters, "account")?;
+    let account = required_string(parameters, "account")?;
     let folder = engine::canon_folder(
-        &req_str(parameters, "folder").unwrap_or_else(|_| "INBOX".to_string()),
+        &required_string(parameters, "folder").unwrap_or_else(|_| "INBOX".to_string()),
     );
-    let target_folder = store::normalize_local_folder_name(&req_str(parameters, "target_folder")?)?;
+    let target_folder =
+        store::normalize_local_folder_name(&required_string(parameters, "target_folder")?)?;
     let thread_id = changed_thread_id(parameters, &account, &folder);
     let archive = archive(main)?;
     if !store::folder_exists(

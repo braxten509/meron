@@ -2,6 +2,12 @@
 //! The engine queries these rows for recent mail, arrivals and thread membership.
 //! Starred pages, body storage and synchronization markers have dedicated modules.
 
+mod thread_membership;
+pub use thread_membership::{
+    draft_thread_keys, get_thread_headers, newest_thread_uids, resolve_message_uids,
+    thread_uids_by_folder,
+};
+
 mod starred;
 pub use starred::{
     get_starred, get_starred_all_accounts, get_starred_page, get_starred_page_from,
@@ -56,40 +62,40 @@ pub fn upsert_messages_marking(
     // The Message-IDs this batch cached: the only ids whose arrival can hand a
     // canonical thread key down to rows already in the cache.
     let mut upserted_ids: HashSet<String> = HashSet::new();
-    for m in messages {
+    for header in messages {
         // A move or delete already dropped this UID. A sync that fetched it
         // beforehand must not put the row back into the folder it left.
-        if removed.contains(&m.uid) {
+        if removed.contains(&header.uid) {
             continue;
         }
         // Store recipient lists as JSON. Skip empty lists so a later flag-only
         // resync (which carries no envelope) can't clobber recipients we already
         // cached with NULLs.
         let mut extra = serde_json::Map::new();
-        if !m.to.is_empty() {
-            extra.insert("to".to_string(), json!(m.to));
+        if !header.to.is_empty() {
+            extra.insert("to".to_string(), json!(header.to));
         }
-        if !m.cc.is_empty() {
-            extra.insert("cc".to_string(), json!(m.cc));
+        if !header.cc.is_empty() {
+            extra.insert("cc".to_string(), json!(header.cc));
         }
-        if !m.message_id.is_empty() {
-            extra.insert("message_id".to_string(), json!(m.message_id));
+        if !header.message_id.is_empty() {
+            extra.insert("message_id".to_string(), json!(header.message_id));
         }
-        if let Some(gmail_msg_id) = m.gmail_msg_id {
-            extra.insert("gmail_msg_id".to_string(), json!(gmail_msg_id));
+        if let Some(gmail_message_id) = header.gmail_msg_id {
+            extra.insert("gmail_msg_id".to_string(), json!(gmail_message_id));
         }
-        if !m.in_reply_to.is_empty() {
-            extra.insert("in_reply_to".to_string(), json!(m.in_reply_to));
+        if !header.in_reply_to.is_empty() {
+            extra.insert("in_reply_to".to_string(), json!(header.in_reply_to));
         }
-        if m.files.is_some() {
+        if header.files.is_some() {
             extra.insert("attachment_metadata".to_string(), json!(true));
         }
-        if backfill.contains(&m.uid) {
+        if backfill.contains(&header.uid) {
             extra.insert(super::ai_sort::INBOX_BACKFILL_KEY.to_string(), json!(1));
         }
         let extra_json = Value::Object(extra).to_string();
-        let thread_key = resolve_message_thread_key(&tx, account, &m.thread_key)?;
-        let message_id = m.message_id.trim().to_lowercase();
+        let thread_key = resolve_message_thread_key(&tx, account, &header.thread_key)?;
+        let message_id = header.message_id.trim().to_lowercase();
         if !message_id.is_empty() {
             upserted_ids.insert(message_id);
         }
@@ -117,21 +123,21 @@ pub fn upsert_messages_marking(
         .execute(params![
                 account,
                 folder,
-                m.uid,
-                m.subject,
-                m.from_name,
-                m.from_addr,
-                m.date,
-                m.seen as i64,
-                m.starred as i64,
+                header.uid,
+                header.subject,
+                header.from_name,
+                header.from_addr,
+                header.date,
+                header.seen as i64,
+                header.starred as i64,
                 thread_key,
                 extra_json,
-                recipients_index_text(&m.to, &m.cc),
-                m.files.as_ref().filter(|files| !files.is_empty()).map(|files| json!(files).to_string()),
-                m.files.is_some() as i64
+                recipients_index_text(&header.to, &header.cc),
+                header.files.as_ref().filter(|files| !files.is_empty()).map(|files| json!(files).to_string()),
+                header.files.is_some() as i64
         ])?;
-        if let Some(server_tags) = &m.server_tags {
-            observe_server_tags(&tx, account, folder, m.uid, server_tags)?;
+        if let Some(server_tags) = &header.server_tags {
+            observe_server_tags(&tx, account, folder, header.uid, server_tags)?;
         }
     }
     let rekeyed = reconcile_thread_keys_from(&tx, account, upserted_ids)?;
@@ -143,8 +149,8 @@ pub fn upsert_messages_marking(
         folder,
         messages
             .iter()
-            .filter(|m| !removed.contains(&m.uid))
-            .map(|m| m.uid),
+            .filter(|header| !removed.contains(&header.uid))
+            .map(|header| header.uid),
     )?;
     if !adopt.is_empty() {
         adopt.extend(rekeyed.into_iter().map(|(id, old)| (id, Some(old))));
@@ -315,12 +321,13 @@ pub fn mark_attachment_metadata_attempted(
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct RecentFilter {
     pub unread_only: bool,
-    /// Messages whose *thread* has a cached message with a real attachment —
-    /// thread-wide, like the card's paperclip, so an unread plain reply to a
-    /// read message that carried the file still lists its thread under
-    /// "unread with attachments". A subject-branched thread shares one key, so
-    /// this is a superset; the card-level narrowing
-    /// (`ThreadListQuery::retain_attachment_threads`) trims it to the branch.
+    /// Select conversations containing a cached message with attachments.
+    ///
+    /// Messages whose *thread* has a cached message with a real attachment — thread-wide, like the card's
+    /// paperclip, so an unread plain reply to a read message that carried the file still lists its thread under
+    /// "unread with attachments". A subject-branched thread shares one key, so this is a superset; the card-level
+    /// narrowing (`ThreadListQuery::retain_attachment_threads`) trims it to the branch.
+    ///
     /// Header sync supplies BODYSTRUCTURE metadata even before a body is cached.
     pub attachments_only: bool,
 }
@@ -516,11 +523,11 @@ pub(super) fn now_epoch_seconds() -> i64 {
 pub(super) fn mail_identity_from_parts(
     folder: &str,
     uid: u32,
-    gmail_msg_id: Option<u64>,
+    gmail_message_id: Option<u64>,
     message_id: &str,
 ) -> String {
-    if let Some(gmail_msg_id) = gmail_msg_id {
-        return format!("gmail:{gmail_msg_id}");
+    if let Some(gmail_message_id) = gmail_message_id {
+        return format!("gmail:{gmail_message_id}");
     }
     let message_id = message_id.trim();
     if !message_id.is_empty() {
@@ -534,7 +541,7 @@ pub(super) fn message_identity(header: &MessageHeader, folder: &str) -> String {
 }
 
 #[cfg(test)]
-pub(super) fn gmail_msg_id_from_json(value: Option<String>) -> Option<u64> {
+pub(super) fn gmail_message_id_from_json(value: Option<String>) -> Option<u64> {
     value.and_then(|value| value.parse::<u64>().ok())
 }
 
@@ -663,7 +670,7 @@ pub fn new_unread_inbox_messages(
         params![account, uid_next_before as i64, uid_next_after as i64],
         |row| {
             let mut header = message_header_from_row(row)?;
-            header.gmail_msg_id = gmail_msg_id_from_json(row.get::<_, Option<String>>(9)?);
+            header.gmail_msg_id = gmail_message_id_from_json(row.get::<_, Option<String>>(9)?);
             header.message_id = row.get::<_, Option<String>>(10)?.unwrap_or_default();
             Ok(header)
         },
@@ -691,172 +698,6 @@ pub fn cached_body_preview(
     let message = get_cached_message(conn, account, folder, uid).ok()??;
     let preview = crate::parse::preview_of(&message.body);
     (!preview.trim().is_empty()).then_some(preview)
-}
-
-pub fn get_thread_headers(
-    conn: &Connection,
-    account: &str,
-    folder: &str,
-    thread_key: &str,
-) -> Result<Vec<MessageHeader>> {
-    // A sender row acts on that person's messages in this folder only; their
-    // Sent copies and drafts are in the chat but not in its actions.
-    if let Some(addr) = sender_key_addr(thread_key) {
-        let mut headers = sender_folder_headers(conn, account, folder, &addr)?;
-        for header in &mut headers {
-            header.folder = String::new();
-        }
-        return Ok(headers);
-    }
-    let mut stmt = conn.prepare(
-        "SELECT uid, subject, from_name, from_addr, date, seen, starred, thread_key,
-                json_extract(json, '$.in_reply_to') FROM messages
-         WHERE account = ?1 AND folder = ?2 AND COALESCE(NULLIF(thread_key, ''), 'uid:' || uid) = ?3
-         ORDER BY date ASC, uid ASC",
-    )?;
-    let rows = stmt.query_map(params![account, folder, thread_key], |row| {
-        let uid = row.get(0)?;
-        Ok(MessageHeader {
-            uid,
-            subject: row.get(1)?,
-            from_name: row.get(2)?,
-            from_addr: row.get(3)?,
-            date: row.get(4)?,
-            seen: row.get::<_, i64>(5)? != 0,
-            starred: row.get::<_, i64>(6)? != 0,
-            thread_key: row
-                .get::<_, Option<String>>(7)?
-                .filter(|key| !key.is_empty())
-                .unwrap_or_else(|| format!("uid:{}", uid)),
-            in_reply_to: row.get::<_, Option<String>>(8)?.unwrap_or_default(),
-            folder: String::new(),
-            ..Default::default()
-        })
-    })?;
-    Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
-}
-
-/// The newest message of a thread (or of one subject branch of it), as a single-element uid list — empty when the thread has no cached messages.
-///
-/// Marking a whole thread unread uses this: the gesture means "bring this back to me", not "I read
-/// none of these", so only the newest message carries the flag. The thread then shows one unread
-/// message and opening it lands on that message, instead of reopening at the oldest one and
-/// shedding the count again as the reader scrolls down.
-pub fn newest_thread_uids(
-    conn: &Connection,
-    account: &str,
-    folder: &str,
-    thread_key: &str,
-    subject_filter: Option<&str>,
-) -> Result<Vec<u32>> {
-    // get_thread_headers orders by date ascending, so the newest is last.
-    let newest = get_thread_headers(conn, account, folder, thread_key)?
-        .into_iter()
-        .filter(|header| match subject_filter {
-            Some(filter) => thread_grouping_subject(&header.subject) == filter,
-            None => true,
-        })
-        .next_back();
-    Ok(newest.map(|header| header.uid).into_iter().collect())
-}
-
-/// A thread's messages grouped by mailbox, for a whole-thread "mark read".
-///
-/// Covers every folder the reader shows the thread from (see `thread_read`), not just the card's
-/// own, so an unread copy filed elsewhere is not left behind a card that now reads as read. A
-/// synthetic `uid:N` key stays folder-local: UIDs are only unique within one mailbox.
-///
-/// `unseen_only` narrows it to messages the store still has unread. Only a caller that updates the
-/// store after the server write may use it: one that marks the store first would leave a retry of a
-/// failed write nothing to send.
-pub fn thread_uids_by_folder(
-    conn: &Connection,
-    account: &str,
-    folder: &str,
-    thread_key: &str,
-    subject_filter: Option<&str>,
-    unseen_only: bool,
-) -> Result<std::collections::BTreeMap<String, Vec<u32>>> {
-    if let Some(addr) = sender_key_addr(thread_key) {
-        return sender_uids_by_folder(conn, account, folder, &addr, unseen_only);
-    }
-    let only_folder = thread_key.starts_with("uid:").then_some(folder);
-    let mut stmt = conn.prepare(
-        "SELECT folder, uid, subject FROM messages
-         WHERE account = ?1 AND uid <> 0 AND (?4 = 0 OR seen = 0)
-           AND COALESCE(NULLIF(thread_key, ''), 'uid:' || uid) = ?2
-           AND (?3 IS NULL OR folder = ?3)
-         ORDER BY folder, uid",
-    )?;
-    let rows = stmt.query_map(
-        params![account, thread_key, only_folder, unseen_only],
-        |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, u32>(1)?,
-                row.get::<_, Option<String>>(2)?.unwrap_or_default(),
-            ))
-        },
-    )?;
-    let mut by_folder = std::collections::BTreeMap::<String, Vec<u32>>::new();
-    for row in rows {
-        let (folder, uid, subject) = row?;
-        if subject_filter.is_some_and(|filter| thread_grouping_subject(&subject) != filter) {
-            continue;
-        }
-        by_folder.entry(folder).or_default().push(uid);
-    }
-    Ok(by_folder)
-}
-
-/// Which of the account's threads have a draft waiting in them — the keys the list's Draft badge is
-/// decided by. Only real thread keys: a draft with no threading headers falls back to
-/// `uid:<its own uid>`, which says nothing about any thread and would collide with an unrelated
-/// message that happens to hold that UID in another mailbox (UIDs are unique only within one).
-pub fn draft_thread_keys(conn: &Connection, account: &str) -> Result<HashSet<String>> {
-    let mut stmt = conn.prepare(
-        "SELECT DISTINCT m.thread_key, m.folder, f.special_use
-           FROM messages m
-           LEFT JOIN folders f ON f.account = m.account AND f.name = m.folder
-          WHERE m.account = ?1 AND m.uid <> 0 AND m.thread_key <> ''",
-    )?;
-    let rows = stmt.query_map(params![account], |row| {
-        Ok((
-            row.get::<_, String>(0)?,
-            row.get::<_, String>(1)?,
-            row.get::<_, Option<String>>(2)?,
-        ))
-    })?;
-    let mut out = HashSet::new();
-    for row in rows {
-        let (thread_key, folder, special_use) = row?;
-        if classify_folder_role(&folder, special_use.as_deref()) == "drafts" {
-            out.insert(thread_key);
-        }
-    }
-    Ok(out)
-}
-
-pub fn resolve_message_uids(
-    conn: &Connection,
-    account: &str,
-    folder: &str,
-    thread_key: &str,
-    subject_filter: Option<&str>,
-    uid: Option<u32>,
-    explicit_uids: &[u32],
-) -> Result<Vec<u32>> {
-    if !explicit_uids.is_empty() {
-        return Ok(explicit_uids.to_vec());
-    }
-    if thread_key.is_empty() {
-        return Ok(uid.into_iter().collect());
-    }
-    let mut headers = get_thread_headers(conn, account, folder, thread_key)?;
-    if let Some(filter) = subject_filter {
-        headers.retain(|header| thread_grouping_subject(&header.subject) == filter);
-    }
-    Ok(headers.into_iter().map(|header| header.uid).collect())
 }
 
 /// Progress of [`backfill_files_batch`] in `meta`: the last `messages.id`

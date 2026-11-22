@@ -27,7 +27,9 @@ pub async fn list_folders(session: &mut Session) -> Result<Vec<Folder>> {
         out.push(Folder {
             display_name: crate::utf7::decode(name.name()),
             name: name.name().to_string(),
-            delimiter: name.delimiter().map(|d| d.to_string()),
+            delimiter: name
+                .delimiter()
+                .map(|path_delimiter| path_delimiter.to_string()),
             unread: 0,
             special_use,
             role: String::new(),
@@ -52,8 +54,8 @@ pub async fn folder_status(session: &mut Session, folder: &str) -> Result<(u32, 
 
 /// The server's NO or BAD answer somewhere in `err`, if that is what it is (as
 /// opposed to a dropped connection or a timeout).
-fn server_refusal(err: &anyhow::Error) -> Option<&str> {
-    err.chain().find_map(
+fn server_refusal(failure: &anyhow::Error) -> Option<&str> {
+    failure.chain().find_map(
         |cause| match cause.downcast_ref::<async_imap::error::Error>()? {
             async_imap::error::Error::No(text) | async_imap::error::Error::Bad(text) => {
                 Some(text.as_str())

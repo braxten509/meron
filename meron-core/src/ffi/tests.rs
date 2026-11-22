@@ -70,12 +70,12 @@ fn ffi_invoke_json_handles_null() {
 }
 
 #[test]
-fn ffi_init_json_records_mobile_data_dir() {
+fn ffi_init_json_records_mobile_data_directory() {
     let _guard = MOBILE_CONFIG_TEST_LOCK
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
-    let data_dir = CString::new("/tmp/meron-mobile-test").unwrap();
-    let raw = unsafe { take_owned_string(meron_core_init_json(data_dir.as_ptr())) };
+    let data_directory = CString::new("/tmp/meron-mobile-test").unwrap();
+    let raw = unsafe { take_owned_string(meron_core_init_json(data_directory.as_ptr())) };
     let value: serde_json::Value = serde_json::from_str(&raw).unwrap();
     assert_eq!(value["ok"], true);
     assert_eq!(value["protocol"], PROTOCOL_VERSION);
@@ -113,7 +113,7 @@ fn configuring_leaves_the_store_for_the_first_command() {
 }
 
 #[test]
-fn ffi_init_json_rejects_missing_data_dir() {
+fn ffi_init_json_rejects_missing_data_directory() {
     let data_directory = CString::new("  ").unwrap();
     let raw = unsafe { take_owned_string(meron_core_init_json(data_directory.as_ptr())) };
     let value: serde_json::Value = serde_json::from_str(&raw).unwrap();

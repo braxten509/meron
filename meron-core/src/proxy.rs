@@ -1,18 +1,16 @@
-//! Outbound proxy support: HTTP CONNECT and SOCKS5 for the mail sockets, and
-//! the matching `ureq` agent for the blocking HTTP paths (feeds, OAuth token
-//! exchange, avatars, changelog).
+//! Connect the core's mail and HTTP clients through the configured proxy.
 //!
-//! Two levels of configuration. A single app-wide proxy lives in the `settings`
-//! table under [`SETTING_KEY`] and is mirrored into a process-global slot
-//! ([`set_global`]) so socket code deep in the IMAP/SMTP stack can reach it
-//! without threading a DB handle through every call. Each account then carries a
-//! [`ProxyChoice`]: inherit the global one (the default), force a direct
-//! connection, or use its own proxy.
+//! Outbound proxy support: HTTP CONNECT and SOCKS5 for the mail sockets, and the matching `ureq` agent for
+//! the blocking HTTP paths (feeds, OAuth token exchange, avatars, changelog).
 //!
-//! Hostnames are always resolved by the proxy, never locally: SOCKS5 gets the
-//! domain address type and HTTP CONNECT gets `host:port`. A proxy that leaks
-//! every mail server's name to the local resolver would defeat the point of
-//! routing the traffic through it at all.
+//! Two levels of configuration. A single app-wide proxy lives in the `settings` table under [`SETTING_KEY`] and
+//! is mirrored into a process-global slot ([`set_global`]) so socket code deep in the IMAP/SMTP stack can reach
+//! it without threading a DB handle through every call. Each account then carries a [`ProxyChoice`]: inherit the
+//! global one (the default), force a direct connection, or use its own proxy.
+//!
+//! Hostnames are always resolved by the proxy, never locally: SOCKS5 gets the domain address type and HTTP
+//! CONNECT gets `host:port`. A proxy that leaks every mail server's name to the local resolver would defeat
+//! the point of routing the traffic through it at all.
 
 use anyhow::{Context, Result, anyhow};
 use serde_json::{Value, json};

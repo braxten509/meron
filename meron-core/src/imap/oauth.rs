@@ -115,7 +115,7 @@ pub async fn refresh_oauth_token(
 
         // Keep non-2xx as a response (not a transport error) so we can surface
         // the JSON error body the provider returns for an invalid/revoked token.
-        let mut resp = crate::proxy::agent_for(proxy.as_ref())?
+        let mut server_response = crate::proxy::agent_for(proxy.as_ref())?
             .post(&token_url)
             .config()
             .http_status_as_error(false)
@@ -123,8 +123,8 @@ pub async fn refresh_oauth_token(
             .send_form(form)
             .context("oauth refresh request")?;
 
-        let status = resp.status();
-        let body = resp
+        let status = server_response.status();
+        let body = server_response
             .body_mut()
             .read_to_string()
             .context("read oauth response")?;

@@ -119,13 +119,13 @@ async fn work_off_rule_actions(
 ) {
     let mut silenced = BTreeSet::new();
     let after_turn = || report_rule_progress(engine, account, folder);
-    if let Err(err) =
+    if let Err(operation_error) =
         run_rule_turns(engine, account, folder, tried, &mut silenced, &after_turn).await
     {
         crate::mlog!(
             crate::log::Level::Warn,
             "mail.rules",
-            "account={account}: rule run: {err:#}"
+            "account={account}: rule run: {operation_error:#}"
         );
     }
 }
@@ -237,11 +237,11 @@ async fn run_rule_turn(
         }
     }
     // Before a move: tags go to the copy they were saved on.
-    if let Err(err) = push_pending_tags(engine, account).await {
+    if let Err(operation_error) = push_pending_tags(engine, account).await {
         crate::mlog!(
             crate::log::Level::Warn,
             "mail.rules",
-            "account={account}: tag push failed: {err:#}"
+            "account={account}: tag push failed: {operation_error:#}"
         );
     }
     let turn = engine
@@ -288,9 +288,9 @@ async fn run_rule_turn(
         let run = batch.first().map_or(0, |action| action.run);
         match mark_rule_mail(engine, account, folder, &batch, silenced).await {
             Ok(()) => marked.push(batch),
-            Err(err) => {
+            Err(operation_error) => {
                 unfinished.extend(uids_of(&batch));
-                fail_batch(engine, account, folder, &batch, run, &err)?;
+                fail_batch(engine, account, folder, &batch, run, &operation_error)?;
             }
         }
     }
@@ -312,9 +312,9 @@ async fn run_rule_turn(
                     finish_batch(engine, account, folder, &batch, run)?;
                 }
             }
-            Err(err) => {
+            Err(operation_error) => {
                 unfinished.extend(uids_of(&batch));
-                fail_batch(engine, account, folder, &batch, run, &err)?;
+                fail_batch(engine, account, folder, &batch, run, &operation_error)?;
             }
         }
     }
@@ -341,9 +341,9 @@ async fn run_rule_turn(
                 moved.extend(uids_of(&batch));
                 finish_batch(engine, account, folder, &batch, run)?;
             }
-            Err(err) => {
+            Err(operation_error) => {
                 unfinished.extend(uids_of(&batch));
-                fail_batch(engine, account, folder, &batch, run, &err)?;
+                fail_batch(engine, account, folder, &batch, run, &operation_error)?;
             }
         }
     }
@@ -367,7 +367,7 @@ fn fail_batch(
     folder: &str,
     batch: &[RuleAction],
     run: i64,
-    err: &anyhow::Error,
+    operation_error: &anyhow::Error,
 ) -> anyhow::Result<()> {
     let uids: Vec<u32> = batch.iter().map(|action| action.uid).collect();
     let dropped = store::retry_rule_actions(
@@ -376,12 +376,12 @@ fn fail_batch(
         folder,
         &uids,
         run,
-        &format!("{err:#}"),
+        &format!("{operation_error:#}"),
     )?;
     crate::mlog!(
         crate::log::Level::Warn,
         "mail.rules",
-        "account={account} folder={folder}: rule actions failed, {dropped} given up: {err:#}"
+        "account={account} folder={folder}: rule actions failed, {dropped} given up: {operation_error:#}"
     );
     Ok(())
 }

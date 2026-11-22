@@ -9,8 +9,8 @@ pub(crate) fn mark_mobile_thread_read(
     data_directory: &str,
     params: &Value,
 ) -> Result<Value, String> {
-    let thread_id = req_str(params, "thread_id")?;
-    let seen = req_bool(params, "seen")?;
+    let thread_id = required_string(params, "thread_id")?;
+    let seen = required_boolean(params, "seen")?;
     if is_rss_thread_id(&thread_id) {
         return mark_mobile_rss_thread_read(data_directory, params);
     }
@@ -104,7 +104,7 @@ pub(crate) fn mark_mobile_folder_all_read(
     data_directory: &str,
     params: &Value,
 ) -> Result<Value, String> {
-    let account_id = req_account_id(params)?;
+    let account_id = required_account_id(params)?;
     let folder = params
         .get("folder_id")
         .or_else(|| params.get("folder"))
@@ -270,7 +270,7 @@ pub(crate) fn mark_mobile_folder_all_read(
 // Restricted to Trash and Junk, and re-checked here rather than trusting the
 // caller: the delete is unrecoverable.
 pub(crate) fn empty_mobile_folder(data_directory: &str, params: &Value) -> Result<Value, String> {
-    let account_id = req_account_id(params)?;
+    let account_id = required_account_id(params)?;
     let folder = params
         .get("folder_id")
         .or_else(|| params.get("folder"))

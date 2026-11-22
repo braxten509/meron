@@ -31,7 +31,7 @@ pub(crate) async fn dispatch(
         }
 
         "calendar.get" => {
-            let event_id = req_str(parameters, "event_id")?;
+            let event_id = required_string(parameters, "event_id")?;
             return events::event_payload(&engine.db.lock().unwrap(), &event_id);
         }
 
@@ -41,7 +41,7 @@ pub(crate) async fn dispatch(
         )?,
 
         "calendar.update" => {
-            let event_id = req_str(parameters, "event_id")?;
+            let event_id = required_string(parameters, "event_id")?;
             events::update_event(
                 &engine.db.lock().unwrap(),
                 &event_id,
@@ -50,13 +50,13 @@ pub(crate) async fn dispatch(
         }
 
         "calendar.delete" => {
-            let event_id = req_str(parameters, "event_id")?;
+            let event_id = required_string(parameters, "event_id")?;
             events::delete_event(&engine.db.lock().unwrap(), &event_id)?
         }
 
         "invite.addToCalendar" => {
-            let message = req_str(parameters, "message")?;
-            let thread_id = req_str(parameters, "thread_id").unwrap_or_default();
+            let message = required_string(parameters, "message")?;
+            let thread_id = required_string(parameters, "thread_id").unwrap_or_default();
             let event_id = meron_core::calendar::add_to_calendar(
                 &engine.db.lock().unwrap(),
                 &message,
@@ -67,7 +67,7 @@ pub(crate) async fn dispatch(
         }
 
         "invite.removeFromCalendar" => {
-            let message = req_str(parameters, "message")?;
+            let message = required_string(parameters, "message")?;
             meron_core::calendar::remove_from_calendar(
                 &engine.db.lock().unwrap(),
                 &message,

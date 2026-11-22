@@ -124,20 +124,21 @@ fn set_inbox_floor(conn: &Connection, account: &str, uidvalidity: u32, uid: u32)
     )
 }
 
-/// Which of `messages`, a window just read from the server's `folder` (under
-/// `uidvalidity`, with UIDNEXT `uid_next`) and about to be cached, are Inbox
-/// backfill: not cached yet, and below the Inbox's arrival floor, so on the
-/// server before Meron watched it. They show up only because the window
-/// reached further back (mail left the Inbox), and the Inbox views leave them
-/// out ([`inbox_listed_sql`]) once
-/// [`super::upsert_messages_marking`] stores them marked.
+/// Identify which recently fetched Inbox headers belong to an older backfill window.
 ///
-/// The floor is the UIDNEXT from when Meron started watching: set by the
-/// first sync of the folder (or after a UIDVALIDITY change), which shows its
-/// whole window as always and so hides nothing; an Inbox synced before the
-/// floor existed starts it at the UIDNEXT of its previous sync. Mail that
-/// arrives later, including copies a move or an undo puts back (new UIDs), is
-/// at or above it. Empty for anything but a real Inbox.
+/// Which of `messages`, a window just read from the server's `folder` (under `uidvalidity`, with UIDNEXT
+/// `uid_next`) and about to be cached, are Inbox backfill: not cached yet, and below the Inbox's arrival
+/// floor, so on the server before Meron watched it.
+///
+/// They show up only because the window reached further back (mail left the Inbox), and the Inbox views
+/// leave them out ([`inbox_listed_sql`]) once [`super::upsert_messages_marking`] stores them marked.
+///
+/// The floor is the UIDNEXT from when Meron started watching: set by the first sync of the folder (or after
+/// a UIDVALIDITY change), which shows its whole window as always and so hides nothing; an Inbox synced
+/// before the floor existed starts it at the UIDNEXT of its previous sync. Mail that arrives later,
+/// including copies a move or an undo puts back (new UIDs), is at or above it.
+///
+/// Empty for anything but a real Inbox.
 pub fn inbox_backfill_uids(
     conn: &Connection,
     account: &str,

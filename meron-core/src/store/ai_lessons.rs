@@ -120,12 +120,12 @@ fn subject_words(subject: &str) -> String {
         .join(" ")
 }
 
-/// The emails among `uids` of `folder` a lesson can be made of: not the
-/// reader's own, one per sender and subject, newest first, at most
-/// [`AI_LESSON_PER_ACTION`]. With `one_sender` (a move to Spam), a
-/// conversation teaches only when all of it is from one sender, and then
-/// through its newest email: when several people wrote in it, a colleague
-/// answering a scam say, nothing tells which of them the Spam is.
+/// Select stored messages that qualify as examples of a filing choice.
+///
+/// The emails among `uids` of `folder` a lesson can be made of: not the reader's own, one per sender and
+/// subject, newest first, at most [`AI_LESSON_PER_ACTION`]. With `one_sender` (a move to Spam), a conversation
+/// teaches only when all of it is from one sender, and then through its newest email: when several people wrote
+/// in it, a colleague answering a scam say, nothing tells which of them the Spam is.
 pub fn ai_lesson_seeds(
     conn: &Connection,
     account: &str,
@@ -334,11 +334,11 @@ impl MoveLesson {
         } else {
             ai_lessons_teach(conn, &self.account, &self.seeds, place)
         };
-        done.unwrap_or_else(|err| {
+        done.unwrap_or_else(|operation_error| {
             crate::mlog!(
                 crate::log::Level::Warn,
                 "mail.aiSort",
-                "could not record a move's lesson: {err:#}"
+                "could not record a move's lesson: {operation_error:#}"
             );
             false
         })

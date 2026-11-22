@@ -2,6 +2,15 @@
 //! Account updates and preference reads operate on the shared SQLite database.
 //! Sender identity is resolved separately for message display and composition.
 
+mod connection_settings;
+use connection_settings::{config_to_creds, creds_to_config};
+
+mod preferences;
+pub use preferences::{
+    set_account_aliases, set_account_cert_pins, set_account_pref, set_account_pref_json,
+    set_account_pref_u64, set_account_proxy, set_account_rejected_grant, set_load_remote_images,
+};
+
 mod senders;
 pub use senders::{
     account_aliases, account_message_is_outgoing, all_self_addrs, apply_card_identity, is_outgoing,
@@ -75,15 +84,18 @@ impl AccountSignature {
             None | Some(Value::Null) => return Ok(None),
             Some(value) => value,
         };
-        let obj = value
+        let fields = value
             .as_object()
             .ok_or_else(|| "signature must be an object".to_string())?;
-        let mode = obj
+        let mode = fields
             .get("mode")
             .and_then(Value::as_str)
             .and_then(SignatureMode::parse)
             .ok_or_else(|| "unknown signature mode".to_string())?;
-        let html = obj.get("html").and_then(Value::as_str).unwrap_or_default();
+        let html = fields
+            .get("html")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
         if html.len() > MAX_SIGNATURE_HTML {
             return Err("signature is too large".to_string());
         }
@@ -230,74 +242,6 @@ pub struct AccountMeta {
     pub sender_name: String,
 }
 
-fn creds_to_config(creds: &Creds) -> String {
-    json!({
-        "host": creds.host,
-        "port": creds.port,
-        "user": creds.user,
-        "tls": creds.tls,
-        "starttls": creds.starttls,
-        "smtp_host": creds.smtp_host,
-        "smtp_port": creds.smtp_port,
-        "smtp_tls": creds.smtp_tls,
-        "smtp_starttls": creds.smtp_starttls,
-        "auth_type": creds.auth_type,
-        "token_expires_at": creds.token_expires_at,
-        "oauth_client_id": creds.oauth_client_id,
-        "oauth_client_secret": creds.oauth_client_secret,
-        "oauth_token_url": creds.oauth_token_url,
-        "oauth_scope": creds.oauth_scope,
-        "proxy": creds.proxy.to_json(),
-        "cert_pin": creds.cert_pin,
-        "smtp_cert_pin": creds.smtp_cert_pin,
-        "rejected_grant": creds.rejected_grant,
-    })
-    .to_string()
-}
-
-/// Pins are stored as hex strings; absent, null and empty all mean "no pin"
-/// (accounts written before pinning existed have no key at all).
-fn config_cert_pin(config: &serde_json::Value, key: &str) -> Option<String> {
-    config[key]
-        .as_str()
-        .map(str::trim)
-        .filter(|pin| !pin.is_empty())
-        .map(|pin| pin.to_ascii_lowercase())
-}
-
-fn config_to_creds(json: &str) -> Creds {
-    let v: serde_json::Value = serde_json::from_str(json).unwrap_or_else(|_| json!({}));
-    Creds {
-        host: v["host"].as_str().unwrap_or("").to_string(),
-        port: v["port"].as_u64().unwrap_or(993) as u16,
-        user: v["user"].as_str().unwrap_or("").to_string(),
-        password: String::new(),
-        tls: v["tls"].as_bool().unwrap_or(true),
-        starttls: v["starttls"].as_bool().unwrap_or(false),
-        smtp_host: v["smtp_host"].as_str().unwrap_or("").to_string(),
-        smtp_port: v["smtp_port"].as_u64().unwrap_or(587) as u16,
-        smtp_tls: v["smtp_tls"].as_bool().unwrap_or(true),
-        smtp_starttls: v["smtp_starttls"].as_bool().unwrap_or(false),
-        auth_type: v["auth_type"].as_str().unwrap_or("password").to_string(),
-        access_token: None,
-        refresh_token: None,
-        token_expires_at: v["token_expires_at"].as_i64().unwrap_or(0),
-        oauth_client_id: v["oauth_client_id"].as_str().unwrap_or("").to_string(),
-        oauth_client_secret: v["oauth_client_secret"].as_str().unwrap_or("").to_string(),
-        oauth_token_url: v["oauth_token_url"].as_str().unwrap_or("").to_string(),
-        oauth_scope: v["oauth_scope"].as_str().unwrap_or("").to_string(),
-        // Accounts written before proxy support have no key here, which parses
-        // as "follow the app-wide setting".
-        proxy: crate::proxy::ProxyChoice::from_json(&v["proxy"]),
-        cert_pin: config_cert_pin(&v, "cert_pin"),
-        smtp_cert_pin: config_cert_pin(&v, "smtp_cert_pin"),
-        rejected_grant: v["rejected_grant"]
-            .as_str()
-            .filter(|fingerprint| !fingerprint.is_empty())
-            .map(str::to_string),
-    }
-}
-
 /// Persist account connection metadata so IDLE can auto-resume on restart.
 /// Secrets (IMAP password, OAuth tokens) are NOT written here — they live in the
 /// OS keychain. Mail connection fields are packed into the `config` column.
@@ -346,130 +290,6 @@ pub fn save_account_config(conn: &Connection, id: &str, creds: &Creds) -> Result
     conn.execute(
         "UPDATE accounts SET config = ?2, updated_at = ?3 WHERE id = ?1",
         params![id, creds_to_config(creds), now_unix()],
-    )?;
-    Ok(())
-}
-
-/// Record the fingerprint of a refresh token the provider refused (see
-/// [`Creds::rejected_grant`]). Touches only that key, so it cannot undo a save
-/// that landed while the refused request was in flight.
-pub fn set_account_rejected_grant(conn: &Connection, id: &str, fingerprint: &str) -> Result<()> {
-    conn.execute(
-        "UPDATE accounts
-            SET config = json_set(config, '$.rejected_grant', ?2), updated_at = ?3
-          WHERE id = ?1",
-        params![id, fingerprint, now_unix()],
-    )?;
-    Ok(())
-}
-
-/// Persist the per-account "load remote images" preference (explicit on/off),
-/// overriding the engine default. `json_set` updates just this key in place, so
-/// other prefs are untouched.
-pub fn set_load_remote_images(conn: &Connection, id: &str, enabled: bool) -> Result<()> {
-    set_account_pref(conn, id, "load_remote_images", enabled)
-}
-
-/// Set a boolean field in an account's `prefs` JSON column. `key` is a top-level
-/// pref name (e.g. "muted", "paused", "included_in_unified"); unset keys resolve
-/// to their code default in `AccountPrefs`, so no schema migration is needed.
-pub fn set_account_pref(conn: &Connection, id: &str, key: &str, enabled: bool) -> Result<()> {
-    let path = format!("$.{key}");
-    conn.execute(
-        "UPDATE accounts
-         SET prefs = json_set(prefs, ?2, json(?3)), updated_at = ?4
-         WHERE id = ?1",
-        params![id, path, if enabled { "true" } else { "false" }, now_unix()],
-    )?;
-    Ok(())
-}
-
-/// Replace just the proxy entry in an account's connection `config`, leaving
-/// the rest of the JSON (hosts, ports, OAuth metadata) untouched.
-pub fn set_account_proxy(
-    conn: &Connection,
-    id: &str,
-    choice: &crate::proxy::ProxyChoice,
-) -> Result<()> {
-    conn.execute(
-        "UPDATE accounts
-         SET config = json_set(config, '$.proxy', json(?2)), updated_at = ?3
-         WHERE id = ?1",
-        params![id, choice.to_json().to_string(), now_unix()],
-    )?;
-    Ok(())
-}
-
-/// Replace just the certificate pins in an account's connection `config`. Used
-/// when the user accepts a server certificate for an account that already
-/// exists, so the pin lands without re-entering the password. `None` clears the
-/// pin for that server.
-pub fn set_account_cert_pins(
-    conn: &Connection,
-    id: &str,
-    cert_pin: Option<&str>,
-    smtp_cert_pin: Option<&str>,
-) -> Result<()> {
-    conn.execute(
-        "UPDATE accounts
-         SET config = json_set(config, '$.cert_pin', ?2, '$.smtp_cert_pin', ?3), updated_at = ?4
-         WHERE id = ?1",
-        params![id, cert_pin, smtp_cert_pin, now_unix()],
-    )?;
-    Ok(())
-}
-
-/// Set a numeric field in an account's `prefs` JSON column.
-pub fn set_account_pref_u64(conn: &Connection, id: &str, key: &str, value: u64) -> Result<()> {
-    let path = format!("$.{key}");
-    conn.execute(
-        "UPDATE accounts
-         SET prefs = json_set(prefs, ?2, json(?3)), updated_at = ?4
-         WHERE id = ?1",
-        params![id, path, value.to_string(), now_unix()],
-    )?;
-    Ok(())
-}
-
-/// Set or clear a JSON field in an account's `prefs` column. `None` removes the
-/// key so callers can return to the code default without storing sentinel data.
-pub fn set_account_pref_json(
-    conn: &Connection,
-    id: &str,
-    key: &str,
-    value: Option<Value>,
-) -> Result<()> {
-    let path = format!("$.{key}");
-    match value {
-        Some(value) => {
-            conn.execute(
-                "UPDATE accounts
-                 SET prefs = json_set(prefs, ?2, json(?3)), updated_at = ?4
-                 WHERE id = ?1",
-                params![id, path, value.to_string(), now_unix()],
-            )?;
-        }
-        None => {
-            conn.execute(
-                "UPDATE accounts
-                 SET prefs = json_remove(prefs, ?2), updated_at = ?3
-                 WHERE id = ?1",
-                params![id, path, now_unix()],
-            )?;
-        }
-    }
-    Ok(())
-}
-
-/// Replace an account's send-as aliases (the whole list). Stored in the `prefs`
-/// JSON `aliases` key via `json_set`, leaving other prefs untouched. Entries are
-/// normalized by the caller (trimmed, blank emails dropped).
-pub fn set_account_aliases(conn: &Connection, id: &str, aliases: &[Alias]) -> Result<()> {
-    conn.execute(
-        "UPDATE accounts
-         SET prefs = json_set(prefs, '$.aliases', json(?2)), updated_at = ?3
-         WHERE id = ?1",
-        params![id, json!(aliases).to_string(), now_unix()],
     )?;
     Ok(())
 }

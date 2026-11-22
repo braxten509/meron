@@ -13,15 +13,16 @@ use meron_core::{rss, store};
 use crate::sidecar::idle::*;
 use crate::{Writer, emit};
 
-/// Decide whether a thread has *new* ancestor gaps worth fetching, and if so
-/// run [`fill_thread_gaps`] in the background so the read it was called from
-/// returns immediately. Two guards keep this cheap:
+/// Schedule missing-ancestor recovery when the known gaps have changed.
+///
+/// Decide whether a thread has *new* ancestor gaps worth fetching, and if so run [`fill_thread_gaps`] in the
+/// background so the read it was called from returns immediately. Two guards keep this cheap:
 ///   - the gap set is computed from the local DB (no network) before spawning;
 ///   - a per-thread negative cache (`Engine::gap_attempts`) drops ids we've
 ///     already tried this session, so re-opening a thread whose ancestors will
 ///     never arrive (the common case) does no network work at all.
-/// When the fill actually stores something, it emits `mail.synced` so the open
-/// thread re-reads; the re-read sees no new gaps and won't reconnect.
+/// When the fill actually stores something, it emits `mail.synced` so the open thread re-reads; the re-read
+/// sees no new gaps and won't reconnect.
 pub(crate) fn maybe_spawn_fill_thread_gaps(
     engine: &Arc<Engine>,
     out: &Writer,

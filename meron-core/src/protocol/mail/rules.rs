@@ -22,7 +22,7 @@ pub(crate) fn set_mobile_rules(data_directory: &str, params: &Value) -> Result<V
 }
 
 pub(crate) fn mobile_rule_matches(data_directory: &str, params: &Value) -> Result<Value, String> {
-    let id = req_str(params, "id")?;
+    let id = required_string(params, "id")?;
     with_mobile_db(data_directory, |conn| {
         let count =
             store::count_existing_rule_matches(&conn, &id).map_err(|error| error.to_string())?;
@@ -39,7 +39,7 @@ pub(crate) fn mobile_rule_status(data_directory: &str) -> Result<Value, String> 
 }
 
 pub(crate) fn stop_mobile_rule(data_directory: &str, params: &Value) -> Result<Value, String> {
-    let id = req_str(params, "id")?;
+    let id = required_string(params, "id")?;
     with_mobile_db(data_directory, |conn| {
         store::stop_rule(&conn, &id).map_err(|error| error.to_string())?;
         Ok(json!({ "ok": true }))
@@ -106,7 +106,7 @@ pub(crate) fn mobile_meron_folders(
 }
 
 pub(crate) fn run_mobile_rule(data_directory: &str, params: &Value) -> Result<Value, String> {
-    let id = req_str(params, "id")?;
+    let id = required_string(params, "id")?;
     let engine = crate::ffi::engine_for(data_directory)?;
     let count = crate::ffi::engine_block_on(crate::engine::run_rule_on_existing(&engine, &id))?;
     Ok(json!({ "count": count }))

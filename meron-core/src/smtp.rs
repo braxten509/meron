@@ -175,12 +175,12 @@ fn parse_addrs(raw: &str) -> Vec<String> {
     out
 }
 
-/// Split a `Name <addr>` (or bare `addr`) entry into its display name and
-/// address. mail-builder's `From<&str> for Address` treats the entire input as
-/// the email field — so passing `"Name <addr>"` produces a header like
-/// `<Name <addr>>`, which receiving clients render as a malformed recipient
-/// (display name "<Name >" with literal angle brackets). Splitting here keeps
-/// the display name in `name` where it belongs.
+/// Build the mailbox address and optional display name for an outgoing recipient.
+///
+/// Split a `Name <addr>` (or bare `addr`) entry into its display name and address. mail-builder's
+/// `From<&str> for Address` treats the entire input as the email field — so passing `"Name <addr>"` produces a
+/// header like `<Name <addr>>`, which receiving clients render as a malformed recipient (display name "<Name >"
+/// with literal angle brackets). Splitting here keeps the display name in `name` where it belongs.
 fn split_name_addr(entry: &str) -> (String, String) {
     let trimmed = entry.trim();
     if let Some(start) = trimmed.find('<')
@@ -505,23 +505,23 @@ async fn submit(
                     authed = true;
                     break;
                 }
-                Err(err) => {
+                Err(failure) => {
                     let command_rejected = matches!(
-                        &err,
+                        &failure,
                         SmtpError::Permanent(resp)
                             if resp.has_code(502) || resp.has_code(503) || resp.has_code(504)
                     );
                     if !command_rejected {
                         auth_unsupported = false;
                     }
-                    last_error = Some(err);
+                    last_error = Some(failure);
                 }
             }
         }
         if !authed {
             if !auth_unsupported {
-                let err = last_error.expect("auth failed without an error");
-                return Err(anyhow::Error::new(err).context("smtp auth"));
+                let failure = last_error.expect("auth failed without an error");
+                return Err(anyhow::Error::new(failure).context("smtp auth"));
             }
             crate::mlog!(
                 crate::log::Level::Warn,

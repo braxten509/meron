@@ -134,7 +134,7 @@ pub fn upsert_rss_item(
         "content": extra.content,
         "body_html": body_html,
         "images": extra.images.iter()
-            .map(|img| json!({ "url": img.url, "key": img.key }))
+            .map(|image| json!({ "url": image.url, "key": image.key }))
             .collect::<Vec<_>>(),
         "videos": extra.videos.iter()
             .map(|vid| json!({ "url": vid.url, "key": vid.key }))

@@ -2,6 +2,11 @@
 //! Discovery resolves server settings and account commands persist the selected configuration.
 //! Results are encoded for the same protocol used by Android and iOS.
 
+mod discovery;
+pub(crate) use discovery::autodiscover_mobile_account;
+#[cfg(test)]
+use discovery::parse_mobile_autoconfig;
+
 use super::*;
 use hickory_resolver::Resolver;
 use hickory_resolver::proto::rr::RData;
@@ -66,14 +71,14 @@ pub(crate) fn list_mobile_accounts(data_directory: &str) -> Result<Value, String
     })
 }
 
-pub(crate) fn req_account_pref_id(params: &Value) -> Result<String, String> {
-    req_str(params, "account")
-        .or_else(|_| req_str(params, "account_id"))
-        .or_else(|_| req_str(params, "id"))
+pub(crate) fn account_preference_id(params: &Value) -> Result<String, String> {
+    required_string(params, "account")
+        .or_else(|_| required_string(params, "account_id"))
+        .or_else(|_| required_string(params, "id"))
 }
 
 pub(crate) fn remove_mobile_account(data_directory: &str, params: &Value) -> Result<Value, String> {
-    let id = req_account_pref_id(params)?;
+    let id = account_preference_id(params)?;
     let result = with_mobile_db(data_directory, |conn| {
         store::delete_account(&conn, &id).map_err(|error| error.to_string())?;
         Ok(json!({ "ok": true }))
@@ -83,377 +88,11 @@ pub(crate) fn remove_mobile_account(data_directory: &str, params: &Value) -> Res
     Ok(result)
 }
 
-pub(crate) fn autodiscover_mobile_account(params: &Value) -> Result<Value, String> {
-    let email = req_str(params, "email")?.trim().to_string();
-    let Some((_, domain)) = email.rsplit_once('@') else {
-        return Err("invalid email".to_string());
-    };
-    let domain = domain.trim().to_ascii_lowercase();
-    if domain.is_empty() {
-        return Err("invalid email".to_string());
-    }
-
-    let discovered = mobile_provider_mail_settings(&email, &domain)
-        .or_else(|| discover_mobile_autoconfig(&email, &domain))
-        .or_else(|| discover_mobile_srv(&email, &domain))
-        .unwrap_or_else(|| DiscoveredMailSettings {
-            imap_host: format!("imap.{domain}"),
-            imap_port: 993,
-            smtp_host: format!("smtp.{domain}"),
-            smtp_port: 465,
-            username: email.clone(),
-            source: "guess".to_string(),
-            ..Default::default()
-        });
-    let mut result = json!({
-        "imap_host": discovered.imap_host,
-        "imap_port": discovered.imap_port,
-        "smtp_host": discovered.smtp_host,
-        "smtp_port": discovered.smtp_port,
-        "username": discovered.username,
-        "source": discovered.source,
-    });
-    if !discovered.provider_name.is_empty() {
-        result["provider_name"] = json!(discovered.provider_name);
-    }
-    if let Some((provider, url)) =
-        mobile_app_password_hint(&domain, result["imap_host"].as_str().unwrap_or_default())
-    {
-        result["app_password_hint"] = json!({ "provider": provider, "url": url });
-    }
-    Ok(result)
-}
-
-fn mobile_provider_mail_settings(email: &str, domain: &str) -> Option<DiscoveredMailSettings> {
-    let settings = match domain {
-        "gmail.com" | "googlemail.com" => ("Gmail", "imap.gmail.com", 993, "smtp.gmail.com", 465),
-        "outlook.com" | "hotmail.com" | "live.com" | "msn.com" => (
-            "Outlook",
-            "outlook.office365.com",
-            993,
-            "smtp.office365.com",
-            587,
-        ),
-        "icloud.com" | "me.com" | "mac.com" => {
-            ("iCloud", "imap.mail.me.com", 993, "smtp.mail.me.com", 587)
-        }
-        "yahoo.com" | "ymail.com" | "rocketmail.com" => (
-            "Yahoo",
-            "imap.mail.yahoo.com",
-            993,
-            "smtp.mail.yahoo.com",
-            465,
-        ),
-        "aol.com" => ("AOL", "imap.aol.com", 993, "smtp.aol.com", 465),
-        "fastmail.com" | "fastmail.fm" => (
-            "Fastmail",
-            "imap.fastmail.com",
-            993,
-            "smtp.fastmail.com",
-            465,
-        ),
-        "proton.me" | "protonmail.com" => {
-            ("Proton Mail Bridge", "127.0.0.1", 1143, "127.0.0.1", 1025)
-        }
-        _ => return None,
-    };
-    Some(DiscoveredMailSettings {
-        provider_name: settings.0.to_string(),
-        imap_host: settings.1.to_string(),
-        imap_port: settings.2,
-        smtp_host: settings.3.to_string(),
-        smtp_port: settings.4,
-        username: email.to_string(),
-        source: "known".to_string(),
-    })
-}
-
-fn discover_mobile_autoconfig(email: &str, domain: &str) -> Option<DiscoveredMailSettings> {
-    let encoded_email: String = form_urlencoded::byte_serialize(email.as_bytes()).collect();
-    let urls = [
-        (
-            format!(
-                "https://autoconfig.{domain}/mail/config-v1.1.xml?emailaddress={encoded_email}"
-            ),
-            "autoconfig",
-        ),
-        (
-            format!(
-                "https://{domain}/.well-known/autoconfig/mail/config-v1.1.xml?emailaddress={encoded_email}"
-            ),
-            "autoconfig",
-        ),
-        (
-            format!("https://autoconfig.thunderbird.net/v1.1/{domain}"),
-            "thunderbird",
-        ),
-    ];
-    for (url, source) in urls {
-        let Some(xml) = fetch_mobile_autoconfig(&url) else {
-            continue;
-        };
-        let Some(mut settings) = parse_mobile_autoconfig(&xml, email) else {
-            continue;
-        };
-        settings.source = source.to_string();
-        return Some(settings);
-    }
-    None
-}
-
-fn fetch_mobile_autoconfig(url: &str) -> Option<String> {
-    let mut response = crate::proxy::agent()
-        .ok()?
-        .get(url)
-        .header("User-Agent", "Meron-Mail-Autoconfig")
-        .config()
-        .http_status_as_error(false)
-        .timeout_global(Some(Duration::from_secs(6)))
-        .build()
-        .call()
-        .ok()?;
-    if !response.status().is_success() {
-        return None;
-    }
-    response
-        .body_mut()
-        .with_config()
-        .limit(1 << 20)
-        .read_to_string()
-        .ok()
-}
-
-fn parse_mobile_autoconfig(xml: &str, email: &str) -> Option<DiscoveredMailSettings> {
-    let mut reader = Reader::from_str(xml);
-    let decoder = reader.decoder();
-    let mut buffer = Vec::new();
-    let mut path: Vec<String> = Vec::new();
-    let mut display_name = String::new();
-    let mut incoming: Vec<AutoconfigServer> = Vec::new();
-    let mut outgoing: Vec<AutoconfigServer> = Vec::new();
-    let mut current: Option<AutoconfigServer> = None;
-
-    loop {
-        match reader.read_event_into(&mut buffer) {
-            Ok(Event::Eof) => break,
-            Ok(Event::Start(e)) => {
-                let name = String::from_utf8_lossy(e.name().as_ref()).to_string();
-                if name == "incomingServer" || name == "outgoingServer" {
-                    let mut server = AutoconfigServer::default();
-                    for attr in e.attributes().flatten() {
-                        if attr.key.as_ref() == b"type" {
-                            server.server_type =
-                                attr.decode_and_unescape_value(decoder).ok()?.to_string();
-                        }
-                    }
-                    current = Some(server);
-                }
-                path.push(name);
-            }
-            Ok(Event::Text(e)) => {
-                let text = e.unescape().ok()?.trim().to_string();
-                if text.is_empty() {
-                    buffer.clear();
-                    continue;
-                }
-                match path.last().map(String::as_str) {
-                    Some("displayName") if current.is_none() => display_name = text,
-                    Some("hostname") => {
-                        if let Some(server) = current.as_mut() {
-                            server.hostname = text;
-                        }
-                    }
-                    Some("port") => {
-                        if let Some(server) = current.as_mut() {
-                            server.port = text.parse::<u16>().unwrap_or(0);
-                        }
-                    }
-                    Some("socketType") => {
-                        if let Some(server) = current.as_mut() {
-                            server.socket_type = text;
-                        }
-                    }
-                    Some("username") => {
-                        if let Some(server) = current.as_mut() {
-                            server.username = text;
-                        }
-                    }
-                    _ => {}
-                }
-            }
-            Ok(Event::End(e)) => {
-                let name = e.name().as_ref().to_vec();
-                if name.as_slice() == b"incomingServer" {
-                    if let Some(server) = current.take() {
-                        incoming.push(server);
-                    }
-                } else if name.as_slice() == b"outgoingServer" {
-                    if let Some(server) = current.take() {
-                        outgoing.push(server);
-                    }
-                }
-                path.pop();
-            }
-            Ok(_) => {}
-            Err(_) => return None,
-        }
-        buffer.clear();
-    }
-
-    let imap = incoming.into_iter().find(|server| {
-        server.server_type.eq_ignore_ascii_case("imap") && !server.hostname.is_empty()
-    })?;
-    let smtp = outgoing.into_iter().find(|server| {
-        server.server_type.eq_ignore_ascii_case("smtp") && !server.hostname.is_empty()
-    })?;
-    Some(DiscoveredMailSettings {
-        imap_host: imap.hostname,
-        imap_port: port_for_mobile_autoconfig(imap.port, &imap.socket_type, true),
-        smtp_host: smtp.hostname,
-        smtp_port: port_for_mobile_autoconfig(smtp.port, &smtp.socket_type, false),
-        username: expand_mobile_autoconfig_username(&imap.username, email)
-            .unwrap_or_else(|| email.to_string()),
-        provider_name: display_name,
-        source: String::new(),
-    })
-}
-
-fn discover_mobile_srv(email: &str, domain: &str) -> Option<DiscoveredMailSettings> {
-    let runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_io()
-        .enable_time()
-        .build()
-        .ok()?;
-    let (imap_host, imap_port) = lookup_mobile_srv(&runtime, "imaps", domain)
-        .or_else(|| lookup_mobile_srv(&runtime, "imap", domain))?;
-    let (smtp_host, smtp_port) = lookup_mobile_srv(&runtime, "submissions", domain)
-        .or_else(|| lookup_mobile_srv(&runtime, "submission", domain))?;
-    Some(DiscoveredMailSettings {
-        imap_host,
-        imap_port,
-        smtp_host,
-        smtp_port,
-        username: email.to_string(),
-        source: "srv".to_string(),
-        ..Default::default()
-    })
-}
-
-fn lookup_mobile_srv(
-    runtime: &tokio::runtime::Runtime,
-    service: &str,
-    domain: &str,
-) -> Option<(String, u16)> {
-    runtime.block_on(async {
-        let resolver = Resolver::builder_tokio().ok()?.build().ok()?;
-        let name = format!("_{service}._tcp.{domain}.");
-        let response = tokio::time::timeout(Duration::from_secs(5), resolver.srv_lookup(name))
-            .await
-            .ok()?
-            .ok()?;
-        let mut records = response
-            .answers()
-            .iter()
-            .filter_map(|record| match &record.data {
-                RData::SRV(srv) => Some(srv),
-                _ => None,
-            })
-            .collect::<Vec<_>>();
-        records.sort_by(|a, b| {
-            a.priority
-                .cmp(&b.priority)
-                .then_with(|| b.weight.cmp(&a.weight))
-        });
-        let best = records.first()?;
-        let target = best.target.to_utf8().trim_end_matches('.').to_string();
-        if target.is_empty() || target == "." {
-            return None;
-        }
-        Some((target, best.port))
-    })
-}
-
-fn port_for_mobile_autoconfig(port: u16, socket_type: &str, imap: bool) -> u16 {
-    if port != 0 {
-        return port;
-    }
-    match socket_type.to_ascii_uppercase().as_str() {
-        "STARTTLS" => {
-            if imap {
-                143
-            } else {
-                587
-            }
-        }
-        "PLAIN" => {
-            if imap {
-                143
-            } else {
-                25
-            }
-        }
-        _ => {
-            if imap {
-                993
-            } else {
-                465
-            }
-        }
-    }
-}
-
-fn expand_mobile_autoconfig_username(template: &str, email: &str) -> Option<String> {
-    if template.is_empty() {
-        return None;
-    }
-    let local = email
-        .split_once('@')
-        .map(|(local, _)| local)
-        .unwrap_or(email);
-    Some(
-        template
-            .replace("%EMAILADDRESS%", email)
-            .replace("%EMAILLOCALPART%", local),
-    )
-}
-
-pub(crate) fn mobile_app_password_hint(
-    domain: &str,
-    imap_host: &str,
-) -> Option<(&'static str, &'static str)> {
-    let host = imap_host.to_ascii_lowercase();
-    let contains = |needle: &str| host.contains(needle) || domain.contains(needle);
-    if contains("mail.me.com")
-        || contains("icloud.com")
-        || contains("me.com")
-        || contains("mac.com")
-    {
-        Some(("iCloud", "https://account.apple.com/account/manage"))
-    } else if contains("fastmail") {
-        Some((
-            "Fastmail",
-            "https://app.fastmail.com/settings/security/apppassword",
-        ))
-    } else if contains("yahoo") || contains("ymail") || contains("rocketmail") {
-        Some((
-            "Yahoo",
-            "https://login.yahoo.com/account/security/app-passwords",
-        ))
-    } else if contains("aol.com") {
-        Some((
-            "AOL",
-            "https://login.aol.com/account/security/app-passwords",
-        ))
-    } else {
-        None
-    }
-}
-
 pub(crate) fn reorder_mobile_accounts(
     data_directory: &str,
     params: &Value,
 ) -> Result<Value, String> {
-    let ids = req_str_array(params, "accounts")?;
+    let ids = required_strings(params, "accounts")?;
     with_mobile_db(data_directory, |conn| {
         store::reorder_accounts(&conn, &ids).map_err(|error| error.to_string())?;
         Ok(json!({ "ok": true }))
@@ -467,16 +106,16 @@ pub(crate) fn suggest_mobile_contacts(
     data_directory: &str,
     params: &Value,
 ) -> Result<Value, String> {
-    let mut account = opt_str(params, "account");
+    let mut account = optional_string(params, "account");
     if account.is_empty() {
-        account = opt_str(params, "account_id");
+        account = optional_string(params, "account_id");
     }
     if account.is_empty() {
-        account = opt_str(params, "id");
+        account = optional_string(params, "id");
     }
-    let query = opt_str(params, "query");
-    let limit = opt_u32(params, "limit").unwrap_or(8);
-    let sort = store::ContactSort::parse(&opt_str(params, "sort"));
+    let query = optional_string(params, "query");
+    let limit = optional_u32(params, "limit").unwrap_or(8);
+    let sort = store::ContactSort::parse(&optional_string(params, "sort"));
     let directory = params
         .get("directory")
         .and_then(Value::as_bool)
@@ -492,8 +131,8 @@ pub(crate) fn set_mobile_account_name(
     data_directory: &str,
     params: &Value,
 ) -> Result<Value, String> {
-    let id = req_account_pref_id(params)?;
-    let name = opt_str(params, "name");
+    let id = account_preference_id(params)?;
+    let name = optional_string(params, "name");
     with_mobile_db(data_directory, |conn| {
         conn.execute(
             "UPDATE accounts SET display_name = ?1, updated_at = strftime('%s', 'now') WHERE id = ?2",
@@ -508,8 +147,8 @@ pub(crate) fn set_mobile_account_sender_name(
     data_directory: &str,
     params: &Value,
 ) -> Result<Value, String> {
-    let id = req_account_pref_id(params)?;
-    let name = opt_str(params, "name");
+    let id = account_preference_id(params)?;
+    let name = optional_string(params, "name");
     with_mobile_db(data_directory, |conn| {
         conn.execute(
             "UPDATE accounts SET sender_name = ?1, updated_at = strftime('%s', 'now') WHERE id = ?2",
@@ -524,8 +163,8 @@ pub(crate) fn set_mobile_account_avatar(
     data_directory: &str,
     params: &Value,
 ) -> Result<Value, String> {
-    let id = req_account_pref_id(params)?;
-    let avatar_url = opt_str(params, "avatar_url");
+    let id = account_preference_id(params)?;
+    let avatar_url = optional_string(params, "avatar_url");
     with_mobile_db(data_directory, |conn| {
         conn.execute(
             "UPDATE accounts SET avatar_url = ?1, updated_at = strftime('%s', 'now') WHERE id = ?2",
@@ -540,16 +179,20 @@ pub(crate) fn set_mobile_account_chat_wallpaper(
     data_directory: &str,
     params: &Value,
 ) -> Result<Value, String> {
-    let id = req_account_pref_id(params)?;
+    let id = account_preference_id(params)?;
     let wallpaper = match params.get("wallpaper") {
         Some(Value::Null) | None => None,
         Some(value) => {
-            let obj = value
+            let fields = value
                 .as_object()
                 .ok_or_else(|| "wallpaper must be an object".to_string())?;
-            match obj.get("kind").and_then(Value::as_str).unwrap_or_default() {
+            match fields
+                .get("kind")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+            {
                 "preset" => {
-                    let preset_id = obj
+                    let preset_id = fields
                         .get("presetId")
                         .and_then(Value::as_str)
                         .unwrap_or_default()
@@ -560,7 +203,7 @@ pub(crate) fn set_mobile_account_chat_wallpaper(
                     Some(json!({ "kind": "preset", "presetId": preset_id }))
                 }
                 "custom" => {
-                    let url = obj
+                    let url = fields
                         .get("url")
                         .and_then(Value::as_str)
                         .unwrap_or_default()
@@ -587,7 +230,7 @@ pub(crate) fn set_mobile_account_signature(
     data_directory: &str,
     params: &Value,
 ) -> Result<Value, String> {
-    let id = req_account_pref_id(params)?;
+    let id = account_preference_id(params)?;
     let signature = store::AccountSignature::from_param(params.get("signature"))?;
     with_mobile_db(data_directory, |conn| {
         store::set_account_pref_json(&conn, &id, "signature", signature.map(|sig| json!(sig)))
@@ -600,8 +243,8 @@ pub(crate) fn set_mobile_account_images(
     data_directory: &str,
     params: &Value,
 ) -> Result<Value, String> {
-    let id = req_account_pref_id(params)?;
-    let enabled = req_bool(params, "enabled")?;
+    let id = account_preference_id(params)?;
+    let enabled = required_boolean(params, "enabled")?;
     with_mobile_db(data_directory, |conn| {
         store::set_load_remote_images(&conn, &id, enabled).map_err(|error| error.to_string())?;
         Ok(json!({ "ok": true }))
@@ -613,8 +256,8 @@ pub(crate) fn set_mobile_account_bool_pref(
     params: &Value,
     key: &str,
 ) -> Result<Value, String> {
-    let id = req_account_pref_id(params)?;
-    let enabled = req_bool(params, "enabled")?;
+    let id = account_preference_id(params)?;
+    let enabled = required_boolean(params, "enabled")?;
     with_mobile_db(data_directory, |conn| {
         store::set_account_pref(&conn, &id, key, enabled).map_err(|error| error.to_string())?;
         Ok(json!({ "ok": true }))
@@ -625,7 +268,7 @@ pub(crate) fn set_mobile_account_save_sent_copy(
     data_directory: &str,
     params: &Value,
 ) -> Result<Value, String> {
-    let id = req_account_pref_id(params)?;
+    let id = account_preference_id(params)?;
     let value = match params.get("value") {
         Some(Value::Bool(enabled)) => Some(json!(enabled)),
         Some(Value::Null) | None => None,
@@ -642,7 +285,7 @@ pub(crate) fn set_mobile_account_rss_sync_interval(
     data_directory: &str,
     params: &Value,
 ) -> Result<Value, String> {
-    let id = req_account_pref_id(params)?;
+    let id = account_preference_id(params)?;
     let minutes = params
         .get("minutes")
         .and_then(Value::as_u64)
@@ -659,7 +302,7 @@ pub(crate) fn set_mobile_account_aliases(
     data_directory: &str,
     params: &Value,
 ) -> Result<Value, String> {
-    let id = req_account_pref_id(params)?;
+    let id = account_preference_id(params)?;
     let mut aliases: Vec<store::Alias> = params
         .get("aliases")
         .cloned()
@@ -683,7 +326,7 @@ pub(crate) fn set_mobile_account_proxy(
     data_directory: &str,
     params: &Value,
 ) -> Result<Value, String> {
-    let id = req_account_pref_id(params)?;
+    let id = account_preference_id(params)?;
     let choice = crate::proxy::ProxyChoice::from_json(params.get("proxy").unwrap_or(&Value::Null));
     let result = with_mobile_db(data_directory, |conn| {
         store::set_account_proxy(&conn, &id, &choice).map_err(|error| error.to_string())?;
@@ -703,7 +346,7 @@ pub(crate) fn set_mobile_account_cert_pin(
     data_directory: &str,
     params: &Value,
 ) -> Result<Value, String> {
-    let id = req_account_pref_id(params)?;
+    let id = account_preference_id(params)?;
     let result = with_mobile_db(data_directory, |conn| {
         let stored = store::load_accounts(&conn)
             .map_err(|error| error.to_string())?
@@ -758,13 +401,13 @@ pub(crate) fn set_mobile_proxy(data_directory: &str, params: &Value) -> Result<V
 /// both exist because a self-signed local bridge is unreachable without a pin.
 /// A certificate pin parameter: hex, normalized, with blank treated as absent.
 fn pin_param(params: &Value, key: &str) -> Option<String> {
-    Some(opt_str(params, key).to_ascii_lowercase()).filter(|pin| !pin.is_empty())
+    Some(optional_string(params, key).to_ascii_lowercase()).filter(|pin| !pin.is_empty())
 }
 
 pub(crate) fn probe_mobile_cert(params: &Value) -> Result<Value, String> {
-    let host = req_str(params, "host")?;
-    let port = req_u16(params, "port").unwrap_or(993);
-    let protocol = opt_str(params, "protocol");
+    let host = required_string(params, "host")?;
+    let port = optional_u16(params, "port").unwrap_or(993);
+    let protocol = optional_string(params, "protocol");
     let starttls = params
         .get("starttls")
         .and_then(Value::as_bool)
@@ -780,22 +423,22 @@ pub(crate) fn add_mobile_password_account(
     data_directory: &str,
     params: &Value,
 ) -> Result<Value, String> {
-    let email = req_str(params, "email")?;
+    let email = required_string(params, "email")?;
     if !email.contains('@') {
         return Err("invalid email".to_string());
     }
-    let imap_host = req_str(params, "imap_host")?;
-    let smtp_host = req_str(params, "smtp_host")?;
+    let imap_host = required_string(params, "imap_host")?;
+    let smtp_host = required_string(params, "smtp_host")?;
     if imap_host.trim().is_empty() || smtp_host.trim().is_empty() {
         return Err("server required".to_string());
     }
-    let username = req_str(params, "username")?;
+    let username = required_string(params, "username")?;
     if username.trim().is_empty() {
         return Err("username required".to_string());
     }
 
-    let imap_port = req_u16(params, "imap_port").unwrap_or(993);
-    let smtp_port = req_u16(params, "smtp_port").unwrap_or(465);
+    let imap_port = optional_u16(params, "imap_port").unwrap_or(993);
+    let smtp_port = optional_u16(params, "smtp_port").unwrap_or(465);
     // Older clients send one `tls` switch and rely on the port to distinguish
     // implicit TLS from STARTTLS. Newer clients can choose each transport mode
     // explicitly; keep the inferred values as a backwards-compatible fallback.
@@ -805,7 +448,7 @@ pub(crate) fn add_mobile_password_account(
     let (smtp_tls, smtp_starttls) =
         explicit_or_inferred_tls_mode(params, "smtp_tls", "smtp_starttls", None, tls, smtp_port);
     let id = account_id(&email);
-    let password = opt_str(params, "password");
+    let password = optional_string(params, "password");
     let creds = Creds {
         host: imap_host,
         port: imap_port,
@@ -834,9 +477,9 @@ pub(crate) fn add_mobile_password_account(
         engine: "mail".to_string(),
         provider: "custom".to_string(),
         email: email.clone(),
-        display_name: opt_str(params, "display_name"),
+        display_name: optional_string(params, "display_name"),
         avatar_url: String::new(),
-        sender_name: opt_str(params, "sender_name"),
+        sender_name: optional_string(params, "sender_name"),
     };
     // Reconnecting re-runs this call with the setup form's fields; anything the
     // form does not carry (the account's proxy, accepted certificates) is kept

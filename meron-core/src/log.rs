@@ -120,10 +120,11 @@ macro_rules! mlog {
     };
 }
 
-/// Route panics through [`emit`] so they survive where stderr does not: on
-/// mobile the host forwards them to Logcat / os_log and the shareable
-/// diagnostic log, on desktop the sidecar's stderr already lands in meron.log.
-/// The previous hook still runs afterwards, keeping the default backtrace.
+/// Report Rust panics through the same event stream as core diagnostics.
+///
+/// Route panics through [`emit`] so they survive where stderr does not: on mobile the host forwards them to
+/// Logcat / os_log and the shareable diagnostic log, on desktop the sidecar's stderr already lands in
+/// meron.log. The previous hook still runs afterwards, keeping the default backtrace.
 ///
 /// Idempotent: repeated calls (each mobile `ffi::init`) install the hook once.
 pub fn install_panic_hook() {
@@ -133,7 +134,9 @@ pub fn install_panic_hook() {
         std::panic::set_hook(Box::new(move |info| {
             let location = info
                 .location()
-                .map(|l| format!("{}:{}", l.file(), l.line()))
+                .map(|source_location| {
+                    format!("{}:{}", source_location.file(), source_location.line())
+                })
                 .unwrap_or_else(|| "unknown location".to_string());
             let message = info
                 .payload()

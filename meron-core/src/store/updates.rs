@@ -367,8 +367,8 @@ pub fn messages_still_unread(
          WHERE account = ?1 AND folder = ?2 AND msg_id = ?3 AND seen = 0",
     )?;
     let mut unread = Vec::with_capacity(messages.len());
-    for (folder, msg_id) in messages {
-        unread.push(stmt.exists(params![account, folder, msg_id])?);
+    for (folder, message_identifier) in messages {
+        unread.push(stmt.exists(params![account, folder, message_identifier])?);
     }
     Ok(unread)
 }
@@ -426,19 +426,19 @@ pub fn move_messages_by_uid(
     let tx = conn.unchecked_transaction()?;
     let mut moved = 0usize;
     for uid in uids {
-        let msg_id = tx
+        let message_identifier = tx
             .query_row(
                 "SELECT msg_id FROM messages WHERE account = ?1 AND folder = ?2 AND uid = ?3",
                 params![account, source_folder, *uid],
                 |row| row.get::<_, String>(0),
             )
             .optional()?;
-        let Some(msg_id) = msg_id else {
+        let Some(message_identifier) = message_identifier else {
             continue;
         };
         tx.execute(
             "DELETE FROM messages WHERE account = ?1 AND folder = ?2 AND msg_id = ?3",
-            params![account, target_folder, msg_id],
+            params![account, target_folder, message_identifier],
         )?;
         moved += tx.execute(
             "UPDATE messages SET folder = ?4 WHERE account = ?1 AND folder = ?2 AND uid = ?3",

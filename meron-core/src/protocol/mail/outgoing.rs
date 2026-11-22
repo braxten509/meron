@@ -32,18 +32,18 @@ fn watch_for_sent_copy(
 }
 
 pub(crate) fn send_mobile_message(data_directory: &str, params: &Value) -> Result<Value, String> {
-    let account_id = req_account_id(params)?;
-    let to = req_str(params, "to")?;
-    let cc = opt_str(params, "cc");
-    let bcc = opt_str(params, "bcc");
-    let subject = opt_str(params, "subject");
-    let body = opt_str(params, "body");
-    let html = opt_str(params, "html");
-    let in_reply_to = opt_str(params, "in_reply_to");
-    let references = opt_str(params, "references");
-    let reply_to = opt_str(params, "reply_to");
-    let message_id = opt_str(params, "message_id");
-    let requested_from = opt_str(params, "from");
+    let account_id = required_account_id(params)?;
+    let to = required_string(params, "to")?;
+    let cc = optional_string(params, "cc");
+    let bcc = optional_string(params, "bcc");
+    let subject = optional_string(params, "subject");
+    let body = optional_string(params, "body");
+    let html = optional_string(params, "html");
+    let in_reply_to = optional_string(params, "in_reply_to");
+    let references = optional_string(params, "references");
+    let reply_to = optional_string(params, "reply_to");
+    let message_id = optional_string(params, "message_id");
+    let requested_from = optional_string(params, "from");
     let attachments = parse_mobile_attachments(params)?;
 
     // Route through the shared Engine: reuses the warm session pool while
@@ -115,9 +115,9 @@ fn finish_mobile_sent(
 
 /// Answer a calendar invitation from its card: see [`crate::calendar::respond`].
 pub(crate) fn respond_mobile_invite(data_directory: &str, params: &Value) -> Result<Value, String> {
-    let message = req_str(params, "message")?;
-    let thread_id = opt_str(params, "thread_id");
-    let response = req_str(params, "response")?;
+    let message = required_string(params, "message")?;
+    let thread_id = optional_string(params, "thread_id");
+    let response = required_string(params, "response")?;
     let response = crate::calendar::Response::parse(&response)
         .ok_or_else(|| format!("unknown invitation response: {response}"))?;
     let engine = crate::ffi::engine_for(data_directory)?;
@@ -138,18 +138,18 @@ pub(crate) fn respond_mobile_invite(data_directory: &str, params: &Value) -> Res
 }
 
 pub(crate) fn save_mobile_draft(data_directory: &str, params: &Value) -> Result<Value, String> {
-    let account_id = req_account_id(params)?;
-    let to = opt_str(params, "to");
-    let cc = opt_str(params, "cc");
-    let bcc = opt_str(params, "bcc");
-    let subject = opt_str(params, "subject");
-    let body = opt_str(params, "body");
-    let html = opt_str(params, "html");
-    let in_reply_to = opt_str(params, "in_reply_to");
-    let references = opt_str(params, "references");
-    let reply_to = opt_str(params, "reply_to");
-    let draft_id = req_str(params, "draft_id")?;
-    let requested_from = opt_str(params, "from");
+    let account_id = required_account_id(params)?;
+    let to = optional_string(params, "to");
+    let cc = optional_string(params, "cc");
+    let bcc = optional_string(params, "bcc");
+    let subject = optional_string(params, "subject");
+    let body = optional_string(params, "body");
+    let html = optional_string(params, "html");
+    let in_reply_to = optional_string(params, "in_reply_to");
+    let references = optional_string(params, "references");
+    let reply_to = optional_string(params, "reply_to");
+    let draft_id = required_string(params, "draft_id")?;
+    let requested_from = optional_string(params, "from");
     let attachments = parse_mobile_attachments(params)?;
 
     let engine = crate::ffi::engine_for(data_directory)?;
@@ -243,8 +243,8 @@ pub(crate) fn save_mobile_draft(data_directory: &str, params: &Value) -> Result<
 }
 
 pub(crate) fn discard_mobile_draft(data_directory: &str, params: &Value) -> Result<Value, String> {
-    let account_id = req_account_id(params)?;
-    let draft_id = opt_str(params, "draft_id");
+    let account_id = required_account_id(params)?;
+    let draft_id = optional_string(params, "draft_id");
     if draft_id.trim().is_empty() {
         return Ok(json!({ "ok": true, "deleted": 0, "permanent": true }));
     }

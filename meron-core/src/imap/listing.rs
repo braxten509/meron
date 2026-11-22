@@ -5,13 +5,14 @@
 
 use super::*;
 
-/// SELECT `folder` and return `(UIDVALIDITY, UIDNEXT, uids)`, where `uids` holds
-/// the most recent `limit` messages newest first — the same window
-/// [`fetch_recent`] covers, but established without fetching any message.
+/// Select a mailbox and list its newest UIDs together with its validity and next UID.
 ///
-/// Used by the poison-message recovery path, which needs the window as UIDs it
-/// can subdivide. A `UID SEARCH` reply is a list of bare numbers, so it cannot
-/// itself hit the parse failure that sent us down this path.
+/// SELECT `folder` and return `(UIDVALIDITY, UIDNEXT, uids)`, where `uids` holds the most recent `limit`
+/// messages newest first — the same window [`fetch_recent`] covers, but established without fetching any
+/// message.
+///
+/// Used by the poison-message recovery path, which needs the window as UIDs it can subdivide. A `UID SEARCH`
+/// reply is a list of bare numbers, so it cannot itself hit the parse failure that sent us down this path.
 pub async fn recent_uids(
     session: &mut Session,
     folder: &str,
@@ -78,14 +79,14 @@ pub struct IncrementalBatch {
     pub server_uids: HashSet<u32>,
 }
 
-/// [`fetch_recent`] for a folder synced before: lists the folder's UIDs and
-/// reads in full only the window's messages missing from `known` (the UIDs
-/// the cache holds). Nothing new means no message FETCH at all.
+/// Refresh a previously synchronized mailbox while reusing cached headers.
 ///
-/// Answers `None`, having read no message, when the full read is needed
-/// instead: UIDVALIDITY is unknown or changed, or the listing contradicts the
-/// SELECT. Flags of the window's cached messages are the caller's to refresh
-/// (CONDSTORE, or [`fetch_flags_by_uid`]).
+/// [`fetch_recent`] for a folder synced before: lists the folder's UIDs and reads in full only the window's
+/// messages missing from `known` (the UIDs the cache holds). Nothing new means no message FETCH at all.
+///
+/// Answers `None`, having read no message, when the full read is needed instead: UIDVALIDITY is unknown or
+/// changed, or the listing contradicts the SELECT. Flags of the window's cached messages are the caller's to
+/// refresh (CONDSTORE, or [`fetch_flags_by_uid`]).
 pub async fn fetch_recent_incremental(
     session: &mut Session,
     folder: &str,

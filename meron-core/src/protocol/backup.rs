@@ -12,9 +12,9 @@ pub(crate) fn export_mobile_backup(data_directory: &str, params: &Value) -> Resu
         .get("include_secrets")
         .and_then(Value::as_bool)
         .unwrap_or(false);
-    let passphrase = opt_str(params, "passphrase");
-    let app_version = opt_str(params, "app_version");
-    let platform = opt_str(params, "platform");
+    let passphrase = optional_string(params, "passphrase");
+    let app_version = optional_string(params, "app_version");
+    let platform = optional_string(params, "platform");
     let host = crate::backup::Host {
         platform: &platform,
         app_version: &app_version,
@@ -31,8 +31,8 @@ pub(crate) fn export_mobile_backup(data_directory: &str, params: &Value) -> Resu
 /// back as `{ "needs_passphrase": true }` rather than an error, so the host can
 /// prompt and call again.
 pub(crate) fn import_mobile_backup(data_directory: &str, params: &Value) -> Result<Value, String> {
-    let text = req_str(params, "backup")?;
-    let passphrase = opt_str(params, "passphrase");
+    let text = required_string(params, "backup")?;
+    let passphrase = optional_string(params, "passphrase");
     let result = with_mobile_db(data_directory, |conn| {
         let data = match crate::backup::parse(&text, Some(&passphrase)) {
             Ok(data) => data,

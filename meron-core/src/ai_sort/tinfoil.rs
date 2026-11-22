@@ -10,22 +10,22 @@ use super::{AiError, ErrorKind, HTTP_TIMEOUT, Model};
 /// Verifying fetches several documents; give it more than one request's time.
 pub const VERIFY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
 
-fn classify(err: &::tinfoil::Error) -> AiError {
+fn classify(failure: &::tinfoil::Error) -> AiError {
     use ::tinfoil::async_openai::error::OpenAIError;
-    if let ::tinfoil::Error::Api(OpenAIError::ApiError(response)) = err {
+    if let ::tinfoil::Error::Api(OpenAIError::ApiError(response)) = failure {
         let status = response.status_code.as_u16();
         return AiError::from_status(status);
     }
-    if err.is_attestation() {
+    if failure.is_attestation() {
         return AiError::new(
             ErrorKind::Verify,
             "Tinfoil's privacy check failed, so nothing was sent.",
         );
     }
-    if err.is_configuration() {
+    if failure.is_configuration() {
         return AiError::new(ErrorKind::Other, "Tinfoil isn't set up right.");
     }
-    if err.is_retryable() {
+    if failure.is_retryable() {
         return AiError::network("Couldn't reach Tinfoil.");
     }
     AiError::new(ErrorKind::Other, "Tinfoil didn't answer.")
@@ -66,7 +66,7 @@ pub async fn chat(client: &::tinfoil::Client, body: Value) -> Result<String, AiE
             }
             Ok(response.content().unwrap_or_default().to_string())
         }
-        Ok(Err(err)) => Err(classify(&err)),
+        Ok(Err(failure)) => Err(classify(&failure)),
         Err(_) => Err(AiError::network("Tinfoil didn't answer in time.")),
     }
 }

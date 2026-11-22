@@ -22,7 +22,7 @@ pub(crate) async fn dispatch(request: &Request) -> anyhow::Result<Value> {
     .map_err(anyhow::Error::msg)
 }
 
-fn str_param(parameters: &Value, key: &str) -> String {
+fn string_parameter(parameters: &Value, key: &str) -> String {
     parameters
         .get(key)
         .and_then(Value::as_str)
@@ -46,9 +46,9 @@ fn client(parameters: &Value) -> Result<oauth::Client, String> {
 fn authorize_url(parameters: &Value) -> Result<Value, String> {
     let url = oauth::authorize_url(
         &client(parameters)?,
-        &str_param(parameters, "redirect_uri"),
-        &str_param(parameters, "state"),
-        &str_param(parameters, "code_challenge"),
+        &string_parameter(parameters, "redirect_uri"),
+        &string_parameter(parameters, "state"),
+        &string_parameter(parameters, "code_challenge"),
         "",
     )?;
     Ok(json!({ "url": url }))
@@ -59,9 +59,9 @@ fn exchange_code(parameters: &Value) -> Result<Value, String> {
     let client = client(parameters)?;
     let tokens = oauth::exchange_code(
         &client,
-        &str_param(parameters, "code"),
-        &str_param(parameters, "redirect_uri"),
-        &str_param(parameters, "code_verifier"),
+        &string_parameter(parameters, "code"),
+        &string_parameter(parameters, "redirect_uri"),
+        &string_parameter(parameters, "code_verifier"),
     )?;
     let refresh_token = tokens.refresh_token.clone().unwrap_or_default();
     if refresh_token.is_empty() {
@@ -82,8 +82,8 @@ fn exchange_code(parameters: &Value) -> Result<Value, String> {
 fn fetch_photo(parameters: &Value) -> Result<Value, String> {
     let photo = oauth::fetch_photo(
         &client(parameters)?,
-        &str_param(parameters, "access_token"),
-        &str_param(parameters, "refresh_token"),
+        &string_parameter(parameters, "access_token"),
+        &string_parameter(parameters, "refresh_token"),
         "",
     )?;
     Ok(json!({

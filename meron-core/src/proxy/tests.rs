@@ -185,32 +185,32 @@ async fn socks5_surfaces_a_refusal() {
         .unwrap();
     });
 
-    let err = connect_through(&socks5("127.0.0.1", port), "imap.example.com", 993)
+    let failure = connect_through(&socks5("127.0.0.1", port), "imap.example.com", 993)
         .await
         .unwrap_err();
     assert!(
-        format!("{err:#}").contains("connection refused"),
-        "unexpected error: {err:#}"
+        format!("{failure:#}").contains("connection refused"),
+        "unexpected error: {failure:#}"
     );
 }
 
 #[tokio::test]
 async fn socks5_requires_credentials_when_the_proxy_asks_for_them() {
     let (port, _server) =
-        with_proxy_server(|_req| vec![SOCKS5_VERSION, SOCKS5_AUTH_UNACCEPTABLE]).await;
-    let err = connect_through(&socks5("127.0.0.1", port), "imap.example.com", 993)
+        with_proxy_server(|_request| vec![SOCKS5_VERSION, SOCKS5_AUTH_UNACCEPTABLE]).await;
+    let failure = connect_through(&socks5("127.0.0.1", port), "imap.example.com", 993)
         .await
         .unwrap_err();
     assert!(
-        format!("{err:#}").contains("requires authentication"),
-        "unexpected error: {err:#}"
+        format!("{failure:#}").contains("requires authentication"),
+        "unexpected error: {failure:#}"
     );
 }
 
 #[tokio::test]
 async fn http_connect_tunnels_and_authenticates() {
     let (port, server) =
-        with_proxy_server(|_req| b"HTTP/1.1 200 Connection established\r\n\r\n".to_vec()).await;
+        with_proxy_server(|_request| b"HTTP/1.1 200 Connection established\r\n\r\n".to_vec()).await;
     let proxy = ProxyConfig {
         kind: ProxyKind::Http,
         host: "127.0.0.1".into(),
@@ -236,9 +236,10 @@ async fn http_connect_tunnels_and_authenticates() {
 
 #[tokio::test]
 async fn http_connect_reports_a_rejection() {
-    let (port, _server) =
-        with_proxy_server(|_req| b"HTTP/1.1 407 Proxy Authentication Required\r\n\r\n".to_vec())
-            .await;
+    let (port, _server) = with_proxy_server(|_request| {
+        b"HTTP/1.1 407 Proxy Authentication Required\r\n\r\n".to_vec()
+    })
+    .await;
     let proxy = ProxyConfig {
         kind: ProxyKind::Http,
         host: "127.0.0.1".into(),
@@ -246,12 +247,12 @@ async fn http_connect_reports_a_rejection() {
         username: String::new(),
         password: String::new(),
     };
-    let err = connect_through(&proxy, "smtp.example.com", 587)
+    let failure = connect_through(&proxy, "smtp.example.com", 587)
         .await
         .unwrap_err();
     assert!(
-        format!("{err:#}").contains("proxy authentication required"),
-        "unexpected error: {err:#}"
+        format!("{failure:#}").contains("proxy authentication required"),
+        "unexpected error: {failure:#}"
     );
 }
 
@@ -271,7 +272,7 @@ async fn proxy_handshake_is_bounded() {
         password: String::new(),
     };
 
-    let err = connect_through_with_timeout(
+    let failure = connect_through_with_timeout(
         &proxy,
         "imap.example.com",
         993,
@@ -280,8 +281,8 @@ async fn proxy_handshake_is_bounded() {
     .await
     .unwrap_err();
     assert!(
-        format!("{err:#}").contains("proxy handshake timed out"),
-        "unexpected error: {err:#}"
+        format!("{failure:#}").contains("proxy handshake timed out"),
+        "unexpected error: {failure:#}"
     );
     server.abort();
 }

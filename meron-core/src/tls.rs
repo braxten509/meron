@@ -258,7 +258,7 @@ pub fn is_cert_error(error: &std::io::Error) -> bool {
     matches!(
         error
             .get_ref()
-            .and_then(|e| e.downcast_ref::<rustls::Error>()),
+            .and_then(|cause| cause.downcast_ref::<rustls::Error>()),
         Some(rustls::Error::InvalidCertificate(_))
     )
 }
@@ -407,14 +407,18 @@ mod tests {
 
     #[test]
     fn untrusted_certificate_errors_carry_the_marker_and_stay_typed() {
-        let err = UntrustedCertificate::from_io(std::io::Error::new(
+        let operation_error = UntrustedCertificate::from_io(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
             rustls::Error::InvalidCertificate(rustls::CertificateError::Other(rustls::OtherError(
                 std::sync::Arc::new(std::io::Error::other("CaUsedAsEndEntity")),
             ))),
         ));
-        assert!(err.to_string().contains(UNTRUSTED_CERT_MARKER));
-        assert!(err.downcast_ref::<UntrustedCertificate>().is_some());
+        assert!(operation_error.to_string().contains(UNTRUSTED_CERT_MARKER));
+        assert!(
+            operation_error
+                .downcast_ref::<UntrustedCertificate>()
+                .is_some()
+        );
 
         // A transport failure keeps its own error, so the SMTP check can tell
         // "certificate rejected" from "server unreachable".
@@ -427,7 +431,7 @@ mod tests {
 
     #[test]
     fn certificate_failures_are_distinguished_from_transport_failures() {
-        let cert_err = std::io::Error::new(
+        let certificate_error = std::io::Error::new(
             std::io::ErrorKind::InvalidData,
             // Exactly how a Proton Bridge handshake fails: webpki's
             // CaUsedAsEndEntity, wrapped by rustls as an opaque Other.
@@ -435,9 +439,9 @@ mod tests {
                 std::sync::Arc::new(std::io::Error::other("CaUsedAsEndEntity")),
             ))),
         );
-        assert!(is_cert_error(&cert_err));
+        assert!(is_cert_error(&certificate_error));
 
-        let net_err = std::io::Error::new(std::io::ErrorKind::ConnectionRefused, "refused");
-        assert!(!is_cert_error(&net_err));
+        let network_error = std::io::Error::new(std::io::ErrorKind::ConnectionRefused, "refused");
+        assert!(!is_cert_error(&network_error));
     }
 }

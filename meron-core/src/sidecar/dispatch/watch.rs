@@ -26,9 +26,9 @@ pub(crate) async fn dispatch(
         // selected mailbox, so kanban starts visible non-INBOX folders here while
         // account startup keeps INBOX watched.
         "watch.start" => {
-            let account = req_str(parameters, "account")?;
+            let account = required_string(parameters, "account")?;
             let folder = canon_folder(
-                &req_str(parameters, "folder").unwrap_or_else(|_| "INBOX".to_string()),
+                &required_string(parameters, "folder").unwrap_or_else(|_| "INBOX".to_string()),
             );
             if engine.is_paused(&account) {
                 return Ok(json!({ "ok": true, "paused": true }));
@@ -39,9 +39,9 @@ pub(crate) async fn dispatch(
         }
 
         "watch.stop" => {
-            let account = req_str(parameters, "account")?;
+            let account = required_string(parameters, "account")?;
             let folder = canon_folder(
-                &req_str(parameters, "folder").unwrap_or_else(|_| "INBOX".to_string()),
+                &required_string(parameters, "folder").unwrap_or_else(|_| "INBOX".to_string()),
             );
             set_view_watch(&account, &folder, false);
             // A view (a kanban column) letting go of an opted-in folder that

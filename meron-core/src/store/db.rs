@@ -202,7 +202,7 @@ fn archive_path() -> PathBuf {
     if let Ok(path) = std::env::var("MERON_ARCHIVE_DB") {
         return PathBuf::from(path);
     }
-    app_dir().join("archive.db")
+    application_directory().join("archive.db")
 }
 
 /// Open an unencrypted store. SQLCipher leaves a database untouched until a key
@@ -445,20 +445,20 @@ fn db_path() -> PathBuf {
     if let Ok(path) = std::env::var("MERON_CORE_DB") {
         return PathBuf::from(path);
     }
-    config_dir().join("meron.db")
+    configuration_directory().join("meron.db")
 }
 
 /// The directory holding the store, and the natural home for anything else that
 /// belongs to this app profile (the local keyring, for one). Follows
 /// `MERON_CORE_DB`, so dev and production profiles stay separate.
-pub fn app_dir() -> PathBuf {
+pub fn application_directory() -> PathBuf {
     db_path()
         .parent()
         .map(Path::to_path_buf)
-        .unwrap_or_else(config_dir)
+        .unwrap_or_else(configuration_directory)
 }
 
-fn config_dir() -> PathBuf {
+fn configuration_directory() -> PathBuf {
     let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
     PathBuf::from(home).join(".config/meron")
 }

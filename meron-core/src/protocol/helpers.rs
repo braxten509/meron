@@ -4,8 +4,8 @@
 
 use super::*;
 
-pub(crate) fn req_account_id(params: &Value) -> Result<String, String> {
-    req_str(params, "account_id").or_else(|_| req_str(params, "account"))
+pub(crate) fn required_account_id(params: &Value) -> Result<String, String> {
+    required_string(params, "account_id").or_else(|_| required_string(params, "account"))
 }
 
 pub(crate) fn is_rss_account(
@@ -250,7 +250,7 @@ pub(crate) fn tls_mode(tls: bool, port: u16) -> (bool, bool) {
     }
 }
 
-pub(crate) fn req_str(params: &Value, key: &str) -> Result<String, String> {
+pub(crate) fn required_string(params: &Value, key: &str) -> Result<String, String> {
     params
         .get(key)
         .and_then(Value::as_str)
@@ -260,7 +260,7 @@ pub(crate) fn req_str(params: &Value, key: &str) -> Result<String, String> {
         .ok_or_else(|| format!("{key} required"))
 }
 
-pub(crate) fn req_str_array(params: &Value, key: &str) -> Result<Vec<String>, String> {
+pub(crate) fn required_strings(params: &Value, key: &str) -> Result<Vec<String>, String> {
     let values = params
         .get(key)
         .and_then(Value::as_array)
@@ -274,7 +274,7 @@ pub(crate) fn req_str_array(params: &Value, key: &str) -> Result<Vec<String>, St
         .collect())
 }
 
-pub(crate) fn opt_str(params: &Value, key: &str) -> String {
+pub(crate) fn optional_string(params: &Value, key: &str) -> String {
     params
         .get(key)
         .and_then(Value::as_str)
@@ -283,15 +283,15 @@ pub(crate) fn opt_str(params: &Value, key: &str) -> String {
         .to_string()
 }
 
-pub(crate) fn req_u16(params: &Value, key: &str) -> Option<u16> {
+pub(crate) fn optional_u16(params: &Value, key: &str) -> Option<u16> {
     params.get(key)?.as_u64()?.try_into().ok()
 }
 
-pub(crate) fn opt_u32(params: &Value, key: &str) -> Option<u32> {
+pub(crate) fn optional_u32(params: &Value, key: &str) -> Option<u32> {
     params.get(key)?.as_u64()?.try_into().ok()
 }
 
-pub(crate) fn req_bool(params: &Value, key: &str) -> Result<bool, String> {
+pub(crate) fn required_boolean(params: &Value, key: &str) -> Result<bool, String> {
     params
         .get(key)
         .and_then(Value::as_bool)

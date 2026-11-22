@@ -589,12 +589,14 @@ pub fn local_midnight(date: NaiveDate) -> i64 {
         .map_or_else(|| midnight.and_utc().timestamp(), |dt| dt.timestamp())
 }
 
-/// Split on whitespace, except inside a double-quoted span or a group opened
-/// right after a key's colon, so `from:"Ann Lee"` and `from:{a b}` each stay
-/// one term. An unclosed quote or group runs to the end, or to a bare `AND`:
-/// the query joined on there is not part of its value. A group also ends at a
-/// bare `AND`, which is never one of its alternatives, and a newline ends any
-/// term, so queries joined on separate lines can't run into each other.
+/// Tokenize a search query while preserving quoted arguments and grouped values.
+///
+/// Split on whitespace, except inside a double-quoted span or a group opened right after a key's colon, so
+/// `from:"Ann Lee"` and `from:{a b}` each stay one term. An unclosed quote or group runs to the end, or to a
+/// bare `AND`: the query joined on there is not part of its value.
+///
+/// A group also ends at a bare `AND`, which is never one of its alternatives, and a newline ends any term,
+/// so queries joined on separate lines can't run into each other.
 fn terms(query: &str) -> impl Iterator<Item = &str> {
     let mut rest = query;
     std::iter::from_fn(move || {

@@ -83,7 +83,7 @@ pub(super) fn collect_attachments(
     let oversized = media.is_some() && size as u64 > media_cache_cap();
     let key = media
         .filter(|_| !oversized)
-        .and_then(|ctx| write_media(ctx, index, &filename, &mime, &bytes));
+        .and_then(|media_context| write_media(media_context, index, &filename, &mime, &bytes));
 
     // Map this inline image's Content-ID to its served key so HTML mode can
     // rewrite `cid:` references (`<foo@host>` headers — strip the angle brackets).
@@ -138,9 +138,13 @@ pub(super) fn write_media_with_cap(
     let ext = sanitize_segment(
         Path::new(filename)
             .extension()
-            .and_then(|e| e.to_str())
-            .filter(|e| !e.is_empty())
-            .or_else(|| mime.rsplit('/').next().filter(|e| !e.is_empty()))
+            .and_then(|media_extension| media_extension.to_str())
+            .filter(|media_extension| !media_extension.is_empty())
+            .or_else(|| {
+                mime.rsplit('/')
+                    .next()
+                    .filter(|media_extension| !media_extension.is_empty())
+            })
             .unwrap_or("bin"),
     );
     let key = format!(
@@ -248,8 +252,8 @@ fn collect_media_files(
 /// Reduce a path segment to filesystem- and URL-safe characters so account names
 /// and IMAP folder paths (which may contain `/`, brackets, spaces) can't escape
 /// the media root or break the served URL.
-pub(crate) fn sanitize_segment(s: &str) -> String {
-    s.chars()
+pub(crate) fn sanitize_segment(text: &str) -> String {
+    text.chars()
         .map(|c| {
             if c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-') {
                 c

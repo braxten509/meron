@@ -14,12 +14,15 @@ pub struct FetchedMessage {
     pub message: parse::Message,
 }
 
-/// Locate messages in `folder` whose `Message-ID` matches any id in `ids` (bare,
-/// no angle brackets) and fetch flags + envelope + full body for each match in a
-/// single round-trip. Returns one `FetchedMessage` per located UID; ids with no
-/// match here are simply absent from the result so the caller can try the next
-/// folder. The `thread_key` is computed exactly as the recent-sync path does, so
-/// a fetched ancestor groups into the same thread as the reply that referenced it.
+/// Look up messages by Message-ID and fetch the metadata needed by their callers.
+///
+/// Locate messages in `folder` whose `Message-ID` matches any id in `ids` (bare, no angle brackets) and
+/// fetch flags + envelope + full body for each match in a single round-trip. Returns one `FetchedMessage`
+/// per located UID; ids with no match here are simply absent from the result so the caller can try the next
+/// folder.
+///
+/// The `thread_key` is computed exactly as the recent-sync path does, so a fetched ancestor groups into the
+/// same thread as the reply that referenced it.
 pub async fn fetch_by_message_ids(
     session: &mut Session,
     folder: &str,

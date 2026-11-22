@@ -41,19 +41,20 @@ pub(in crate::engine) fn moved_copy_uids(
     uids
 }
 
-/// Re-read `target` after moving `count` messages into it, and pick out the
-/// copies the move created (see [`moved_copy_uids`]): every message at or
-/// above the target's UIDNEXT from before the move is read, not just the
-/// recent window, so a large move can't lose its earliest copies. Undo moves
-/// exactly these back, rather than resolving the thread key in the target —
-/// which would also take older mail of the same conversation, and finds
-/// nothing for a `uid:` key, as UIDs change on a move.
+/// Identify the destination copies created by a completed move.
 ///
-/// `moved` is `None` when the moved messages couldn't all be described, and
-/// then no copies are picked, as when the pre-move UIDNEXT is unknown.
+/// Re-read `target` after moving `count` messages into it, and pick out the copies the move created (see
+/// [`moved_copy_uids`]): every message at or above the target's UIDNEXT from before the move is read, not
+/// just the recent window, so a large move can't lose its earliest copies.
 ///
-/// Read-only and best-effort, on its own sessions: the MOVE has landed and
-/// must not be retried or reported failed because a re-read went wrong.
+/// Undo moves exactly these back, rather than resolving the thread key in the target — which would also take
+/// older mail of the same conversation, and finds nothing for a `uid:` key, as UIDs change on a move.
+///
+/// `moved` is `None` when the moved messages couldn't all be described, and then no copies are picked, as
+/// when the pre-move UIDNEXT is unknown.
+///
+/// Read-only and best-effort, on its own sessions: the MOVE has landed and must not be retried or reported
+/// failed because a re-read went wrong.
 pub async fn refresh_moved_copies(
     engine: &Arc<Engine>,
     account: &str,

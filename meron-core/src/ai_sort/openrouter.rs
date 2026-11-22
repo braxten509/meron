@@ -53,10 +53,10 @@ fn body_error(value: &Value) -> Option<AiError> {
         .and_then(Value::as_u64)
         .map(|code| code as u16)
         .unwrap_or(502);
-    let mut err = AiError::from_status(code);
+    let mut failure = AiError::from_status(code);
     // Mid-answer failures are worth the one retry unless it's the key or credit.
-    err.retry = !matches!(err.kind, ErrorKind::Key | ErrorKind::Credit) && code != 403;
-    Some(err)
+    failure.retry = !matches!(failure.kind, ErrorKind::Key | ErrorKind::Credit) && code != 403;
+    Some(failure)
 }
 
 /// Send one chat request and answer with the model's text. `structured`: the
@@ -82,14 +82,14 @@ pub fn chat(key: &str, mut body: Value, structured: bool) -> Result<String, AiEr
     }
     let value: Value = serde_json::from_str(&text)
         .map_err(|_| AiError::network("The AI service's answer wasn't readable."))?;
-    if let Some(err) = body_error(&value) {
-        return Err(err);
+    if let Some(failure) = body_error(&value) {
+        return Err(failure);
     }
-    if let Some(err) = value
+    if let Some(failure) = value
         .pointer("/choices/0/error")
         .and_then(|error| body_error(&json!({ "error": error })))
     {
-        return Err(err);
+        return Err(failure);
     }
     Ok(value
         .pointer("/choices/0/message/content")

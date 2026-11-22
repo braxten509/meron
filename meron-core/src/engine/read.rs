@@ -31,18 +31,19 @@ pub(super) fn thread_gap_search_folders(
     folders
 }
 
-/// Fetch a thread's referenced-but-unsynced ancestor messages from the server
-/// and cache them, so the reader shows the whole conversation rather than the
-/// locally-synced tail. No-op when nothing is missing (the common case), so a
-/// normal thread open pays no network cost. Searches INBOX and Sent first —
-/// where the recent-sync assigns stable UIDs, so re-finding an already-cached
-/// message updates it in place rather than duplicating it — then Drafts for
-/// remote saved replies, then the all-mail / archive folder for messages that
-/// live only there.
-/// Fetch any referenced-but-missing ancestor messages for a thread over IMAP and
-/// persist them. Returns `true` if at least one message was newly stored, so the
-/// caller can refresh the open thread. Opens a network connection — call it off
-/// the read path (see [`maybe_spawn_fill_thread_gaps`]).
+/// Recover missing parent messages before the reader displays their conversation.
+///
+/// Fetch a thread's referenced-but-unsynced ancestor messages from the server and cache them, so the reader
+/// shows the whole conversation rather than the locally-synced tail. No-op when nothing is missing (the
+/// common case), so a normal thread open pays no network cost.
+///
+/// Searches INBOX and Sent first — where the recent-sync assigns stable UIDs, so re-finding an
+/// already-cached message updates it in place rather than duplicating it — then Drafts for remote saved
+/// replies, then the all-mail / archive folder for messages that live only there. Fetch any
+/// referenced-but-missing ancestor messages for a thread over IMAP and persist them.
+///
+/// Returns `true` if at least one message was newly stored, so the caller can refresh the open thread. Opens
+/// a network connection — call it off the read path (see [`maybe_spawn_fill_thread_gaps`]).
 pub async fn fill_thread_gaps(
     engine: &Arc<Engine>,
     account: &str,

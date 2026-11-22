@@ -257,15 +257,15 @@ fn inline_image_send_parses_back_with_media_refs() {
         folder: "Sent".into(),
         uid: 1,
     };
-    let msg = crate::parse::parse_message(&raw, Some(&context));
+    let parsed_message = crate::parse::parse_message(&raw, Some(&context));
     let _ = std::fs::remove_dir_all(&root);
 
-    let html_out = msg.body_html.expect("html kept");
+    let html_out = parsed_message.body_html.expect("html kept");
     assert!(
         !html_out.contains("cid:"),
         "unrewritten cid ref: {html_out}"
     );
     assert!(html_out.contains("/media/acct/Sent/1/0.png"), "{html_out}");
     assert!(html_out.contains("/media/acct/Sent/1/1.png"), "{html_out}");
-    assert_eq!(msg.attachments.len(), 2);
+    assert_eq!(parsed_message.attachments.len(), 2);
 }

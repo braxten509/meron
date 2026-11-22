@@ -18,14 +18,16 @@ pub fn decode_words(raw: &str) -> String {
     }
 }
 
-/// Parse an address header like `mailparse::addrparse_header`, but also decode
-/// encoded-words `mailparse` leaves verbatim: ones glued to surrounding text
-/// (`Acme=?UTF-8?B?...?=`), which RFC 2047 forbids but some senders emit, and
-/// ones after non-ASCII text on the same line, where `mailparse` misreads the
-/// preceding character. Display and group names holding an encoded-word are
-/// decoded here from the raw value and handed back to `mailparse` as one
-/// well-formed encoded-word on a line of its own, so it decodes them once and
-/// keeps the decoded text opaque to address syntax.
+/// Parse mailbox names and decode encoded words that survive the initial header parse.
+///
+/// Parse an address header like `mailparse::addrparse_header`, but also decode encoded-words `mailparse`
+/// leaves verbatim: ones glued to surrounding text (`Acme=?UTF-8?B?...?=`), which RFC 2047 forbids but some
+/// senders emit, and ones after non-ASCII text on the same line, where `mailparse` misreads the preceding
+/// character.
+///
+/// Display and group names holding an encoded-word are decoded here from the raw value and handed back to
+/// `mailparse` as one well-formed encoded-word on a line of its own, so it decodes them once and keeps the
+/// decoded text opaque to address syntax.
 pub fn addrparse_lenient(header: &MailHeader) -> Option<MailAddrList> {
     let raw = header.get_value_raw();
     let raw = match std::str::from_utf8(raw) {

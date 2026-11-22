@@ -24,18 +24,15 @@ pub(super) struct HeaderFields {
 
 /// Everything the message list needs, parsed from `RFC822.HEADER`.
 ///
-/// The IMAP `ENVELOPE` carries the same fields, but imap-proto rejects any
-/// quoted string holding a byte outside `0x01..=0x7F`, so a single message whose
-/// server emitted a raw 8-bit display name (rather than a literal or an RFC 2047
-/// encoded-word) fails to parse. async-imap leaves that response in its buffer
-/// unconsumed, wedging the connection, and the next sync refetches the same
-/// range and wedges again — one message stalls the whole folder forever. The
-/// header arrives as a literal, copied out by length with no parsing, so it
-/// cannot hit that. It is also what we already trusted over the envelope for the
-/// subject: imap-proto hands back quoted-string contents without unescaping, so
-/// an envelope subject containing double quotes arrived as `\"...\"` and, being
-/// part of the compound thread key, split the conversation into a duplicate
-/// thread.
+/// The IMAP `ENVELOPE` carries the same fields, but imap-proto rejects any quoted string holding a byte outside
+/// `0x01..=0x7F`, so a single message whose server emitted a raw 8-bit display name (rather than a literal or an RFC 2047
+/// encoded-word) fails to parse. async-imap leaves that response in its buffer unconsumed, wedging the connection, and the
+/// next sync refetches the same range and wedges again — one message stalls the whole folder forever.
+///
+/// The header arrives as a literal, copied out by length with no parsing, so it cannot hit that. It is also
+/// what we already trusted over the envelope for the subject: imap-proto hands back quoted-string contents
+/// without unescaping, so an envelope subject containing double quotes arrived as `\"...\"` and, being part
+/// of the compound thread key, split the conversation into a duplicate thread.
 pub(super) fn header_fields(header: &[u8]) -> HeaderFields {
     let Ok((headers, _)) = mailparse::parse_headers(header) else {
         return HeaderFields::default();
@@ -138,9 +135,10 @@ pub(super) fn attachment_files(
         | BodyStructure::Message { common, other, .. } => (common, other),
     };
     let disposition = common.disposition.as_ref();
-    let explicit_attachment = disposition.is_some_and(|d| d.ty.eq_ignore_ascii_case("attachment"));
+    let explicit_attachment = disposition
+        .is_some_and(|header_disposition| header_disposition.ty.eq_ignore_ascii_case("attachment"));
     let filename = disposition
-        .and_then(|d| body_parameter(&d.params, "filename"))
+        .and_then(|header_disposition| body_parameter(&header_disposition.params, "filename"))
         .or_else(|| body_parameter(&common.ty.params, "name"));
     if !explicit_attachment && common.ty.ty.eq_ignore_ascii_case("image") && other.id.is_some() {
         return Vec::new();

@@ -26,7 +26,7 @@ pub(crate) async fn dispatch(
         "tasks.lists" => return tasks::lists_payload(&engine.db.lock().unwrap()),
 
         "tasks.items" => {
-            let list_id = req_str(parameters, "list_id")?;
+            let list_id = required_string(parameters, "list_id")?;
             let include_completed = parameters
                 .get("include_completed")
                 .and_then(Value::as_bool)
@@ -37,42 +37,42 @@ pub(crate) async fn dispatch(
         // Which tasks point at a thread, for the "already in Tasks" affordance
         // in the mail surfaces.
         "tasks.forThread" => {
-            let thread_id = req_str(parameters, "thread_id")?;
+            let thread_id = required_string(parameters, "thread_id")?;
             return tasks::thread_tasks_payload(&engine.db.lock().unwrap(), &thread_id);
         }
 
         "tasks.listCreate" => {
-            let title = req_str(parameters, "title").unwrap_or_default();
+            let title = required_string(parameters, "title").unwrap_or_default();
             tasks::create_list(&engine.db.lock().unwrap(), &title)?
         }
 
         "tasks.listRename" => {
-            let list_id = req_str(parameters, "list_id")?;
-            let title = req_str(parameters, "title")?;
+            let list_id = required_string(parameters, "list_id")?;
+            let title = required_string(parameters, "title")?;
             tasks::rename_list(&engine.db.lock().unwrap(), &list_id, &title)?
         }
 
         "tasks.listDelete" => {
-            let list_id = req_str(parameters, "list_id")?;
+            let list_id = required_string(parameters, "list_id")?;
             tasks::delete_list(&mut engine.db.lock().unwrap(), &list_id)?
         }
 
         "tasks.listReorder" => {
-            let list_ids = req_str_array(parameters, "list_ids")?;
+            let list_ids = required_strings(parameters, "list_ids")?;
             tasks::reorder_lists(&mut engine.db.lock().unwrap(), &list_ids)?
         }
 
         "tasks.create" => {
-            let list_id = req_str(parameters, "list_id").unwrap_or_default();
-            let title = req_str(parameters, "title").unwrap_or_default();
-            let notes = req_str(parameters, "notes").unwrap_or_default();
+            let list_id = required_string(parameters, "list_id").unwrap_or_default();
+            let title = required_string(parameters, "title").unwrap_or_default();
+            let notes = required_string(parameters, "notes").unwrap_or_default();
             let due_at = parameters
                 .get("due_at")
                 .and_then(Value::as_i64)
                 .unwrap_or(0);
-            let account = req_str(parameters, "account").unwrap_or_default();
-            let thread_id = req_str(parameters, "thread_id").unwrap_or_default();
-            let message_id = req_str(parameters, "message_id").unwrap_or_default();
+            let account = required_string(parameters, "account").unwrap_or_default();
+            let thread_id = required_string(parameters, "thread_id").unwrap_or_default();
+            let message_id = required_string(parameters, "message_id").unwrap_or_default();
             tasks::mutate_with_due_time(&engine.db.lock().unwrap(), parameters, |conn| {
                 tasks::create_task(
                     conn,
@@ -90,7 +90,7 @@ pub(crate) async fn dispatch(
         // A patch: an absent field means "leave it alone", so the editor can
         // save a title without knowing the notes.
         "tasks.update" => {
-            let task_id = req_str(parameters, "task_id")?;
+            let task_id = required_string(parameters, "task_id")?;
             let title = parameters.get("title").and_then(Value::as_str);
             let notes = parameters.get("notes").and_then(Value::as_str);
             let due_at = parameters.get("due_at").and_then(Value::as_i64);
@@ -101,19 +101,19 @@ pub(crate) async fn dispatch(
         }
 
         "tasks.setDone" => {
-            let task_id = req_str(parameters, "task_id")?;
-            let done = req_bool(parameters, "done")?;
+            let task_id = required_string(parameters, "task_id")?;
+            let done = required_boolean(parameters, "done")?;
             tasks::set_done(&engine.db.lock().unwrap(), &task_id, done)?
         }
 
         "tasks.delete" => {
-            let task_id = req_str(parameters, "task_id")?;
+            let task_id = required_string(parameters, "task_id")?;
             tasks::delete_task(&engine.db.lock().unwrap(), &task_id)?
         }
 
         "tasks.reorder" => {
-            let list_id = req_str(parameters, "list_id")?;
-            let task_ids = req_str_array(parameters, "task_ids")?;
+            let list_id = required_string(parameters, "list_id")?;
+            let task_ids = required_strings(parameters, "task_ids")?;
             tasks::reorder_tasks(&mut engine.db.lock().unwrap(), &list_id, &task_ids)?
         }
 
@@ -124,7 +124,7 @@ pub(crate) async fn dispatch(
         }
 
         "tasks.clearCompleted" => {
-            let list_id = req_str(parameters, "list_id")?;
+            let list_id = required_string(parameters, "list_id")?;
             tasks::clear_completed(&engine.db.lock().unwrap(), &list_id)?
         }
 

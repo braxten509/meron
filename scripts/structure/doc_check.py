@@ -240,7 +240,7 @@ def shape_problems(text: list[str], paragraph_lines: int) -> list[tuple[int, str
                 problems.append((offset, "has two empty comment lines in a row"))
             blank_before = True
             continue
-        is_item = bool(LIST_ITEM.match(line)) or line.startswith((" ", "\t"))
+        is_item = bool(LIST_ITEM.match(line)) or line.startswith((" ", "\t")) or (line.startswith("|") and line.endswith("|"))
         if is_item or not units or blank_before or units[-1][1] != "paragraph":
             if units and units[-1][1] == "item" and line.startswith((" ", "\t")) and not blank_before:
                 units[-1][2].append(line)

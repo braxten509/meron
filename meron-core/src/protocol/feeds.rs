@@ -8,8 +8,8 @@ pub(crate) fn add_mobile_rss_account(
     data_directory: &str,
     params: &Value,
 ) -> Result<Value, String> {
-    let feed_url = opt_str(params, "feed_url");
-    let display_name = opt_str(params, "display_name");
+    let feed_url = optional_string(params, "feed_url");
+    let display_name = optional_string(params, "display_name");
     with_mobile_db_mutex(data_directory, |db| {
         let account =
             rss::add(&db, &feed_url, &display_name).map_err(|error| format!("{error:#}"))?;
@@ -18,8 +18,8 @@ pub(crate) fn add_mobile_rss_account(
 }
 
 pub(crate) fn add_mobile_rss_feed(data_directory: &str, params: &Value) -> Result<Value, String> {
-    let account = req_account_id(params)?;
-    let feed_url = req_str(params, "feed_url")?;
+    let account = required_account_id(params)?;
+    let feed_url = required_string(params, "feed_url")?;
     with_mobile_db_mutex(data_directory, |db| {
         rss::add_feed(&db, &account, &feed_url).map_err(|error| format!("{error:#}"))
     })
@@ -29,23 +29,23 @@ pub(crate) fn remove_mobile_rss_feed(
     data_directory: &str,
     params: &Value,
 ) -> Result<Value, String> {
-    let thread_id = req_str(params, "thread_id")?;
+    let thread_id = required_string(params, "thread_id")?;
     with_mobile_db(data_directory, |conn| {
         rss::remove_feed(&conn, &thread_id).map_err(|error| format!("{error:#}"))
     })
 }
 
 pub(crate) fn move_mobile_rss_feed(data_directory: &str, params: &Value) -> Result<Value, String> {
-    let thread_id = req_str(params, "thread_id")?;
-    let target_account =
-        req_str(params, "target_account").or_else(|_| req_str(params, "target_account_id"))?;
+    let thread_id = required_string(params, "thread_id")?;
+    let target_account = required_string(params, "target_account")
+        .or_else(|_| required_string(params, "target_account_id"))?;
     with_mobile_db(data_directory, |conn| {
         rss::move_feed(&conn, &thread_id, &target_account).map_err(|error| format!("{error:#}"))
     })
 }
 
 pub(crate) fn export_mobile_opml(data_directory: &str, params: &Value) -> Result<Value, String> {
-    let account = req_account_id(params)?;
+    let account = required_account_id(params)?;
     with_mobile_db(data_directory, |conn| {
         let opml = rss::export_opml(&conn, &account).map_err(|error| format!("{error:#}"))?;
         Ok(json!({ "opml": opml }))
@@ -53,8 +53,8 @@ pub(crate) fn export_mobile_opml(data_directory: &str, params: &Value) -> Result
 }
 
 pub(crate) fn import_mobile_opml(data_directory: &str, params: &Value) -> Result<Value, String> {
-    let account = req_account_id(params)?;
-    let opml = req_str(params, "opml")?;
+    let account = required_account_id(params)?;
+    let opml = required_string(params, "opml")?;
     with_mobile_db_mutex(data_directory, |db| {
         let imported =
             rss::import_opml(&db, &opml, &account).map_err(|error| format!("{error:#}"))?;
@@ -63,7 +63,7 @@ pub(crate) fn import_mobile_opml(data_directory: &str, params: &Value) -> Result
 }
 
 pub(crate) fn sync_mobile_rss(data_directory: &str, params: &Value) -> Result<Value, String> {
-    let account_id = req_account_id(params)?;
+    let account_id = required_account_id(params)?;
     with_mobile_db(data_directory, |conn| {
         sync_mobile_rss_with_conn(conn, account_id)
     })
@@ -102,8 +102,8 @@ pub(crate) fn read_mobile_rss_thread(
     data_directory: &str,
     params: &Value,
 ) -> Result<Value, String> {
-    let thread_id = req_str(params, "thread_id")?;
-    let limit = opt_u32(params, "limit");
+    let thread_id = required_string(params, "thread_id")?;
+    let limit = optional_u32(params, "limit");
     let before_cursor = params
         .get("before_cursor")
         .and_then(Value::as_str)
@@ -126,7 +126,7 @@ pub(crate) fn mark_mobile_rss_thread_read(
     data_directory: &str,
     params: &Value,
 ) -> Result<Value, String> {
-    let thread_id = req_str(params, "thread_id")?;
+    let thread_id = required_string(params, "thread_id")?;
     let seen = params.get("seen").and_then(Value::as_bool).unwrap_or(true);
     let item_keys = rss_item_keys(params, &thread_id);
     with_mobile_db(data_directory, |conn| {
@@ -144,7 +144,7 @@ pub(crate) fn mark_mobile_rss_thread_starred(
     data_directory: &str,
     params: &Value,
 ) -> Result<Value, String> {
-    let thread_id = req_str(params, "thread_id")?;
+    let thread_id = required_string(params, "thread_id")?;
     let starred = params
         .get("starred")
         .and_then(Value::as_bool)

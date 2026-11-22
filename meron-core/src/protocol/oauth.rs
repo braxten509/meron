@@ -10,11 +10,11 @@ pub(crate) fn add_mobile_oauth_account(
     data_directory: &str,
     params: &Value,
 ) -> Result<Value, String> {
-    let email = req_str(params, "email")?;
+    let email = required_string(params, "email")?;
     if !email.contains('@') {
         return Err("invalid email".to_string());
     }
-    let provider = req_str(params, "provider")?.to_lowercase();
+    let provider = required_string(params, "provider")?.to_lowercase();
     let (auth_type, default_imap_host, default_smtp_host, default_smtp_port) =
         match provider.as_str() {
             "gmail" => ("gmail_oauth", "imap.gmail.com", "smtp.gmail.com", 587),
@@ -26,16 +26,16 @@ pub(crate) fn add_mobile_oauth_account(
             ),
             _ => return Err("unsupported oauth provider".to_string()),
         };
-    let username = opt_str(params, "username");
-    let access_token = opt_str(params, "access_token");
+    let username = optional_string(params, "username");
+    let access_token = optional_string(params, "access_token");
     // `refresh_token` is optional: platform-managed accounts (e.g. Android
     // Gmail via AccountManager) have no refresh token because the OS re-mints
     // short-lived access tokens and pushes them in via `account.updateOAuthToken`.
-    let refresh_token = opt_str(params, "refresh_token");
-    let oauth_client_id = opt_str(params, "client_id");
-    let oauth_client_secret = opt_str(params, "client_secret");
-    let oauth_token_url = opt_str(params, "token_url");
-    let oauth_scope = opt_str(params, "scope");
+    let refresh_token = optional_string(params, "refresh_token");
+    let oauth_client_id = optional_string(params, "client_id");
+    let oauth_client_secret = optional_string(params, "client_secret");
+    let oauth_token_url = optional_string(params, "token_url");
+    let oauth_scope = optional_string(params, "scope");
     let imap_host = params
         .get("imap_host")
         .and_then(Value::as_str)
@@ -50,8 +50,8 @@ pub(crate) fn add_mobile_oauth_account(
         .filter(|value| !value.is_empty())
         .unwrap_or(default_smtp_host)
         .to_string();
-    let imap_port = req_u16(params, "imap_port").unwrap_or(993);
-    let smtp_port = req_u16(params, "smtp_port").unwrap_or(default_smtp_port);
+    let imap_port = optional_u16(params, "imap_port").unwrap_or(993);
+    let smtp_port = optional_u16(params, "smtp_port").unwrap_or(default_smtp_port);
     let token_expires_at = params
         .get("token_expires_at")
         .and_then(Value::as_i64)
@@ -97,15 +97,15 @@ pub(crate) fn add_mobile_oauth_account(
         engine: "mail".to_string(),
         provider,
         email: email.clone(),
-        display_name: opt_str(params, "display_name"),
+        display_name: optional_string(params, "display_name"),
         // An avatar already set, possibly chosen by the user, outlives a
         // reconnect: an empty one here keeps it.
         avatar_url: if stored_avatar_url(data_directory, &id).is_empty() {
-            opt_str(params, "avatar_url")
+            optional_string(params, "avatar_url")
         } else {
             String::new()
         },
-        sender_name: opt_str(params, "sender_name"),
+        sender_name: optional_string(params, "sender_name"),
     };
 
     let result = with_mobile_db(data_directory, |conn| {
@@ -137,8 +137,8 @@ pub(crate) fn update_mobile_oauth_token(
     data_directory: &str,
     params: &Value,
 ) -> Result<Value, String> {
-    let id = req_account_id(params)?;
-    let access_token = req_str(params, "access_token")?;
+    let id = required_account_id(params)?;
+    let access_token = required_string(params, "access_token")?;
     if access_token.trim().is_empty() {
         return Err("access_token is required".to_string());
     }
@@ -182,16 +182,16 @@ pub(crate) fn update_mobile_oauth_token(
 /// `{url}`, the authorization URL the host opens.
 pub(crate) fn mobile_oauth_authorize_url(params: &Value) -> Result<Value, String> {
     let client = oauth::Client {
-        provider: req_str(params, "provider")?.to_lowercase(),
-        client_id: req_str(params, "client_id")?,
+        provider: required_string(params, "provider")?.to_lowercase(),
+        client_id: required_string(params, "client_id")?,
         ..oauth::Client::default()
     };
     let url = oauth::authorize_url(
         &client,
-        &req_str(params, "redirect_uri")?,
-        &req_str(params, "state")?,
-        &req_str(params, "code_challenge")?,
-        &opt_str(params, "login_hint"),
+        &required_string(params, "redirect_uri")?,
+        &required_string(params, "state")?,
+        &required_string(params, "code_challenge")?,
+        &optional_string(params, "login_hint"),
     )?;
     Ok(json!({ "url": url }))
 }
@@ -200,40 +200,42 @@ pub(crate) fn exchange_mobile_oauth_code(
     data_directory: &str,
     params: &Value,
 ) -> Result<Value, String> {
-    let requested_email = opt_str(params, "email");
-    let provider = req_str(params, "provider")?.to_lowercase();
+    let requested_email = optional_string(params, "email");
+    let provider = required_string(params, "provider")?.to_lowercase();
     if provider != "gmail" && provider != "outlook" {
         return Err("unsupported oauth provider".to_string());
     }
-    let code = req_str(params, "code")?;
+    let code = required_string(params, "code")?;
     let client = oauth::Client {
         provider: provider.clone(),
-        client_id: req_str(params, "client_id")?,
-        client_secret: opt_str(params, "client_secret"),
-        token_url: opt_str(params, "token_url"),
-        userinfo_url: opt_str(params, "userinfo_url"),
-        photo_url: opt_str(params, "photo_url"),
+        client_id: required_string(params, "client_id")?,
+        client_secret: optional_string(params, "client_secret"),
+        token_url: optional_string(params, "token_url"),
+        userinfo_url: optional_string(params, "userinfo_url"),
+        photo_url: optional_string(params, "photo_url"),
     };
 
     let token = oauth::exchange_code(
         &client,
         &code,
-        &opt_str(params, "redirect_uri"),
-        &opt_str(params, "code_verifier"),
+        &optional_string(params, "redirect_uri"),
+        &optional_string(params, "code_verifier"),
     )?;
     let refresh_token = token
         .refresh_token
         .clone()
         .filter(|value| !value.trim().is_empty())
-        .or_else(|| Some(opt_str(params, "refresh_token")).filter(|value| !value.is_empty()))
+        .or_else(|| {
+            Some(optional_string(params, "refresh_token")).filter(|value| !value.is_empty())
+        })
         .ok_or_else(|| "oauth response missing refresh_token".to_string())?;
     let token_expires_at = now_epoch_seconds() + token.expires_in.unwrap_or(3600);
     let (claim_email, claim_name) =
         oauth::parse_id_token_claims(token.id_token.as_deref().unwrap_or(""));
     let profile_missing = requested_email.is_empty()
-        || opt_str(params, "display_name").is_empty()
-        || opt_str(params, "sender_name").is_empty()
-        || opt_str(params, "avatar_url").is_empty();
+        || optional_string(params, "display_name").is_empty()
+        || optional_string(params, "sender_name").is_empty()
+        || optional_string(params, "avatar_url").is_empty();
     let profile = if provider == "gmail" && profile_missing {
         oauth::fetch_profile(&client, &token).unwrap_or_default()
     } else {
@@ -256,24 +258,25 @@ pub(crate) fn exchange_mobile_oauth_code(
     };
 
     let mut add_params = params.clone();
-    let obj = add_params
+    let fields = add_params
         .as_object_mut()
         .ok_or_else(|| "params must be an object".to_string())?;
-    obj.insert("email".to_string(), Value::String(email.clone()));
-    obj.insert("provider".to_string(), Value::String(provider.clone()));
-    if opt_str(params, "display_name").is_empty() {
+    fields.insert("email".to_string(), Value::String(email.clone()));
+    fields.insert("provider".to_string(), Value::String(provider.clone()));
+    if optional_string(params, "display_name").is_empty() {
         let display_name = if name.is_empty() {
             email.clone()
         } else {
             name.clone()
         };
-        obj.insert("display_name".to_string(), Value::String(display_name));
+        fields.insert("display_name".to_string(), Value::String(display_name));
     }
-    if opt_str(params, "sender_name").is_empty() && !name.is_empty() {
-        obj.insert("sender_name".to_string(), Value::String(name));
+    if optional_string(params, "sender_name").is_empty() && !name.is_empty() {
+        fields.insert("sender_name".to_string(), Value::String(name));
     }
     let id = account_id(&email);
-    if opt_str(params, "avatar_url").is_empty() && stored_avatar_url(data_directory, &id).is_empty()
+    if optional_string(params, "avatar_url").is_empty()
+        && stored_avatar_url(data_directory, &id).is_empty()
     {
         // The provider's photo, stored locally. Should the download fail,
         // Google's picture is still usable remotely; no photo leaves the initials.
@@ -288,15 +291,15 @@ pub(crate) fn exchange_mobile_oauth_code(
         })
         .unwrap_or(profile.picture);
         if !avatar_url.is_empty() {
-            obj.insert("avatar_url".to_string(), Value::String(avatar_url));
+            fields.insert("avatar_url".to_string(), Value::String(avatar_url));
         }
     }
-    obj.insert(
+    fields.insert(
         "access_token".to_string(),
         Value::String(token.access_token),
     );
-    obj.insert("refresh_token".to_string(), Value::String(refresh_token));
-    obj.insert("token_expires_at".to_string(), json!(token_expires_at));
+    fields.insert("refresh_token".to_string(), Value::String(refresh_token));
+    fields.insert("token_expires_at".to_string(), json!(token_expires_at));
     add_mobile_oauth_account(data_directory, &add_params)
 }
 

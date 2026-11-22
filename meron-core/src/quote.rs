@@ -1,11 +1,11 @@
-//! Finding the quoted tail of a reply — the earlier conversation a mail client
-//! pastes under the new text — so the conversation view can fold it away the
-//! way Gmail does. Every bubble sits right under the message it answers, so an
-//! unfolded quote repeats the thread above it.
+//! Locate quoted history at the end of a reply for the conversation reader.
 //!
-//! Only a quote that ends the message is folded: one the sender answered inline
-//! is part of the reply. A message that is nothing but a quote, and a forward
-//! (whose quoted part *is* the content), are left alone.
+//! Finding the quoted tail of a reply — the earlier conversation a mail client pastes under the new text —
+//! so the conversation view can fold it away the way Gmail does. Every bubble sits right under the message
+//! it answers, so an unfolded quote repeats the thread above it.
+//!
+//! Only a quote that ends the message is folded: one the sender answered inline is part of the reply. A
+//! message that is nothing but a quote, and a forward (whose quoted part *is* the content), are left alone.
 
 use ego_tree::{NodeId, NodeRef};
 use scraper::{ElementRef, Html, Node, Selector};
@@ -202,12 +202,12 @@ fn find_and_mark_html_quote(html: &str, forward: bool) -> Option<String> {
         return None;
     }
 
-    let quote = doc.select(&selector).find(|el| {
-        let outermost = !el
+    let quote = doc.select(&selector).find(|element_node| {
+        let outermost = !element_node
             .ancestors()
             .filter_map(ElementRef::wrap)
             .any(|ancestor| selector.matches(&ancestor));
-        outermost && trailing_elements(**el).is_some()
+        outermost && trailing_elements(**element_node).is_some()
     })?;
     let trailing = trailing_elements(*quote)?;
     if is_forward_header(&quote.text().take(200).collect::<String>()) {
@@ -447,7 +447,12 @@ fn is_content(node: NodeRef<Node>) -> bool {
                 .all(|c| c.is_whitespace() || c == '\u{200b}' || c == '\u{feff}')
                 && !node
                     .parent()
-                    .and_then(|parent| parent.value().as_element().map(|el| el.name() == "style"))
+                    .and_then(|parent| {
+                        parent
+                            .value()
+                            .as_element()
+                            .map(|element_node| element_node.name() == "style")
+                    })
                     .unwrap_or(false)
         }
         Node::Element(element) => matches!(element.name(), "img" | "video"),

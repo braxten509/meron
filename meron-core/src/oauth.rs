@@ -164,7 +164,7 @@ pub fn fetch_profile(client: &Client, tokens: &Tokens) -> Result<Profile, String
         name: Option<String>,
         picture: Option<String>,
     }
-    let mut resp = agent()?
+    let mut server_response = agent()?
         .get(client.userinfo_url())
         .header("Authorization", &format!("Bearer {}", tokens.access_token))
         .config()
@@ -173,8 +173,8 @@ pub fn fetch_profile(client: &Client, tokens: &Tokens) -> Result<Profile, String
         .build()
         .call()
         .map_err(|error| format!("Google userinfo request: {error:#}"))?;
-    let status = resp.status();
-    let body = resp
+    let status = server_response.status();
+    let body = server_response
         .body_mut()
         .read_to_string()
         .map_err(|error| format!("read Google userinfo response: {error:#}"))?;
@@ -275,7 +275,7 @@ fn agent() -> Result<ureq::Agent, String> {
 }
 
 fn post_token(url: &str, form: Vec<(&str, &str)>, what: &str) -> Result<Tokens, String> {
-    let mut resp = agent()?
+    let mut server_response = agent()?
         .post(url)
         .config()
         .http_status_as_error(false)
@@ -283,8 +283,8 @@ fn post_token(url: &str, form: Vec<(&str, &str)>, what: &str) -> Result<Tokens, 
         .build()
         .send_form(form)
         .map_err(|error| format!("{what} request: {error:#}"))?;
-    let status = resp.status();
-    let body = resp
+    let status = server_response.status();
+    let body = server_response
         .body_mut()
         .read_to_string()
         .map_err(|error| format!("read {what} response: {error:#}"))?;

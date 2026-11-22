@@ -190,9 +190,10 @@ pub fn meron_marks_prune(
     Ok(())
 }
 
-/// Act on the marks a sync of `folder` (the Inbox or the archive mailbox,
-/// [`meron_reads_marks`]) read, its read having started at `read_at` (a
-/// [`meron_mark_tick`]):
+/// Apply observed local-folder marks from an IMAP synchronization pass.
+///
+/// Act on the marks a sync of `folder` (the Inbox or the archive mailbox, [`meron_reads_marks`]) read, its
+/// read having started at `read_at` (a [`meron_mark_tick`]):
 ///
 /// - a mark that appeared or changed files the copy's conversation into that
 ///   Meron folder, when the folder exists here, the mail is within
@@ -210,13 +211,12 @@ pub fn meron_marks_prune(
 /// - a mark gone from one copy while another mark-folder copy of the
 ///   conversation still carries it leaves the conversation where it is.
 ///
-/// In the Inbox a mark naming the built-in Archive counts as no mark when
-/// the account has an archive mailbox (one already known here stays, keeping
-/// an earlier Meron-only filing); without one it files like any mark, unless
-/// a newer Inbox copy of the conversation lacks it (see [`file_copy`]). In the
-/// archive mailbox there is no age limit, filing counts as the user's, and an
-/// Archive mark of a conversation that still has cached Inbox mail waits
-/// ([`WAITING_FOR_INBOX`]) until it has none.
+/// In the Inbox a mark naming the built-in Archive counts as no mark when the account has an archive mailbox
+/// (one already known here stays, keeping an earlier Meron-only filing); without one it files like any mark,
+/// unless a newer Inbox copy of the conversation lacks it (see [`file_copy`]).
+///
+/// In the archive mailbox there is no age limit, filing counts as the user's, and an Archive mark of a
+/// conversation that still has cached Inbox mail waits ([`WAITING_FOR_INBOX`]) until it has none.
 ///
 /// Nothing is written back to the server. Rows must be stored already.
 pub fn meron_marks_observe(

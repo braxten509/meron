@@ -38,14 +38,16 @@ pub struct Message {
     /// when present. Empty when the header is absent (likely a root message).
     #[serde(default)]
     pub references: String,
-    /// Whether the message carries headers a receiving MTA adds at delivery
-    /// (`Return-Path`, `Delivered-To`, `X-Original-To`) — i.e. this copy was
-    /// delivered to us rather than written by us. Direction can't be read off
-    /// the From address alone: a shared address configured here as a send-as
-    /// alias is also used by colleagues, and their mail matches it. Unlike the
-    /// mailbox it currently sits in, this travels with the message when it is
-    /// archived or moved. Defaults to false for rows cached before it existed,
-    /// which reads as "unknown" and leaves the address match in charge.
+    /// Recognize delivery headers added by a receiving mail server.
+    ///
+    /// Whether the message carries headers a receiving MTA adds at delivery (`Return-Path`, `Delivered-To`,
+    /// `X-Original-To`) — i.e. this copy was delivered to us rather than written by us. Direction can't be read
+    /// off the From address alone: a shared address configured here as a send-as alias is also used by
+    /// colleagues, and their mail matches it.
+    ///
+    /// Unlike the mailbox it currently sits in, this travels with the message when it is archived or moved.
+    /// Defaults to false for rows cached before it existed, which reads as "unknown" and leaves the address
+    /// match in charge.
     #[serde(default)]
     pub delivered: bool,
     /// Send time as Unix epoch seconds (0 when the `Date` header is absent or

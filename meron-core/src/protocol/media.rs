@@ -10,10 +10,10 @@ pub(crate) fn write_mobile_account_media_file(
     params: &Value,
     media_kind: &str,
 ) -> Result<Value, String> {
-    let id = req_account_pref_id(params)?;
-    let filename = req_str(params, "filename")?;
-    let mime = opt_str(params, "mime").to_lowercase();
-    let data = req_str(params, "data")?;
+    let id = account_preference_id(params)?;
+    let filename = required_string(params, "filename")?;
+    let mime = optional_string(params, "mime").to_lowercase();
+    let data = required_string(params, "data")?;
     let bytes = STANDARD
         .decode(data.as_bytes())
         .map_err(|error| format!("invalid media data: {error}"))?;
@@ -53,7 +53,7 @@ pub(crate) fn read_mobile_attachment_file(
     data_directory: &str,
     params: &Value,
 ) -> Result<Value, String> {
-    let key = req_str(params, "key")?;
+    let key = required_string(params, "key")?;
     let relative = Path::new(&key);
     if key.trim().is_empty()
         || relative.is_absolute()
@@ -83,8 +83,8 @@ pub(crate) fn mobile_storage_usage(data_directory: &str) -> Result<Value, String
         return Err("mobile core is not initialized".to_string());
     }
     Ok(json!({
-        "cacheBytes": path_size_bytes(&root.join("attachments")).map_err(|err| err.to_string())?,
-        "dbBytes": path_size_bytes(&root.join("meron.db")).map_err(|err| err.to_string())?,
+        "cacheBytes": path_size_bytes(&root.join("attachments")).map_err(|failure| failure.to_string())?,
+        "dbBytes": path_size_bytes(&root.join("meron.db")).map_err(|failure| failure.to_string())?,
     }))
 }
 

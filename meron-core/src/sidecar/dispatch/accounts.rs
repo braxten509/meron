@@ -46,11 +46,11 @@ pub(crate) async fn dispatch(
                 else {
                     continue;
                 };
-                if let Some(obj) = account.as_object_mut() {
+                if let Some(fields) = account.as_object_mut() {
                     let needs_reconnect = live_accounts
                         .get(&id)
                         .is_none_or(|creds| !creds_have_required_secret(creds));
-                    obj.insert("needs_reconnect".to_string(), json!(needs_reconnect));
+                    fields.insert("needs_reconnect".to_string(), json!(needs_reconnect));
                 }
             }
             Ok(json!({ "accounts": accounts }))
@@ -58,16 +58,17 @@ pub(crate) async fn dispatch(
 
         // Store (and validate) IMAP credentials for an account.
         "account.connect" => {
-            let id = req_str(parameters, "account").or_else(|_| req_str(parameters, "id"))?;
-            let host = req_str(parameters, "host")?;
+            let id = required_string(parameters, "account")
+                .or_else(|_| required_string(parameters, "id"))?;
+            let host = required_string(parameters, "host")?;
             let mut creds = imap::Creds {
                 host: host.clone(),
-                port: req_u16(parameters, "port").unwrap_or(993),
-                user: req_str(parameters, "user")?,
+                port: required_u16(parameters, "port").unwrap_or(993),
+                user: required_string(parameters, "user")?,
                 password: parameters
                     .get("password")
                     .and_then(Value::as_str)
-                    .map(|s| s.to_string())
+                    .map(|text| text.to_string())
                     .unwrap_or_default(),
                 tls: parameters
                     .get("tls")
@@ -77,8 +78,8 @@ pub(crate) async fn dispatch(
                     .get("starttls")
                     .and_then(Value::as_bool)
                     .unwrap_or(false),
-                smtp_host: req_str(parameters, "smtp_host").unwrap_or(host),
-                smtp_port: req_u16(parameters, "smtp_port").unwrap_or(587),
+                smtp_host: required_string(parameters, "smtp_host").unwrap_or(host),
+                smtp_port: required_u16(parameters, "smtp_port").unwrap_or(587),
                 smtp_tls: parameters
                     .get("smtp_tls")
                     .and_then(Value::as_bool)
@@ -90,16 +91,16 @@ pub(crate) async fn dispatch(
                 auth_type: parameters
                     .get("auth_type")
                     .and_then(Value::as_str)
-                    .map(|s| s.to_string())
+                    .map(|text| text.to_string())
                     .unwrap_or_else(|| "password".to_string()),
                 access_token: parameters
                     .get("access_token")
                     .and_then(Value::as_str)
-                    .map(|s| s.to_string()),
+                    .map(|text| text.to_string()),
                 refresh_token: parameters
                     .get("refresh_token")
                     .and_then(Value::as_str)
-                    .map(|s| s.to_string()),
+                    .map(|text| text.to_string()),
                 token_expires_at: parameters
                     .get("token_expires_at")
                     .and_then(Value::as_i64)
@@ -248,8 +249,8 @@ pub(crate) async fn dispatch(
         // Mail Bridge) whose self-signed leaf webpki refuses outright; nothing
         // is sent over the probe connection.
         "account.probeCert" => {
-            let host = req_str(parameters, "host")?;
-            let port = req_u16(parameters, "port").unwrap_or(993);
+            let host = required_string(parameters, "host")?;
+            let port = required_u16(parameters, "port").unwrap_or(993);
             let protocol = parameters
                 .get("protocol")
                 .and_then(Value::as_str)
@@ -271,7 +272,8 @@ pub(crate) async fn dispatch(
         // keychain secret. The IDLE watcher notices the account is gone on its
         // next loop and exits.
         "account.remove" => {
-            let id = req_str(parameters, "account").or_else(|_| req_str(parameters, "id"))?;
+            let id = required_string(parameters, "account")
+                .or_else(|_| required_string(parameters, "id"))?;
             engine.accounts.lock().await.remove(&id);
             // Drop any warm sessions: their creds are gone and must not be reused.
             engine.clear_pool(&id);
@@ -286,16 +288,18 @@ pub(crate) async fn dispatch(
 
         // Set the per-account "load remote images" preference.
         "account.setImages" => {
-            let id = req_str(parameters, "account").or_else(|_| req_str(parameters, "id"))?;
-            let enabled = req_bool(parameters, "enabled")?;
+            let id = required_string(parameters, "account")
+                .or_else(|_| required_string(parameters, "id"))?;
+            let enabled = required_boolean(parameters, "enabled")?;
             store::set_load_remote_images(&engine.db.lock().unwrap(), &id, enabled)?;
             Ok(json!({ "ok": true }))
         }
 
         // Toggle whether conversation bubbles render original HTML when available.
         "account.setConversationHtml" => {
-            let id = req_str(parameters, "account").or_else(|_| req_str(parameters, "id"))?;
-            let enabled = req_bool(parameters, "enabled")?;
+            let id = required_string(parameters, "account")
+                .or_else(|_| required_string(parameters, "id"))?;
+            let enabled = required_boolean(parameters, "enabled")?;
             store::set_account_pref(
                 &engine.db.lock().unwrap(),
                 &id,
@@ -309,17 +313,21 @@ pub(crate) async fn dispatch(
         // owns image-file validation and storage; the sidecar validates the
         // persisted JSON shape.
         "account.setChatWallpaper" => {
-            let id = req_str(parameters, "account").or_else(|_| req_str(parameters, "id"))?;
+            let id = required_string(parameters, "account")
+                .or_else(|_| required_string(parameters, "id"))?;
             let wallpaper = match parameters.get("wallpaper") {
                 Some(Value::Null) | None => None,
                 Some(value) => {
-                    let obj = value
+                    let fields = value
                         .as_object()
                         .ok_or_else(|| anyhow::anyhow!("wallpaper must be an object"))?;
-                    let kind = obj.get("kind").and_then(Value::as_str).unwrap_or_default();
+                    let kind = fields
+                        .get("kind")
+                        .and_then(Value::as_str)
+                        .unwrap_or_default();
                     match kind {
                         "preset" => {
-                            let preset_id = obj
+                            let preset_id = fields
                                 .get("presetId")
                                 .and_then(Value::as_str)
                                 .unwrap_or_default()
@@ -330,7 +338,7 @@ pub(crate) async fn dispatch(
                             Some(json!({ "kind": "preset", "presetId": preset_id }))
                         }
                         "custom" => {
-                            let url = obj
+                            let url = fields
                                 .get("url")
                                 .and_then(Value::as_str)
                                 .unwrap_or_default()
@@ -358,7 +366,8 @@ pub(crate) async fn dispatch(
         // at none). Live sessions keep their sockets; the choice applies as
         // they reconnect.
         "account.setProxy" => {
-            let id = req_str(parameters, "account").or_else(|_| req_str(parameters, "id"))?;
+            let id = required_string(parameters, "account")
+                .or_else(|_| required_string(parameters, "id"))?;
             let choice =
                 proxy::ProxyChoice::from_json(parameters.get("proxy").unwrap_or(&Value::Null));
             store::set_account_proxy(&engine.db.lock().unwrap(), &id, &choice)?;
@@ -373,7 +382,8 @@ pub(crate) async fn dispatch(
         // showed up on a later sync or send. Omitting a key leaves that server's
         // pin alone; an explicit null clears it.
         "account.setCertPin" => {
-            let id = req_str(parameters, "account").or_else(|_| req_str(parameters, "id"))?;
+            let id = required_string(parameters, "account")
+                .or_else(|_| required_string(parameters, "id"))?;
             let mut accounts = engine.accounts.lock().await;
             let existing = accounts.get(&id);
             let cert_pin = match parameters.get("cert_pin") {
@@ -401,8 +411,9 @@ pub(crate) async fn dispatch(
         }
 
         "account.setName" => {
-            let id = req_str(parameters, "account").or_else(|_| req_str(parameters, "id"))?;
-            let name = req_str(parameters, "name")?;
+            let id = required_string(parameters, "account")
+                .or_else(|_| required_string(parameters, "id"))?;
+            let name = required_string(parameters, "name")?;
             {
                 let db = engine.db.lock().unwrap();
                 db.execute(
@@ -415,8 +426,9 @@ pub(crate) async fn dispatch(
 
         // Set the account's sender name.
         "account.setSenderName" => {
-            let id = req_str(parameters, "account").or_else(|_| req_str(parameters, "id"))?;
-            let name = req_str(parameters, "name")?;
+            let id = required_string(parameters, "account")
+                .or_else(|_| required_string(parameters, "id"))?;
+            let name = required_string(parameters, "name")?;
             {
                 let db = engine.db.lock().unwrap();
                 db.execute(
@@ -429,8 +441,9 @@ pub(crate) async fn dispatch(
 
         // Set or clear the account's UI avatar URL/path.
         "account.setAvatar" => {
-            let id = req_str(parameters, "account").or_else(|_| req_str(parameters, "id"))?;
-            let avatar_url = req_str(parameters, "avatar_url").unwrap_or_default();
+            let id = required_string(parameters, "account")
+                .or_else(|_| required_string(parameters, "id"))?;
+            let avatar_url = required_string(parameters, "avatar_url").unwrap_or_default();
             {
                 let db = engine.db.lock().unwrap();
                 db.execute(
@@ -444,7 +457,8 @@ pub(crate) async fn dispatch(
         // Replace an account's send-as aliases (the whole list). Entries are
         // {email, name?}; we trim, drop blank emails, and dedupe by email.
         "account.setAliases" => {
-            let id = req_str(parameters, "account").or_else(|_| req_str(parameters, "id"))?;
+            let id = required_string(parameters, "account")
+                .or_else(|_| required_string(parameters, "id"))?;
             let mut aliases: Vec<store::Alias> = match parameters.get("aliases") {
                 Some(v) => serde_json::from_value(v.clone()).unwrap_or_default(),
                 None => Vec::new(),
@@ -465,7 +479,8 @@ pub(crate) async fn dispatch(
         // Set or clear this account's signature override. A null `signature`
         // drops the pref, so the account follows the app-wide signature again.
         "account.setSignature" => {
-            let id = req_str(parameters, "account").or_else(|_| req_str(parameters, "id"))?;
+            let id = required_string(parameters, "account")
+                .or_else(|_| required_string(parameters, "id"))?;
             let signature = store::AccountSignature::from_param(parameters.get("signature"))
                 .map_err(|error| anyhow::anyhow!(error))?;
             store::set_account_pref_json(
@@ -480,8 +495,9 @@ pub(crate) async fn dispatch(
         // Toggle whether the account folds into the unified inbox. Purely a stored
         // pref the UI reads via account.list; no engine side effects.
         "account.setUnified" => {
-            let id = req_str(parameters, "account").or_else(|_| req_str(parameters, "id"))?;
-            let enabled = req_bool(parameters, "enabled")?;
+            let id = required_string(parameters, "account")
+                .or_else(|_| required_string(parameters, "id"))?;
+            let enabled = required_boolean(parameters, "enabled")?;
             store::set_account_pref(
                 &engine.db.lock().unwrap(),
                 &id,
@@ -495,8 +511,9 @@ pub(crate) async fn dispatch(
         // watcher still runs (mail keeps arriving); the bridge reads the `muted`
         // flag on each mail.newMessages event to decide whether to notify.
         "account.setMuted" => {
-            let id = req_str(parameters, "account").or_else(|_| req_str(parameters, "id"))?;
-            let enabled = req_bool(parameters, "enabled")?;
+            let id = required_string(parameters, "account")
+                .or_else(|_| required_string(parameters, "id"))?;
+            let enabled = required_boolean(parameters, "enabled")?;
             store::set_account_pref(&engine.db.lock().unwrap(), &id, "muted", enabled)?;
             Ok(json!({ "ok": true }))
         }
@@ -504,8 +521,9 @@ pub(crate) async fn dispatch(
         // Pause/resume automatic checking. Pausing stops the IDLE watcher and
         // gates background syncs; resuming restarts the watcher for mail accounts.
         "account.setPaused" => {
-            let id = req_str(parameters, "account").or_else(|_| req_str(parameters, "id"))?;
-            let enabled = req_bool(parameters, "enabled")?;
+            let id = required_string(parameters, "account")
+                .or_else(|_| required_string(parameters, "id"))?;
+            let enabled = required_boolean(parameters, "enabled")?;
             store::set_account_pref(&engine.db.lock().unwrap(), &id, "paused", enabled)?;
             if enabled {
                 // Wake live watchers so the just-paused one shuts down promptly,
@@ -525,7 +543,8 @@ pub(crate) async fn dispatch(
         // Override Sent-copy behavior. Null removes the override so provider
         // defaults apply; true/false force or suppress IMAP APPEND after SMTP.
         "account.setSaveSentCopy" => {
-            let id = req_str(parameters, "account").or_else(|_| req_str(parameters, "id"))?;
+            let id = required_string(parameters, "account")
+                .or_else(|_| required_string(parameters, "id"))?;
             let value = match parameters.get("value") {
                 Some(Value::Bool(enabled)) => Some(json!(enabled)),
                 Some(Value::Null) | None => None,
@@ -538,8 +557,9 @@ pub(crate) async fn dispatch(
         // Set the RSS automatic sync interval. Stored in minutes so the UI and
         // scheduler can read it from account.list without sidecar state.
         "account.setRSSSyncInterval" => {
-            let id = req_str(parameters, "account").or_else(|_| req_str(parameters, "id"))?;
-            let minutes = req_u32(parameters, "minutes")?.clamp(5, 1440) as u64;
+            let id = required_string(parameters, "account")
+                .or_else(|_| required_string(parameters, "id"))?;
+            let minutes = required_u32(parameters, "minutes")?.clamp(5, 1440) as u64;
             store::set_account_pref_u64(
                 &engine.db.lock().unwrap(),
                 &id,
@@ -551,7 +571,7 @@ pub(crate) async fn dispatch(
 
         // Reorder accounts in the database.
         "account.reorder" => {
-            let ids = req_str_array(parameters, "accounts")?;
+            let ids = required_strings(parameters, "accounts")?;
             store::reorder_accounts(&engine.db.lock().unwrap(), &ids)?;
             Ok(json!({ "ok": true }))
         }

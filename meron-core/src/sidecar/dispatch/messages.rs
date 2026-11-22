@@ -17,11 +17,11 @@ use crate::{Writer, emit};
 /// Handle mailbox and thread reads: listing, sync, thread reads, contacts.
 pub(crate) async fn dispatch(
     engine: &Arc<Engine>,
-    req: &Request,
+    command_request: &Request,
     out: &Writer,
 ) -> anyhow::Result<Value> {
-    let parameters = &req.params;
-    match req.method.as_str() {
+    let parameters = &command_request.params;
+    match command_request.method.as_str() {
         "messages.unifiedRecent" => {
             let cursors = parameters
                 .get("before_cursor")
@@ -49,7 +49,8 @@ pub(crate) async fn dispatch(
             // no such mailbox drops out of the merge silently. Surfacing that as
             // a failure would pin a permanent error banner on the view for any
             // account whose provider simply lacks the folder.
-            let role = req_str(parameters, "folder_role").unwrap_or_else(|_| "inbox".to_string());
+            let role =
+                required_string(parameters, "folder_role").unwrap_or_else(|_| "inbox".to_string());
             let mut folders = Vec::with_capacity(accounts.len());
             {
                 let db = engine.db.lock().unwrap();
@@ -59,17 +60,17 @@ pub(crate) async fn dispatch(
                     }
                 }
             }
-            let limit = u32::from(req_u16(parameters, "limit").unwrap_or(50));
+            let limit = u32::from(required_u16(parameters, "limit").unwrap_or(50));
             let mut pages = Vec::with_capacity(folders.len());
             for (account, folder) in folders {
                 let from = cursors.get(&account).cloned().unwrap_or_default();
                 let mut params = json!({
                     "account": account.clone(),
                     "folder": folder,
-                    "query": req_str(parameters, "query").unwrap_or_default(),
-                    "filter": req_str(parameters, "filter").unwrap_or_default(),
+                    "query": required_string(parameters, "query").unwrap_or_default(),
+                    "filter": required_string(parameters, "filter").unwrap_or_default(),
                     "attachments": parameters.get("attachments").and_then(Value::as_bool).unwrap_or(false),
-                    "group_by": req_str(parameters, "group_by").unwrap_or_default(),
+                    "group_by": required_string(parameters, "group_by").unwrap_or_default(),
                     "limit": from.fetch_limit(limit),
                     "refresh": parameters.get("refresh").and_then(Value::as_bool).unwrap_or(true),
                     "group": true,
@@ -78,13 +79,13 @@ pub(crate) async fn dispatch(
                     params["before_cursor"] = Value::String(cursor.clone());
                 }
                 let request = Request {
-                    id: req.id,
+                    id: command_request.id,
                     method: "messages.recent".to_string(),
                     params,
                 };
                 let result = Box::pin(dispatch(engine, &request, out))
                     .await
-                    .map_err(|err| format!("{err:#}"));
+                    .map_err(|operation_error| format!("{operation_error:#}"));
                 pages.push(unified::AccountPage {
                     account_id: account,
                     from,
@@ -130,7 +131,7 @@ pub(crate) async fn dispatch(
         // Every tag in use, for pickers, or one account's. The archive is read
         // before taking the store lock, as opening it reads the store.
         "tags.list" => {
-            let account = req_str(parameters, "account").ok();
+            let account = required_string(parameters, "account").ok();
             let mut counts = if account.is_none() {
                 crate::sidecar::local::tag_counts(engine)
             } else {
@@ -155,22 +156,25 @@ pub(crate) async fn dispatch(
             Ok(json!({ "log": store::rule_log(&db)?, "running": store::running_rules(&db)? }))
         }
         "rules.stop" => {
-            store::stop_rule(&engine.db.lock().unwrap(), &req_str(parameters, "id")?)?;
+            store::stop_rule(
+                &engine.db.lock().unwrap(),
+                &required_string(parameters, "id")?,
+            )?;
             Ok(json!({ "ok": true }))
         }
         "rules.matches" => {
-            let id = req_str(parameters, "id")?;
+            let id = required_string(parameters, "id")?;
             let count = store::count_existing_rule_matches(&engine.db.lock().unwrap(), &id)?;
             Ok(json!({ "count": count }))
         }
         "rules.run" => {
-            let id = req_str(parameters, "id")?;
+            let id = required_string(parameters, "id")?;
             let count = run_rule_on_existing(engine, &id).await?;
             Ok(json!({ "count": count }))
         }
 
         "starred.items" => {
-            let limit = req_u32(parameters, "limit").unwrap_or(200);
+            let limit = required_u32(parameters, "limit").unwrap_or(200);
             // Before taking the store lock: opening the archive reads the store.
             let local = crate::sidecar::local::starred_cards(engine, 2_000);
             let db = engine.db.lock().unwrap();
@@ -179,8 +183,8 @@ pub(crate) async fn dispatch(
             items.extend(rss::starred_items(&db, 2_000)?);
             Ok(mail_model::starred_page(
                 items,
-                &req_str(parameters, "query").unwrap_or_default(),
-                &req_str(parameters, "filter").unwrap_or_else(|_| "all".to_string()),
+                &required_string(parameters, "query").unwrap_or_default(),
+                &required_string(parameters, "filter").unwrap_or_else(|_| "all".to_string()),
                 parameters
                     .get("attachments")
                     .and_then(Value::as_bool)
@@ -192,16 +196,18 @@ pub(crate) async fn dispatch(
 
         "identity.allocate" => Ok(json!({
             "message_id": mail_model::allocate_message_id(
-                &req_str(parameters, "account_id").unwrap_or_default(),
+                &required_string(parameters, "account_id").unwrap_or_default(),
                 parameters.get("draft").and_then(Value::as_bool).unwrap_or(false),
             )
         })),
 
         "contacts.threads" => {
-            let addr = req_str(parameters, "addr")?;
+            let addr = required_string(parameters, "addr")?;
             anyhow::ensure!(!addr.trim().is_empty(), "addr is required");
             let db = engine.db.lock().unwrap();
-            let limit = req_u32(parameters, "limit").unwrap_or(50).clamp(1, 200) as usize;
+            let limit = required_u32(parameters, "limit")
+                .unwrap_or(50)
+                .clamp(1, 200) as usize;
             store::contact_thread_page(
                 &db,
                 &addr,
@@ -214,9 +220,9 @@ pub(crate) async fn dispatch(
         // distinct correspondents from cached messages, matched against
         // `query`, in the order `sort` names (frequency by default).
         "contacts.suggest" => {
-            let account = req_str(parameters, "account").unwrap_or_default();
-            let query = req_str(parameters, "query").unwrap_or_default();
-            let limit = req_u32(parameters, "limit").unwrap_or(8);
+            let account = required_string(parameters, "account").unwrap_or_default();
+            let query = required_string(parameters, "query").unwrap_or_default();
+            let limit = required_u32(parameters, "limit").unwrap_or(8);
             let sort = store::ContactSort::parse(
                 parameters.get("sort").and_then(Value::as_str).unwrap_or(""),
             );
@@ -237,25 +243,25 @@ pub(crate) async fn dispatch(
 
         // Fire-and-forget background sync; the result arrives via mail.synced.
         "messages.sync" => {
-            let account = req_str(parameters, "account")?;
+            let account = required_string(parameters, "account")?;
             if is_rss(engine, &account)? {
                 spawn_rss_sync(engine.clone(), out.clone(), account);
                 return Ok(json!({ "ok": true, "queued": true }));
             }
             let folder = canon_folder(
-                &req_str(parameters, "folder").unwrap_or_else(|_| "INBOX".to_string()),
+                &required_string(parameters, "folder").unwrap_or_else(|_| "INBOX".to_string()),
             );
-            let limit = req_u16(parameters, "limit").unwrap_or(50) as u32;
+            let limit = required_u16(parameters, "limit").unwrap_or(50) as u32;
             spawn_message_sync(engine.clone(), out.clone(), account, folder, limit);
             Ok(json!({ "ok": true, "queued": true }))
         }
 
         "messages.read" => {
-            let account = req_str(parameters, "account")?;
+            let account = required_string(parameters, "account")?;
             let folder = canon_folder(
-                &req_str(parameters, "folder").unwrap_or_else(|_| "INBOX".to_string()),
+                &required_string(parameters, "folder").unwrap_or_else(|_| "INBOX".to_string()),
             );
-            let uid = req_u32(parameters, "uid")?;
+            let uid = required_u32(parameters, "uid")?;
 
             let mut message = read_cached_or_fetch(engine, &account, &folder, uid).await?;
             let (mine, ours) = {
@@ -308,14 +314,14 @@ pub(crate) async fn dispatch(
         }
 
         "messages.thread" => {
-            let account = req_str(parameters, "account")?;
+            let account = required_string(parameters, "account")?;
             let folder = canon_folder(
-                &req_str(parameters, "folder").unwrap_or_else(|_| "INBOX".to_string()),
+                &required_string(parameters, "folder").unwrap_or_else(|_| "INBOX".to_string()),
             );
             // Card ids carry a branch subject suffix; the store queries use the
             // root key and the branch filter narrows the rows afterwards.
             let (thread_key, subject_filter) =
-                store::split_thread_key(&req_str(parameters, "thread_key")?);
+                store::split_thread_key(&required_string(parameters, "thread_key")?);
             // Pagination is opt-in: callers that don't pass `limit` get the
             // full thread (preserves the markRead full-scan path in app.go).
             let limit = parameters
@@ -325,7 +331,7 @@ pub(crate) async fn dispatch(
             let before_cursor = parameters.get("before_cursor").and_then(Value::as_str);
             // The bridge passes the frontend's exact thread id so message ids
             // match what the UI keys on; direct callers (tests) may omit it.
-            let thread_id = req_str(parameters, "thread_id")
+            let thread_id = required_string(parameters, "thread_id")
                 .unwrap_or_else(|_| mail_model::format_thread_id(&account, &folder, &thread_key));
 
             // For UI reads (limit present), pull in any referenced ancestor
@@ -379,12 +385,12 @@ pub(crate) async fn dispatch(
         }
 
         "messages.threadHeaders" => {
-            let account = req_str(parameters, "account")?;
+            let account = required_string(parameters, "account")?;
             let folder = canon_folder(
-                &req_str(parameters, "folder").unwrap_or_else(|_| "INBOX".to_string()),
+                &required_string(parameters, "folder").unwrap_or_else(|_| "INBOX".to_string()),
             );
             let (thread_key, subject_filter) =
-                store::split_thread_key(&req_str(parameters, "thread_key")?);
+                store::split_thread_key(&required_string(parameters, "thread_key")?);
             let headers = {
                 let db = engine.db.lock().unwrap();
                 store::get_thread_headers(&db, &account, &folder, &thread_key)?
@@ -419,7 +425,7 @@ async fn messages_recent(
     parameters: &Value,
     out: &Writer,
 ) -> anyhow::Result<Value> {
-    let account = req_str(parameters, "account")?;
+    let account = required_string(parameters, "account")?;
     let request = thread_list::ThreadListQuery::from_params(parameters, "folder");
     let refresh = parameters
         .get("refresh")

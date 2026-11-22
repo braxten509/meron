@@ -61,14 +61,15 @@ pub struct CompanionSync {
     pub result: anyhow::Result<SyncMessagesResult>,
 }
 
-/// Piggyback Sent and Drafts envelope syncs onto a completed sync of `folder`,
-/// so messages sent or drafted from another client surface in the cross-folder
-/// conversation view straight from the local store — the per-folder recent
-/// sync only ever covers the open folder, and thread-gap filling only fetches
-/// referenced *ancestors*, so nothing else ever pulls in a reply another
-/// client added to Sent. Shared by desktop and mobile so the two can't drift.
-/// Failures are returned per folder, never propagated: a companion hiccup must
-/// not fail the primary sync that already succeeded.
+/// Refresh related Sent and Drafts folders after synchronizing a mailbox.
+///
+/// Piggyback Sent and Drafts envelope syncs onto a completed sync of `folder`, so messages sent or drafted
+/// from another client surface in the cross-folder conversation view straight from the local store — the
+/// per-folder recent sync only ever covers the open folder, and thread-gap filling only fetches referenced
+/// *ancestors*, so nothing else ever pulls in a reply another client added to Sent.
+///
+/// Shared by desktop and mobile so the two can't drift. Failures are returned per folder, never propagated:
+/// a companion hiccup must not fail the primary sync that already succeeded.
 pub async fn sync_companion_folders(
     engine: &Arc<Engine>,
     account: &str,

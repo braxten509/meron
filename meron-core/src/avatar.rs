@@ -66,7 +66,7 @@ impl ImageCache {
         while entries.len() > 512
             || entries
                 .iter()
-                .filter_map(|e| e.result.get())
+                .filter_map(|cached_entry| cached_entry.result.get())
                 .filter_map(|r| r.as_ref().ok())
                 .map(|image| image.src.len())
                 .sum::<usize>()

@@ -15,11 +15,11 @@ use crate::sidecar::params::*;
 /// Handle `backup.*`: export and import of the whole store.
 pub(crate) async fn dispatch(
     engine: &Arc<Engine>,
-    req: &Request,
+    command_request: &Request,
     _out: &Writer,
 ) -> anyhow::Result<Value> {
-    let parameters = &req.params;
-    match req.method.as_str() {
+    let parameters = &command_request.params;
+    match command_request.method.as_str() {
         // Serialize accounts, prefs, feeds and settings to a backup document
         // (see `backup`). The passphrase-based key derivation is deliberately
         // slow, so this runs on the blocking pool rather than the reactor.
@@ -93,7 +93,7 @@ pub(crate) async fn dispatch(
         // passphrase comes back as `needs_passphrase` (not an error) so the UI
         // can prompt and call again instead of showing a failure.
         "backup.import" => {
-            let text = req_str(parameters, "backup")?;
+            let text = required_string(parameters, "backup")?;
             let passphrase = parameters
                 .get("passphrase")
                 .and_then(Value::as_str)

@@ -6,8 +6,8 @@
 use super::*;
 
 pub(crate) fn move_mobile_thread(data_directory: &str, params: &Value) -> Result<Value, String> {
-    let thread_id = req_str(params, "thread_id")?;
-    let target_folder = canon_folder(&req_str(params, "target_folder_id")?);
+    let thread_id = required_string(params, "thread_id")?;
+    let target_folder = canon_folder(&required_string(params, "target_folder_id")?);
     let parsed = parse_thread_id(&thread_id).ok_or_else(|| "invalid thread_id".to_string())?;
     // An Undo moves back exactly the copies the action made. Without them it
     // would fall back to the thread id, which in Archive or Trash names other
@@ -269,9 +269,9 @@ pub(crate) fn move_mobile_thread(data_directory: &str, params: &Value) -> Result
 }
 
 pub(crate) fn copy_mobile_thread(data_directory: &str, params: &Value) -> Result<Value, String> {
-    let thread_id = req_str(params, "thread_id")?;
-    let target_account = req_str(params, "target_account_id")?;
-    let target_folder = canon_folder(&req_str(params, "target_folder_id")?);
+    let thread_id = required_string(params, "thread_id")?;
+    let target_account = required_string(params, "target_account_id")?;
+    let target_folder = canon_folder(&required_string(params, "target_folder_id")?);
     let parsed = parse_thread_id(&thread_id).ok_or_else(|| "invalid thread_id".to_string())?;
     let engine = crate::ffi::engine_for(data_directory)?;
     with_mobile_db(data_directory, |conn| {

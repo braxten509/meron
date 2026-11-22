@@ -23,8 +23,8 @@ pub(crate) async fn dispatch(
         // Add an RSS feed: fetch + parse + persist on the blocking pool (network
         // I/O), returning the bridge Account JSON.
         "account.addRss" => {
-            let feed_url = req_str(parameters, "feed_url")?;
-            let display_name = req_str(parameters, "display_name").unwrap_or_default();
+            let feed_url = required_string(parameters, "feed_url")?;
+            let display_name = required_string(parameters, "display_name").unwrap_or_default();
             let engine = engine.clone();
             let account =
                 tokio::task::spawn_blocking(move || rss::add(&engine.db, &feed_url, &display_name))
@@ -34,34 +34,35 @@ pub(crate) async fn dispatch(
 
         // Add a feed to an existing RSS account (network on the blocking pool).
         "feed.add" => {
-            let account = req_str(parameters, "account")?;
-            let feed_url = req_str(parameters, "feed_url")?;
+            let account = required_string(parameters, "account")?;
+            let feed_url = required_string(parameters, "feed_url")?;
             let engine = engine.clone();
-            let res =
+            let feed_result =
                 tokio::task::spawn_blocking(move || rss::add_feed(&engine.db, &account, &feed_url))
                     .await??;
-            Ok(res)
+            Ok(feed_result)
         }
 
         // Remove a single feed (subscription) and its items from an RSS account.
         "feed.remove" => {
-            let thread_id = req_str(parameters, "thread_id")?;
-            let res = rss::remove_feed(&engine.db.lock().unwrap(), &thread_id)?;
-            Ok(res)
+            let thread_id = required_string(parameters, "thread_id")?;
+            let feed_result = rss::remove_feed(&engine.db.lock().unwrap(), &thread_id)?;
+            Ok(feed_result)
         }
 
         // Move a feed subscription between RSS accounts without losing cached
         // items or per-item read/starred state.
         "feed.move" => {
-            let thread_id = req_str(parameters, "thread_id")?;
-            let target_account = req_str(parameters, "target_account")?;
-            let res = rss::move_feed(&engine.db.lock().unwrap(), &thread_id, &target_account)?;
-            Ok(res)
+            let thread_id = required_string(parameters, "thread_id")?;
+            let target_account = required_string(parameters, "target_account")?;
+            let feed_result =
+                rss::move_feed(&engine.db.lock().unwrap(), &thread_id, &target_account)?;
+            Ok(feed_result)
         }
 
         // Serialize one RSS account's feeds to an OPML 2.0 document.
         "rss.exportOpml" => {
-            let account = req_str(parameters, "account")?;
+            let account = required_string(parameters, "account")?;
             let opml = rss::export_opml(&engine.db.lock().unwrap(), &account)?;
             Ok(json!({ "opml": opml }))
         }
@@ -69,8 +70,8 @@ pub(crate) async fn dispatch(
         // Import feeds from an OPML document into one RSS account. Returns the
         // number of feeds added; the caller reloads accounts and syncs.
         "rss.importOpml" => {
-            let opml = req_str(parameters, "opml")?;
-            let account = req_str(parameters, "account")?;
+            let opml = required_string(parameters, "opml")?;
+            let account = required_string(parameters, "account")?;
             let engine = engine.clone();
             let imported =
                 tokio::task::spawn_blocking(move || rss::import_opml(&engine.db, &opml, &account))
@@ -81,7 +82,7 @@ pub(crate) async fn dispatch(
         // RSS thread read: paginated newest-first slice (or full thread when
         // `limit` is omitted), as final Message JSON.
         "rss.thread" => {
-            let thread_id = req_str(parameters, "thread_id")?;
+            let thread_id = required_string(parameters, "thread_id")?;
             let limit = parameters
                 .get("limit")
                 .and_then(Value::as_u64)
@@ -106,7 +107,7 @@ pub(crate) async fn dispatch(
         }
 
         "rss.markRead" => {
-            let thread_id = req_str(parameters, "thread_id")?;
+            let thread_id = required_string(parameters, "thread_id")?;
             // Defaults to read; pass seen:false to mark unread.
             let seen = parameters
                 .get("seen")
@@ -132,7 +133,7 @@ pub(crate) async fn dispatch(
         }
 
         "rss.markAllRead" => {
-            let account = req_str(parameters, "account")?;
+            let account = required_string(parameters, "account")?;
             let updated = rss::mark_account_read(&engine.db.lock().unwrap(), &account)?;
             Ok(json!({
                 "ok": true,
@@ -142,7 +143,7 @@ pub(crate) async fn dispatch(
         }
 
         "rss.markStarred" => {
-            let thread_id = req_str(parameters, "thread_id")?;
+            let thread_id = required_string(parameters, "thread_id")?;
             let starred = parameters
                 .get("starred")
                 .and_then(Value::as_bool)

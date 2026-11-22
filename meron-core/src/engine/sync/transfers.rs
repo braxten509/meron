@@ -208,14 +208,15 @@ pub(crate) async fn move_on_server_alone(
         .await
 }
 
-/// The lowercased Message-ID of each message about to be moved, `""` for one
-/// without, so [`refresh_moved_copies`] can tell its copies from other mail in
-/// the target. `cached` comes from `store::cached_message_ids`; what the cache
-/// lacks is read from the server. `None` when a message can't be described
-/// there either — then no copies are picked.
+/// Capture message identity before the server assigns a destination UID.
 ///
-/// Read-only, on its own session, and run before the move: best-effort, since
-/// failing here costs only the exact undo, never the move.
+/// The lowercased Message-ID of each message about to be moved, `""` for one without, so
+/// [`refresh_moved_copies`] can tell its copies from other mail in the target. `cached` comes from
+/// `store::cached_message_ids`; what the cache lacks is read from the server. `None` when a message can't be
+/// described there either — then no copies are picked.
+///
+/// Read-only, on its own session, and run before the move: best-effort, since failing here costs only the
+/// exact undo, never the move.
 pub async fn moved_message_ids(
     engine: &Arc<Engine>,
     account: &str,
@@ -239,11 +240,11 @@ pub async fn moved_message_ids(
                 .into_iter()
                 .map(|header| (header.uid, header.message_id.trim().to_lowercase()))
                 .collect(),
-            Err(err) => {
+            Err(operation_error) => {
                 crate::mlog!(
                     crate::log::Level::Warn,
                     "mail.sync",
-                    "account={account} folder={folder}: reading messages before move failed: {err:#}"
+                    "account={account} folder={folder}: reading messages before move failed: {operation_error:#}"
                 );
                 return None;
             }
@@ -255,20 +256,21 @@ pub async fn moved_message_ids(
         .collect()
 }
 
-/// What deleting a sender row removes: `cached` (their cached messages in
-/// `folder`, see `store::sender_folder_uids`) plus older messages of theirs in
-/// `folder` that only the server holds. The server is asked with two SEARCHes,
-/// FROM the address and TO it, because the row's person follows the "other
-/// person" rule (`store::sender_person`): mail From one of my own addresses,
-/// or any mail in a Sent-like mailbox, belongs to its first recipient. Each
-/// uncached hit is read back and kept only when that rule names exactly
-/// `addr` — SEARCH matches substrings, and `bob@x.com` must not take
-/// `jimbob@x.com` with it. Sent copies elsewhere are never touched: the search
-/// covers `folder` alone.
+/// Resolve the complete set of messages represented by a sender row.
 ///
-/// All or nothing: when the server cannot tell which messages are theirs (a
-/// failed search, or a hit that could not be read back), this fails and
-/// nothing is deleted, rather than deleting only part of the row.
+/// What deleting a sender row removes: `cached` (their cached messages in `folder`, see
+/// `store::sender_folder_uids`) plus older messages of theirs in `folder` that only the server holds.
+///
+/// The server is asked with two SEARCHes, FROM the address and TO it, because the row's person follows the
+/// "other person" rule (`store::sender_person`): mail From one of my own addresses, or any mail in a
+/// Sent-like mailbox, belongs to its first recipient.
+///
+/// Each uncached hit is read back and kept only when that rule names exactly `addr` — SEARCH matches
+/// substrings, and `bob@x.com` must not take `jimbob@x.com` with it. Sent copies elsewhere are never
+/// touched: the search covers `folder` alone.
+///
+/// All or nothing: when the server cannot tell which messages are theirs (a failed search, or a hit that
+/// could not be read back), this fails and nothing is deleted, rather than deleting only part of the row.
 pub async fn sender_delete_uids(
     engine: &Arc<Engine>,
     account: &str,
@@ -294,13 +296,13 @@ pub async fn sender_delete_uids(
             })
         })
         .await
-        .map_err(|err| {
+        .map_err(|operation_error| {
             crate::mlog!(
                 crate::log::Level::Warn,
                 "mail.sync",
-                "account={account} folder={folder}: sender search before delete failed: {err:#}"
+                "account={account} folder={folder}: sender search before delete failed: {operation_error:#}"
             );
-            err.context("searching the server for the sender's mail")
+            operation_error.context("searching the server for the sender's mail")
         })?;
     // A hit the cache already holds is either in `cached` or someone else's.
     let (uncached, mine) = {
@@ -320,13 +322,13 @@ pub async fn sender_delete_uids(
     let (headers, skipped) =
         fetch_headers_isolating_unparseable(engine, account, folder, uncached.clone())
             .await
-            .map_err(|err| {
+            .map_err(|operation_error| {
                 crate::mlog!(
                     crate::log::Level::Warn,
                     "mail.sync",
-                    "account={account} folder={folder}: reading sender search hits failed: {err:#}"
+                    "account={account} folder={folder}: reading sender search hits failed: {operation_error:#}"
                 );
-                err.context("reading the sender's mail from the server")
+                operation_error.context("reading the sender's mail from the server")
             })?;
     let read: std::collections::HashSet<u32> = headers.iter().map(|header| header.uid).collect();
     let missing = uncached.iter().filter(|uid| !read.contains(uid)).count();
