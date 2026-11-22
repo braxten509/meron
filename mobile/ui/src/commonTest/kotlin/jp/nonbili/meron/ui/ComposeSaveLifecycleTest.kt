@@ -463,9 +463,9 @@ class ComposeSaveLifecycleTest {
             awaitState { state.quickReplyConsumedDraftIds.isEmpty() }
             assertTrue(state.messages.none { it.id == "draft-row" })
             state.messages = state.messages + consumedDraft()
-            // A later server-returned row is evidence the discard did not remove
-            // that copy; do not hide it indefinitely on a successful response.
-            assertTrue(state.visibleThreadMessages().any { it.id == "draft-row" })
+            // The send's hold is gone, but the discard succeeded: a later row is a
+            // read that set off before it, so the draft stays hidden for good.
+            assertTrue(state.visibleThreadMessages().none { it.id == "draft-row" })
         }
 
     @Test

@@ -85,8 +85,8 @@ class MailTransferErrorsTest {
     @Test
     fun numberPlaceholdersRenderInNonEnglishCatalogsToo() {
         assertEquals(
-            "3 件中 1 件のメッセージのコピーを確認しました。",
-            localizedString("ja", "mail.transferError.progress", mapOf("copied" to 1, "total" to 3)),
+            "1 de 3 mensagens confirmadas como copiadas.",
+            localizedString("pt-BR", "mail.transferError.progress", mapOf("copied" to 1, "total" to 3)),
         )
     }
 }

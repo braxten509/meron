@@ -32,7 +32,9 @@ class MailboxReloadTopUpTest {
             assertEquals(listOf("c1"), asked)
             assertEquals(listOf("t3", "t2"), result.threads.map { it.id })
             assertEquals("c2", result.nextCursor)
-            assertEquals(100 + MAILBOX_PAGE_SIZE, depth)
+            // Reading on does not deepen the next reload: the depth stays what
+            // was on screen, or every refresh would add a page of older mail.
+            assertEquals(100, depth)
         }
 
     @Test

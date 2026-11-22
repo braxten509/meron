@@ -60,13 +60,13 @@ class ManagedGoogleAuthTest {
                     kanbanColumnKey(direct) to KanbanColumnState(threads = listOf(thread), unreadCount = 1),
                     kanbanColumnKey(unified) to KanbanColumnState(threads = listOf(thread.copy(id = "unified-row")), unreadCount = 1),
                 )
-            saveAppLanguageTag(state.prefs, "ja")
+            saveAppLanguageTag(state.prefs, "pt-BR")
 
             state.markKanbanBoardAllRead()
             withTimeout(5_000) { while (state.kanbanMarkingRead) delay(10) }
 
             assertEquals(1, core.commands.count { it == MobileCommand.MarkAllRead })
-            assertEquals(localizedString("ja", "mail.toast.markedReadCount", mapOf("count" to 1)), state.status)
+            assertEquals(localizedString("pt-BR", "mail.toast.markedReadCount", mapOf("count" to 1)), state.status)
             assertTrue(state.kanbanColumns.values.all { column -> column.threads.none { it.unread } })
         }
 

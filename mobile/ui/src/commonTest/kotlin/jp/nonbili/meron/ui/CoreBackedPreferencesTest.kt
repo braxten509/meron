@@ -61,15 +61,15 @@ class CoreBackedPreferencesTest {
         val mirror = testMirror(core)
         val prefs = CoreBackedPreferences(app, PrefStore.App, CoroutineScope(Dispatchers.Unconfined), mirror)
 
-        saveAppLanguageTag(prefs, "ja")
+        saveAppLanguageTag(prefs, "pt-BR")
 
-        assertEquals("ja", app.getString(APP_LANGUAGE_PREF, ""))
-        assertEquals(""""ja"""", core.rowFor(languageKey))
+        assertEquals("pt-BR", app.getString(APP_LANGUAGE_PREF, ""))
+        assertEquals(""""pt-BR"""", core.rowFor(languageKey))
 
         // The hydrate that follows startup must not read the old row as newer.
         val changed = runSuspend { hydrateSettingsFromCore(app, FakePreferences(), mirror) }
         assertTrue(changed.isEmpty(), "$changed")
-        assertEquals("ja", app.getString(APP_LANGUAGE_PREF, ""))
+        assertEquals("pt-BR", app.getString(APP_LANGUAGE_PREF, ""))
     }
 
     /** An unsupported tag normalizes to "follow the system" rather than sticking. */
@@ -91,10 +91,10 @@ class CoreBackedPreferencesTest {
     @Test
     fun resettingTheLanguageToSystemDefaultIsMirrored() {
         val app = FakePreferences()
-        val core = FakeCoreStore(languageKey to """"ja"""")
+        val core = FakeCoreStore(languageKey to """"pt-BR"""")
         val mirror = testMirror(core)
         val prefs = CoreBackedPreferences(app, PrefStore.App, CoroutineScope(Dispatchers.Unconfined), mirror)
-        app.putString(APP_LANGUAGE_PREF, "ja")
+        app.putString(APP_LANGUAGE_PREF, "pt-BR")
 
         saveAppLanguageTag(prefs, "")
 

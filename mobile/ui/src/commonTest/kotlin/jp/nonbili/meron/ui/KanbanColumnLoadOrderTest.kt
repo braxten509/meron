@@ -336,13 +336,15 @@ class KanbanColumnLoadOrderTest {
             val core = GatedCore()
             val state = state(core, this)
             val thread = ThreadSummary(id = "a#INBOX#t1", accountId = "a", folder = "INBOX", subject = "Hello", sender = "Ada")
+            // The Undo tap puts the row back; restoreThread then moves the mail.
+            state.showRestoredThread(setOf(thread.id), null, listOf(thread), emptyMap())
             state.restoreThread(
                 thread,
                 listOf(thread),
                 emptyMap(),
-                """{"change":{"source_folder":"INBOX","thread_id":"a#INBOX#t1"},"folder":"Archive","moved":1,"ok":true,"thread_id":"a#Archive#t1"}""",
+                """{"change":{"source_folder":"INBOX","thread_id":"a#INBOX#t1"},"folder":"Archive","moved":1,"ok":true,"target_uids":[7],"thread_id":"a#Archive#t1"}""",
             )
-            waitUntil { state.status == "Restored" }
+            waitUntil { core.actionCalls == 1 }
             val (command, payload) = core.actionRequests.single()
             assertEquals(MobileCommand.Move, command)
             assertEquals("a#Archive#t1", payload.jsonStringValue("thread_id"))
