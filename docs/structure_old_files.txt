@@ -278,7 +278,6 @@ desktop/frontend/src/lib/html.test.ts
 desktop/frontend/src/lib/html.ts
 desktop/frontend/src/lib/i18n.test.ts
 desktop/frontend/src/lib/i18n.ts
-desktop/frontend/src/lib/kanbanData.test.ts
 desktop/frontend/src/lib/kanbanData.ts
 desktop/frontend/src/lib/latestBooleanUpdater.ts
 desktop/frontend/src/lib/mailTransferErrors.test.ts
@@ -356,7 +355,6 @@ desktop/frontend/src/states/contacts.ts
 desktop/frontend/src/states/emlExport.ts
 desktop/frontend/src/states/feeds.test.ts
 desktop/frontend/src/states/feeds.ts
-desktop/frontend/src/states/kanban.test.ts
 desktop/frontend/src/states/kanban.ts
 desktop/frontend/src/states/loadFolders.test.ts
 desktop/frontend/src/states/mail.test.ts
