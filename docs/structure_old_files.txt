@@ -4,10 +4,6 @@ mobile/android/src/debug/java/jp/nonbili/meron/DebugNotificationReceiver.kt
 mobile/android/src/main/java/jp/nonbili/meron/AndroidNotificationService.kt
 mobile/android/src/main/java/jp/nonbili/meron/AndroidUiAdapters.kt
 mobile/android/src/main/java/jp/nonbili/meron/MeronCoreNative.java
-mobile/ios/Meron/IosBackgroundRefresh.swift
-mobile/ios/Meron/RustCoreBridge.swift
-mobile/scripts/frame-screenshots.sh
-mobile/scripts/maestro-screenshots.sh
 mobile/shared/src/commonMain/kotlin/jp/nonbili/meron/shared/CertificateTrust.kt
 mobile/shared/src/commonMain/kotlin/jp/nonbili/meron/shared/MailState.kt
 mobile/shared/src/commonMain/kotlin/jp/nonbili/meron/shared/OAuthFlow.kt

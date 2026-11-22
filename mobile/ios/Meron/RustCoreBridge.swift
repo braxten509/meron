@@ -31,9 +31,9 @@ enum RustCoreBridge {
     /// Set up the core without opening the store, so unlike `initJson` this is
     /// safe on the main thread. The first command prepares the store.
     static func configureJson(dataDirectory: String, dbKey: String) -> String {
-        dataDirectory.withCString { dirPointer in
+        dataDirectory.withCString { directoryPointer in
             dbKey.withCString { keyPointer in
-                ownedString(meron_core_configure_json_keyed(dirPointer, keyPointer))
+                ownedString(meron_core_configure_json_keyed(directoryPointer, keyPointer))
             }
         }
     }
@@ -44,9 +44,9 @@ enum RustCoreBridge {
                 ownedString(meron_core_init_json(pointer))
             }
         }
-        return dataDirectory.withCString { dirPointer in
+        return dataDirectory.withCString { directoryPointer in
             dbKey.withCString { keyPointer in
-                ownedString(meron_core_init_json_keyed(dirPointer, keyPointer))
+                ownedString(meron_core_init_json_keyed(directoryPointer, keyPointer))
             }
         }
     }

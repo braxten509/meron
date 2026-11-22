@@ -1,5 +1,4 @@
 #!/bin/bash
-#
 # Capture screenshots with Maestro and organize them for fastlane frameit.
 #
 # Usage:
@@ -18,8 +17,8 @@
 
 set -euo pipefail
 
-MOBILE_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-FLOW="$MOBILE_DIR/.maestro/screenshots.yaml"
+MOBILE_DIRECTORY="$(cd "$(dirname "$0")/.." && pwd)"
+FLOW="$MOBILE_DIRECTORY/.maestro/screenshots.yaml"
 LOCALE="${LOCALE:-en-US}"
 
 if [ -d "$HOME/.maestro/bin" ]; then
@@ -50,7 +49,7 @@ detect_platform() {
 
 PLATFORM="$(detect_platform "${1:-}")"
 DEVICE_NAME="${2:-}"
-OUTPUT_DIR="$MOBILE_DIR/fastlane/screenshots/$PLATFORM/$LOCALE"
+OUTPUT_DIRECTORY="$MOBILE_DIRECTORY/fastlane/screenshots/$PLATFORM/$LOCALE"
 
 # Resolve the device id so Maestro targets the right platform when both a
 # simulator and emulator are running. "ipad" runs on a booted iOS simulator;
@@ -68,15 +67,15 @@ else
 fi
 
 echo "Platform: $PLATFORM"
-echo "Output:   $OUTPUT_DIR"
+echo "Output:   $OUTPUT_DIRECTORY"
 echo ""
 
-mkdir -p "$OUTPUT_DIR"
+mkdir -p "$OUTPUT_DIRECTORY"
 # Drop any previous captures so stale screens don't linger.
-rm -f "$OUTPUT_DIR"/[0-9][0-9]_*.png
+rm -f "$OUTPUT_DIRECTORY"/[0-9][0-9]_*.png
 
 echo "Running Maestro flow..."
-cd "$OUTPUT_DIR"
+cd "$OUTPUT_DIRECTORY"
 maestro "${DEVICE_ARG[@]}" test "$FLOW"
 
 # Optionally prefix with a fastlane device name (Device-Name-NN_name.png).
@@ -89,7 +88,7 @@ if [ -n "$DEVICE_NAME" ]; then
 fi
 
 echo ""
-echo "Screenshots saved to: $OUTPUT_DIR"
-ls -1 "$OUTPUT_DIR"/*.png 2>/dev/null || echo "(no screenshots found)"
+echo "Screenshots saved to: $OUTPUT_DIRECTORY"
+ls -1 "$OUTPUT_DIRECTORY"/*.png 2>/dev/null || echo "(no screenshots found)"
 echo ""
 echo "Next: ./scripts/frame-screenshots.sh $PLATFORM"
