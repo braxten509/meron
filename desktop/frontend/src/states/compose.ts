@@ -2,22 +2,18 @@
 // a reply, edit a draft or open a separate view through these actions.
 // Callers include calendar.ts and kanban.ts.
 
-import { arrayMove } from '@dnd-kit/sortable'
 import { t } from '../lib/i18n'
 import { isNarrowWindow } from '../lib/useNarrowWindow'
-import type { Account, Attachment, ComposeDraft, ComposerAttachment, Message, MessageTab } from '../types'
+import type { Account, Attachment, ComposeDraft, ComposerAttachment, Message } from '../types'
 import { invoke } from '../lib/bridge'
 import { CONVERSATION_PAGE_SIZE } from '../lib/pagination'
 import { ui$, showToast } from './ui'
-import { unifiedFolderRole } from '../lib/unifiedFolders'
 import { accounts$, isSendableAccount } from './accounts'
-import { getActiveThread, loadThreads, normalizeMessageId } from './mail'
+import { getActiveThread, normalizeMessageId } from './mail'
 // From the leaf module: this one subscribes to it while loading, which can be
 // inside an import cycle through mail.ts.
 import { mail$ } from './mailState'
 import { isDraftFolder } from './mailFolders'
-import { LOCAL_SEND_PREFIX } from './pendingSends'
-import { htmlToText, resolveInlineCids } from '../lib/html'
 import { parseMailto } from '../lib/mailto'
 import {
   bodyWithSignature,
@@ -31,15 +27,7 @@ import {
 } from '../lib/signature'
 import { settings$ } from './settings'
 import { closeCurrentConversation, kanban$ } from './kanban'
-import { resolveConversationMode, revealRemote, thread$ } from './thread'
-import {
-  closeComposeSession,
-  draftSavesSettled,
-  forgetComposeSession,
-  getComposeSession,
-  pruneComposeSessions,
-  closeComposeSessionKeepingDraft,
-} from './composeSessions'
+import { draftSavesSettled, getComposeSession, pruneComposeSessions } from './composeSessions'
 import {
   buildReplyRecipients,
   buildReplyThreading,
@@ -49,7 +37,6 @@ import {
   resolveQuickReplyFrom,
 } from './composeReply'
 import {
-  allocateMessageIdentity,
   compose$,
   COMPOSE_TABS_KEY,
   hasExtraComposeHeaders,
@@ -60,7 +47,6 @@ import {
 import {
   cancelQuickReplyDraftSave,
   clearQuickReplyDraftOwnership,
-  discardClosedDraft,
   discardingDraftIds,
   quickReplyAbandonedSaves,
   nextQuickReplyOwnershipTick,
@@ -70,14 +56,7 @@ import {
   unconfirmedQuickReplyDraftId,
   seedQuickReplySignature,
 } from './quickReply'
-import {
-  tabHistory,
-  persistTabView,
-  readerTab,
-  newestMessage,
-  popToPreviousTab,
-  activateConversationTab,
-} from './readerTabs'
+import { tabHistory, persistTabView, readerTab, newestMessage } from './readerTabs'
 import {
   textToHtml,
   replyQuote,
@@ -87,6 +66,22 @@ import {
   forwardedSubject,
   forwardedPlainBody,
 } from './composeContent'
+import { closeMessageTabs } from './composeTabClosing'
+export { sendComposed, appendSentMessage, saveComposedDraft, draftIdOfFailedSave } from './composeDelivery'
+export {
+  finishClosingMessageTab,
+  reopenComposeTab,
+  restoreComposeTabAfterFailedSave,
+  closeMessageTab,
+  closeMessageTabKeepingDraft,
+  closeMessageTabs,
+  moveMessageTab,
+  revealMessageRemote,
+  patchTabMessage,
+  setTabViewMode,
+  toggleConversationMode,
+} from './composeTabClosing'
+
 export { escapeHtml, textToHtml, replyQuote, bodyHasReplyQuote, composedContent } from './composeContent'
 export {
   activateConversationTab,
@@ -762,347 +757,4 @@ export function updateComposeDraft(id: string, partial: Partial<ComposeDraft>) {
       return { ...tab, compose, subject }
     }),
   )
-}
-
-// Remove a tab once saves have drained; remote cleanup may still be running.
-export function finishClosingMessageTab(id: string) {
-  const tabs = compose$.tabs.get()
-  const index = tabs.findIndex((tab) => tab.id === id)
-  if (index === -1) return
-  forgetComposeSession(id)
-  const next = tabs.filter((tab) => tab.id !== id)
-  compose$.tabs.set(next)
-  if (compose$.activeTab.get() === id) {
-    const target = popToPreviousTab(id, next)
-    // Falling back to the Current tab needs a conversation to fall back to.
-    // With none — a tab opened from tasks or a notification over an empty pane
-    // — Current is not even offered in the strip (and in kanban view it would
-    // close the pane), so hand over to a tab that's still open instead.
-    const fallback = !target && !compose$.conversationThread.get() ? next[next.length - 1]?.id : ''
-    const resolved = fallback || target
-    const nextTab = resolved ? next.find((tab) => tab.id === resolved) : null
-    if (!nextTab) {
-      activateConversationTab()
-    } else if (nextTab.kind === 'thread') {
-      compose$.activeTab.set(nextTab.id)
-      ui$.selectedThread.set(nextTab.threadId)
-    } else {
-      compose$.activeTab.set(nextTab.id)
-    }
-  }
-}
-
-// Bring a closed compose tab back as it was, or go to the tab already holding
-// that draft: it may have been reopened from Drafts in the meantime.
-export function reopenComposeTab(tab: MessageTab, compose: ComposeDraft) {
-  if (isNarrowWindow()) ui$.contactsOpen.set(false)
-  // The composer opens in the mail pane, which the calendar replaces.
-  ui$.calendarOpen.set(false)
-  const draftId = normalizeMessageId(compose.draftMessageId)
-  const open = compose$.tabs
-    .peek()
-    .find((t) => t.id === tab.id || (t.compose && normalizeMessageId(t.compose.draftMessageId) === draftId))
-  if (!open) compose$.tabs.set([...compose$.tabs.peek(), { ...tab, compose }])
-  compose$.activeTab.set(open?.id ?? tab.id)
-}
-
-// Bring back a compose tab whose last save failed. The tab is the only copy of
-// these edits, so it always comes back. If the draft was reopened from Drafts
-// meanwhile, that tab holds an older copy under the same id: this one becomes a
-// draft of its own, so neither can overwrite or discard the other.
-export function restoreComposeTabAfterFailedSave(tab: MessageTab, compose: ComposeDraft) {
-  ui$.calendarOpen.set(false)
-  const draftId = normalizeMessageId(compose.draftMessageId)
-  const held = compose$.tabs.peek().some((t) => t.compose && normalizeMessageId(t.compose.draftMessageId) === draftId)
-  const restored = held ? { ...compose, draftMessageId: newDraftMessageId(), sourceDraft: undefined } : compose
-  compose$.tabs.set([...compose$.tabs.peek(), { ...tab, compose: restored }])
-  compose$.activeTab.set(tab.id)
-}
-
-// The single close entry point used by tab buttons, hotkeys and the palette.
-// Mounted composers register their save queue here so no caller can bypass it.
-export async function closeMessageTab(id: string) {
-  const tabs = compose$.tabs.get()
-  const index = tabs.findIndex((tab) => tab.id === id)
-  if (index === -1) return
-  if (tabs[index].kind !== 'compose') return finishClosingMessageTab(id)
-  const draft = tabs[index].compose
-  if (!draft) return finishClosingMessageTab(id)
-  return closeComposeSession(id, async () => {
-    const remoteId = draft.draftMessageId?.startsWith('local-draft-') ? undefined : draft.draftMessageId
-    finishClosingMessageTab(id)
-    if (remoteId || draft.sourceDraft) {
-      await discardClosedDraft({
-        threadId: draft.sourceDraft?.threadId ?? '',
-        messageId: draft.sourceDraft?.messageId ?? '',
-        folderId: draft.sourceDraft?.folderId ?? '',
-        accountId: draft.accountId,
-        draftMessageId: remoteId,
-        // A reply escalated out of a conversation has no draft row of its
-        // own to take the card away with it; the conversation's card stays
-        // and only its Draft badge goes.
-        replyThreadId: draft.sourceDraft ? '' : tabs[index].threadId,
-      })
-    }
-  })
-}
-
-/**
- * The tab strip's ×, Ctrl+W and the palette's Close tab: a compose tab goes to Drafts (with an "Open
- * draft" toast), like Esc. Throwing a message away is the composer's own Discard button; a × that did
- * it silently lost work. A compose tab that isn't on screen has no mounted composer to do the last
- * save, so it is brought forward first.
- */
-export async function closeMessageTabKeepingDraft(id: string) {
-  const tab = compose$.tabs.peek().find((candidate) => candidate.id === id)
-  if (tab?.kind !== 'compose') return closeMessageTab(id)
-  if (closeComposeSessionKeepingDraft(id)) return
-  compose$.activeTab.set(id)
-  for (let attempt = 0; attempt < 10; attempt++) {
-    await new Promise((resolve) => setTimeout(resolve, 30))
-    if (closeComposeSessionKeepingDraft(id)) return
-  }
-  // No composer came up to save it: leave the tab open rather than lose it.
-  console.error('Close tab: no composer to save the draft of', id)
-}
-
-// Close several tabs at once (the tab strip's close others/left/right/all).
-// Compose tabs are skipped: closing one discards its draft, which a bulk close
-// must never do behind the user's back.
-export function closeMessageTabs(ids: string[]) {
-  const wanted = new Set(ids)
-  const closing = compose$.tabs
-    .get()
-    .filter((tab) => wanted.has(tab.id) && tab.kind !== 'compose')
-    .map((tab) => tab.id)
-  // Close the active tab last, so it falls back to a tab that stays open.
-  const active = compose$.activeTab.get()
-  for (const id of closing) if (id !== active) finishClosingMessageTab(id)
-  if (closing.includes(active)) finishClosingMessageTab(active)
-}
-
-// Put a tab where another one sits, for reordering the strip. Either may have
-// closed during the drag, in which case the order stands.
-export function moveMessageTab(id: string, overId: string) {
-  const tabs = compose$.tabs.get()
-  const from = tabs.findIndex((tab) => tab.id === id)
-  const to = tabs.findIndex((tab) => tab.id === overId)
-  if (from === -1 || to === -1 || from === to) return
-  compose$.tabs.set(arrayMove(tabs, from, to))
-}
-
-// Reveal a message's remote content in the conversation and on any reader tab
-// already open for it. The tab needs its own copy because `resetThreadView`
-// clears the conversation's reveal map on the next thread switch while the tab
-// stays open — and an inactive tab is unmounted, so it cannot copy this itself.
-export function revealMessageRemote(messageId: string) {
-  revealRemote(messageId)
-  compose$.tabs.set(
-    compose$.tabs
-      .get()
-      .map((tab) => (tab.kind === 'reader' && tab.messageId === messageId ? { ...tab, revealRemote: true } : tab)),
-  )
-}
-
-/** Keeps a reader tab's copy of its message in step with a change made from
- *  the tab, for when the thread it came from is no longer loaded. */
-export function patchTabMessage(id: string, patch: Partial<Message>) {
-  compose$.tabs.set(
-    compose$.tabs
-      .get()
-      .map((tab) => (tab.id === id && tab.message ? { ...tab, message: { ...tab.message, ...patch } } : tab)),
-  )
-}
-
-export function setTabViewMode(id: string, mode: 'html' | 'plain') {
-  compose$.tabs.set(compose$.tabs.get().map((tab) => (tab.id === id ? { ...tab, viewMode: mode } : tab)))
-}
-
-/** Switches what's in front between HTML and plain text, for the shortcut:
- *  a reader tab flips its own view, a conversation flips its account's
- *  session override, as the header's "View as" menu does. A thread tab's
- *  account comes from the tab. Returns false when there was nothing to switch. */
-export function toggleConversationMode(accountId: string | undefined): boolean {
-  const activeTabId = compose$.activeTab.peek()
-  const tab = activeTabId ? compose$.tabs.peek().find((candidate) => candidate.id === activeTabId) : undefined
-  if (tab?.kind === 'reader') {
-    // A message with no HTML part reads the same either way.
-    if (!tab.bodyHtml) return false
-    setTabViewMode(tab.id, tab.viewMode === 'html' ? 'plain' : 'html')
-    return true
-  }
-  if (tab?.kind === 'compose') return false
-  const id = tab?.kind === 'thread' && tab.accountId ? tab.accountId : accountId
-  const accounts = accounts$.peek()
-  if (!id || !accounts.some((account) => account.id === id)) return false
-  const current = resolveConversationMode(accounts, thread$.conversationModeOverrides.peek(), id)
-  thread$.conversationModeOverrides[id].set(current === 'html' ? 'plain' : 'html')
-  return true
-}
-
-// Send a composed message via the same mail.send path used by replies. When
-// `rich`, the HTML is sent with a derived plaintext fallback. Throws on failure
-// so the caller can surface the error inline.
-export async function sendComposed(args: {
-  accountId: string
-  from?: string
-  to: string
-  cc?: string
-  bcc?: string
-  replyTo?: string
-  subject: string
-  rich: boolean
-  content: string // HTML when rich, plaintext otherwise
-  inReplyTo?: string
-  references?: string
-  attachments: ComposerAttachment[]
-}) {
-  const html = args.rich ? args.content : ''
-  const body = args.rich ? htmlToText(args.content) : args.content
-  await invoke('mail.send', {
-    account_id: args.accountId,
-    from: args.from ?? '',
-    to: args.to,
-    cc: args.cc ?? '',
-    bcc: args.bcc ?? '',
-    reply_to: args.replyTo ?? '',
-    subject: args.subject,
-    body,
-    html,
-    in_reply_to: args.inReplyTo ?? '',
-    references: args.references ?? '',
-    attachments: args.attachments.map((a) => ({
-      filename: a.filename,
-      mime: a.mime,
-      data: a.data,
-      inline_id: a.inlineId ?? '',
-    })),
-  })
-}
-
-// Surface a just-sent compose-tab message in the open conversation so the user
-// sees their reply immediately, without waiting for the next IMAP sync to pull
-// it back from the Sent folder. No-op unless the message belongs to the
-// currently open thread. The optimistic bubble (id prefixed with
-// LOCAL_SEND_PREFIX) is replaced by the real DB row on the next thread reload.
-export function appendSentMessage(args: {
-  threadId: string
-  accountId: string
-  from: string
-  to: string
-  cc?: string
-  bcc?: string
-  subject: string
-  rich: boolean
-  content: string // HTML when rich, plaintext otherwise
-  references?: string
-  attachments: ComposerAttachment[]
-}) {
-  if (!args.threadId || ui$.selectedThread.get() !== args.threadId) return
-  const activeT = getActiveThread()
-  if (!activeT || activeT.thread_id !== args.threadId) return
-
-  const account = accounts$.get().find((acc) => acc.id === args.accountId)
-  // The content still carries `cid:` refs (what actually went out on the wire);
-  // resolve them against the attachment bytes so this local copy renders.
-  const html = args.rich ? resolveInlineCids(args.content, args.attachments) : ''
-  const body = args.rich ? htmlToText(args.content) : args.content
-  const sent: Message = {
-    id: `${LOCAL_SEND_PREFIX}${Date.now()}`,
-    account_id: args.accountId,
-    folder_id: activeT.folder_id,
-    thread_id: args.threadId,
-    from_name: 'You',
-    from_addr: args.from || account?.email || '',
-    to: args.to,
-    cc: args.cc ?? '',
-    bcc: args.bcc ?? '',
-    references: args.references ?? '',
-    subject: args.subject,
-    preview: body || (args.attachments.length > 0 ? `[Attachment: ${args.attachments[0].filename}]` : ''),
-    body,
-    body_html: html || undefined,
-    date: Math.floor(Date.now() / 1000),
-    unread: false,
-    starred: false,
-    has_attachments: args.attachments.length > 0,
-    send_status: 'sent',
-    attachments: args.attachments.map((a) => ({
-      filename: a.filename,
-      mime: a.mime,
-      size: a.size,
-      key: null,
-      url: a.mime.startsWith('image/') || a.mime.startsWith('video/') ? `data:${a.mime};base64,${a.data}` : null,
-    })),
-  }
-  mail$.messages.push(sent)
-  thread$.pendingOwnSendId.set(sent.id)
-}
-
-// Save a composed draft message to the drafts folder on the server.
-export async function saveComposedDraft(args: {
-  accountId: string
-  from?: string
-  to: string
-  cc?: string
-  bcc?: string
-  replyTo?: string
-  subject: string
-  rich: boolean
-  content: string // HTML when rich, plaintext otherwise
-  inReplyTo?: string
-  references?: string
-  draftMessageId: string
-  attachments: ComposerAttachment[]
-}): Promise<string> {
-  const html = args.rich ? args.content : ''
-  const body = args.rich ? htmlToText(args.content) : args.content
-  const draftMessageId =
-    !args.draftMessageId || args.draftMessageId.startsWith('local-draft-')
-      ? await allocateMessageIdentity(args.accountId, true)
-      : args.draftMessageId
-  const request = invoke('mail.saveDraft', {
-    account_id: args.accountId,
-    from: args.from ?? '',
-    to: args.to,
-    cc: args.cc ?? '',
-    bcc: args.bcc ?? '',
-    reply_to: args.replyTo ?? '',
-    subject: args.subject,
-    body,
-    html,
-    in_reply_to: args.inReplyTo ?? '',
-    references: args.references ?? '',
-    draft_id: draftMessageId,
-    attachments: args.attachments.map((a) => ({
-      filename: a.filename,
-      mime: a.mime,
-      data: a.data,
-      inline_id: a.inlineId ?? '',
-    })),
-  })
-  try {
-    await request
-  } catch (error) {
-    // A failed save may still have written the draft (the host can give up
-    // waiting while the core carries on), so the id it was written under has to
-    // survive the failure: the next save then replaces that copy, and a send
-    // discards it, instead of it sitting in Drafts with nothing pointing at it.
-    throw Object.assign(error instanceof Error ? error : new Error(String(error)), {
-      draftMessageId,
-    })
-  }
-  // The Drafts list on screen shows the new copy now, not after a folder switch.
-  const account = ui$.selectedAccount.peek()
-  const folder = ui$.selectedFolder.peek()
-  if (account === 'unified' ? unifiedFolderRole(folder) === 'drafts' : isDraftFolder(folder, account)) {
-    void loadThreads(false)
-  }
-  return draftMessageId
-}
-
-/** The server draft id a failed [saveComposedDraft] was writing, if it had one. */
-export function draftIdOfFailedSave(error: unknown): string | undefined {
-  const id = (error as { draftMessageId?: unknown } | null)?.draftMessageId
-  return typeof id === 'string' && id ? id : undefined
 }

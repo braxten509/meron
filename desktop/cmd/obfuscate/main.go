@@ -1,10 +1,9 @@
-// Command obfuscate encodes Google OAuth credentials into the base64 blobs
-// embedded in oauth_config.go.
+// Command obfuscate encodes Google OAuth credentials into the base64 blobs embedded in oauth_config.go.
 //
 // Usage:
 //
-//	go run ./cmd/obfuscate                         # prompts for both values
-//	go run ./cmd/obfuscate <client-id> <secret>    # non-interactive
+// 	go run ./cmd/obfuscate                         # prompts for both values
+// 	go run ./cmd/obfuscate <client-id> <secret>    # non-interactive
 //
 // Paste the printed lines over googleClientIDObf / googleClientSecretObf.
 package main

@@ -120,7 +120,7 @@ func checkArchiveFolderResolves(t *testing.T, sidecar *Sidecar) {
 	// folders.archive resolves the account's special-use Archive folder; the
 	// move-to-archive action depends on this lookup succeeding.
 	result := callMap(t, sidecar, "folders.archive", map[string]any{"account": "bob"})
-	if folder := str(result, "folder"); folder == "" {
+	if folder := stringField(result, "folder"); folder == "" {
 		t.Fatalf("folders.archive returned no folder: %v", result)
 	}
 }
@@ -140,16 +140,16 @@ func checkExternalExpungePrunesTheLocalRow(t *testing.T, sidecar *Sidecar, serve
 		t.Fatalf("send expunge fixture: %v", err)
 	}
 	message := pollInbox(t, sidecar, "bob", func(m map[string]any) bool {
-		return str(m, "subject") == expungeSubject
+		return stringField(m, "subject") == expungeSubject
 	})
-	uid := num(message, "uid")
+	uid := numericField(message, "uid")
 	if uid == 0 {
 		t.Fatalf("expunge fixture has no uid: %v", message)
 	}
 
 	imapExpunge(t, server.imapPort, "bob@mail.test", testPassword, "INBOX", uid)
 	assertNoMessageInFolder(t, sidecar, "bob", "INBOX", func(m map[string]any) bool {
-		return str(m, "subject") == expungeSubject
+		return stringField(m, "subject") == expungeSubject
 	})
 }
 
@@ -174,9 +174,9 @@ func checkExternalFlagChangesReconcileLocally(t *testing.T) {
 		t.Fatalf("send external-flags fixture: %v", err)
 	}
 	message := pollInbox(t, sidecar, "bob", func(m map[string]any) bool {
-		return str(m, "subject") == flagSubject
+		return stringField(m, "subject") == flagSubject
 	})
-	uid := num(message, "uid")
+	uid := numericField(message, "uid")
 	if uid == 0 {
 		t.Fatalf("external-flags fixture has no uid: %v", message)
 	}
@@ -196,10 +196,10 @@ func checkExternalFlagChangesReconcileLocally(t *testing.T) {
 
 	imapSetFlags(t, server.imapPort, "bob@mail.test", testPassword, "INBOX", uid, true, true)
 	updated := pollInbox(t, sidecar, "bob", func(m map[string]any) bool {
-		return str(m, "subject") == flagSubject && boolValue(m, "seen") && boolValue(m, "starred")
+		return stringField(m, "subject") == flagSubject && boolValue(m, "seen") && boolValue(m, "starred")
 	})
-	if num(updated, "uid") != uid {
-		t.Fatalf("externally flagged message uid = %d, want %d", num(updated, "uid"), uid)
+	if numericField(updated, "uid") != uid {
+		t.Fatalf("externally flagged message uid = %d, want %d", numericField(updated, "uid"), uid)
 	}
 	page = callMap(t, sidecar, "messages.recent", map[string]any{
 		"account": "bob",
@@ -213,10 +213,10 @@ func checkExternalFlagChangesReconcileLocally(t *testing.T) {
 
 	imapSetFlags(t, server.imapPort, "bob@mail.test", testPassword, "INBOX", uid, false, false)
 	updated = pollInbox(t, sidecar, "bob", func(m map[string]any) bool {
-		return str(m, "subject") == flagSubject && !boolValue(m, "seen") && !boolValue(m, "starred")
+		return stringField(m, "subject") == flagSubject && !boolValue(m, "seen") && !boolValue(m, "starred")
 	})
-	if num(updated, "uid") != uid {
-		t.Fatalf("externally unflagged message uid = %d, want %d", num(updated, "uid"), uid)
+	if numericField(updated, "uid") != uid {
+		t.Fatalf("externally unflagged message uid = %d, want %d", numericField(updated, "uid"), uid)
 	}
 	page = callMap(t, sidecar, "messages.recent", map[string]any{
 		"account": "bob",
@@ -252,7 +252,7 @@ func checkUidvalidityChangeClearsTheCachedFolder(t *testing.T, sidecar *Sidecar,
 	}
 	for _, subj := range []string{firstSubject, secondSubject} {
 		pollFolder(t, sidecar, "bob", folder, func(m map[string]any) bool {
-			return str(m, "subject") == subj
+			return stringField(m, "subject") == subj
 		})
 	}
 	before := imapUIDValidity(t, server.imapPort, "bob@mail.test", testPassword, folder)
@@ -272,13 +272,13 @@ func checkUidvalidityChangeClearsTheCachedFolder(t *testing.T, sidecar *Sidecar,
 	}, "after the mailbox was recreated"))
 
 	pollFolder(t, sidecar, "bob", folder, func(m map[string]any) bool {
-		return str(m, "subject") == freshSubject
+		return stringField(m, "subject") == freshSubject
 	})
 	// The new message reuses UID 1, so an upsert alone would hide the first
 	// stale row. The second one can only be gone if the folder was cleared.
 	for _, subj := range []string{firstSubject, secondSubject} {
 		assertNoMessageInFolder(t, sidecar, "bob", folder, func(m map[string]any) bool {
-			return str(m, "subject") == subj
+			return stringField(m, "subject") == subj
 		})
 	}
 }
@@ -294,8 +294,8 @@ func checkIdlePushesFolderUpdatesWhileWatched(t *testing.T, sidecar *Sidecar, se
 	}
 	synced := func() int {
 		return events.count(func(event sidecarEvent) bool {
-			return event.name == "mail.synced" && str(event.detail, "account") == "bob" &&
-				strings.EqualFold(str(event.detail, "folder"), folder)
+			return event.name == "mail.synced" && stringField(event.detail, "account") == "bob" &&
+				strings.EqualFold(stringField(event.detail, "folder"), folder)
 		})
 	}
 	// Finish the startup catch-up before appending, so it cannot satisfy
@@ -364,8 +364,8 @@ func checkIdlePushesFolderUpdatesWhileWatched(t *testing.T, sidecar *Sidecar, se
 
 	stopped := func() int {
 		return events.count(func(event sidecarEvent) bool {
-			return event.name == "watch.stopped" && str(event.detail, "account") == "bob" &&
-				strings.EqualFold(str(event.detail, "folder"), folder)
+			return event.name == "watch.stopped" && stringField(event.detail, "account") == "bob" &&
+				strings.EqualFold(stringField(event.detail, "folder"), folder)
 		})
 	}
 	stoppedBaseline := stopped()

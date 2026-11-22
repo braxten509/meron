@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-func TestFilePickerDefaultDirKeepsExistingCandidate(t *testing.T) {
+func TestFilePickerDefaultDirectoryKeepsExistingCandidate(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	candidate := t.TempDir()
@@ -20,12 +20,12 @@ func TestFilePickerDefaultDirKeepsExistingCandidate(t *testing.T) {
 		expected = candidate
 	}
 
-	if got := filePickerDefaultDir(candidate); got != expected {
+	if got := filePickerDefaultDirectory(candidate); got != expected {
 		t.Fatalf("filePickerDefaultDir(%q) = %q, want %q", candidate, got, expected)
 	}
 }
 
-func TestFilePickerDefaultDirFallsBackToHome(t *testing.T) {
+func TestFilePickerDefaultDirectoryFallsBackToHome(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	missing := filepath.Join(home, "Downloads")
@@ -35,12 +35,12 @@ func TestFilePickerDefaultDirFallsBackToHome(t *testing.T) {
 		expected = home
 	}
 
-	if got := filePickerDefaultDir(missing); got != expected {
+	if got := filePickerDefaultDirectory(missing); got != expected {
 		t.Fatalf("filePickerDefaultDir(%q) = %q, want %q", missing, got, expected)
 	}
 }
 
-func TestFilePickerDefaultDirResolvesSymlink(t *testing.T) {
+func TestFilePickerDefaultDirectoryResolvesSymlink(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	target := t.TempDir()
@@ -54,7 +54,7 @@ func TestFilePickerDefaultDirResolvesSymlink(t *testing.T) {
 		expected = target
 	}
 
-	if got := filePickerDefaultDir(link); got != expected {
+	if got := filePickerDefaultDirectory(link); got != expected {
 		t.Fatalf("filePickerDefaultDir(%q) = %q, want %q", link, got, expected)
 	}
 }

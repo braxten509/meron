@@ -1,5 +1,9 @@
 //go:build windows
 
+// Reads the Windows app color preference and monitors its
+// registry key. Changes update the desktop appearance until
+// shutdown signals the listener to release its resources.
+
 package main
 
 import (

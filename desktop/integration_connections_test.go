@@ -22,7 +22,7 @@ func checkColdSyncFromAnEmptyProfileSeesServerState(t *testing.T, server *mailSe
 
 	moveSubject := "Meron integration move " + nonce
 	row := pollFolder(t, cold, "bob", "ITestFolder", func(m map[string]any) bool {
-		return str(m, "subject") == moveSubject
+		return stringField(m, "subject") == moveSubject
 	})
 	if !boolValue(row, "seen") || !boolValue(row, "starred") {
 		t.Fatalf("cold sync does not see the flags a warm store reported: %v", row)
@@ -31,13 +31,13 @@ func checkColdSyncFromAnEmptyProfileSeesServerState(t *testing.T, server *mailSe
 	thread := callMap(t, cold, "messages.thread", map[string]any{
 		"account":    "bob",
 		"folder":     "ITestFolder",
-		"thread_key": str(row, "thread_key"),
+		"thread_key": stringField(row, "thread_key"),
 	})
 	message := firstThreadMessage(t, thread)
 	if boolValue(message, "body_missing") {
 		t.Fatalf("cold sync could not fetch the message body: %v", message)
 	}
-	if body := str(message, "body"); !strings.Contains(body, "move me to the integration folder") {
+	if body := stringField(message, "body"); !strings.Contains(body, "move me to the integration folder") {
 		t.Fatalf("cold-synced body = %q", body)
 	}
 }
@@ -65,7 +65,7 @@ func checkConnectRejectsBadCredentials(t *testing.T, sidecar *Sidecar, server *m
 	accounts, _ := callMap(t, sidecar, "account.list", map[string]any{})["accounts"].([]any)
 	for _, item := range accounts {
 		account, ok := item.(map[string]any)
-		if ok && str(account, "id") == id {
+		if ok && stringField(account, "id") == id {
 			t.Fatalf("rejected account was stored anyway: %v", account)
 		}
 	}
@@ -87,8 +87,8 @@ func checkSyncRecoversAfterAServerRestart(t *testing.T) {
 	}
 	synced := func() int {
 		return events.count(func(event sidecarEvent) bool {
-			return event.name == "mail.synced" && str(event.detail, "account") == "bob" &&
-				strings.EqualFold(str(event.detail, "folder"), folder)
+			return event.name == "mail.synced" && stringField(event.detail, "account") == "bob" &&
+				strings.EqualFold(stringField(event.detail, "folder"), folder)
 		})
 	}
 	callMap(t, sidecar, "watch.start", map[string]any{"account": "bob", "folder": folder})
@@ -198,9 +198,9 @@ func checkFlagWritesRecoverFromAStalePooledConnection(t *testing.T) {
 	}, "flagged over a pooled connection the server dropped"))
 
 	message := pollInbox(t, sidecar, "bob", func(m map[string]any) bool {
-		return str(m, "subject") == staleSubject
+		return stringField(m, "subject") == staleSubject
 	})
-	uid := num(message, "uid")
+	uid := numericField(message, "uid")
 	if uid == 0 {
 		t.Fatalf("delivered stale-pool fixture has no uid: %v", message)
 	}

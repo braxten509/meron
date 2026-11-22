@@ -12,11 +12,10 @@ import (
 	"testing"
 )
 
-// Raising a window on Linux takes an unmap/map cycle: mutter ignores a plain
-// show and a gtk_window_present from an unfocused process, on Wayland and on
-// X11 alike, so a notification or tray click would leave the window wherever it
-// was. Guarding the remap on WindowIsMinimised — which is right on Windows,
-// where unminimising un-maximises — silently broke that, so pin the sequence.
+// Raising a window on Linux takes an unmap/map cycle: mutter ignores a plain show and a
+// gtk_window_present from an unfocused process, on Wayland and on X11 alike, so a notification or tray
+// click would leave the window wherever it was. Guarding the remap on WindowIsMinimised — which is
+// right on Windows, where unminimising un-maximises — silently broke that, so pin the sequence.
 func TestShowAndRaiseRemapsWindow(t *testing.T) {
 	restore := stubWindowCalls(t)
 	defer restore()

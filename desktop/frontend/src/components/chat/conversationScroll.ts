@@ -49,7 +49,7 @@ export function collectManualUnreadIds(
   messages: readonly { id: string; unread?: boolean }[],
   previousUnread: ReadonlyMap<string, boolean>,
 ): string[] {
-  return messages.filter((message) => message.unread && previousUnread.get(message.id) === false).map((m) => m.id)
+  return messages.filter((message) => message.unread && previousUnread.get(message.id) === false).map((matchedItem) => matchedItem.id)
 }
 
 export type VerticalBounds = {

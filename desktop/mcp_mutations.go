@@ -1,3 +1,7 @@
+// Connects tool requests that change mail to the desktop
+// host and core. The service validates the selection and
+// prepares the requested action for its operation lifecycle.
+
 package main
 
 import (

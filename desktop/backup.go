@@ -20,12 +20,12 @@ func backupFilename(now time.Time) string {
 	return fmt.Sprintf("meron-backup-%s.json", now.Format("2006-01-02"))
 }
 
-// exportBackup asks the sidecar to serialize accounts, prefs, feeds and
-// settings, then writes the document to a user-chosen path via a native save
-// dialog. Cached mail is not included — see meron-core's `backup` module.
+// exportBackup asks the sidecar to serialize accounts, prefs, feeds and settings, then writes the document to a user-chosen path via a native save dialog.
 //
-// `include_secrets` requires a passphrase; the core refuses the combination
-// otherwise, so no plaintext file can ever carry a password.
+// Cached mail is not included — see meron-core's `backup` module.
+//
+// `include_secrets` requires a passphrase; the core refuses the combination otherwise, so no plaintext
+// file can ever carry a password.
 func (a *App) exportBackup(payload map[string]any) (any, error) {
 	// Validated before the engine check so the guard holds even with no sidecar:
 	// a plaintext file carrying passwords must be unreachable by every path.
@@ -78,13 +78,11 @@ func (a *App) exportBackup(payload map[string]any) (any, error) {
 	return map[string]any{"saved": true, "path": dest, "encrypted": passphrase != ""}, nil
 }
 
-// importBackup reads a backup file and hands it to the sidecar, which restores
-// accounts, feeds and settings.
+// importBackup reads a backup file and hands it to the sidecar, which restores accounts, feeds and settings.
 //
-// An encrypted file needs a passphrase the user has not typed yet, so the first
-// call comes back `needsPassphrase` along with the chosen `path`. The frontend
-// prompts and calls again with that path, which skips the file dialog rather
-// than making the user pick the same file twice.
+// An encrypted file needs a passphrase the user has not typed yet, so the first call comes back
+// `needsPassphrase` along with the chosen `path`. The frontend prompts and calls again with that path,
+// which skips the file dialog rather than making the user pick the same file twice.
 func (a *App) importBackup(payload map[string]any) (any, error) {
 	if a.sidecar == nil || !a.sidecar.Started() {
 		return nil, a.engineUnavailable()
@@ -146,13 +144,13 @@ func jsonInt(value any) int {
 
 // writePrivateFile writes data to path with owner-only permissions.
 //
-// 0600 matters here: even a backup without secrets lists every address the user
-// reads mail for, and an encrypted one is only as private as its passphrase.
-// os.WriteFile's mode argument applies *only when it creates the file*, so
-// overwriting an existing world-readable file would silently keep mode 0644 —
-// the save dialog happily offers existing paths. Removing it first guarantees
-// we are the one creating it. A umask can only tighten 0600 further, never
-// loosen it.
+// 0600 matters here: even a backup without secrets lists every address the user reads mail for, and an
+// encrypted one is only as private as its passphrase. os.WriteFile's mode argument applies *only when
+// it creates the file*, so overwriting an existing world-readable file would silently keep mode 0644 —
+// the save dialog happily offers existing paths.
+//
+// Removing it first guarantees we are the one creating it. A umask can only tighten 0600 further,
+// never loosen it.
 func writePrivateFile(path string, data []byte) error {
 	// A missing file (the common case) is exactly what we want; any other
 	// failure surfaces from the write below with a better message.

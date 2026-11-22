@@ -27,12 +27,12 @@ func checkSendAndReceive(t *testing.T, sidecar *Sidecar, subject string, message
 	}
 
 	message := pollInbox(t, sidecar, "bob", func(m map[string]any) bool {
-		return str(m, "subject") == subject
+		return stringField(m, "subject") == subject
 	})
-	if from := str(message, "from_addr"); from != "alice@mail.test" {
+	if from := stringField(message, "from_addr"); from != "alice@mail.test" {
 		t.Errorf("from_addr = %q, want alice@mail.test", from)
 	}
-	if str(message, "thread_key") == "" {
+	if stringField(message, "thread_key") == "" {
 		t.Error("delivered message has empty thread_key")
 	}
 }
@@ -52,20 +52,20 @@ func checkThreading(t *testing.T, sidecar *Sidecar, subject string, messageID st
 	}
 
 	reply := pollInbox(t, sidecar, "bob", func(m map[string]any) bool {
-		return str(m, "subject") == "Re: "+subject
+		return stringField(m, "subject") == "Re: "+subject
 	})
 	original := pollInbox(t, sidecar, "bob", func(m map[string]any) bool {
-		return str(m, "subject") == subject
+		return stringField(m, "subject") == subject
 	})
-	if str(reply, "thread_key") != str(original, "thread_key") {
+	if stringField(reply, "thread_key") != stringField(original, "thread_key") {
 		t.Errorf("reply thread_key %q != original thread_key %q",
-			str(reply, "thread_key"), str(original, "thread_key"))
+			stringField(reply, "thread_key"), stringField(original, "thread_key"))
 	}
 
 	result := callMap(t, sidecar, "messages.thread", map[string]any{
 		"account":    "bob",
 		"folder":     "INBOX",
-		"thread_key": str(original, "thread_key"),
+		"thread_key": stringField(original, "thread_key"),
 	})
 	if n := threadLength(result); n < 2 {
 		t.Errorf("messages.thread returned %d messages, want >= 2: %v", n, result)
@@ -88,9 +88,9 @@ func checkFailedImapWriteDoesNotFalselyMarkReadLocally(t *testing.T, sidecar *Si
 		t.Fatalf("send flagfail fixture: %v", err)
 	}
 	message := pollInbox(t, sidecar, "bob", func(m map[string]any) bool {
-		return str(m, "subject") == flagFailSubject
+		return stringField(m, "subject") == flagFailSubject
 	})
-	uid := num(message, "uid")
+	uid := numericField(message, "uid")
 	if uid == 0 {
 		t.Fatalf("delivered flagfail fixture has no uid: %v", message)
 	}
@@ -135,7 +135,7 @@ func checkFailedImapWriteDoesNotFalselyMarkReadLocally(t *testing.T, sidecar *Si
 	reconnect()
 
 	stillUnread := pollInbox(t, sidecar, "bob", func(m map[string]any) bool {
-		return str(m, "subject") == flagFailSubject
+		return stringField(m, "subject") == flagFailSubject
 	})
 	if boolValue(stillUnread, "seen") {
 		t.Fatalf("message was marked seen locally despite the IMAP write having failed: %v", stillUnread)
@@ -149,10 +149,10 @@ func checkFailedImapWriteDoesNotFalselyMarkReadLocally(t *testing.T, sidecar *Si
 		"seen":    true,
 	})
 	updated := pollInbox(t, sidecar, "bob", func(m map[string]any) bool {
-		return str(m, "subject") == flagFailSubject && boolValue(m, "seen")
+		return stringField(m, "subject") == flagFailSubject && boolValue(m, "seen")
 	})
-	if num(updated, "uid") != uid {
-		t.Fatalf("flagged message uid = %d, want %d", num(updated, "uid"), uid)
+	if numericField(updated, "uid") != uid {
+		t.Fatalf("flagged message uid = %d, want %d", numericField(updated, "uid"), uid)
 	}
 }
 
@@ -170,9 +170,9 @@ func checkSearchAndStarredItems(t *testing.T, sidecar *Sidecar, nonce string) {
 	}
 
 	message := pollInbox(t, sidecar, "bob", func(m map[string]any) bool {
-		return str(m, "subject") == searchSubject
+		return stringField(m, "subject") == searchSubject
 	})
-	uid := num(message, "uid")
+	uid := numericField(message, "uid")
 	if uid == 0 {
 		t.Fatalf("delivered search fixture has no uid: %v", message)
 	}
@@ -221,7 +221,7 @@ func checkAttachments(t *testing.T, sidecar *Sidecar, nonce string) {
 	}
 
 	header := pollInbox(t, sidecar, "bob", func(m map[string]any) bool {
-		return str(m, "subject") == attachmentSubject
+		return stringField(m, "subject") == attachmentSubject
 	})
 	// BODYSTRUCTURE must index the file before the thread is opened.
 	page := callMap(t, sidecar, "messages.recent", map[string]any{
@@ -232,7 +232,7 @@ func checkAttachments(t *testing.T, sidecar *Sidecar, nonce string) {
 	found := false
 	for _, row := range cards {
 		card, ok := row.(map[string]any)
-		if !ok || str(card, "subject") != attachmentSubject {
+		if !ok || stringField(card, "subject") != attachmentSubject {
 			continue
 		}
 		files, _ := card["files"].([]any)
@@ -240,7 +240,7 @@ func checkAttachments(t *testing.T, sidecar *Sidecar, nonce string) {
 			t.Fatalf("unopened attachment card files = %v, want one file", files)
 		}
 		file, ok := files[0].(map[string]any)
-		if !ok || str(file, "filename") != "itest-note.txt" || str(file, "mime") != "text/plain" {
+		if !ok || stringField(file, "filename") != "itest-note.txt" || stringField(file, "mime") != "text/plain" {
 			t.Fatalf("unopened attachment metadata = %v", files)
 		}
 		found = true
@@ -248,7 +248,7 @@ func checkAttachments(t *testing.T, sidecar *Sidecar, nonce string) {
 	if !found {
 		t.Fatalf("attachment filter omitted the unopened thread: %v", page)
 	}
-	threadKey := str(header, "thread_key")
+	threadKey := stringField(header, "thread_key")
 	if threadKey == "" {
 		t.Fatalf("attachment fixture has empty thread_key: %v", header)
 	}
@@ -264,20 +264,20 @@ func checkAttachments(t *testing.T, sidecar *Sidecar, nonce string) {
 		t.Fatalf("attachments len = %d, want 1: %v", len(attachments), message)
 	}
 	attachment := attachments[0]
-	if str(attachment, "filename") != "itest-note.txt" {
-		t.Fatalf("attachment filename = %q", str(attachment, "filename"))
+	if stringField(attachment, "filename") != "itest-note.txt" {
+		t.Fatalf("attachment filename = %q", stringField(attachment, "filename"))
 	}
-	if str(attachment, "mime") != "text/plain" {
-		t.Fatalf("attachment mime = %q", str(attachment, "mime"))
+	if stringField(attachment, "mime") != "text/plain" {
+		t.Fatalf("attachment mime = %q", stringField(attachment, "mime"))
 	}
-	if size := num(attachment, "size"); size != uint32(len(attachmentBytes)) {
+	if size := numericField(attachment, "size"); size != uint32(len(attachmentBytes)) {
 		t.Fatalf("attachment size = %d, want %d", size, len(attachmentBytes))
 	}
-	key := str(attachment, "key")
+	key := stringField(attachment, "key")
 	if key == "" {
 		t.Fatalf("attachment key is empty: %v", attachment)
 	}
-	got, err := os.ReadFile(filepath.Join(mediaDir(), key))
+	got, err := os.ReadFile(filepath.Join(mediaDirectory(), key))
 	if err != nil {
 		t.Fatalf("read cached attachment %q: %v", key, err)
 	}
@@ -301,9 +301,9 @@ func checkEmptyTrash(t *testing.T, sidecar *Sidecar, nonce string) {
 		t.Fatalf("send empty fixture: %v", err)
 	}
 	message := pollInbox(t, sidecar, "bob", func(m map[string]any) bool {
-		return str(m, "subject") == emptySubject
+		return stringField(m, "subject") == emptySubject
 	})
-	uid := num(message, "uid")
+	uid := numericField(message, "uid")
 	if uid == 0 {
 		t.Fatalf("empty fixture has no uid: %v", message)
 	}
@@ -313,7 +313,7 @@ func checkEmptyTrash(t *testing.T, sidecar *Sidecar, nonce string) {
 		"uid":     uid,
 	})
 	pollFolder(t, sidecar, "bob", "Trash", func(m map[string]any) bool {
-		return str(m, "subject") == emptySubject
+		return stringField(m, "subject") == emptySubject
 	})
 
 	if _, err := sidecar.Call("messages.emptyFolder", map[string]any{
@@ -347,7 +347,7 @@ func checkMarkAllRead(t *testing.T, sidecar *Sidecar, nonce string) {
 	// Wait for both to land while still unseen.
 	for _, subj := range []string{readSubjectA, readSubjectB} {
 		pollInbox(t, sidecar, "bob", func(m map[string]any) bool {
-			return str(m, "subject") == subj && !boolValue(m, "seen")
+			return stringField(m, "subject") == subj && !boolValue(m, "seen")
 		})
 	}
 
@@ -358,7 +358,7 @@ func checkMarkAllRead(t *testing.T, sidecar *Sidecar, nonce string) {
 
 	for _, subj := range []string{readSubjectA, readSubjectB} {
 		pollInbox(t, sidecar, "bob", func(m map[string]any) bool {
-			return str(m, "subject") == subj && boolValue(m, "seen")
+			return stringField(m, "subject") == subj && boolValue(m, "seen")
 		})
 	}
 }
@@ -375,7 +375,7 @@ func checkContactsSuggestFromHistory(t *testing.T, sidecar *Sidecar) {
 	found := false
 	for _, item := range contacts {
 		contact, ok := item.(map[string]any)
-		if ok && strings.Contains(str(contact, "addr"), "alice@mail.test") {
+		if ok && strings.Contains(stringField(contact, "addr"), "alice@mail.test") {
 			found = true
 			break
 		}
@@ -401,7 +401,7 @@ func checkGroupedThreadCards(t *testing.T, sidecar *Sidecar) {
 		t.Fatalf("grouped messages.recent returned no threads: %v", res)
 	}
 	card, ok := threads[0].(map[string]any)
-	if !ok || str(card, "thread_id") == "" {
+	if !ok || stringField(card, "thread_id") == "" {
 		t.Fatalf("thread card missing thread_id: %v", threads[0])
 	}
 	if _, hasMessages := res["messages"]; hasMessages {

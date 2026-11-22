@@ -221,16 +221,17 @@ export function isBodyBlankWithoutSignature(body: ComposeBody, tracking: Signatu
 }
 
 /**
- * Where the tracked signature sits in the body, or -1 when it cannot be
- * identified — because the user has edited it, or because the body holds a
- * second block just like it and ours is no longer where it was put.
+ * Locate the managed signature without replacing text the writer has edited.
  *
- * The placement says which copy is ours when there are several: above a quote
- * it is the first, below the text the last. That alone is a guess, though, and
- * guessing wrong would rewrite the user's own words — so in an ambiguous body
- * ours must still be exactly at the edge it was inserted against (nothing but
- * blank lines beyond it) to be touched at all. Failing that the draft simply
- * stops being managed: nothing rewritten, and no second signature added.
+ * Where the tracked signature sits in the body, or -1 when it cannot be identified — because the user has
+ * edited it, or because the body holds a second block just like it and ours is no longer where it was put.
+ *
+ * The placement says which copy is ours when there are several: above a quote it is the first, below the
+ * text the last. That alone is a guess, though, and guessing wrong would rewrite the user's own words — so
+ * in an ambiguous body ours must still be exactly at the edge it was inserted against (nothing but blank
+ * lines beyond it) to be touched at all.
+ *
+ * Failing that the draft simply stops being managed: nothing rewritten, and no second signature added.
  */
 function trackedIndex(body: ComposeBody, mark: SignatureMark): number {
   const [haystack, needle] = body.rich ? [body.html, mark.html] : [body.text, mark.text]

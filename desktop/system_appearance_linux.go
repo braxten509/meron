@@ -1,5 +1,9 @@
 //go:build linux
 
+// Reads the Linux color-scheme preference through the desktop
+// portal. The listener supplies the initial appearance, observes
+// changes and disconnects when the desktop host shuts down.
+
 package main
 
 import (
@@ -23,13 +27,13 @@ var (
 	appearanceMu  sync.Mutex
 )
 
-// setupAppearanceListener reads the desktop's color scheme from the XDG
-// Settings portal and follows its SettingChanged signal. GNOME, KDE and the
-// other portal backends all publish the preference there. Without a portal the
+// setupAppearanceListener reads the desktop's color scheme from the XDG Settings portal and follows its SettingChanged signal.
+//
+// GNOME, KDE and the other portal backends all publish the preference there. Without a portal the
 // preference stays unknown and the frontend falls back to prefers-color-scheme.
 //
-// Runs in the background: the first portal call can wait on D-Bus activation,
-// and startup must not. The initial value reaches the frontend as an event.
+// Runs in the background: the first portal call can wait on D-Bus activation, and startup must not.
+// The initial value reaches the frontend as an event.
 func (a *App) setupAppearanceListener() {
 	go func() {
 		defer systemAppearanceSettled()

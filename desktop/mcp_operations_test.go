@@ -1,3 +1,7 @@
+// Checks approval and completion of pending desktop mail
+// operations. Controlled host responses verify that an accepted
+// request runs once and a declined or expired one stays closed.
+
 package main
 
 import (

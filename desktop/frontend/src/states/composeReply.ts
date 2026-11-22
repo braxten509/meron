@@ -104,12 +104,14 @@ function detectRecentThreadFrom(target: Message, acc: Account): string | null {
   return null
 }
 
-/** The address the active thread's quick reply sends from: the identity the user
- * picked in the From indicator, the identity used by the newest outgoing
- * message, or the alias detected from the inbound reply target. Like
- * {@link detectAliasFrom} this returns "" for the account primary, which every
- * send/draft path reads as "use the default". Peeks rather than gets: the send
- * and autosave paths are not reactive. */
+/**
+ * Choose the sending identity for the open conversation.
+ *
+ * The address the active thread's quick reply sends from: the identity the user picked in the From indicator,
+ * the identity used by the newest outgoing message, or the alias detected from the inbound reply target. Like
+ * {@link detectAliasFrom} this returns "" for the account primary, which every send/draft path reads as "use the
+ * default". Peeks rather than gets: the send and autosave paths are not reactive.
+ */
 export function resolveQuickReplyFrom(target: Message, acc: Account | null | undefined): string {
   const override = compose$.quickReplyFrom.peek()
   if (!acc) return ''
@@ -156,14 +158,17 @@ export function quickReplyRecipients(): { to: string; cc: string } {
   return buildReplyRecipients(pickReplyTarget(thread))
 }
 
-/** The To/Cc a reply to this message gets, as the core decided them (see
- * meron-core/src/reply.rs): the sender is addressed, the original Cc is copied,
- * and our own addresses stay out of both. `replyAll` picks the form that also
- * copies the other original recipients.
+/**
+ * Build the reply's To and Cc lists from the core recipient decision.
  *
- * A target with no `reply` field carries no recipient headers to decide from — a
- * thread card standing in for a thread whose messages have not loaded, or an RSS
- * item. Addressing its sender is all that can be said. */
+ * The To/Cc a reply to this message gets, as the core decided them (see meron-core/src/reply.rs): the
+ * sender is addressed, the original Cc is copied, and our own addresses stay out of both. `replyAll` picks
+ * the form that also copies the other original recipients.
+ *
+ * A target with no `reply` field carries no recipient headers to decide from — a thread card standing in
+ * for a thread whose messages have not loaded, or an RSS item. Addressing its sender is all that can be
+ * said.
+ */
 export function buildReplyRecipients(target: Message, replyAll = false): { to: string; cc: string } {
   const reply = target.reply
   if (!reply) {

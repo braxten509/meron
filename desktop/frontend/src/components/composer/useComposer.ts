@@ -3,6 +3,7 @@
 // session.
 // Imported by Composer.tsx.
 
+import { composerAttachmentActions } from './composerAttachmentActions'
 import { useEffect, useRef, useState } from 'react'
 import { Extension, useEditor } from '@tiptap/react'
 import { TextSelection } from '@tiptap/pm/state'
@@ -12,7 +13,7 @@ import { useTranslation } from '../../lib/i18n'
 import { confirmAction, showToast, showUndoToast } from '../../states/ui'
 import { settings$ } from '../../states/settings'
 import { isBodyBlankWithoutSignature } from '../../lib/signature'
-import type { ComposeDraft, ComposerAttachment } from '../../types'
+import type { ComposeDraft } from '../../types'
 import {
   sendComposed,
   appendSentMessage,
@@ -26,31 +27,19 @@ import {
 } from '../../states/compose'
 import { compose$, newDraftMessageId } from '../../states/composeState'
 import { htmlToText } from '../../lib/html'
-import { invoke } from '../../lib/bridge'
 import { isExternalFileDrop } from '../../lib/useFileDrop'
-import {
-  readAttachment,
-  reportUnattachedFiles,
-  settleAttachment,
-  takeWithinAttachmentLimits,
-} from '../../lib/attachFiles'
 import { contextualErrorMessage } from '../../lib/errors'
 import { discardSavedDraftCopy } from '../../states/mailMoves'
 import { discardClosedDraft, discardSentDraft } from '../../states/quickReply'
-import { pickFiles, pickImageFiles } from '../../lib/nativeFilePicker'
 import { getComposeSession, registerComposeSession, trackDraftSave } from '../../states/composeSessions'
 import { accounts$, isSendableAccount } from '../../states/accounts'
 import { ResizableImage } from './composerImage'
 import {
   clipboardHasImageMarkup,
-  createInlineId,
   extractClipboardImages,
   inlineRichStyles,
   prepareInlineImages,
-  readClipboardImages,
-  readNativeClipboardImage,
   textToHtml,
-  type NativeClipboardImage,
 } from './composerHelpers'
 
 // A quoted reply's `<blockquote type="cite">` (see replyQuote) keeps its type
@@ -125,14 +114,14 @@ export function useComposer(tabId: string) {
   const latestDraft = () => compose$.tabs.peek().find((t) => t.id === tabId)?.compose
 
   /**
-   * Delete the server-side copy of a draft: the one the last save actually
-   * wrote, which by then is the allocated id rather than the local placeholder
-   * the composer opened with.
+   * Remove the server draft created by the last completed save.
    *
-   * A tab opened from the Drafts list carries `sourceDraft`, whose thread is
-   * the draft itself and disappears with it. A reply escalated out of a
-   * conversation has no such row — only the tab's conversation, which keeps its
-   * card and needs its Draft badge cleared once the draft behind it is gone.
+   * Delete the server-side copy of a draft: the one the last save actually wrote, which by then is the
+   * allocated id rather than the local placeholder the composer opened with.
+   *
+   * A tab opened from the Drafts list carries `sourceDraft`, whose thread is the draft itself and disappears
+   * with it. A reply escalated out of a conversation has no such row — only the tab's conversation, which
+   * keeps its card and needs its Draft badge cleared once the draft behind it is gone.
    */
   const remoteDraftOf = (target: ComposeDraft) => {
     const remoteId = target.draftMessageId?.startsWith('local-draft-') ? undefined : target.draftMessageId
@@ -152,12 +141,14 @@ export function useComposer(tabId: string) {
   }
 
   /**
-   * Throw the draft away: stop saving and close the tab at once, then let the
-   * queue finish before deleting the server copy — a save still running would
-   * otherwise put the draft back seconds later. The tab must not wait on that
-   * save: a slow Drafts server would leave the close button seemingly dead.
-   * A save that allocates a new id after the tab is gone discards its own copy
-   * (the tab's account no longer matches), so the snapshot's id is enough here.
+   * Discard the editor contents and its server copy.
+   *
+   * Throw the draft away: stop saving and close the tab at once, then let the queue finish before deleting
+   * the server copy — a save still running would otherwise put the draft back seconds later. The tab must not
+   * wait on that save: a slow Drafts server would leave the close button seemingly dead.
+   *
+   * A save that allocates a new id after the tab is gone discards its own copy (the tab's account no longer
+   * matches), so the snapshot's id is enough here.
    */
   const discardAndClose = async () => {
     setError('')
@@ -167,8 +158,8 @@ export function useComposer(tabId: string) {
     try {
       await drained
       if (current) await discardRemoteDraft(current)
-    } catch (err) {
-      const message = contextualErrorMessage(err, t('composer.status.couldNotDiscardDraft'))
+    } catch (requestFailure) {
+      const message = contextualErrorMessage(requestFailure, t('composer.status.couldNotDiscardDraft'))
       showToast(message, 'error')
     }
   }
@@ -223,13 +214,13 @@ export function useComposer(tabId: string) {
         const reopen = () => reopenComposeTab(closed, { ...closing, draftMessageId })
         showUndoToast(t('composer.status.savedToDrafts'), reopen, 'app', t('composer.actions.openDraft'))
         return { draftMessageId, reopen }
-      } catch (err) {
-        console.error('Saving the draft on Esc failed:', err)
+      } catch (requestFailure) {
+        console.error('Saving the draft on Esc failed:', requestFailure)
         // Reopened under the id the failed save was writing, so a copy that
         // landed anyway is replaced by the next save rather than duplicated.
-        const draftMessageId = draftIdOfFailedSave(err) ?? current.draftMessageId
+        const draftMessageId = draftIdOfFailedSave(requestFailure) ?? current.draftMessageId
         restoreComposeTabAfterFailedSave(closed, { ...closing, draftMessageId })
-        showToast(contextualErrorMessage(err, t('composer.status.draftAutosaveFailed')), 'error')
+        showToast(contextualErrorMessage(requestFailure, t('composer.status.draftAutosaveFailed')), 'error')
         return null
       }
     })
@@ -386,8 +377,8 @@ export function useComposer(tabId: string) {
           accountId: previous.accountId,
           draftMessageId: orphan,
         })
-      } catch (err) {
-        console.error('Discarding the previous account’s draft failed:', err)
+      } catch (requestFailure) {
+        console.error('Discarding the previous account’s draft failed:', requestFailure)
       }
     })
   }, [session, tabId, draft?.accountId, draft?.draftMessageId])
@@ -467,11 +458,11 @@ export function useComposer(tabId: string) {
         if (!isCurrent()) return
         setSaveStatus('saved')
         setSaveError('')
-      } catch (err) {
-        console.error('Autosave draft failed:', err)
+      } catch (requestFailure) {
+        console.error('Autosave draft failed:', requestFailure)
         // Keep the id the failed save was writing under, as a successful one
         // would, so a copy that landed anyway is replaced or discarded later.
-        const attemptedId = draftIdOfFailedSave(err)
+        const attemptedId = draftIdOfFailedSave(requestFailure)
         const latest = latestDraft()
         if (
           attemptedId &&
@@ -490,7 +481,7 @@ export function useComposer(tabId: string) {
         }
         if (!isCurrent()) return
         setSaveStatus('error')
-        setSaveError(contextualErrorMessage(err, t('composer.status.draftAutosaveFailed')))
+        setSaveError(contextualErrorMessage(requestFailure, t('composer.status.draftAutosaveFailed')))
       }
     }
 
@@ -565,164 +556,8 @@ export function useComposer(tabId: string) {
 
   const removeQuote = () => update({ quote: undefined })
 
-  // Inline images replace the selection; with `afterSelection` (a drop) they go
-  // in after it, so a dropped image never replaces one that is still selected
-  // from the last insertion. The selection is read when each image is ready:
-  // the body may have been edited while its file was written.
-  const addFiles = (files: ArrayLike<File>, options: { inline?: boolean; afterSelection?: boolean } = {}) => {
-    const attachmentsNow = () => compose$.tabs.get().find((t) => t.id === tabId)?.compose?.attachments ?? []
-    const insertImage = (source: string, alt: string, attachmentId: string) => {
-      try {
-        const chain = editor!.chain().focus()
-        const placed = options.afterSelection
-          ? chain
-              .insertContentAt(editor!.state.selection.to, { type: ResizableImage.name, attrs: { src: source, alt } })
-              .run()
-          : chain.setImage({ src: source, alt }).run()
-        if (placed) return
-      } catch (err) {
-        console.error('Failed to insert inline image:', err)
-      }
-      // Not in the body: keep it as an ordinary attachment, not an inline part
-      // nothing refers to.
-      update({
-        attachments: attachmentsNow().map((a) => (a.id === attachmentId ? { ...a, inlineId: undefined } : a)),
-      })
-    }
-    const taken = takeWithinAttachmentLimits(
-      tabId,
-      Array.from(files),
-      attachmentsNow().reduce((bytes, attachment) => bytes + attachment.size, 0),
-    )
-    if (taken.length < files.length) reportUnattachedFiles()
-    // Every file is read and attached as soon as it can be; only placing the
-    // inline images waits its turn, so they keep the order they came in.
-    let placing: Promise<void> = Promise.resolve()
-    for (const file of taken) {
-      const ready = readAttachment(file).then(async ({ attachment, dataUrl }) => {
-        const shouldInline = !!options.inline && file.type.toLowerCase().startsWith('image/') && !!editor
-        const next: ComposerAttachment = { ...attachment, inlineId: shouldInline ? createInlineId() : undefined }
-        update({ attachments: [...attachmentsNow(), next] })
-        settleAttachment(tabId, file)
-        if (!shouldInline) return null
-        const source = await invoke<string>('composer.writeMediaFile', {
-          data: next.data,
-          filename: next.filename,
-        }).catch((err) => {
-          console.error('Failed to write media file:', err)
-          return dataUrl
-        })
-        return { src: source, next }
-      })
-      // Reported when its turn comes below; until then a failure is not one
-      // nobody handles. A file that never attached is settled here.
-      ready.catch(() => settleAttachment(tabId, file))
-      placing = placing
-        .then(() => ready)
-        .then((image) => {
-          if (image) insertImage(image.src, image.next.filename, image.next.id)
-        })
-        .catch((err) => {
-          // A folder, or a file that can't be read.
-          console.error('Failed to attach file:', err)
-          reportUnattachedFiles()
-        })
-    }
-  }
-
-  const addNativeClipboardImage = (image: NativeClipboardImage, options: { inline?: boolean } = {}) => {
-    const shouldInline = !!options.inline && image.mime.toLowerCase().startsWith('image/') && !!editor
-    const next: ComposerAttachment = {
-      id: `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
-      filename: image.filename,
-      mime: image.mime || 'application/octet-stream',
-      size: image.size,
-      data: image.data,
-      inlineId: shouldInline ? createInlineId() : undefined,
-    }
-    update({
-      attachments: [...(compose$.tabs.get().find((t) => t.id === tabId)?.compose?.attachments ?? []), next],
-    })
-    if (shouldInline) {
-      invoke<string>('composer.writeMediaFile', { data: image.data, filename: image.filename })
-        .then((url) => {
-          editor!.chain().focus().setImage({ src: url, alt: image.filename }).run()
-        })
-        .catch((err) => {
-          console.error('Failed to write media file:', err)
-          editor!
-            .chain()
-            .focus()
-            .setImage({ src: `data:${image.mime || 'image/png'};base64,${image.data}`, alt: image.filename })
-            .run()
-        })
-    }
-  }
-
-  const pickAttachmentFiles = async () => {
-    try {
-      const files = await pickFiles(t('composer.actions.attachFiles'))
-      if (files.length > 0) addFiles(files)
-    } catch (error) {
-      showToast(error instanceof Error ? error.message : t('chat.failedToChooseFiles'), 'error')
-    }
-  }
-
-  const pickInlineImages = async () => {
-    try {
-      const files = await pickImageFiles(t('composer.actions.insertInlineImages'))
-      if (files.length > 0) addFiles(files, { inline: true })
-    } catch (error) {
-      showToast(error instanceof Error ? error.message : t('chat.failedToChooseImages'), 'error')
-    }
-  }
-
-  const handlePaste = (event: React.ClipboardEvent) => {
-    const imageFiles = extractClipboardImages(event.clipboardData)
-    if (imageFiles.length > 0) {
-      event.preventDefault()
-      lastImagePasteAtRef.current = Date.now()
-      addFiles(imageFiles)
-    } else if (clipboardHasImageMarkup(event.clipboardData)) {
-      event.preventDefault()
-      pasteImageFromClipboard(Date.now(), { inline: false })
-    }
-  }
-
-  // WebKitGTK often doesn't expose pasted images via the synchronous paste
-  // event's clipboardData. As a fallback, intercept Ctrl/Cmd+V and read the
-  // clipboard asynchronously.
-  const handleKeyDown = async (event: React.KeyboardEvent) => {
-    const isPaste = (event.ctrlKey || event.metaKey) && (event.key === 'v' || event.key === 'V')
-    if (!isPaste) return
-
-    pasteImageFromClipboard(Date.now(), { inline: !!draft?.rich })
-  }
-
-  const pasteImageFromClipboard = (pasteStartedAt: number, options: { inline: boolean }) => {
-    void readClipboardImages()
-      .then((images) => {
-        if (lastImagePasteAtRef.current >= pasteStartedAt) return
-        if (images.length === 0) {
-          return readNativeClipboardImage().then((image) => {
-            if (!image || lastImagePasteAtRef.current >= pasteStartedAt) return
-            lastImagePasteAtRef.current = Date.now()
-            addNativeClipboardImage(image, options)
-          })
-        }
-        lastImagePasteAtRef.current = Date.now()
-        addFiles(images, options)
-      })
-      .catch(() => {
-        void readNativeClipboardImage()
-          .then((image) => {
-            if (!image || lastImagePasteAtRef.current >= pasteStartedAt) return
-            lastImagePasteAtRef.current = Date.now()
-            addNativeClipboardImage(image, options)
-          })
-          .catch(() => undefined)
-      })
-  }
+  const { addFiles, pickAttachmentFiles, pickInlineImages, handlePaste, handleKeyDown, pasteImageFromClipboard } =
+    composerAttachmentActions(tabId, editor, draft, update, lastImagePasteAtRef, t)
 
   const setLink = () => {
     if (!editor) return

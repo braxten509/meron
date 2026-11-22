@@ -1,5 +1,9 @@
 //go:build windows
 
+// Applies desktop theme changes to Windows window decoration.
+// The host resolves the main window handle and sets the
+// titlebar colors through the Desktop Window Manager.
+
 package main
 
 import (
@@ -32,10 +36,9 @@ var (
 	procGetWindowThreadProcessId = user32.NewProc("GetWindowThreadProcessId")
 )
 
-// setNativeTitlebarColors paints the DWM caption in the side nav's colors.
-// Wails only sets the caption color when options.Windows.CustomTheme is given,
-// which main.go leaves unset, so this is the only writer. Windows 11 honors
-// it; Windows 10 rejects the attribute and keeps its caption, which is fine.
+// setNativeTitlebarColors paints the DWM caption in the side nav's colors. Wails only sets the caption
+// color when options.Windows.CustomTheme is given, which main.go leaves unset, so this is the only
+// writer. Windows 11 honors it; Windows 10 rejects the attribute and keeps its caption, which is fine.
 // Anything but an opaque #rrggbb pair restores the system colors.
 func setNativeTitlebarColors(bg, fg string) {
 	hwnd := findMainWindow()

@@ -1,5 +1,9 @@
 //go:build integration
 
+// Exercises desktop mail tools against an isolated test
+// mail server. The fixtures verify server-side copies
+// and cover servers with different IMAP capabilities.
+
 package main
 
 import (
@@ -40,8 +44,8 @@ func TestIntegrationMCP(t *testing.T) {
 		subject := "MCP visible message"
 		uid := appendMessage(t, "alice@mail.test", "INBOX", subject)
 		appendMessage(t, "bob@mail.test", "INBOX", "MCP private message")
-		pollInbox(t, sidecar, "allowed", func(m map[string]any) bool { return str(m, "subject") == subject })
-		private := pollInbox(t, sidecar, "excluded", func(m map[string]any) bool { return str(m, "subject") == "MCP private message" })
+		pollInbox(t, sidecar, "allowed", func(m map[string]any) bool { return stringField(m, "subject") == subject })
+		private := pollInbox(t, sidecar, "excluded", func(m map[string]any) bool { return stringField(m, "subject") == "MCP private message" })
 
 		accounts := operationResult(t, callMCP(t, session, "list_accounts", map[string]any{}))["accounts"].([]any)
 		if len(accounts) != 1 || accounts[0].(map[string]any)["id"] != "allowed" {
@@ -57,15 +61,15 @@ func TestIntegrationMCP(t *testing.T) {
 				t.Fatalf("search = %v", result)
 			}
 			thread := threads[0].(map[string]any)
-			mcpWaitForBody(t, session, str(thread, "thread_id"), "Body for "+subject)
+			mcpWaitForBody(t, session, stringField(thread, "thread_id"), "Body for "+subject)
 		}
 		for _, tc := range []struct {
 			tool string
 			args map[string]any
 		}{
 			{"search_messages", map[string]any{"account_id": "excluded"}},
-			{"read_thread", map[string]any{"thread_id": formatImapThreadID("excluded", "INBOX", str(private, "thread_key"))}},
-			{"delete_permanently", map[string]any{"account_id": "excluded", "folder_id": "INBOX", "uids": []uint32{num(private, "uid")}, "request_id": "forbidden-delete"}},
+			{"read_thread", map[string]any{"thread_id": formatImapThreadID("excluded", "INBOX", stringField(private, "thread_key"))}},
+			{"delete_permanently", map[string]any{"account_id": "excluded", "folder_id": "INBOX", "uids": []uint32{numericField(private, "uid")}, "request_id": "forbidden-delete"}},
 		} {
 			if !callMCP(t, session, tc.tool, tc.args).IsError {
 				t.Fatalf("allowed access to excluded account: %s", tc.tool)
@@ -110,7 +114,7 @@ func TestIntegrationMCP(t *testing.T) {
 		id := mcpRequireStatus(t, queued, "pending_approval")
 		mcpAssertServerCopies(t, server, "bob@mail.test", "INBOX", "MCP approved send", 0)
 		mcpRequireStatus(t, resolveMCP(t, app, id, true), "completed")
-		pollInbox(t, sidecar, "excluded", func(m map[string]any) bool { return str(m, "subject") == "MCP approved send" })
+		pollInbox(t, sidecar, "excluded", func(m map[string]any) bool { return stringField(m, "subject") == "MCP approved send" })
 		retry := operationResult(t, callMCP(t, session, "send_message", args))
 		if mcpRequireStatus(t, retry, "completed") != id {
 			t.Fatalf("retry created a new operation: %v", retry)
@@ -238,7 +242,7 @@ func mcpRequireUIDPLUSRefusal(t *testing.T, result *mcp.CallToolResult) {
 
 func mcpRequireStatus(t *testing.T, result map[string]any, status string) string {
 	t.Helper()
-	id := str(result, "operation_id")
+	id := stringField(result, "operation_id")
 	if result["status"] != status || id == "" {
 		t.Fatalf("want operation status %s: %v", status, result)
 	}
@@ -261,7 +265,7 @@ func mcpWaitForBody(t *testing.T, session *mcp.ClientSession, threadID, body str
 		result := operationResult(t, callMCP(t, session, "read_thread", map[string]any{"thread_id": threadID}))
 		messages, _ := result["messages"].([]any)
 		for _, message := range messages {
-			if strings.Contains(str(message.(map[string]any), "body"), body) {
+			if strings.Contains(stringField(message.(map[string]any), "body"), body) {
 				return
 			}
 		}

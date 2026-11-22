@@ -13,19 +13,20 @@ import (
 	"strings"
 )
 
-// applyUpdate installs a downloaded .dmg over the running .app bundle and
-// queues a relaunch. The caller quits immediately afterwards.
+// applyUpdate installs a downloaded .dmg over the running .app bundle and queues a relaunch.
 //
-// The DMG is mounted read-only, the bundle inside is checked against the
-// running app's code signature, copied to the same directory as the installed
-// bundle (so the swap is a rename on one volume), and then swapped in.
+// The caller quits immediately afterwards.
+//
+// The DMG is mounted read-only, the bundle inside is checked against the running app's code signature,
+// copied to the same directory as the installed bundle (so the swap is a rename on one volume), and
+// then swapped in.
 func applyUpdate(channel updateChannel, payload string) error {
 	if channel.Kind != channelDMG {
 		return fmt.Errorf("update: unsupported channel %q", channel.Kind)
 	}
 	bundle := channel.Target
 	parent := filepath.Dir(bundle)
-	if err := ensureWritableDir(parent); err != nil {
+	if err := ensureWritableDirectory(parent); err != nil {
 		return fmt.Errorf("update: %s is not writable — install the update manually: %w", parent, err)
 	}
 
@@ -92,10 +93,9 @@ func bundleInside(mount string) (string, error) {
 
 var teamIdentifierPattern = regexp.MustCompile(`(?m)^TeamIdentifier=(.+)$`)
 
-// verifyBundleSignature is the compensating control for not signing the update
-// manifest ourselves: the downloaded bundle must carry a valid signature from
-// the same Apple team as the copy that is running. An unsigned running app
-// (a local build) has nothing to compare against, so only the validity check
+// verifyBundleSignature is the compensating control for not signing the update manifest ourselves: the
+// downloaded bundle must carry a valid signature from the same Apple team as the copy that is running.
+// An unsigned running app (a local build) has nothing to compare against, so only the validity check
 // applies there.
 func verifyBundleSignature(candidate, current string) error {
 	if out, err := exec.Command("codesign", "--verify", "--deep", "--strict", candidate).CombinedOutput(); err != nil {

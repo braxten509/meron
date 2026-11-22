@@ -308,7 +308,7 @@ func messagesContainSubject(result map[string]any, subject string) bool {
 	rows, _ := result["messages"].([]any)
 	for _, row := range rows {
 		message, ok := row.(map[string]any)
-		if ok && str(message, "subject") == subject {
+		if ok && stringField(message, "subject") == subject {
 			return true
 		}
 	}
@@ -319,7 +319,7 @@ func starredMailContainsSubject(result map[string]any, subject string) bool {
 	rows, _ := result["items"].([]any)
 	for _, row := range rows {
 		message, ok := row.(map[string]any)
-		if ok && str(message, "subject") == subject {
+		if ok && stringField(message, "subject") == subject {
 			return true
 		}
 	}

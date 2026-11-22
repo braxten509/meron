@@ -6,26 +6,25 @@ package main
 
 import "meron/internal/obf"
 
-// Loopback host for the OAuth redirect. Per RFC 8252 (OAuth for Native Apps)
-// we bind an ephemeral port (host:0) at flow start and build the redirect URI
-// from the OS-assigned port — both Google and Microsoft match loopback
-// redirects on host only, so the portless URI is what's registered. This
-// avoids hardcoding a port that may already be in use.
+// Loopback host for the OAuth redirect.
 //
-// The scopes and the authorization URL itself come from the core
-// (meron_core::oauth), shared with mobile.
+// Per RFC 8252 (OAuth for Native Apps) we bind an ephemeral port (host:0) at flow start and build the
+// redirect URI from the OS-assigned port — both Google and Microsoft match loopback redirects on host
+// only, so the portless URI is what's registered. This avoids hardcoding a port that may already be in
+// use.
+//
+// The scopes and the authorization URL itself come from the core (meron_core::oauth), shared with
+// mobile.
 const oauthLoopbackHost = "127.0.0.1"
 
 // Obfuscated Google OAuth credentials baked into release builds.
 //
-// These are intentionally embedded in source: the Flatpak is built on
-// infrastructure we don't control, with no build-time secret injection, so the
-// values have to travel with the public repo. Per Google's installed-app model
-// the client secret is not confidential; the obfuscation (see internal/obf)
-// only defeats plaintext scraping, not a determined extractor.
+// These are intentionally embedded in source: the Flatpak is built on infrastructure we don't control,
+// with no build-time secret injection, so the values have to travel with the public repo. Per Google's
+// installed-app model the client secret is not confidential; the obfuscation (see internal/obf) only
+// defeats plaintext scraping, not a determined extractor.
 //
-// Generate replacements with:  go run ./cmd/obfuscate
-// then paste the printed values here.
+// Generate replacements with:  go run ./cmd/obfuscate then paste the printed values here.
 var (
 	googleClientIDObf     = "f1FFXVgbXFZAQFgZWwGpVyUNGAkfQAFVQRgJGE4G6At0ABwFDF8NFx0EBl1HH/tMPRZcCAFCCA0QARtIBFL1UjkAHBtATgAM"
 	googleClientSecretObf = "CioxPD51QlcQNz0fIkvUSwoRQC4vaQM2QC4ydTtzw1Y0DQA="

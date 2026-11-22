@@ -158,11 +158,10 @@ func (a *App) outlookBegin() (any, error) {
 	return a.beginOAuth("outlook")
 }
 
-// beginOAuth runs the shared PKCE authorization-code setup for any provider:
-// it generates state + verifier, arms the loopback callback listener, builds
-// the provider's authorization URL, and opens the system browser. The active
-// provider is recorded so the (shared) callback handler knows which token
-// endpoint and profile source to use.
+// beginOAuth runs the shared PKCE authorization-code setup for any provider: it generates state +
+// verifier, arms the loopback callback listener, builds the provider's authorization URL, and opens
+// the system browser. The active provider is recorded so the (shared) callback handler knows which
+// token endpoint and profile source to use.
 func (a *App) beginOAuth(provider string) (any, error) {
 	state := randomBase64URL(32)
 	verifier := randomBase64URL(32)

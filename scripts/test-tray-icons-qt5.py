@@ -1,5 +1,6 @@
 """Check tray SVGs with Qt5, including hosts without SVG mask support.
 
+Renders each icon to a transparent QImage and checks its visible pixels.
 Requires PyQt5. Run with QT_QPA_PLATFORM=offscreen python this-file.py.
 """
 

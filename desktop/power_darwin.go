@@ -1,5 +1,9 @@
 //go:build darwin
 
+// Connects the macOS wake notification to desktop mail synchronization.
+// App startup registers the native listener and shutdown
+// releases it after the sidecar has received any resume signal.
+
 package main
 
 /*

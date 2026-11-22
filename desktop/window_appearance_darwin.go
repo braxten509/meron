@@ -1,5 +1,9 @@
 //go:build darwin
 
+// Applies the chosen desktop theme to native AppKit controls.
+// The frontend draws the titlebar while menus, sheets
+// and window controls follow the configured appearance.
+
 package main
 
 /*

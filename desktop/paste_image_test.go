@@ -22,10 +22,10 @@ func setupMediaTestEnv(t *testing.T) {
 	t.Setenv("frontenddevserverurl", "")
 }
 
-func TestResolveMediaPathConfinesKeysToMediaDir(t *testing.T) {
+func TestResolveMediaPathConfinesKeysToMediaDirectory(t *testing.T) {
 	setupMediaTestEnv(t)
 
-	root := mediaDir()
+	root := mediaDirectory()
 	got, err := resolveMediaPath("avatars/acct/photo.png")
 	if err != nil {
 		t.Fatalf("resolveMediaPath returned error: %v", err)
@@ -103,7 +103,7 @@ func TestWriteMediaFileWritesDecodedDataWithSafeGeneratedName(t *testing.T) {
 	if strings.ContainsAny(key, `/\`) {
 		t.Fatalf("writeMediaFile key contains path separator: %q", key)
 	}
-	path := filepath.Join(mediaDir(), key)
+	path := filepath.Join(mediaDirectory(), key)
 	got, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read written media file: %v", err)
@@ -161,7 +161,7 @@ func TestWriteAvatarFileWritesValidatedImageWithSanitizedAccount(t *testing.T) {
 	if !strings.HasPrefix(url, "/media/avatars/acct----one-example-com/") || !strings.HasSuffix(url, ".png") {
 		t.Fatalf("writeAvatarFile url = %q", url)
 	}
-	path := filepath.Join(mediaDir(), strings.TrimPrefix(url, "/media/"))
+	path := filepath.Join(mediaDirectory(), strings.TrimPrefix(url, "/media/"))
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("avatar file missing: %v", err)
 	}
@@ -191,7 +191,7 @@ func TestWriteAvatarFileRejectsInvalidInputs(t *testing.T) {
 func TestPruneComposerMediaRemovesOnlyRootFilesNotKept(t *testing.T) {
 	setupMediaTestEnv(t)
 
-	root := mediaDir()
+	root := mediaDirectory()
 	if err := os.MkdirAll(filepath.Join(root, "avatars", "acct"), 0755); err != nil {
 		t.Fatal(err)
 	}

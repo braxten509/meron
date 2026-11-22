@@ -1,5 +1,6 @@
 // Appended to window_chrome_linux.go's C preamble by the native startup test.
 // Each process owns a fresh GTK display and window, just like an app launch.
+// Startup assertions cover both an integrated titlebar and the native fallback.
 void goWindowStateChanged(void) {}
 static gboolean fallbackReported = FALSE;
 void goWindowTitlebarUnavailable(void) { fallbackReported = TRUE; }

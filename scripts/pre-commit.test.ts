@@ -1,3 +1,7 @@
+// Exercises the project's formatting hook against disposable Git
+// fixtures. Cases cover unusual filenames, renamed paths, symlinks
+// and preserving the staged version of a partially edited file.
+
 import { afterEach, beforeEach, expect, test } from 'bun:test'
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -173,9 +177,9 @@ test('allows CRLF batch files while still rejecting trailing spaces', () => {
 
 function localizationFixture() {
   write('scripts/i18n/catalog.ts', catalog)
-  const localesDir = new URL('../locales/', import.meta.url)
-  for (const path of new Bun.Glob('*.json').scanSync({ cwd: localesDir.pathname })) {
-    write(`locales/${path}`, readFileSync(new URL(path, localesDir), 'utf8'))
+  const localesDirectory = new URL('../locales/', import.meta.url)
+  for (const path of new Bun.Glob('*.json').scanSync({ cwd: localesDirectory.pathname })) {
+    write(`locales/${path}`, readFileSync(new URL(path, localesDirectory), 'utf8'))
   }
   executable(join(bin, 'bun'), `#!/bin/sh\nexec '${process.execPath.replaceAll("'", "'\\''")}' "$@"\n`)
   git('add', '.')

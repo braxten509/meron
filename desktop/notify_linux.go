@@ -162,20 +162,19 @@ func (a *App) closeNotificationListener() {
 	_ = conn.Close()
 }
 
-// deliverNotification raises the notification, choosing the transport by
-// sandbox rather than by trying the portal first.
+// deliverNotification raises the notification, choosing the transport by sandbox rather than by trying the portal first.
 //
-// Inside Flatpak the portal is the only route out, and it works there because
-// the sandbox gives the app a real app id. Outside it, the portal hands the
-// notification to the desktop's own service keyed by an app id it guesses from
-// the process — GNOME Shell then rejects ids it cannot resolve to an installed
-// .desktop ("The app by ID \"meron\" could not be found") and drops it. The
-// portal call still returns success, so that failure is invisible to us and no
-// fallback can key off it. Unsandboxed builds therefore talk to the
-// freedesktop notification service directly, as every other native app does.
+// Inside Flatpak the portal is the only route out, and it works there because the sandbox gives the
+// app a real app id. Outside it, the portal hands the notification to the desktop's own service keyed
+// by an app id it guesses from the process — GNOME Shell then rejects ids it cannot resolve to an
+// installed .desktop ("The app by ID \"meron\" could not be found") and drops it.
 //
-// It returns the handle withdrawNotification takes, or "" when the
-// notification cannot be withdrawn (the beeep fallback).
+// The portal call still returns success, so that failure is invisible to us and no fallback can key
+// off it. Unsandboxed builds therefore talk to the freedesktop notification service directly, as every
+// other native app does.
+//
+// It returns the handle withdrawNotification takes, or "" when the notification cannot be withdrawn
+// (the beeep fallback).
 func (a *App) deliverNotification(n notification) string {
 	notificationMu.Lock()
 	conn := notificationConn

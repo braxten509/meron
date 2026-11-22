@@ -1,12 +1,10 @@
 #!/usr/bin/env bash
-# Cross-build a Windows Meron from Linux, for testing the Windows startup path
-# without waiting on CI.
+# Cross-build a Windows Meron from Linux, for testing the Windows startup path without waiting on CI.
 #
-# The sidecar targets x86_64-pc-windows-gnu, not the MSVC target CI ships: the
-# vendored OpenSSL that rusqlite's bundled-sqlcipher-vendored-openssl pulls in
-# needs nmake for an MSVC build, which does not exist here. mingw builds it with
-# plain make instead. A gnu-target sidecar is fine for reproducing bugs, but it
-# is not the artifact to release.
+# The sidecar targets x86_64-pc-windows-gnu, not the MSVC target CI ships: the vendored OpenSSL that
+# rusqlite's bundled-sqlcipher-vendored-openssl pulls in needs nmake for an MSVC build, which does not
+# exist here. mingw builds it with plain make instead. A gnu-target sidecar is fine for reproducing bugs,
+# but it is not the artifact to release.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."

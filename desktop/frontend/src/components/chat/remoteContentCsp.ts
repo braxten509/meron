@@ -1,10 +1,12 @@
-// The sidecar bakes each HTML body with a CSP `<meta>` whose `img-src`/`media-src`
-// decide whether remote content loads (see `prepare_html`). That decision is made
-// when the body is read, so a change made afterwards has to rewrite the baked
-// policy here rather than wait for a refetch — loosening it for a reveal ("show
-// images in this message", or allowing the sender while the thread is open), and
-// tightening it when the trust is taken back, since a body read while the sender
-// was allowed carries a permissive policy until the thread is read again.
+// Applies the reader's remote-content decision to each message frame.
+//
+// The sidecar bakes each HTML body with a CSP `<meta>` whose `img-src`/`media-src` decide whether remote
+// content loads (see `prepare_html`).
+//
+// That decision is made when the body is read, so a change made afterwards has to rewrite the baked policy here
+// rather than wait for a refetch — loosening it for a reveal ("show images in this message", or allowing the
+// sender while the thread is open), and tightening it when the trust is taken back, since a body read while the
+// sender was allowed carries a permissive policy until the thread is read again.
 const REMOTE_SOURCES = ['http:', 'https:']
 
 /** Source-list tokens that let remote content through. */

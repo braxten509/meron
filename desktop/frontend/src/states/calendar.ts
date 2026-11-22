@@ -380,7 +380,7 @@ export async function respondToInvite(message: Message, response: InviteResponse
   const previous = invite.response
   updateInvite(message, { response })
   try {
-    const res = await invoke<{ event_id?: string }>('invite.respond', {
+    const calendarResponse = await invoke<{ event_id?: string }>('invite.respond', {
       message: message.id,
       thread_id: message.thread_id,
       response,
@@ -388,7 +388,7 @@ export async function respondToInvite(message: Message, response: InviteResponse
     // Filed in the calendar now, or (declined) taken out of it. A declined
     // series takes its event out from under every message that pointed at it;
     // a declined occurrence leaves the series, and the other dates, in place.
-    const eventId = res?.event_id ?? ''
+    const eventId = calendarResponse?.event_id ?? ''
     if (!eventId && invite.event_id && invite.recurrence_id === 0) clearInviteEvent(invite.event_id)
     updateInvite(message, { event_id: eventId })
   } catch (error) {

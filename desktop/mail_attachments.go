@@ -24,7 +24,7 @@ func mediaFilePath(key string) (string, error) {
 	if key == "" {
 		return "", errors.New("missing attachment key")
 	}
-	root := mediaDir()
+	root := mediaDirectory()
 	// Cleaning a rooted "/"+key strips any "..", then Join confines it to root.
 	source := filepath.Join(root, filepath.Clean("/"+key))
 	if rel, err := filepath.Rel(root, source); err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
@@ -118,7 +118,7 @@ func (a *App) openAttachment(payload map[string]any) (any, error) {
 		return map[string]any{"opened": false}, nil
 	}
 
-	root := filepath.Join(appCacheDir(), attachmentOpenDirectoryName)
+	root := filepath.Join(appCacheDirectory(), attachmentOpenDirectoryName)
 	pruneAttachmentOpenDirectory(root)
 	directory := filepath.Join(root, randomBase64URL(8))
 	if err := os.MkdirAll(directory, 0o700); err != nil {

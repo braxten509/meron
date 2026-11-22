@@ -421,11 +421,10 @@ func (a *App) notifyNewMail(detail any) {
 	}()
 }
 
-// parseStoreMessages names the store rows a `mail.newMessages` detail's
-// arrivals are: mail by the batch folder and UID, a feed entry by its
-// subscription (the entry's thread key) and entry key. Empty unless every
-// arrival is listed and identifiable — a notification standing partly for
-// unlisted mail must not be withdrawn on the rest.
+// parseStoreMessages names the store rows a `mail.newMessages` detail's arrivals are: mail by the
+// batch folder and UID, a feed entry by its subscription (the entry's thread key) and entry key. Empty
+// unless every arrival is listed and identifiable — a notification standing partly for unlisted mail
+// must not be withdrawn on the rest.
 func parseStoreMessages(detail map[string]any, count int) []storeMessage {
 	account, _ := detail["account"].(string)
 	folder, _ := detail["folder"].(string)

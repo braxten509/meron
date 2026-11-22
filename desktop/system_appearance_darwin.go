@@ -1,5 +1,9 @@
 //go:build darwin
 
+// Listens for macOS system appearance changes. Startup
+// registers the native callback, which reports the light or
+// dark setting used when the desktop theme follows the system.
+
 package main
 
 /*

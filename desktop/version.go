@@ -43,11 +43,10 @@ func appVersion() string {
 	return appVersionValue
 }
 
-// compareVersions orders two dotted numeric versions ("0.1.12", "v0.2.0"),
-// returning -1, 0 or 1. A leading "v" is ignored, missing components count as
-// zero (so "0.2" == "0.2.0"), and any non-numeric component compares as zero —
-// we only ever ship plain numeric versions, and a malformed remote version must
-// not be able to masquerade as newer.
+// compareVersions orders two dotted numeric versions ("0.1.12", "v0.2.0"), returning -1, 0 or 1. A
+// leading "v" is ignored, missing components count as zero (so "0.2" == "0.2.0"), and any non-numeric
+// component compares as zero — we only ever ship plain numeric versions, and a malformed remote
+// version must not be able to masquerade as newer.
 func compareVersions(a, b string) int {
 	left := versionParts(a)
 	right := versionParts(b)

@@ -6,13 +6,15 @@
 
 package main
 
-// The integrated title bar on Windows is Wails' frameless window: no caption,
-// but DWM keeps the shadow, the Windows 11 rounded corners and the resize
-// borders (WS_THICKFRAME; Wails' runtime resizes from the page's edges), and a
-// --wails-draggable press is a real caption drag, so Aero Snap works. What it
-// can't offer is the Windows 11 Snap Layouts flyout on the maximize button:
-// that needs WM_NCHITTEST to answer HTMAXBUTTON, and the WebView2 child window
-// takes the mouse before the frame sees it. Win+Z still opens it.
+// Use the Windows frame settings that support the integrated titlebar.
+//
+// The integrated title bar on Windows is Wails' frameless window: no caption, but DWM keeps the shadow, the
+// Windows 11 rounded corners and the resize borders (WS_THICKFRAME; Wails' runtime resizes from the page's
+// edges), and a --wails-draggable press is a real caption drag, so Aero Snap works.
+//
+// What it can't offer is the Windows 11 Snap Layouts flyout on the maximize button: that needs WM_NCHITTEST
+// to answer HTMAXBUTTON, and the WebView2 child window takes the mouse before the frame sees it. Win+Z
+// still opens it.
 const integratedTitlebarSupported = true
 
 const framelessTitlebar = true

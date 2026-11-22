@@ -37,10 +37,9 @@ var (
 	readChromeSettings   = nativeChromeSettings
 )
 
-// windowChrome tells the frontend how to draw the title bar: whether it is
-// integrated now, whether that is the saved choice (the two differ until a
-// restart where the switch can't apply live), the platform whose controls to
-// draw, and the desktop's button layout and double-click action, which it
+// windowChrome tells the frontend how to draw the title bar: whether it is integrated now, whether
+// that is the saved choice (the two differ until a restart where the switch can't apply live), the
+// platform whose controls to draw, and the desktop's button layout and double-click action, which it
 // follows rather than offering its own settings.
 func (a *App) windowChrome() (any, error) {
 	layout, doubleClick := readChromeSettings()
@@ -58,11 +57,10 @@ func (a *App) windowChrome() (any, error) {
 	}, nil
 }
 
-// windowSetTitlebar switches between the system and the integrated title bar
-// and remembers the choice in window.json, which is read before the window is
-// created on the next launch. Where the switch can't apply to the live window
-// (Windows and Linux desktops with native server-side decorations), that launch
-// is when it takes effect.
+// windowSetTitlebar switches between the system and the integrated title bar and remembers the choice
+// in window.json, which is read before the window is created on the next launch. Where the switch
+// can't apply to the live window (Windows and Linux desktops with native server-side decorations),
+// that launch is when it takes effect.
 func (a *App) windowSetTitlebar(payload map[string]any) (any, error) {
 	wanted, _ := payload["integrated"].(bool)
 	integrated := wanted && integratedTitlebarSupported

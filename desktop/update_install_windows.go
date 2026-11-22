@@ -47,11 +47,10 @@ func runSilentInstaller(installer, exe string) error {
 	return startWindowsUpdateHelper(installer, exe)
 }
 
-// PowerShell's process wait works without a console. cmd's timeout exits
-// immediately with redirected stdin, racing the single-instance lock; starting
-// NSIS before this process exits also races the locked executable. Keep the
-// helper unelevated so the relaunched app runs as the original user, and elevate
-// only NSIS (the Wails installer requires admin rights).
+// PowerShell's process wait works without a console. cmd's timeout exits immediately with redirected
+// stdin, racing the single-instance lock; starting NSIS before this process exits also races the
+// locked executable. Keep the helper unelevated so the relaunched app runs as the original user, and
+// elevate only NSIS (the Wails installer requires admin rights).
 func startWindowsUpdateHelper(installer, exe string) error {
 	script := windowsUpdateScript(installer, exe, windowsUpdateErrorPath(), os.Getpid(), 2*time.Minute)
 	cmd := exec.Command("powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-EncodedCommand", encodePowerShellCommand(script))
@@ -64,7 +63,7 @@ func startWindowsUpdateHelper(installer, exe string) error {
 
 func windowsUpdateErrorPath() string {
 	// Keep failures outside the download cache, which startup cleans up.
-	return filepath.Join(appConfigDir(), "update-error.txt")
+	return filepath.Join(appConfigDirectory(), "update-error.txt")
 }
 
 func pendingUpdateError() string {
@@ -147,7 +146,7 @@ try {
 // replacePortableExe swaps the loose meron.exe from the portable zip.
 func replacePortableExe(archive, exe string) error {
 	parent := filepath.Dir(exe)
-	if err := ensureWritableDir(parent); err != nil {
+	if err := ensureWritableDirectory(parent); err != nil {
 		return fmt.Errorf("update: %s is not writable — install the update manually: %w", parent, err)
 	}
 

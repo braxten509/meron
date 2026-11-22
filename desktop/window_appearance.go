@@ -20,15 +20,15 @@ var opaqueHexColor = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
 // (GTK 3 clips neither the webview nor its own frame to them).
 var roundedWindowCorners = runtime.GOOS == "linux"
 
-// setWindowAppearance tells the native window chrome which appearance the
-// frontend is painting, so the parts of the window the webview does not draw —
-// the title bar above all — match the theme picked in settings instead of
-// staying light under a dark theme.
+// setWindowAppearance applies the frontend theme to the native window.
 //
-// The wails runtime's theme calls only do something on Windows (the DWM dark
-// caption); Linux and macOS are handled by setNativeWindowDark, whose
-// implementation is per platform. setNativeTitlebarColors then paints the
-// title bar in the side nav's colors where the platform allows it.
+// setWindowAppearance tells the native window chrome which appearance the frontend is painting, so the
+// parts of the window the webview does not draw — the title bar above all — match the theme picked in
+// settings instead of staying light under a dark theme.
+//
+// The wails runtime's theme calls only do something on Windows (the DWM dark caption); Linux and macOS are
+// handled by setNativeWindowDark, whose implementation is per platform. setNativeTitlebarColors then paints
+// the title bar in the side nav's colors where the platform allows it.
 func (a *App) setWindowAppearance(payload map[string]any) (any, error) {
 	dark, _ := payload["dark"].(bool)
 	if a.ctx != nil {

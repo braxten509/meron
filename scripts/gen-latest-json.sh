@@ -2,11 +2,11 @@
 # Build the update manifest (latest.json) from the release artifacts.
 #
 # The desktop updater reads this file from
-# https://github.com/nonbili/meron/releases/latest/download/latest.json and
-# matches on "<goos>-<goarch>" plus the install channel it detected. Only the
-# self-updatable channels are listed: .snap and .appx are store-managed, so
-# leaving them out is what makes those builds report "managed by your package
-# manager" even if detection ever slips.
+# https://github.com/nonbili/meron/releases/latest/download/latest.json and matches on "<goos>-<goarch>"
+# plus the install channel it detected.
+#
+# Only the self-updatable channels are listed: .snap and .appx are store-managed, so leaving them out is
+# what makes those builds report "managed by your package manager" even if detection ever slips.
 #
 # Usage: scripts/gen-latest-json.sh <version> <asset-base-url> <dist-dir>
 set -euo pipefail

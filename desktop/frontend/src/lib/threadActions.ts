@@ -50,12 +50,12 @@ export async function markThreadsReadRemote(threads: Message[], accounts: Accoun
 
   await Promise.all([
     ...Array.from(mailAccounts).map((accountId) =>
-      invoke('mail.markAllRead', { account_id: accountId, folder_id: folderId }).catch((err) =>
-        console.error('markAllRead failed:', err),
+      invoke('mail.markAllRead', { account_id: accountId, folder_id: folderId }).catch((requestFailure) =>
+        console.error('markAllRead failed:', requestFailure),
       ),
     ),
     ...rssThreadIds.map((threadId) =>
-      invoke('mail.markRead', { thread_id: threadId }).catch((err) => console.error('markAllRead (rss) failed:', err)),
+      invoke('mail.markRead', { thread_id: threadId }).catch((requestFailure) => console.error('markAllRead (rss) failed:', requestFailure)),
     ),
   ])
 }

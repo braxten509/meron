@@ -100,11 +100,10 @@ func main() {
 	}
 }
 
-// contentSecurityPolicy is defined per build tag: the strict same-origin policy
-// in csp_prod.go (production builds) and a relaxed policy in csp_dev.go that lets
-// the Vite dev server's inline preamble and HMR websockets through. In `wails dev`
-// the page is served from wails.localhost and proxied to Vite, so this middleware
-// runs on dev responses too — hence the dev variant.
+// contentSecurityPolicy is defined per build tag: the strict same-origin policy in csp_prod.go
+// (production builds) and a relaxed policy in csp_dev.go that lets the Vite dev server's inline
+// preamble and HMR websockets through. In `wails dev` the page is served from wails.localhost and
+// proxied to Vite, so this middleware runs on dev responses too — hence the dev variant.
 func cspMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Security-Policy", contentSecurityPolicy)

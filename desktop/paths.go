@@ -28,11 +28,11 @@ func decode(payload map[string]any, out any) error {
 }
 
 // accountID derives the stable primary key for a mail account from its email.
-// The normalized address is used verbatim: a SQLite TEXT key accepts any
-// character, and keeping the address intact avoids collisions (an earlier
-// scheme that mapped @ . + _ all to '-' folded a.b@x.com and a-b@x.com onto the
-// same id). Mail ids always contain '@', so they never collide with the
-// "rss-" namespace minted by the sidecar (see isRSSAccountID).
+//
+// The normalized address is used verbatim: a SQLite TEXT key accepts any character, and keeping the
+// address intact avoids collisions (an earlier scheme that mapped @ . + _ all to '-' folded a.b@x.com
+// and a-b@x.com onto the same id). Mail ids always contain '@', so they never collide with the "rss-"
+// namespace minted by the sidecar (see isRSSAccountID).
 func accountID(email string) string {
 	return strings.ToLower(strings.TrimSpace(email))
 }
@@ -81,13 +81,12 @@ func loadDotEnvLocal() {
 	}
 }
 
-// mediaHandler serves attachment files written by the sidecar at `/media/<key>`,
-// so image bytes load straight into the webview instead of round-tripping as
-// base64 through the JSON bridge. The AssetServer tries embedded frontend assets
-// first and only falls through here for unmatched paths. http.Dir cleans the
-// path and blocks `..` traversal out of the media root.
+// mediaHandler serves attachment files written by the sidecar at `/media/<key>`, so image bytes load
+// straight into the webview instead of round-tripping as base64 through the JSON bridge. The
+// AssetServer tries embedded frontend assets first and only falls through here for unmatched paths.
+// http.Dir cleans the path and blocks `..` traversal out of the media root.
 func mediaHandler() http.Handler {
-	fs := http.StripPrefix("/media/", http.FileServer(http.Dir(mediaDir())))
+	fs := http.StripPrefix("/media/", http.FileServer(http.Dir(mediaDirectory())))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.HasPrefix(r.URL.Path, "/media/") {
 			http.NotFound(w, r)
@@ -97,11 +96,11 @@ func mediaHandler() http.Handler {
 	})
 }
 
-// mediaDir is where the mail sidecar writes attachment files and the asset
+// mediaDirectory is where the mail sidecar writes attachment files and the asset
 // handler serves them from at `/media/<key>`. Both sides must agree, so the
 // bridge sets MERON_MEDIA_DIR on the sidecar to this exact path.
-func mediaDir() string {
-	return filepath.Join(appCacheDir(), "attachments")
+func mediaDirectory() string {
+	return filepath.Join(appCacheDirectory(), "attachments")
 }
 
 // storageUsage reports disk used by the clearable attachment cache and by the
@@ -109,17 +108,17 @@ func mediaDir() string {
 // cache while making clear the DB (the user's mail) is not touched here.
 func (a *App) storageUsage() (any, error) {
 	return map[string]any{
-		"cacheBytes": dirSize(mediaDir()),
-		"dbBytes":    fileSize(filepath.Join(appConfigDir(), "meron.db")),
+		"cacheBytes": directorySize(mediaDirectory()),
+		"dbBytes":    fileSize(filepath.Join(appConfigDirectory(), "meron.db")),
 		// Local folders: the only copy of that mail, never cleared here.
-		"archiveBytes": fileSize(filepath.Join(appConfigDir(), "archive.db")),
+		"archiveBytes": fileSize(filepath.Join(appConfigDirectory(), "archive.db")),
 	}, nil
 }
 
 // storageClearCache deletes the attachment cache and recreates the empty dir so
 // the sidecar can keep writing. It never touches the DB.
 func (a *App) storageClearCache() (any, error) {
-	dir := mediaDir()
+	dir := mediaDirectory()
 	if err := os.RemoveAll(dir); err != nil {
 		return nil, err
 	}
@@ -129,8 +128,8 @@ func (a *App) storageClearCache() (any, error) {
 	return a.storageUsage()
 }
 
-// dirSize sums the sizes of all regular files under root. A missing dir is 0.
-func dirSize(root string) int64 {
+// directorySize sums the sizes of all regular files under root. A missing dir is 0.
+func directorySize(root string) int64 {
 	var total int64
 	_ = filepath.WalkDir(root, func(_ string, d os.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
@@ -152,15 +151,15 @@ func fileSize(path string) int64 {
 	return 0
 }
 
-func appConfigDir() string {
-	return filepath.Join(configHome(), appDirName())
+func appConfigDirectory() string {
+	return filepath.Join(configHome(), appDirectoryName())
 }
 
-func appCacheDir() string {
-	return filepath.Join(cacheHome(), appDirName())
+func appCacheDirectory() string {
+	return filepath.Join(cacheHome(), appDirectoryName())
 }
 
-func appDirName() string {
+func appDirectoryName() string {
 	if isWailsDevLaunch() {
 		return "meron-dev"
 	}
@@ -206,7 +205,7 @@ func configHome() string {
 const maxLogBytes = 5 << 20
 
 func openAppLog() (*log.Logger, *os.File) {
-	path := filepath.Join(appConfigDir(), "meron.log")
+	path := filepath.Join(appConfigDirectory(), "meron.log")
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return log.New(os.Stderr, "meron: ", log.LstdFlags|log.Lmicroseconds), nil
 	}

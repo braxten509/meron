@@ -13,7 +13,7 @@ import (
 func TestLocalBackupRefusesLiveDatabases(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	for _, name := range []string{"archive.db", "archive.db-wal", "meron.db"} {
-		if !isLiveDatabasePath(filepath.Join(appConfigDir(), name)) {
+		if !isLiveDatabasePath(filepath.Join(appConfigDirectory(), name)) {
 			t.Fatalf("%s accepted as a backup destination", name)
 		}
 	}
@@ -22,8 +22,8 @@ func TestLocalBackupRefusesLiveDatabases(t *testing.T) {
 	}
 
 	// A link to the live archive is the archive, whatever it is called.
-	live := filepath.Join(appConfigDir(), "archive.db")
-	if err := os.MkdirAll(appConfigDir(), 0o755); err != nil {
+	live := filepath.Join(appConfigDirectory(), "archive.db")
+	if err := os.MkdirAll(appConfigDirectory(), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(live, []byte("db"), 0o600); err != nil {

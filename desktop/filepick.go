@@ -46,10 +46,10 @@ func (a *App) pickFiles(payload map[string]any, imagesOnly, multiple bool) (any,
 
 	a.filePickerMu.Lock()
 	defaultDirectory := a.lastFileDir
-	lastDirPath := lastFileDirPath()
+	lastDirPath := lastFileDirectoryPath()
 	if imagesOnly {
 		defaultDirectory = a.lastImageDir
-		lastDirPath = lastImageDirPath()
+		lastDirPath = lastImageDirectoryPath()
 	}
 	if defaultDirectory == "" {
 		if data, err := os.ReadFile(lastDirPath); err == nil {
@@ -63,7 +63,7 @@ func (a *App) pickFiles(payload map[string]any, imagesOnly, multiple bool) (any,
 	}
 	a.filePickerMu.Unlock()
 
-	defaultDirectory = filePickerDefaultDir(defaultDirectory)
+	defaultDirectory = filePickerDefaultDirectory(defaultDirectory)
 
 	paths, usedPortal, err := openFilePicker(a.ctx, title, defaultDirectory, imagesOnly, multiple)
 	if err != nil {
@@ -148,7 +148,7 @@ func (a *App) openComposerAttachment(payload map[string]any) (any, error) {
 		return nil, fmt.Errorf("decode attachment: %w", err)
 	}
 
-	dir := filepath.Join(appCacheDir(), "composer-open")
+	dir := filepath.Join(appCacheDirectory(), "composer-open")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
 	}
@@ -191,28 +191,28 @@ func openSystemFile(path string) error {
 	return nil
 }
 
-func lastImageDirPath() string {
-	return filepath.Join(appConfigDir(), "last-image-dir")
+func lastImageDirectoryPath() string {
+	return filepath.Join(appConfigDirectory(), "last-image-dir")
 }
 
-func lastFileDirPath() string {
-	return filepath.Join(appConfigDir(), "last-file-dir")
+func lastFileDirectoryPath() string {
+	return filepath.Join(appConfigDirectory(), "last-file-dir")
 }
 
-func filePickerDefaultDir(candidate string) string {
-	if dir, ok := usablePickerDir(candidate); ok {
+func filePickerDefaultDirectory(candidate string) string {
+	if dir, ok := usablePickerDirectory(candidate); ok {
 		return dir
 	}
 	home, err := os.UserHomeDir()
 	if err == nil {
-		if dir, ok := usablePickerDir(home); ok {
+		if dir, ok := usablePickerDirectory(home); ok {
 			return dir
 		}
 	}
 	return ""
 }
 
-func usablePickerDir(path string) (string, bool) {
+func usablePickerDirectory(path string) (string, bool) {
 	if path == "" {
 		return "", false
 	}

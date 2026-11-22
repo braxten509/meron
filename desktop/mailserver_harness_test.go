@@ -33,7 +33,7 @@ const (
 // Loopback-only test fixture: plaintext IMAP and authenticated SMTP submission.
 // DMS pre-creates Drafts, Sent, Trash and Junk; add Archive for the same roles
 // used by the app. Filtering is disabled so synthetic messages stay unchanged.
-const dovecotConf = `auth_allow_cleartext = yes
+const dovecotConfiguration = `auth_allow_cleartext = yes
 ssl = no
 namespace inbox {
     mailbox Archive {
@@ -96,7 +96,7 @@ func startMailServerWithConfig(t *testing.T, extraDovecot string) *mailServer {
 	for name, contents := range map[string]string{
 		"postfix-accounts.cf": "alice@" + mailHostname + "|{PLAIN}" + testPassword + "\n" +
 			"bob@" + mailHostname + "|{PLAIN}" + testPassword + "\n",
-		"dovecot.cf": dovecotConf + extraDovecot,
+		"dovecot.cf": dovecotConfiguration + extraDovecot,
 		"postfix-master.cf": "submission/inet/smtpd_tls_security_level=none\n" +
 			"submission/inet/smtpd_tls_auth_only=no\n",
 	} {
@@ -187,14 +187,14 @@ func restartMailServer(t *testing.T, server *mailServer) {
 	waitForSMTPGreeting(t, server.smtpPort, docker, server.container)
 }
 
-// startSidecar launches the Rust core against a throwaway profile dir, and
-// records the events it pushes. The sidecar resolves its DB/media paths from XDG
-// dirs (sidecarEnv), so pointing XDG_* and HOME at a temp dir isolates it;
-// MERON_KEYRING=off keeps the test run out of the OS keychain.
+// startSidecar launches the Rust core against a throwaway profile dir, and records the events it pushes.
 //
-// The profile and the env pointing at it are scoped to the `t` passed in, so
-// calling this from a subtest yields a *second*, empty profile against the same
-// server — a cold store whose contents can only have come from IMAP.
+// The sidecar resolves its DB/media paths from XDG dirs (sidecarEnv), so pointing XDG_* and HOME at a
+// temp dir isolates it; MERON_KEYRING=off keeps the test run out of the OS keychain.
+//
+// The profile and the env pointing at it are scoped to the `t` passed in, so calling this from a
+// subtest yields a *second*, empty profile against the same server — a cold store whose contents can
+// only have come from IMAP.
 func startSidecar(t *testing.T) (*Sidecar, *eventLog) {
 	t.Helper()
 	bin := "../meron-core/target/debug/meron-core"
@@ -232,19 +232,19 @@ type sidecarEvent struct {
 	detail map[string]any
 }
 
-func (l *eventLog) record(name string, detail any) {
+func (eventLogState *eventLog) record(name string, detail any) {
 	object, _ := detail.(map[string]any)
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	l.events = append(l.events, sidecarEvent{name: name, detail: object})
+	eventLogState.mu.Lock()
+	defer eventLogState.mu.Unlock()
+	eventLogState.events = append(eventLogState.events, sidecarEvent{name: name, detail: object})
 }
 
 // match returns the events so far satisfying predicate.
-func (l *eventLog) match(predicate func(sidecarEvent) bool) []sidecarEvent {
-	l.mu.Lock()
-	defer l.mu.Unlock()
+func (eventLogState *eventLog) match(predicate func(sidecarEvent) bool) []sidecarEvent {
+	eventLogState.mu.Lock()
+	defer eventLogState.mu.Unlock()
 	var out []sidecarEvent
-	for _, event := range l.events {
+	for _, event := range eventLogState.events {
 		if predicate(event) {
 			out = append(out, event)
 		}
@@ -294,12 +294,14 @@ func callMap(t *testing.T, sidecar *Sidecar, method string, params map[string]an
 	return object
 }
 
-// imapProxy forwards IMAP connections to the mail server container so a test can cut
-// the client's live sockets on demand, standing in for a pooled connection the
-// server dropped without telling the client. Cutting it here rather than by
-// restarting or unplugging the container keeps the server itself reachable —
-// and Docker's host-side port forwarding survives a container restart anyway,
-// so the socket the client holds would stay usable.
+// imapProxy lets integration tests interrupt an existing IMAP connection.
+//
+// imapProxy forwards IMAP connections to the mail server container so a test can cut the client's live
+// sockets on demand, standing in for a pooled connection the server dropped without telling the client.
+//
+// Cutting it here rather than by restarting or unplugging the container keeps the server itself reachable —
+// and Docker's host-side port forwarding survives a container restart anyway, so the socket the client
+// holds would stay usable.
 type imapProxy struct {
 	listener net.Listener
 	mu       sync.Mutex

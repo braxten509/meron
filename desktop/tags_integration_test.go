@@ -69,14 +69,14 @@ func TestIntegrationTags(t *testing.T) {
 	}
 	hasTags := func(subject string, tags ...string) func(map[string]any) bool {
 		return func(card map[string]any) bool {
-			return str(card, "subject") == subject && slices.Equal(cardTags(card), tags)
+			return stringField(card, "subject") == subject && slices.Equal(cardTags(card), tags)
 		}
 	}
 
 	t.Run("a local tag reaches the server, non-ASCII included", func(t *testing.T) {
 		subject := "Tag written here"
 		uid := deliver(subject)
-		pollInbox(t, sidecar, "acct", func(card map[string]any) bool { return str(card, "subject") == subject })
+		pollInbox(t, sidecar, "acct", func(card map[string]any) bool { return stringField(card, "subject") == subject })
 		callMap(t, sidecar, "messages.setTags", map[string]any{
 			"account": "acct", "folder": "INBOX", "uids": []uint32{uid}, "add": []string{"Todo", "重要"},
 		})
@@ -103,7 +103,7 @@ func TestIntegrationTags(t *testing.T) {
 	t.Run("a keyword from another client comes and goes", func(t *testing.T) {
 		subject := "Tag written elsewhere"
 		deliver(subject)
-		pollInbox(t, sidecar, "acct", func(card map[string]any) bool { return str(card, "subject") == subject })
+		pollInbox(t, sidecar, "acct", func(card map[string]any) bool { return stringField(card, "subject") == subject })
 		changeServerKeyword(t, server, user, subject, "add", "waiting")
 		pollCards(t, sidecar, hasTags(subject, "waiting"))
 		changeServerKeyword(t, server, user, subject, "remove", "waiting")
@@ -113,7 +113,7 @@ func TestIntegrationTags(t *testing.T) {
 	t.Run("renaming and deleting a tag reach the server", func(t *testing.T) {
 		subject := "Tag renamed everywhere"
 		uid := deliver(subject)
-		pollInbox(t, sidecar, "acct", func(card map[string]any) bool { return str(card, "subject") == subject })
+		pollInbox(t, sidecar, "acct", func(card map[string]any) bool { return stringField(card, "subject") == subject })
 		callMap(t, sidecar, "messages.setTags", map[string]any{
 			"account": "acct", "folder": "INBOX", "uids": []uint32{uid}, "add": []string{"draftname"},
 		})
@@ -147,7 +147,7 @@ func TestIntegrationTags(t *testing.T) {
 	t.Run("a rule tags new mail and leaves mail already here", func(t *testing.T) {
 		old := "Invoice from before"
 		deliver(old)
-		pollInbox(t, sidecar, "acct", func(card map[string]any) bool { return str(card, "subject") == old })
+		pollInbox(t, sidecar, "acct", func(card map[string]any) bool { return stringField(card, "subject") == old })
 		callMap(t, sidecar, "rules.set", map[string]any{
 			"rules": []map[string]any{{"query": "subject:invoice", "tags": []string{"finance"}}},
 		})
@@ -168,7 +168,7 @@ func TestIntegrationTags(t *testing.T) {
 		kept := "Keepme please"
 		deliver(kept)
 		pollInbox(t, sidecar, "acct", func(message map[string]any) bool {
-			return str(message, "subject") == kept && message["seen"] == true && message["starred"] == true
+			return stringField(message, "subject") == kept && message["seen"] == true && message["starred"] == true
 		})
 		settled := func(flags string) bool {
 			return strings.Contains(flags, "\\Seen") && strings.Contains(flags, "\\Flagged")
@@ -185,9 +185,9 @@ func TestIntegrationTags(t *testing.T) {
 		bystander := "Stays right here"
 		deliver(binned)
 		deliver(bystander)
-		pollFolder(t, sidecar, "acct", "Trash", func(message map[string]any) bool { return str(message, "subject") == binned })
-		assertNoMessageInFolder(t, sidecar, "acct", "INBOX", func(message map[string]any) bool { return str(message, "subject") == binned })
-		pollInbox(t, sidecar, "acct", func(message map[string]any) bool { return str(message, "subject") == bystander })
+		pollFolder(t, sidecar, "acct", "Trash", func(message map[string]any) bool { return stringField(message, "subject") == binned })
+		assertNoMessageInFolder(t, sidecar, "acct", "INBOX", func(message map[string]any) bool { return stringField(message, "subject") == binned })
+		pollInbox(t, sidecar, "acct", func(message map[string]any) bool { return stringField(message, "subject") == bystander })
 
 		callMap(t, sidecar, "folders.create", map[string]any{"account": "acct", "name": "Receipts"})
 		callMap(t, sidecar, "folders.list", map[string]any{"account": "acct", "refresh": true})
@@ -196,8 +196,8 @@ func TestIntegrationTags(t *testing.T) {
 		})
 		filed := "Fileme away"
 		deliver(filed)
-		pollFolder(t, sidecar, "acct", "Receipts", func(message map[string]any) bool { return str(message, "subject") == filed })
-		assertNoMessageInFolder(t, sidecar, "acct", "INBOX", func(message map[string]any) bool { return str(message, "subject") == filed })
+		pollFolder(t, sidecar, "acct", "Receipts", func(message map[string]any) bool { return stringField(message, "subject") == filed })
+		assertNoMessageInFolder(t, sidecar, "acct", "INBOX", func(message map[string]any) bool { return stringField(message, "subject") == filed })
 
 		callMap(t, sidecar, "rules.set", map[string]any{
 			"rules": []map[string]any{
@@ -209,10 +209,10 @@ func TestIntegrationTags(t *testing.T) {
 		foreign := "Notmine at all"
 		deliver(copied)
 		deliver(foreign)
-		pollFolder(t, sidecar, "acct", "Receipts", func(message map[string]any) bool { return str(message, "subject") == copied })
-		pollInbox(t, sidecar, "acct", func(message map[string]any) bool { return str(message, "subject") == copied })
+		pollFolder(t, sidecar, "acct", "Receipts", func(message map[string]any) bool { return stringField(message, "subject") == copied })
+		pollInbox(t, sidecar, "acct", func(message map[string]any) bool { return stringField(message, "subject") == copied })
 		pollInbox(t, sidecar, "acct", func(message map[string]any) bool {
-			return str(message, "subject") == foreign && message["starred"] != true
+			return stringField(message, "subject") == foreign && message["starred"] != true
 		})
 
 		callMap(t, sidecar, "rules.set", map[string]any{
@@ -220,17 +220,17 @@ func TestIntegrationTags(t *testing.T) {
 		})
 		anything := "Anything at all"
 		deliver(anything)
-		pollFolder(t, sidecar, "acct", "Receipts", func(message map[string]any) bool { return str(message, "subject") == anything })
+		pollFolder(t, sidecar, "acct", "Receipts", func(message map[string]any) bool { return stringField(message, "subject") == anything })
 
 		// Delivered with no rule to take it, so only running one by hand can.
 		callMap(t, sidecar, "rules.set", map[string]any{"rules": []map[string]any{}})
 		late := "Bystander already here"
 		deliver(late)
-		pollInbox(t, sidecar, "acct", func(message map[string]any) bool { return str(message, "subject") == late })
+		pollInbox(t, sidecar, "acct", func(message map[string]any) bool { return stringField(message, "subject") == late })
 		saved := callMap(t, sidecar, "rules.set", map[string]any{
 			"rules": []map[string]any{{"query": "subject:bystander", "star": true}},
 		})
-		id := str(saved["rules"].([]any)[0].(map[string]any), "id")
+		id := stringField(saved["rules"].([]any)[0].(map[string]any), "id")
 		if matches := callMap(t, sidecar, "rules.matches", map[string]any{"id": id}); matches["count"] != float64(1) {
 			t.Fatalf("matches: %v", matches)
 		}
@@ -238,7 +238,7 @@ func TestIntegrationTags(t *testing.T) {
 			t.Fatalf("run: %v", run)
 		}
 		pollInbox(t, sidecar, "acct", func(message map[string]any) bool {
-			return str(message, "subject") == late && message["starred"] == true
+			return stringField(message, "subject") == late && message["starred"] == true
 		})
 	})
 }
@@ -259,7 +259,7 @@ func TestIntegrationRulesAcrossAccounts(t *testing.T) {
 		}, "body\r\n"))
 	}
 	subjectIs := func(subject string) func(map[string]any) bool {
-		return func(message map[string]any) bool { return str(message, "subject") == subject }
+		return func(message map[string]any) bool { return stringField(message, "subject") == subject }
 	}
 	// Mail only counts as new once the folder has been synced with something in it.
 	deliver("seed")
@@ -291,7 +291,7 @@ func TestIntegrationRulesAcrossAccounts(t *testing.T) {
 	saved := callMap(t, sidecar, "rules.set", map[string]any{
 		"rules": []map[string]any{{"query": "subject:existing", "copy_account": "b", "copy_folder": "Saved"}},
 	})
-	id := str(saved["rules"].([]any)[0].(map[string]any), "id")
+	id := stringField(saved["rules"].([]any)[0].(map[string]any), "id")
 	for range 2 {
 		if run := callMap(t, sidecar, "rules.run", map[string]any{"id": id}); run["count"] != float64(1) {
 			// The second run sees the first still queued, or done.
@@ -317,7 +317,7 @@ func TestIntegrationRulesAcrossAccounts(t *testing.T) {
 	saved = callMap(t, sidecar, "rules.set", map[string]any{
 		"rules": []map[string]any{{"query": "subject:resent", "copy_account": "b", "copy_folder": "Saved"}},
 	})
-	callMap(t, sidecar, "rules.run", map[string]any{"id": str(saved["rules"].([]any)[0].(map[string]any), "id")})
+	callMap(t, sidecar, "rules.run", map[string]any{"id": stringField(saved["rules"].([]any)[0].(map[string]any), "id")})
 	deadline := time.Now().Add(15 * time.Second)
 	for {
 		found = runCmd(t, dockerBin(t), "exec", server.container, "doveadm", "search", "-u", bob, "mailbox", "Saved", "header", "subject", "resent four")
@@ -337,12 +337,12 @@ func TestIntegrationRulesAcrossAccounts(t *testing.T) {
 	saved = callMap(t, sidecar, "rules.set", map[string]any{
 		"rules": []map[string]any{{"query": "subject:flagged", "copy_account": "b", "copy_folder": "Saved"}},
 	})
-	callMap(t, sidecar, "rules.run", map[string]any{"id": str(saved["rules"].([]any)[0].(map[string]any), "id")})
+	callMap(t, sidecar, "rules.run", map[string]any{"id": stringField(saved["rules"].([]any)[0].(map[string]any), "id")})
 	pollFolder(t, sidecar, "b", "Saved", subjectIs(flagged))
 	saved = callMap(t, sidecar, "rules.set", map[string]any{
 		"rules": []map[string]any{{"query": "subject:flagged", "star": true, "copy_account": "b", "copy_folder": "Saved"}},
 	})
-	callMap(t, sidecar, "rules.run", map[string]any{"id": str(saved["rules"].([]any)[0].(map[string]any), "id")})
+	callMap(t, sidecar, "rules.run", map[string]any{"id": stringField(saved["rules"].([]any)[0].(map[string]any), "id")})
 	deadline = time.Now().Add(15 * time.Second)
 	for !strings.Contains(runCmd(t, dockerBin(t), "exec", server.container, "doveadm", "fetch", "-u", bob, "flags", "mailbox", "Saved", "header", "subject", flagged), "\\Flagged") {
 		if time.Now().After(deadline) {
@@ -356,7 +356,7 @@ func TestIntegrationRulesAcrossAccounts(t *testing.T) {
 	saved = callMap(t, sidecar, "rules.set", map[string]any{
 		"rules": []map[string]any{{"query": "subject:existing", "move_to": "folder", "folder": "Saved", "folder_account": "b"}},
 	})
-	id = str(saved["rules"].([]any)[0].(map[string]any), "id")
+	id = stringField(saved["rules"].([]any)[0].(map[string]any), "id")
 	callMap(t, sidecar, "rules.run", map[string]any{"id": id})
 	pollFolder(t, sidecar, "a", "Trash", subjectIs(existing))
 	found = runCmd(t, dockerBin(t), "exec", server.container, "doveadm", "search", "-u", bob, "mailbox", "Saved", "header", "subject", existing)

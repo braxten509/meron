@@ -126,7 +126,7 @@ func TestReplaceTargetRejectsManagedChannel(t *testing.T) {
 }
 
 // A read-only install dir (a root-owned /opt) must fail before anything moves.
-func TestReplaceTargetUnwritableDir(t *testing.T) {
+func TestReplaceTargetUnwritableDirectory(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("root can write to a read-only directory")
 	}

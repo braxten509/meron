@@ -1,3 +1,7 @@
+// Checks the configuration contract for desktop mail tools.
+// Cases exercise granted settings operations, normalized
+// signatures and the account metadata available to a client.
+
 package main
 
 import (

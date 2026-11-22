@@ -135,11 +135,10 @@ func (sidecar *Sidecar) finishStarting(requestContext context.Context) {
 	}
 }
 
-// awaitCore holds a call until the core reads its stdin, so that a request's
-// timeout measures the request and not the startup in front of it. A store
-// upgrade is waited out however long it takes, because the UI says what is
-// happening. Any other stall (a keychain that never answers) still fails after
-// the call's own timeout, with the same error a late response would give.
+// awaitCore holds a call until the core reads its stdin, so that a request's timeout measures the
+// request and not the startup in front of it. A store upgrade is waited out however long it takes,
+// because the UI says what is happening. Any other stall (a keychain that never answers) still fails
+// after the call's own timeout, with the same error a late response would give.
 func (sidecar *Sidecar) awaitCore(method string, timeout time.Duration) error {
 	sidecar.mu.Lock()
 	coreUp := sidecar.coreUp
@@ -172,8 +171,8 @@ func sidecarEnv() []string {
 	// Pass storage/media paths explicitly so the Go bridge and Rust sidecar use
 	// the same dev or production profile.
 	env := append(os.Environ(),
-		"MERON_CORE_DB="+filepath.Join(appConfigDir(), "meron.db"),
-		"MERON_MEDIA_DIR="+mediaDir(),
+		"MERON_CORE_DB="+filepath.Join(appConfigDirectory(), "meron.db"),
+		"MERON_MEDIA_DIR="+mediaDirectory(),
 	)
 	// Pass the baked OAuth credentials down so the sidecar's refresh path can
 	// read them from the environment without its own deobfuscation.
@@ -290,8 +289,9 @@ func (sidecar *Sidecar) readLoop(requestContext context.Context, stdout io.Reade
 	}
 }
 
-// coreBinaryPath returns the path to the Rust core engine sidecar, resolving it
-// once and caching the result. Resolution order:
+// coreBinaryPath returns the path to the Rust core engine sidecar, resolving it once and caching the result.
+//
+// Resolution order:
 //
 //  1. MERON_CORE_SERVER env var (explicit override; used in dev and custom installs)
 //  2. a meron-core sitting beside the running executable (App Store builds, which
@@ -300,9 +300,8 @@ func (sidecar *Sidecar) readLoop(requestContext context.Context, stdout io.Reade
 //  3. the embedded sidecar, extracted to the cache dir (release builds)
 //  4. the freshly built debug binary in the sibling Rust project (plain `wails dev`)
 //
-// Resolving relative to the working directory was the cause of the release
-// binary showing the setup screen: launched outside the repo, it never found
-// the sidecar, so account.list returned empty.
+// Resolving relative to the working directory was the cause of the release binary showing the setup
+// screen: launched outside the repo, it never found the sidecar, so account.list returned empty.
 func coreBinaryPath() string {
 	mailServerOnce.Do(func() {
 		mailServerResolved = resolveMailServerPath()
@@ -359,11 +358,10 @@ func resolveMailServerPath() string {
 	return filepath.Join("..", "meron-core", "target", "debug", sidecarBinaryName)
 }
 
-// bundledSidecarPath returns the sidecar shipped next to the running executable,
-// or "" when there isn't one. The App Store build puts it at
-// Meron.app/Contents/MacOS/meron-core and signs it as part of the bundle: a
-// sandboxed app is not allowed to exec a binary it extracted to its cache dir,
-// and App Review rejects executable code delivered outside the bundle anyway.
+// bundledSidecarPath returns the sidecar shipped next to the running executable, or "" when there
+// isn't one. The App Store build puts it at Meron.app/Contents/MacOS/meron-core and signs it as part
+// of the bundle: a sandboxed app is not allowed to exec a binary it extracted to its cache dir, and
+// App Review rejects executable code delivered outside the bundle anyway.
 func bundledSidecarPath() string {
 	exe, err := os.Executable()
 	if err != nil {
@@ -394,7 +392,7 @@ func bundledSidecarPathIn(directory string) string {
 func extractEmbeddedSidecar() (string, error) {
 	sum := sha256.Sum256(embeddedSidecar)
 	name := "meron-core-" + hex.EncodeToString(sum[:8]) + sidecarExeSuffix
-	directory := filepath.Join(appCacheDir(), "bin")
+	directory := filepath.Join(appCacheDirectory(), "bin")
 	if err := os.MkdirAll(directory, 0o755); err != nil {
 		return "", err
 	}

@@ -199,14 +199,17 @@ export function useConversationScroll(
     [],
   )
 
-  /** Keeps the reader's place through every message expanding or collapsing at
-   *  once: called before the change, it pins the message at the top of the
-   *  viewport where it is, until the reader scrolls. Collapsing, a position
-   *  deep inside that message no longer exists, so its summary is brought to
-   *  the top instead. A reader at the end of the thread is reading the newest
-   *  message, which no menu action collapses, so that one is held instead:
-   *  holding whatever summary line happened to sit at the top would carry a
-   *  short thread off to its beginning as everything above the newest opens. */
+  /**
+   * Keep the same message in view during a conversation-wide layout change.
+   *
+   * Keeps the reader's place through every message expanding or collapsing at once: called before the change,
+   * it pins the message at the top of the viewport where it is, until the reader scrolls. Collapsing, a
+   * position deep inside that message no longer exists, so its summary is brought to the top instead.
+   *
+   * A reader at the end of the thread is reading the newest message, which no menu action collapses, so that
+   * one is held instead: holding whatever summary line happened to sit at the top would carry a short thread
+   * off to its beginning as everything above the newest opens.
+   */
   const holdTopMessage = useCallback(
     (collapsing: boolean) => {
       const container = scrollRef.current

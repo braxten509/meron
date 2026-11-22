@@ -156,7 +156,7 @@ func resolveMediaPath(key string) (string, error) {
 			return "", errors.New("invalid attachment key")
 		}
 	}
-	root := mediaDir()
+	root := mediaDirectory()
 	src := filepath.Join(root, filepath.Clean("/"+key))
 	if rel, err := filepath.Rel(root, src); err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
 		return "", errors.New("invalid attachment key")
@@ -177,12 +177,12 @@ func imageMimeForPath(path string) string {
 	return "image/png"
 }
 
-// copyImage puts an attachment stored under the media dir onto the system
-// clipboard as an image. The webview's native "Copy Image" is inert in the
-// Wails webview, so the gallery's custom context menu calls this instead. It
-// mirrors readClipboardImage in reverse — going through NSPasteboard on macOS
-// and wl-copy / xclip elsewhere rather than the webview clipboard, which can't
-// reliably carry images here.
+// copyImage puts an attachment stored under the media dir onto the system clipboard as an image.
+//
+// The webview's native "Copy Image" is inert in the Wails webview, so the gallery's custom context
+// menu calls this instead. It mirrors readClipboardImage in reverse — going through NSPasteboard on
+// macOS and wl-copy / xclip elsewhere rather than the webview clipboard, which can't reliably carry
+// images here.
 func (a *App) copyImage(payload map[string]any) (any, error) {
 	key, _ := payload["key"].(string)
 	src, err := resolveMediaPath(key)
@@ -238,7 +238,7 @@ func (a *App) writeMediaFile(payload map[string]any) (any, error) {
 		return nil, fmt.Errorf("decode base64: %w", err)
 	}
 
-	root := mediaDir()
+	root := mediaDirectory()
 	if err := os.MkdirAll(root, 0755); err != nil {
 		return nil, fmt.Errorf("create media dir: %w", err)
 	}
@@ -255,7 +255,7 @@ func (a *App) writeMediaFile(payload map[string]any) (any, error) {
 		return nil, fmt.Errorf("write media file: %w", err)
 	}
 
-	// Served by mediaHandler at this path; both sides agree on mediaDir().
+	// Served by mediaHandler at this path; both sides agree on mediaDirectory().
 	return "/media/" + key, nil
 }
 
@@ -301,7 +301,7 @@ func (a *App) writeAvatarFile(payload map[string]any) (any, error) {
 		return nil, errors.New("invalid account id")
 	}
 
-	root := filepath.Join(mediaDir(), "avatars", safeAccount)
+	root := filepath.Join(mediaDirectory(), "avatars", safeAccount)
 	if err := os.MkdirAll(root, 0755); err != nil {
 		return nil, fmt.Errorf("create avatar dir: %w", err)
 	}
@@ -357,7 +357,7 @@ func (a *App) writeChatWallpaperFile(payload map[string]any) (any, error) {
 		return nil, errors.New("invalid account id")
 	}
 
-	root := filepath.Join(mediaDir(), "wallpapers", safeAccount)
+	root := filepath.Join(mediaDirectory(), "wallpapers", safeAccount)
 	if err := os.MkdirAll(root, 0755); err != nil {
 		return nil, fmt.Errorf("create wallpaper dir: %w", err)
 	}
@@ -371,13 +371,12 @@ func (a *App) writeChatWallpaperFile(payload map[string]any) (any, error) {
 	return map[string]any{"url": "/media/wallpapers/" + safeAccount + "/" + key}, nil
 }
 
-// pruneComposerMedia deletes loose inline-image files written by writeMediaFile
-// that are no longer referenced by any persisted compose draft. The frontend
-// passes the set of `/media/<key>` keys it still references (scanned from
-// persisted draft HTML on boot); every other regular file in the media root is
-// an orphan from a discarded or sent draft and gets removed. Per-account
-// attachment subdirectories (written by the sidecar) are never touched — only
-// regular files at the root, which are exclusively writeMediaFile's output.
+// pruneComposerMedia deletes loose inline-image files written by writeMediaFile that are no longer referenced by any persisted compose draft.
+//
+// The frontend passes the set of `/media/<key>` keys it still references (scanned from persisted draft
+// HTML on boot); every other regular file in the media root is an orphan from a discarded or sent
+// draft and gets removed. Per-account attachment subdirectories (written by the sidecar) are never
+// touched — only regular files at the root, which are exclusively writeMediaFile's output.
 func (a *App) pruneComposerMedia(payload map[string]any) (any, error) {
 	keep := map[string]bool{}
 	if raw, ok := payload["keys"].([]any); ok {
@@ -388,7 +387,7 @@ func (a *App) pruneComposerMedia(payload map[string]any) (any, error) {
 		}
 	}
 
-	root := mediaDir()
+	root := mediaDirectory()
 	entries, err := os.ReadDir(root)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -409,7 +408,7 @@ func (a *App) pruneComposerMedia(payload map[string]any) (any, error) {
 	return map[string]any{"removed": removed}, nil
 }
 
-// downloadAndSaveAvatar downloads a remote image and writes it locally under mediaDir/avatars/<safeAccount>.
+// downloadAndSaveAvatar downloads a remote image and writes it locally under mediaDirectory/avatars/<safeAccount>.
 // It returns the local media URL (e.g. "/media/avatars/account-id/uuid.ext"), or the original URL on error.
 func (a *App) downloadAndSaveAvatar(accountID, avatarURL string) string {
 	if avatarURL == "" || strings.HasPrefix(avatarURL, "/media/") {
@@ -443,7 +442,7 @@ func (a *App) downloadAndSaveAvatar(accountID, avatarURL string) string {
 	return avatarURL
 }
 
-// saveAvatar writes image bytes under mediaDir/avatars/<safeAccount> and
+// saveAvatar writes image bytes under mediaDirectory/avatars/<safeAccount> and
 // returns the local media URL, or "" on error.
 func (a *App) saveAvatar(accountID string, raw []byte) string {
 	safeAccount := strings.Map(func(r rune) rune {
@@ -473,7 +472,7 @@ func (a *App) saveAvatar(accountID string, raw []byte) string {
 		ext = ".jpg"
 	}
 
-	root := filepath.Join(mediaDir(), "avatars", safeAccount)
+	root := filepath.Join(mediaDirectory(), "avatars", safeAccount)
 	if err := os.MkdirAll(root, 0755); err != nil {
 		a.logf("create avatar dir failed: %v", err)
 		return ""

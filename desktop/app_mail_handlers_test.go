@@ -500,7 +500,7 @@ func TestOpenAttachmentRefusesTraversalAndUnlistedTypes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.HasPrefix(escaped, mediaDir()+string(os.PathSeparator)) {
+	if !strings.HasPrefix(escaped, mediaDirectory()+string(os.PathSeparator)) {
 		t.Fatalf("key escaped the media root: %s", escaped)
 	}
 

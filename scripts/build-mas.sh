@@ -43,8 +43,8 @@ BUNDLE_ID="jp.nonbili.meron"
 # Wails names the bundle after outputfilename ("meron"); the shipped app is
 # "Meron.app", the same rename the DMG job does with ditto.
 BUILT_APP="desktop/build/bin/meron.app"
-STAGE_DIR="dist/mas"
-APP_PATH="${STAGE_DIR}/${APP_NAME}.app"
+STAGE_DIRECTORY="dist/mas"
+APP_PATH="${STAGE_DIRECTORY}/${APP_NAME}.app"
 PKG_PATH="dist/${APP_NAME}-mas.pkg"
 MAS_ARCHS="${MAS_ARCHS:-universal}"
 
@@ -203,8 +203,8 @@ fi
 # ------------------------------------------------------------- stage bundle
 
 echo "==> Staging the bundle as ${APP_NAME}.app"
-rm -rf "$STAGE_DIR"
-mkdir -p "$STAGE_DIR"
+rm -rf "$STAGE_DIRECTORY"
+mkdir -p "$STAGE_DIRECTORY"
 ditto "$BUILT_APP" "$APP_PATH"
 
 echo "==> Staging the sidecar and provisioning profile into the bundle"

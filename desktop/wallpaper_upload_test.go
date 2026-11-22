@@ -44,7 +44,7 @@ func TestWriteChatWallpaperFileWritesValidatedImage(t *testing.T) {
 	if strings.Contains(accountPart, ".") || strings.Contains(accountPart, "/") {
 		t.Fatalf("unsafe account path segment in url = %q", url)
 	}
-	path := filepath.Join(mediaDir(), strings.TrimPrefix(url, "/media/"))
+	path := filepath.Join(mediaDirectory(), strings.TrimPrefix(url, "/media/"))
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("wallpaper file missing: %v", err)
 	}

@@ -28,10 +28,10 @@ func checkUnifiedInboxMergesAndWritesAcrossAccounts(t *testing.T, sidecar *Sidec
 		t.Fatalf("send unified fixture: %v", err)
 	}
 	pollInbox(t, sidecar, "alice", func(m map[string]any) bool {
-		return str(m, "subject") == unifiedSubject
+		return stringField(m, "subject") == unifiedSubject
 	})
 	pollInbox(t, sidecar, "bob", func(m map[string]any) bool {
-		return str(m, "subject") == subject
+		return stringField(m, "subject") == subject
 	})
 
 	// refresh:false: both stores were just primed, and the merge is the thing
@@ -54,7 +54,7 @@ func checkUnifiedInboxMergesAndWritesAcrossAccounts(t *testing.T, sidecar *Sidec
 		if !ok {
 			t.Fatalf("unified thread has type %T", item)
 		}
-		seen[str(card, "account_id")] = true
+		seen[stringField(card, "account_id")] = true
 		date, _ := card["date"].(float64)
 		if lastDate >= 0 && int64(date) > lastDate {
 			t.Fatalf("unified page is not sorted newest first: %v", threads)
@@ -119,10 +119,10 @@ func checkUnifiedMarkAllReadReportsAPartialFailure(t *testing.T) {
 		t.Fatalf("send bob partial-failure fixture: %v", err)
 	}
 	aliceMessage := pollInbox(t, sidecar, "alice", func(m map[string]any) bool {
-		return str(m, "subject") == aliceSubject
+		return stringField(m, "subject") == aliceSubject
 	})
 	bobMessage := pollInbox(t, sidecar, "bob", func(m map[string]any) bool {
-		return str(m, "subject") == bobSubject
+		return stringField(m, "subject") == bobSubject
 	})
 
 	broken := "itest-unified-broken"
@@ -133,7 +133,7 @@ func checkUnifiedMarkAllReadReportsAPartialFailure(t *testing.T) {
 		}
 	})
 	pollInbox(t, sidecar, broken, func(m map[string]any) bool {
-		return str(m, "subject") == bobSubject
+		return stringField(m, "subject") == bobSubject
 	})
 	callMap(t, sidecar, "account.connect", map[string]any{
 		"account":   broken,
@@ -160,7 +160,7 @@ func checkUnifiedMarkAllReadReportsAPartialFailure(t *testing.T) {
 		t.Fatalf("markAllReadUnified failures len = %d, want 1: %v", len(failures), result)
 	}
 	failure, ok := failures[0].(map[string]any)
-	if !ok || str(failure, "account_id") != broken {
+	if !ok || stringField(failure, "account_id") != broken {
 		t.Fatalf("markAllReadUnified failure = %v, want account %s", failures[0], broken)
 	}
 	folderUnreads, _ := result["folder_unreads"].(map[string]any)
@@ -173,8 +173,8 @@ func checkUnifiedMarkAllReadReportsAPartialFailure(t *testing.T) {
 		user string
 		uid  uint32
 	}{
-		{"alice@mail.test", num(aliceMessage, "uid")},
-		{"bob@mail.test", num(bobMessage, "uid")},
+		{"alice@mail.test", numericField(aliceMessage, "uid")},
+		{"bob@mail.test", numericField(bobMessage, "uid")},
 	} {
 		if flags := imapFlags(t, server.imapPort, fixture.user, testPassword, "INBOX", fixture.uid); !strings.Contains(flags, `\Seen`) {
 			t.Fatalf("healthy account %s uid %d was not marked read on the server: %q", fixture.user, fixture.uid, flags)
@@ -222,7 +222,7 @@ func checkUnifiedCursorsAdvanceEachAccountIndependently(t *testing.T) {
 	}
 	for _, fixture := range fixtures {
 		pollInbox(t, sidecar, fixture.account, func(m map[string]any) bool {
-			return str(m, "subject") == fixture.subject
+			return stringField(m, "subject") == fixture.subject
 		})
 	}
 
@@ -253,7 +253,7 @@ func checkUnifiedCursorsAdvanceEachAccountIndependently(t *testing.T) {
 			if !ok {
 				t.Fatalf("unified cursor card has type %T", item)
 			}
-			id := str(card, "id")
+			id := stringField(card, "id")
 			if id == "" {
 				t.Fatalf("unified cursor card has no id: %v", card)
 			}
@@ -261,8 +261,8 @@ func checkUnifiedCursorsAdvanceEachAccountIndependently(t *testing.T) {
 				t.Fatalf("unified cursor repeated card %q: %v", id, card)
 			}
 			seenIDs[id] = true
-			accountsOnPage[str(card, "account_id")] = true
-			seenSubjects[str(card, "subject")] = true
+			accountsOnPage[stringField(card, "account_id")] = true
+			seenSubjects[stringField(card, "subject")] = true
 			date, _ := card["date"].(float64)
 			if lastDate >= 0 && int64(date) > lastDate {
 				t.Fatalf("unified cursor page is not sorted newest first: %v", threads)

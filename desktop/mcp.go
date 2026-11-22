@@ -1,3 +1,7 @@
+// Hosts the desktop mail tool service and its listener. Connection
+// settings control the local address, while requests are routed
+// through the service configuration and registered mail tools.
+
 package main
 
 import (
@@ -88,7 +92,7 @@ type mcpService struct {
 type mcpClientContextKey struct{}
 
 func (a *App) startMCP() {
-	s := &mcpService{app: a, path: filepath.Join(appConfigDir(), "mcp.json")}
+	s := &mcpService{app: a, path: filepath.Join(appConfigDirectory(), "mcp.json")}
 	a.mcp = s
 	data, operationError := os.ReadFile(s.path)
 	if operationError == nil {

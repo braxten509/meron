@@ -13,11 +13,10 @@ import (
 	"path/filepath"
 )
 
-// applyUpdate replaces the running AppImage (or the raw binary from the
-// tarball) with the downloaded payload and queues a relaunch.
+// applyUpdate replaces the running AppImage (or the raw binary from the tarball) with the downloaded payload and queues a relaunch.
 //
-// The replacement is a rename within the target's own directory, so it is
-// atomic and the running process keeps the old inode until it exits.
+// The replacement is a rename within the target's own directory, so it is atomic and the running
+// process keeps the old inode until it exits.
 func applyUpdate(channel updateChannel, payload string) error {
 	if operationError := replaceTarget(channel, payload); operationError != nil {
 		return operationError
@@ -33,7 +32,7 @@ func replaceTarget(channel updateChannel, payload string) error {
 		return fmt.Errorf("update: unsupported channel %q", channel.Kind)
 	}
 	parent := filepath.Dir(target)
-	if operationError := ensureWritableDir(parent); operationError != nil {
+	if operationError := ensureWritableDirectory(parent); operationError != nil {
 		return fmt.Errorf("update: %s is not writable — install the update manually: %w", parent, operationError)
 	}
 

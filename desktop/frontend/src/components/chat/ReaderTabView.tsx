@@ -93,10 +93,10 @@ export function ReaderTabView({ tab }: { tab: MessageTab }) {
         const imageElement = (event.target as Element | null)?.closest?.('[data-media-key]') as HTMLElement | null
         const imageKey =
           (event.nativeEvent as { meronImageKey?: string }).meronImageKey ?? imageElement?.dataset.mediaKey
-        const img = (event.target as Element | null)?.closest?.('img') as HTMLImageElement | null
+        const clickedImage = (event.target as Element | null)?.closest?.('img') as HTMLImageElement | null
         const frameImage =
           (event.nativeEvent as { meronImage?: MessageContextMenuState['image'] }).meronImage ??
-          (img ? (imageSource(img.currentSrc || img.src) ?? undefined) : undefined)
+          (clickedImage ? (imageSource(clickedImage.currentSrc || clickedImage.src) ?? undefined) : undefined)
         if (!imageKey && !frameImage && (event.target as Element | null)?.closest?.('img')) return
         event.preventDefault()
         const image = imageKey

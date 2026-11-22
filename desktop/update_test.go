@@ -171,7 +171,7 @@ func TestDownloadToVerifiesPayload(t *testing.T) {
 
 func assertUpdateCacheEmpty(t *testing.T) {
 	t.Helper()
-	entries, err := os.ReadDir(updateCacheDir())
+	entries, err := os.ReadDir(updateCacheDirectory())
 	if err != nil {
 		if os.IsNotExist(err) {
 			return

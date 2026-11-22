@@ -1,3 +1,7 @@
+// Validates account and settings changes requested through
+// desktop tools. The service applies its configuration
+// permissions before forwarding an accepted change to the app.
+
 package main
 
 import (

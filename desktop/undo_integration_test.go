@@ -15,11 +15,10 @@ import (
 	"time"
 )
 
-// Undo of a move, archive, or move to Trash, driven through the same App
-// handlers the frontend calls. Each undo moves back the `target_uids` the
-// action reported, so every case checks those against the server — over an
-// independent IMAP connection, not the core cache — and then that the undo
-// put back exactly those messages.
+// Undo of a move, archive, or move to Trash, driven through the same App handlers the frontend calls.
+// Each undo moves back the `target_uids` the action reported, so every case checks those against the
+// server — over an independent IMAP connection, not the core cache — and then that the undo put back
+// exactly those messages.
 func TestIntegrationUndo(t *testing.T) {
 	server := startMailServer(t)
 	sidecar, _ := startSidecar(t)
@@ -43,11 +42,11 @@ func TestIntegrationUndo(t *testing.T) {
 		}
 		headers = append(headers, extra...)
 		imapAppend(t, server.imapPort, user, testPassword, "INBOX", rawMessage(headers, "body of "+subject))
-		return pollInbox(t, sidecar, "bob", func(m map[string]any) bool { return str(m, "subject") == subject })
+		return pollInbox(t, sidecar, "bob", func(m map[string]any) bool { return stringField(m, "subject") == subject })
 	}
 	threadID := func(t *testing.T, row map[string]any) string {
 		t.Helper()
-		key := str(row, "thread_key")
+		key := stringField(row, "thread_key")
 		if key == "" {
 			t.Fatalf("row has no thread_key: %v", row)
 		}
@@ -76,7 +75,7 @@ func TestIntegrationUndo(t *testing.T) {
 		for _, uid := range targetUIDs(t, result) {
 			ids = append(ids, strconv.FormatUint(uint64(uid), 10))
 		}
-		movedThreadID := str(result, "thread_id")
+		movedThreadID := stringField(result, "thread_id")
 		if movedThreadID == "" || !strings.Contains(movedThreadID, "#"+from+"#") {
 			t.Fatalf("result thread_id %q does not point into %s: %v", movedThreadID, from, result)
 		}
@@ -101,7 +100,7 @@ func TestIntegrationUndo(t *testing.T) {
 			t.Fatalf("target_uids = %v, server Trash copies = %v", trashed, got)
 		}
 
-		if moved := num(undo(t, result, "Trash", "INBOX"), "moved"); moved != 1 {
+		if moved := numericField(undo(t, result, "Trash", "INBOX"), "moved"); moved != 1 {
 			t.Fatalf("undo moved %d, want 1", moved)
 		}
 		if got := onServer(t, "INBOX", messageID); len(got) != 1 {
@@ -121,10 +120,10 @@ func TestIntegrationUndo(t *testing.T) {
 
 		result := call(t, "mail.delete", app.mailDelete, map[string]any{"thread_id": threadID(t, row)})
 		back := call(t, "mail.move", app.mailMove, map[string]any{
-			"thread_id":        str(result, "thread_id"),
+			"thread_id":        stringField(result, "thread_id"),
 			"target_folder_id": "INBOX",
 		})
-		if moved := num(back, "moved"); moved != 1 {
+		if moved := numericField(back, "moved"); moved != 1 {
 			t.Fatalf("thread-key move moved %d, want 1: %v", moved, back)
 		}
 		if got := onServer(t, "INBOX", messageID); len(got) != 1 {
@@ -139,8 +138,8 @@ func TestIntegrationUndo(t *testing.T) {
 		root := deliver(t, subject, rootID)
 		reply := deliver(t, "Re: "+subject, replyID,
 			"In-Reply-To: <"+rootID+">", "References: <"+rootID+">")
-		if str(root, "thread_key") != str(reply, "thread_key") {
-			t.Fatalf("reply did not thread with root: %q vs %q", str(root, "thread_key"), str(reply, "thread_key"))
+		if stringField(root, "thread_key") != stringField(reply, "thread_key") {
+			t.Fatalf("reply did not thread with root: %q vs %q", stringField(root, "thread_key"), stringField(reply, "thread_key"))
 		}
 		thread := threadID(t, root)
 
@@ -148,17 +147,17 @@ func TestIntegrationUndo(t *testing.T) {
 		// whole conversation, and only the reply's deletion is being undone.
 		call(t, "mail.delete", app.mailDelete, map[string]any{
 			"thread_id":   thread,
-			"message_ids": []any{strconv.FormatUint(uint64(num(root, "uid")), 10)},
+			"message_ids": []any{strconv.FormatUint(uint64(numericField(root, "uid")), 10)},
 		})
 		result := call(t, "mail.delete", app.mailDelete, map[string]any{
 			"thread_id":   thread,
-			"message_ids": []any{strconv.FormatUint(uint64(num(reply, "uid")), 10)},
+			"message_ids": []any{strconv.FormatUint(uint64(numericField(reply, "uid")), 10)},
 		})
 		if got := onServer(t, "Trash", replyID); !slices.Equal(targetUIDs(t, result), got) {
 			t.Fatalf("target_uids = %v, server Trash reply copies = %v", targetUIDs(t, result), got)
 		}
 
-		if moved := num(undo(t, result, "Trash", "INBOX"), "moved"); moved != 1 {
+		if moved := numericField(undo(t, result, "Trash", "INBOX"), "moved"); moved != 1 {
 			t.Fatalf("undo moved %d, want 1", moved)
 		}
 		if got := onServer(t, "INBOX", replyID); len(got) != 1 {
@@ -177,15 +176,15 @@ func TestIntegrationUndo(t *testing.T) {
 		// reported copy can bring it back.
 		subject := "Undo no message id " + nonce
 		row := deliver(t, subject, "")
-		if !strings.HasPrefix(str(row, "thread_key"), "uid:") {
-			t.Fatalf("expected a uid-derived thread key, got %q", str(row, "thread_key"))
+		if !strings.HasPrefix(stringField(row, "thread_key"), "uid:") {
+			t.Fatalf("expected a uid-derived thread key, got %q", stringField(row, "thread_key"))
 		}
 
 		result := call(t, "mail.delete", app.mailDelete, map[string]any{"thread_id": threadID(t, row)})
 		if got := imapSearchSubject(t, server.imapPort, user, testPassword, "Trash", subject); !slices.Equal(targetUIDs(t, result), got) {
 			t.Fatalf("target_uids = %v, server Trash copies = %v", targetUIDs(t, result), got)
 		}
-		if moved := num(undo(t, result, "Trash", "INBOX"), "moved"); moved != 1 {
+		if moved := numericField(undo(t, result, "Trash", "INBOX"), "moved"); moved != 1 {
 			t.Fatalf("undo moved %d, want 1", moved)
 		}
 		if got := imapSearchSubject(t, server.imapPort, user, testPassword, "INBOX", subject); len(got) != 1 {
@@ -207,7 +206,7 @@ func TestIntegrationUndo(t *testing.T) {
 		}
 		// mail.move reports no thread_id of its own; the frontend derives it.
 		result["thread_id"] = strings.Replace(threadID(t, row), "#INBOX#", "#ITestUndo#", 1)
-		if moved := num(undo(t, result, "ITestUndo", "INBOX"), "moved"); moved != 1 {
+		if moved := numericField(undo(t, result, "ITestUndo", "INBOX"), "moved"); moved != 1 {
 			t.Fatalf("undo moved %d, want 1", moved)
 		}
 		if got := onServer(t, "INBOX", messageID); len(got) != 1 {
@@ -250,7 +249,7 @@ func TestIntegrationUndo(t *testing.T) {
 			t.Fatalf("target_uids has %d of %d copies: %v, server %v", len(got), total, got, moved)
 		}
 		result["thread_id"] = fmt.Sprintf("bob#ITestUndoBulk#%d", moved[0])
-		if n := num(undo(t, result, "ITestUndoBulk", "INBOX"), "moved"); n != total {
+		if n := numericField(undo(t, result, "ITestUndoBulk", "INBOX"), "moved"); n != total {
 			t.Fatalf("undo moved %d, want %d", n, total)
 		}
 		if got := imapSearchSubject(t, server.imapPort, user, testPassword, "ITestUndoBulk", subject); len(got) != 0 {
@@ -263,14 +262,14 @@ func TestIntegrationUndo(t *testing.T) {
 		row := deliver(t, "Undo archive "+nonce, messageID)
 
 		result := call(t, "mail.archive", app.mailArchive, map[string]any{"thread_id": threadID(t, row)})
-		archive := str(result, "folder")
+		archive := stringField(result, "folder")
 		if archive == "" {
 			t.Fatalf("mail.archive reported no folder: %v", result)
 		}
 		if got := onServer(t, archive, messageID); len(got) != 1 || !slices.Equal(targetUIDs(t, result), got) {
 			t.Fatalf("target_uids = %v, server %s copies = %v", targetUIDs(t, result), archive, got)
 		}
-		if moved := num(undo(t, result, archive, "INBOX"), "moved"); moved != 1 {
+		if moved := numericField(undo(t, result, archive, "INBOX"), "moved"); moved != 1 {
 			t.Fatalf("undo moved %d, want 1", moved)
 		}
 		if got := onServer(t, "INBOX", messageID); len(got) != 1 {

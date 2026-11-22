@@ -43,7 +43,7 @@ func TestDownloadAndSaveAvatar(t *testing.T) {
 	}
 
 	// Verify file exists on disk
-	path := filepath.Join(mediaDir(), strings.TrimPrefix(localURL, "/media/"))
+	path := filepath.Join(mediaDirectory(), strings.TrimPrefix(localURL, "/media/"))
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("downloaded avatar file missing: %v", err)
 	}
@@ -87,7 +87,7 @@ func TestAccountAddOAuthSavesProviderPhoto(t *testing.T) {
 			if !strings.HasPrefix(avatar, "/media/avatars/me-example-com/") || !strings.HasSuffix(avatar, ".jpg") {
 				t.Fatalf("connect avatar_url = %q", avatar)
 			}
-			saved, err := os.ReadFile(filepath.Join(mediaDir(), strings.TrimPrefix(avatar, "/media/")))
+			saved, err := os.ReadFile(filepath.Join(mediaDirectory(), strings.TrimPrefix(avatar, "/media/")))
 			if err != nil || string(saved) != string(photo) {
 				t.Fatalf("saved photo = %q, %v", saved, err)
 			}

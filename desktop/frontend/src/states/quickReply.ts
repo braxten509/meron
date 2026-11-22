@@ -59,12 +59,14 @@ ui$.selectedThread.onChange(({ value }) => {
 })
 
 /**
- * Seed the quick reply with the replying account's signature, as the box the
- * user starts typing into rather than something stapled on at send time — the
- * rule the full composer follows, and what every other mail client shows.
+ * Initialize a new quick reply with the sending account's signature.
  *
- * Replaces whatever the box holds, so it is only ever called on a fresh quick
- * reply: a thread switch, or the clear after a send or an escalation.
+ * Seed the quick reply with the replying account's signature, as the box the user starts typing into rather
+ * than something stapled on at send time — the rule the full composer follows, and what every other mail
+ * client shows.
+ *
+ * Replaces whatever the box holds, so it is only ever called on a fresh quick reply: a thread switch, or
+ * the clear after a send or an escalation.
  */
 export function seedQuickReplySignature() {
   watchQuickReplySignatureSources()

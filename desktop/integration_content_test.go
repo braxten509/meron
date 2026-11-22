@@ -33,15 +33,15 @@ func checkEncodedSubjectAndQuotedPrintableBodyDecode(t *testing.T, sidecar *Side
 	}, "caf=C3=A9 pi=C3=B1a "+nonce))
 
 	row := pollInbox(t, sidecar, "bob", func(m map[string]any) bool {
-		return str(m, "subject") == want
+		return stringField(m, "subject") == want
 	})
 	thread := callMap(t, sidecar, "messages.thread", map[string]any{
 		"account":    "bob",
 		"folder":     "INBOX",
-		"thread_key": str(row, "thread_key"),
+		"thread_key": stringField(row, "thread_key"),
 	})
 	message := firstThreadMessage(t, thread)
-	if body := str(message, "body"); !strings.Contains(body, "café piña") {
+	if body := stringField(message, "body"); !strings.Contains(body, "café piña") {
 		t.Fatalf("quoted-printable body = %q, want it to contain %q", body, "café piña")
 	}
 }
@@ -74,18 +74,18 @@ func checkMultipartAlternativeKeepsBothTextAndHtml(t *testing.T, sidecar *Sideca
 	}, body))
 
 	row := pollInbox(t, sidecar, "bob", func(m map[string]any) bool {
-		return str(m, "subject") == altSubject
+		return stringField(m, "subject") == altSubject
 	})
 	thread := callMap(t, sidecar, "messages.thread", map[string]any{
 		"account":    "bob",
 		"folder":     "INBOX",
-		"thread_key": str(row, "thread_key"),
+		"thread_key": stringField(row, "thread_key"),
 	})
 	message := firstThreadMessage(t, thread)
-	if text := str(message, "body"); !strings.Contains(text, "plain part "+nonce) {
+	if text := stringField(message, "body"); !strings.Contains(text, "plain part "+nonce) {
 		t.Fatalf("body = %q, want the text/plain part", text)
 	}
-	if html := str(message, "body_html"); !strings.Contains(html, "html part "+nonce) {
+	if html := stringField(message, "body_html"); !strings.Contains(html, "html part "+nonce) {
 		t.Fatalf("body_html = %q, want the text/html part", html)
 	}
 }
@@ -145,18 +145,18 @@ func checkNestedMultipartKeepsInlineAndDownloadableAttachments(t *testing.T) {
 	}, body))
 
 	row := pollInbox(t, sidecar, "bob", func(m map[string]any) bool {
-		return str(m, "subject") == nestedSubject
+		return stringField(m, "subject") == nestedSubject
 	})
 	thread := callMap(t, sidecar, "messages.thread", map[string]any{
 		"account":    "bob",
 		"folder":     "INBOX",
-		"thread_key": str(row, "thread_key"),
+		"thread_key": stringField(row, "thread_key"),
 	})
 	message := firstThreadMessage(t, thread)
-	if text := str(message, "body"); !strings.Contains(text, "nested plain "+nonce) {
+	if text := stringField(message, "body"); !strings.Contains(text, "nested plain "+nonce) {
 		t.Fatalf("nested MIME body = %q, want text/plain part", text)
 	}
-	html := str(message, "body_html")
+	html := stringField(message, "body_html")
 	if !strings.Contains(html, "nested html") || strings.Contains(html, "cid:"+contentID) || !strings.Contains(html, "/media/") {
 		t.Fatalf("nested MIME HTML did not rewrite inline CID: %q", html)
 	}
@@ -166,7 +166,7 @@ func checkNestedMultipartKeepsInlineAndDownloadableAttachments(t *testing.T) {
 	}
 	byName := map[string]map[string]any{}
 	for _, attachment := range attachments {
-		byName[str(attachment, "filename")] = attachment
+		byName[stringField(attachment, "filename")] = attachment
 	}
 	for _, expected := range []struct {
 		name string
@@ -179,8 +179,8 @@ func checkNestedMultipartKeepsInlineAndDownloadableAttachments(t *testing.T) {
 		if !ok {
 			t.Fatalf("nested MIME attachment %q missing: %v", expected.name, attachments)
 		}
-		key := str(attachment, "key")
-		got, err := os.ReadFile(filepath.Join(mediaDir(), key))
+		key := stringField(attachment, "key")
+		got, err := os.ReadFile(filepath.Join(mediaDirectory(), key))
 		if err != nil {
 			t.Fatalf("read nested MIME attachment %q: %v", expected.name, err)
 		}
@@ -203,9 +203,9 @@ func checkMessageWithoutAMessageIdStillThreads(t *testing.T, sidecar *Sidecar, s
 	}, "no Message-ID header at all"))
 
 	row := pollInbox(t, sidecar, "bob", func(m map[string]any) bool {
-		return str(m, "subject") == bareSubject
+		return stringField(m, "subject") == bareSubject
 	})
-	threadKey := str(row, "thread_key")
+	threadKey := stringField(row, "thread_key")
 	if threadKey == "" {
 		t.Fatalf("message without a Message-ID got no thread_key: %v", row)
 	}
@@ -246,23 +246,23 @@ func checkClearingTheAttachmentCacheRefetchesTheBytes(t *testing.T, sidecar *Sid
 
 	attachmentSubject := "Meron integration attachment " + nonce
 	row := pollInbox(t, sidecar, "bob", func(m map[string]any) bool {
-		return str(m, "subject") == attachmentSubject
+		return stringField(m, "subject") == attachmentSubject
 	})
 	thread := callMap(t, sidecar, "messages.thread", map[string]any{
 		"account":    "bob",
 		"folder":     "INBOX",
-		"thread_key": str(row, "thread_key"),
+		"thread_key": stringField(row, "thread_key"),
 	})
 	message := firstThreadMessage(t, thread)
 	attachments := attachmentRows(t, message)
 	if len(attachments) != 1 {
 		t.Fatalf("attachments len = %d, want 1: %v", len(attachments), message)
 	}
-	key := str(attachments[0], "key")
+	key := stringField(attachments[0], "key")
 	if key == "" {
 		t.Fatalf("refetched attachment has no key: %v", attachments[0])
 	}
-	got, err := os.ReadFile(filepath.Join(mediaDir(), key))
+	got, err := os.ReadFile(filepath.Join(mediaDirectory(), key))
 	if err != nil {
 		t.Fatalf("attachment was not refetched after the cache was cleared: %v", err)
 	}

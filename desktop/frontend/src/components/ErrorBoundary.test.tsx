@@ -23,7 +23,7 @@ describe('ErrorBoundary', () => {
   })
 
   it('getDerivedStateFromError captures the error into state', () => {
-    const err = new Error('boom')
-    expect(ErrorBoundary.getDerivedStateFromError(err)).toEqual({ error: err })
+    const requestFailure = new Error('boom')
+    expect(ErrorBoundary.getDerivedStateFromError(requestFailure)).toEqual({ error: requestFailure })
   })
 })

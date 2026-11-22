@@ -2,14 +2,14 @@
 // syncs and optimistic sends must agree on which messages are visible.
 // Callers include backup.ts and bulkProgress.ts.
 
-import type { Folder, Message, MessageTab } from '../types'
+import type { Message } from '../types'
 import { invoke } from '../lib/bridge'
 import { t } from '../lib/i18n'
 import { ui$, showToast, type BulkSelectionItem } from './ui'
 import { accounts$, unifiedAccounts } from './accounts'
 import { kanban$, getKanbanColumns, kanbanColumnKey } from './kanban'
 import { columnSearchActive, loadKanbanColumn } from '../lib/kanbanData'
-import { filterThreads, isRssAccount } from '../lib/threadActions'
+import { isRssAccount } from '../lib/threadActions'
 import { isMeronView, isUnifiedStarred, unifiedFolderRole } from '../lib/unifiedFolders'
 import { setMeronFolderUnread } from './meronFolders'
 import { CONVERSATION_PAGE_SIZE } from '../lib/pagination'
@@ -17,34 +17,46 @@ import { decrementFolderUnread, updateCachedFolderUnread } from './mailFolders'
 import { mail$ } from './mailState'
 import { compose$ } from './composeState'
 import { mergeRefreshedThreadMessages } from './sentCopyMatching'
+import { updateKanbanThread, snapshotRecord } from './mailBoardRows'
+import {
+  threadListViewKey,
+  listFilterKey,
+  listGroupBy,
+  beginThreadListRead,
+  type ThreadListRead,
+  THREAD_LIST_PAGE_SIZE,
+  mergeRefreshedThreadPage,
+  nextSelectedAfterRefresh,
+} from './threadPageState'
+import { getFilteredThreads } from './threadSelection'
+export { getFilteredThreads, selectAdjacentThread, getActiveThread, threadFromTab } from './threadSelection'
+
+export {
+  captureKeys,
+  kanbanKeysWithThread,
+  restoreAccountFolders,
+  restoreKanbanColumns,
+  updateKanbanThread,
+  removeKanbanThread,
+  findLocalThread,
+} from './mailBoardRows'
+export {
+  threadListViewKey,
+  listFilterKey,
+  listGroupBy,
+  beginThreadListRead,
+  suppressRemovedThread,
+  completeRemovedThread,
+  releaseRemovedThread,
+  THREAD_LIST_PAGE_SIZE,
+  mergeRefreshedThreadPage,
+  nextSelectedAfterRefresh,
+} from './threadPageState'
+
 export { openAttachment, downloadAttachment, saveMessageAsEml, copyAttachmentImage } from './mailAttachments'
 export { mergeRefreshedThreadMessages, normalizeMessageId } from './sentCopyMatching'
 
 export { mail$ }
-
-// Optimistic rollback for the keyed caches, key by key. Two reasons not to keep a
-// whole `.get()` and restore that: Legend-State mutates a record's raw object in
-// place when a *child* node is set (`kanban$.threads[key]`,
-// `mail$.foldersByAccount[accountId]`), so the "previous state" keeps changing
-// under us; and even a true whole-record snapshot would undo writes that landed
-// for *other* keys while the mutation was in flight — a folder LIST for another
-// account, another column's page. So each flow captures only the keys it is about
-// to touch and puts back exactly those. Plain arrays (`mail$.threads`,
-// `mail$.messages`, `mail$.folders`) are always replaced whole, so a bare `.get()`
-// is already a snapshot there.
-type KeyEntries<T> = [key: string, value: T | undefined][]
-
-export function captureKeys<T>(record: Record<string, T>, keys: string[]): KeyEntries<T> {
-  return keys.map((key) => [key, record[key]])
-}
-
-/** Kanban columns holding a card for this thread: all `updateKanbanThread` and
- * `removeKanbanThread` can touch, so all a rollback has to put back. */
-export function kanbanKeysWithThread(threadId: string): string[] {
-  return Object.entries(kanban$.threads.get())
-    .filter(([, threads]) => threads.some((thread) => thread.thread_id === threadId))
-    .map(([key]) => key)
-}
 
 // Re-read the list whose card stands for this thread after a change inside the
 // conversation (a draft discarded, a message deleted) that the card's message
@@ -79,60 +91,6 @@ export async function reloadThreadCards(columnKeys: string[]) {
   )
 }
 
-export function restoreAccountFolders(entries: KeyEntries<Folder[]>) {
-  for (const [accountId, folders] of entries) {
-    if (folders === undefined) mail$.foldersByAccount[accountId].delete()
-    else mail$.foldersByAccount[accountId].set(folders)
-  }
-}
-
-export function restoreKanbanColumns(threads: KeyEntries<Message[]>, unreadCounts: KeyEntries<number> = []) {
-  for (const [key, columnThreads] of threads) {
-    if (columnThreads === undefined) kanban$.threads[key].delete()
-    else kanban$.threads[key].set(columnThreads)
-  }
-  for (const [key, count] of unreadCounts) {
-    if (count === undefined) kanban$.unreadCounts[key].delete()
-    else kanban$.unreadCounts[key].set(count)
-  }
-}
-
-// The one record a flow does restore whole: `loadThreads` owns the entire cursor
-// set for the query it is loading, and clears it outright, so there are no other
-// keys to preserve.
-function snapshotRecord<T>(record: Record<string, T>): Record<string, T> {
-  return { ...record }
-}
-
-export function updateKanbanThread(threadId: string, update: (thread: Message) => Message) {
-  const columns = kanban$.threads.get()
-  const unreadCounts = kanban$.unreadCounts.get()
-  const nextUnreadCounts = { ...unreadCounts }
-  let changed = false
-  const nextColumns = Object.fromEntries(
-    Object.entries(columns).map(([key, threads]) => {
-      let columnChanged = false
-      const nextThreads = threads.map((thread) => {
-        if (thread.thread_id !== threadId) return thread
-        columnChanged = true
-        const next = update(thread)
-        const beforeUnread = thread.unread ? (thread.unread_count ?? 1) : 0
-        const afterUnread = next.unread ? (next.unread_count ?? 1) : 0
-        if (nextUnreadCounts[key] !== undefined) {
-          nextUnreadCounts[key] = Math.max(0, nextUnreadCounts[key] + afterUnread - beforeUnread)
-        }
-        return next
-      })
-      if (columnChanged) changed = true
-      return [key, columnChanged ? nextThreads : threads]
-    }),
-  )
-  if (changed) {
-    kanban$.threads.set(nextColumns)
-    kanban$.unreadCounts.set(nextUnreadCounts)
-  }
-}
-
 function reconcileThreadUnreadFromLoadedMessages(
   threadId: string,
   messages: Message[],
@@ -152,102 +110,6 @@ function reconcileThreadUnreadFromLoadedMessages(
   )
   decrementFolderUnread(thread.account_id, thread.folder_id, unreadCount)
   updateKanbanThread(threadId, (item) => ({ ...item, unread: false, unread_count: 0 }))
-}
-
-export function removeKanbanThread(threadId: string) {
-  const columns = kanban$.threads.get()
-  let changed = false
-  const nextColumns = Object.fromEntries(
-    Object.entries(columns).map(([key, threads]) => {
-      const nextThreads = threads.filter((thread) => thread.thread_id !== threadId)
-      if (nextThreads.length !== threads.length) changed = true
-      return [key, nextThreads]
-    }),
-  )
-  if (changed) kanban$.threads.set(nextColumns)
-}
-
-export function findLocalThread(threadId: string): Message | undefined {
-  const thread = mail$.threads.get().find((item) => item.thread_id === threadId)
-  if (thread) return thread
-  for (const threads of Object.values(kanban$.threads.get())) {
-    const match = threads.find((item) => item.thread_id === threadId)
-    if (match) return match
-  }
-  return mail$.messages.get().find((item) => item.thread_id === threadId)
-}
-
-// The visible thread list after applying the active filter (all / unread / starred).
-export function getFilteredThreads() {
-  const threads = mail$.threads.get()
-  // The starred folder already lists starred threads only; a leftover filter
-  // mode from the previous mailbox must not hide rows here.
-  if (isUnifiedStarred(ui$.selectedAccount.get(), ui$.selectedFolder.get())) return threads
-  const filterMode = ui$.filterMode.get()
-  const selected = ui$.selectedThread.get()
-  return filterThreads(threads, filterMode, selected, mail$.readThreads.get(), ui$.attachmentsOnly.get())
-}
-
-// Move the selection up (delta -1) or down (delta +1) through the visible
-// thread list, clamping at the ends (no wrap, so a held key doesn't loop back).
-// Backs the j/k keyboard navigation.
-export function selectAdjacentThread(delta: number) {
-  const list = getFilteredThreads()
-  if (list.length === 0) return
-  const selected = ui$.selectedThread.get()
-  const current = list.findIndex((thread) => thread.thread_id === selected)
-  const next = current === -1 ? 0 : Math.min(list.length - 1, Math.max(0, current + delta))
-  const target = list[next]
-  if (target) ui$.selectedThread.set(target.thread_id)
-}
-
-export function getActiveThread() {
-  const filtered = getFilteredThreads()
-  const threads = mail$.threads.get()
-  const selected = ui$.selectedThread.get()
-  // Nothing selected means an empty conversation pane. Falling back to the top
-  // of the list here would re-open — and so mark read — a thread the user never
-  // picked, which is exactly what `loadThreads` refuses to do.
-  if (!selected) return null
-  const fromList = filtered.find((thread) => thread.thread_id === selected)
-  if (fromList) return fromList
-  const fromAllThreads = threads.find((thread) => thread.thread_id === selected)
-  if (fromAllThreads) return fromAllThreads
-  const kanbanColumns = kanban$.threads.get()
-  for (const threads of Object.values(kanbanColumns)) {
-    const match = threads.find((thread) => thread.thread_id === selected)
-    if (match) return match
-  }
-  // A conversation open in its own tab renders outside the list on the left
-  // (a Meron folder, another account): the tab itself says what it is.
-  // Without this the reply box found no conversation, and Send did nothing.
-  const tab = compose$.tabs.get().find((candidate) => candidate.id === compose$.activeTab.get())
-  if (tab?.kind === 'thread' && tab.threadId === selected) return threadFromTab(tab, null)
-  // The selected thread's row hasn't landed yet (a notification or kanban jump
-  // that outran the list load). Wait for it rather than showing an unrelated
-  // conversation from the list we happen to have.
-  return null
-}
-
-/** A thread tab as a thread row, for a conversation not in the list on the left. */
-export function threadFromTab(tab: MessageTab, fallback: Message | null): Message {
-  if (fallback?.thread_id === tab.threadId) return fallback
-  return {
-    id: tab.messageId || tab.threadId,
-    account_id: tab.accountId ?? '',
-    folder_id: tab.folderId ?? 'inbox',
-    thread_id: tab.threadId,
-    from_name: '',
-    from_addr: tab.from,
-    to: '',
-    subject: tab.subject || '(no subject)',
-    preview: '',
-    body: '',
-    date: tab.date ?? 0,
-    unread: false,
-    starred: false,
-    has_attachments: false,
-  }
 }
 
 // Guards against a slow load repainting the list after a newer one already did.
@@ -286,135 +148,6 @@ export function requestThreadReselect() {
 }
 
 type ThreadSearchStage = 'auto' | 'cache' | 'live'
-
-// Identity of a thread-list view: the four inputs `loadThreads` reads and
-// `superseded` watches, newline-joined like `kanbanColumnKey` (neither a folder
-// id nor a single-line search box carries one). Both the loader and the list
-// build the key from the same fields, so the list can tell "these rows are for
-// what I'm showing" from "these rows are the previous view's".
-export function threadListViewKey(account: string, folder: string, query: string, filter: string) {
-  return [account, folder, query, filter].join('\n')
-}
-
-/** The list's filter inputs as one comparable value — the read-state filter,
- * the attachments toggle and the sender grouping — for view keys and staleness
- * checks. Sender rows and thread rows are different lists, so the grouping is
- * part of the key: a view's rows never answer for the other mode. */
-export function listFilterKey(
-  mode = ui$.filterMode.get(),
-  attachments = ui$.attachmentsOnly.get(),
-  groupBySender = ui$.groupBySender.get(),
-) {
-  const key = attachments ? `${mode}+attachments` : mode
-  return groupBySender ? `${key}+sender` : key
-}
-
-/** The `group_by` the list asks the core for. The core applies it to the plain
- * list only; search, Starred and Drafts stay threaded whatever is sent. */
-export function listGroupBy(groupBySender = ui$.groupBySender.get()): 'sender' | 'thread' {
-  return groupBySender ? 'sender' : 'thread'
-}
-
-// Suppress removals only while the backend mutation is pending. Each list read
-// keeps its own snapshot, including removals that start while it is in flight.
-// Completing a mutation releases future reads, while older reads still cannot
-// paint its stale row back. The core's UID guards protect the committed cache.
-const pendingRemovals = new Map<string, symbol>()
-const activeThreadListReads = new Set<Map<string, symbol>>()
-
-export function beginThreadListRead() {
-  const removed = new Map(pendingRemovals)
-  activeThreadListReads.add(removed)
-  return {
-    filter: (threads: Message[]) =>
-      threads.filter((thread) => !removed.has(thread.thread_id) && !pendingRemovals.has(thread.thread_id)),
-    dispose: () => {
-      activeThreadListReads.delete(removed)
-    },
-  }
-}
-
-type ThreadListRead = ReturnType<typeof beginThreadListRead>
-
-export function suppressRemovedThread(threadId: string): () => void {
-  if (!threadId) return () => {}
-  const token = Symbol(threadId)
-  pendingRemovals.set(threadId, token)
-  for (const read of activeThreadListReads) read.set(threadId, token)
-  return () => {
-    if (pendingRemovals.get(threadId) === token) pendingRemovals.delete(threadId)
-    for (const read of activeThreadListReads) {
-      if (read.get(threadId) === token) read.delete(threadId)
-    }
-  }
-}
-
-// The backend has removed the source rows. Reads begun afterwards may show a
-// new reply or a moved-back copy of this conversation; older reads stay guarded.
-export function completeRemovedThread(threadId: string) {
-  pendingRemovals.delete(threadId)
-}
-
-export function releaseRemovedThread(threadId: string) {
-  pendingRemovals.delete(threadId)
-  for (const read of activeThreadListReads) read.delete(threadId)
-}
-
-// `mail.threadList` uses this when the client doesn't pass a limit. The
-// background merge needs it to tell a full first page from the end of the folder.
-export const THREAD_LIST_PAGE_SIZE = 50
-
-// A background refresh only re-reads the first page. Threads it no longer
-// returns left that page (archived, moved, deleted). Threads older than the
-// page are ones the reader scrolled to, and this refresh didn't look at them.
-// A short page still has those when the server sent a cursor — the unified
-// inbox stops at a date cutoff before the page is full. Only a short page with
-// nowhere further to read has covered the folder, and then a missing row is
-// gone. Threads that slide into the page, or that actually just arrived, join
-// by date. Putting them on the front is how an older conversation from another
-// account landed above newer mail after an archive.
-export function mergeRefreshedThreadPage(
-  previous: Message[],
-  fetched: Message[],
-  hasMore = false,
-  pinned: Record<string, boolean> = {},
-): Message[] {
-  const fetchedById = new Map(fetched.map((thread) => [thread.thread_id, thread]))
-  const previousIds = new Set(previous.map((thread) => thread.thread_id))
-  const brandNew = fetched.filter((thread) => !previousIds.has(thread.thread_id))
-  const oldest = Math.min(...fetched.map((thread) => thread.date))
-  const pageCoversRest = fetched.length < THREAD_LIST_PAGE_SIZE && !hasMore
-  const kept = previous.filter((thread) => {
-    // A filtered page cannot distinguish a pinned row's flag change from an
-    // external move. Keep triage pins until the user reloads this view.
-    if (fetchedById.has(thread.thread_id) || pinned[thread.thread_id]) return true
-    if (pageCoversRest) return false
-    // Date alone cannot place equal-timestamp rows on either side of this
-    // boundary. Conservatively keep them until a full user-initiated reload.
-    return thread.date <= oldest
-  })
-  const updated = kept.map((thread) => fetchedById.get(thread.thread_id) ?? thread)
-  const merged = brandNew.length > 0 ? [...brandNew, ...updated] : updated
-  return merged.length < 2 ? merged : merged.sort((a, b) => b.date - a.date)
-}
-
-// The open conversation left the list this refresh just wrote. Follow it to the
-// next row that is still on screen (or the previous one, if it was last) so a
-// burst of archives doesn't land on a blank pane. A selection that was never in
-// this list — a notification that hasn't landed — stays where it is.
-export function nextSelectedAfterRefresh(previous: Message[], visible: Message[], selectedId: string): string {
-  if (!selectedId || visible.some((thread) => thread.thread_id === selectedId)) return selectedId
-  const index = previous.findIndex((thread) => thread.thread_id === selectedId)
-  if (index === -1) return selectedId
-  const visibleIds = new Set(visible.map((thread) => thread.thread_id))
-  const after = previous.slice(index + 1).find((thread) => visibleIds.has(thread.thread_id))
-  if (after) return after.thread_id
-  const before = previous
-    .slice(0, index)
-    .reverse()
-    .find((thread) => visibleIds.has(thread.thread_id))
-  return before?.thread_id ?? visible[0]?.thread_id ?? ''
-}
 
 // Encoded t. keys include the subject branch and are stable across folders.
 // Numeric IMAP UIDs and RSS item ids remain tied to their original location.
@@ -578,9 +311,9 @@ async function loadThreadsWithRead(refresh: boolean, searchStage: ThreadSearchSt
       if (typeof response.folder_unread === 'number') setMeronFolderUnread(selectedFol, response.folder_unread)
       mail$.threadsCursor.set(response.next_cursor ?? '')
       mail$.threadAccountCursors.set({})
-    } catch (err) {
+    } catch (requestFailure) {
       if (superseded()) return
-      console.error('Failed to load Meron folder:', err)
+      console.error('Failed to load Meron folder:', requestFailure)
       readFailed = true
       if (userInitiated) {
         mail$.threadsCursor.set('')
@@ -605,9 +338,9 @@ async function loadThreadsWithRead(refresh: boolean, searchStage: ThreadSearchSt
       allThreads = response.items ?? []
       mail$.threadsCursor.set(response.next_cursor ?? '')
       mail$.threadAccountCursors.set({})
-    } catch (err) {
+    } catch (requestFailure) {
       if (superseded()) return
-      console.error('Failed to load starred items:', err)
+      console.error('Failed to load starred items:', requestFailure)
       readFailed = true
       if (userInitiated) {
         mail$.threadsCursor.set('')
@@ -659,9 +392,9 @@ async function loadThreadsWithRead(refresh: boolean, searchStage: ThreadSearchSt
       }
       // Some account's server search failed; its part of the list is cached only.
       if (refresh && result.search_incomplete) showToast(t('threads.searchServerUnavailable'))
-    } catch (err) {
+    } catch (requestFailure) {
       if (superseded()) return
-      console.error('Failed to load unified threads:', err)
+      console.error('Failed to load unified threads:', requestFailure)
       readFailed = true
       if (userInitiated) {
         mail$.threadAccountCursors.set({})
@@ -694,9 +427,9 @@ async function loadThreadsWithRead(refresh: boolean, searchStage: ThreadSearchSt
       // The server half of the search failed; say the list is only what this
       // device has cached rather than letting older matches silently vanish.
       if (refresh && result.search_incomplete) showToast(t('threads.searchServerUnavailable'))
-    } catch (err) {
+    } catch (requestFailure) {
       if (superseded()) return
-      console.error('Failed to load threads:', err)
+      console.error('Failed to load threads:', requestFailure)
       readFailed = true
       if (userInitiated) {
         mail$.threadsCursor.set('')
@@ -1010,11 +743,11 @@ export async function loadThread(threadId: string) {
     // Reconcile against the unfiltered page: a hidden placeholder can still be
     // unread, and dropping it must not mark the thread read early.
     reconcileThreadUnreadFromLoadedMessages(threadId, result.messages, result.next_cursor)
-  } catch (err) {
+  } catch (requestFailure) {
     // Without this the failure is silent: the finally below clears the
     // spinner and the reader sits blank. Flag the thread so the pane can
     // offer a retry; keep it only if the user is still looking at it.
-    console.error('threadRead failed', err)
+    console.error('threadRead failed', requestFailure)
     if (ui$.selectedThread.get() === threadId) mail$.threadErrorId.set(threadId)
   } finally {
     if (ui$.selectedThread.get() === threadId) {
@@ -1070,8 +803,8 @@ export async function syncMail() {
       const accounts = unifiedAccounts()
       await Promise.all(
         accounts.map((acc) =>
-          invoke('mail.sync', { account_id: acc.id }).catch((err) =>
-            console.error(`Sync failed for ${acc.email}:`, err),
+          invoke('mail.sync', { account_id: acc.id }).catch((requestFailure) =>
+            console.error(`Sync failed for ${acc.email}:`, requestFailure),
           ),
         ),
       )

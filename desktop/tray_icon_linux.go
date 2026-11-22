@@ -59,7 +59,7 @@ var trayIconAssets = []trayIconAsset{
 
 var (
 	traySetIconWithName = systray.SetIconWithName
-	trayIconDir         = func() string { return filepath.Join(appCacheDir(), "tray-icons") }
+	trayIconDir         = func() string { return filepath.Join(appCacheDirectory(), "tray-icons") }
 	trayIconFiles       struct {
 		sync.Mutex
 		dir string

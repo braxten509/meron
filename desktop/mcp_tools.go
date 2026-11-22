@@ -1,3 +1,7 @@
+// Registers the desktop mail service's read and draft tools.
+// Client grants determine which accounts can be searched,
+// and responses carry the selected message or thread data.
+
 package main
 
 import (
@@ -220,15 +224,16 @@ func mcpMediaSegment(id string) string {
 	}, id)
 }
 
-// The segment mapping is lossy, so two configured accounts can land in one
-// media subtree ("a+b@example.com" and "a_b@example.com" both fold to
-// "a_b_example.com"). The key prefix then proves nothing about ownership, and a
-// client granted one of them could read the other's cached attachments. Refuse
-// the read instead of guessing which account the bytes belong to.
+// Check whether a media path identifies a single permitted account.
 //
-// Only a live account list can rule a collision out, and accountList reports no
-// accounts rather than an error when the core is down, so an offline core has
-// to deny the read: an empty list is silence, not proof.
+// The segment mapping is lossy, so two configured accounts can land in one media subtree ("a+b@example.com"
+// and "a_b@example.com" both fold to "a_b_example.com"). The key prefix then proves nothing about
+// ownership, and a client granted one of them could read the other's cached attachments. Refuse the read
+// instead of guessing which account the bytes belong to.
+//
+// Only a live account list can rule a collision out, and accountList reports no accounts rather than an
+// error when the core is down, so an offline core has to deny the read: an empty list is silence, not
+// proof.
 func (service *mcpService) mediaSegmentIsUnique(account string) error {
 	if service.app.sidecar == nil || !service.app.sidecar.Started() {
 		return service.app.engineUnavailable()

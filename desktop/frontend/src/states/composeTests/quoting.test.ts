@@ -208,16 +208,16 @@ describe('quoting the original in replies', () => {
   })
 
   it('sends the quote with a quick reply but keeps it out of the bubble', async () => {
-    const m = original()
-    mail$.threads.set([m])
-    mail$.messages.set([m])
+    const matchedItem = original()
+    mail$.threads.set([matchedItem])
+    mail$.messages.set([matchedItem])
     ui$.selectedThread.set('t-1')
     compose$.composer.set('Sounds good')
 
     await sendReply()
 
     const sent = calls.find((call) => call.command === 'mail.send')?.payload as { body: string; html: string }
-    expect(sent.body).toBe(`Sounds good\n\n${attribution(m)}\n> Lunch on Friday?\n>\n> Jane`)
+    expect(sent.body).toBe(`Sounds good\n\n${attribution(matchedItem)}\n> Lunch on Friday?\n>\n> Jane`)
     expect(sent.html).toBe('')
     expect(mail$.messages.get().find((message) => message.send_status)?.body).toBe('Sounds good')
   })

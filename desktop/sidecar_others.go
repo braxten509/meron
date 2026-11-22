@@ -1,5 +1,9 @@
 //go:build !windows
 
+// Supplies the process setup hook for the sidecar on
+// non-Windows hosts. These operating systems can launch
+// the child process using the ordinary command settings.
+
 package main
 
 import "os/exec"

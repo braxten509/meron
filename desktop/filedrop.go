@@ -20,13 +20,12 @@ import (
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
-// On Linux, WebKitGTK hands the page a file dragged from the file manager only
-// as its file:// address, never as a File, so the page can't read it. Wails'
-// native file drop gets the paths from GTK instead and Go keeps them for a
-// moment; when the drop landed on a drop area, the page asks for the files
-// (system.readDroppedFiles, useFileDrop) and Go reads them. A drop anywhere
-// else is never read. macOS and Windows give the page real files and keep the
-// webview's own drop untouched.
+// On Linux, WebKitGTK hands the page a file dragged from the file manager only as its file:// address, never as a File, so the page can't read it.
+//
+// Wails' native file drop gets the paths from GTK instead and Go keeps them for a moment; when the
+// drop landed on a drop area, the page asks for the files (system.readDroppedFiles, useFileDrop) and
+// Go reads them. A drop anywhere else is never read. macOS and Windows give the page real files and
+// keep the webview's own drop untouched.
 var nativeFileDrop = runtime.GOOS == "linux"
 
 const (
@@ -73,13 +72,15 @@ func (a *App) noteDroppedPaths(paths []string) {
 	a.fileDropMu.Unlock()
 }
 
-// takeDroppedPaths hands out the paths of the native drop the page asks about,
-// once. `wanted` are the paths the page saw in its drop event. A report GTK made
-// around the time of the request is that drop: its wanted paths are handed out,
-// or all of it when the page names none of them. An older one may be of an earlier drop that landed nowhere: it counts
-// only if it holds every wanted path, and only those are handed out; a partial
-// match is another drop, and the wait for this one's report goes on. Either
-// way the page can't have Go read a file that wasn't dropped.
+// takeDroppedPaths hands out the paths of the native drop the page asks about, once.
+//
+// `wanted` are the paths the page saw in its drop event. A report GTK made around the time of the
+// request is that drop: its wanted paths are handed out, or all of it when the page names none of
+// them.
+//
+// An older one may be of an earlier drop that landed nowhere: it counts only if it holds every wanted
+// path, and only those are handed out; a partial match is another drop, and the wait for this one's
+// report goes on. Either way the page can't have Go read a file that wasn't dropped.
 func (a *App) takeDroppedPaths(wanted []string, wait time.Duration) []string {
 	asked := time.Now()
 	deadline := asked.Add(wait)

@@ -1,5 +1,9 @@
 //go:build linux
 
+// Observes Linux suspend and resume through systemd-logind.
+// The desktop host forwards a wake event to the sidecar so
+// mailbox watches can reconnect after the machine returns.
+
 package main
 
 import (
@@ -13,10 +17,9 @@ var (
 	resumeMu  sync.Mutex
 )
 
-// setupResumeListener watches systemd-logind's PrepareForSleep signal on the
-// system bus. logind emits PrepareForSleep(true) right before suspend and
-// PrepareForSleep(false) once the system has woken; on the latter we tell the
-// sidecar so its IDLE watchers reconnect. Falls back silently (relying on TCP
+// setupResumeListener watches systemd-logind's PrepareForSleep signal on the system bus. logind emits
+// PrepareForSleep(true) right before suspend and PrepareForSleep(false) once the system has woken; on
+// the latter we tell the sidecar so its IDLE watchers reconnect. Falls back silently (relying on TCP
 // keepalive) if the system bus is unavailable.
 func (a *App) setupResumeListener() {
 	conn, err := dbus.ConnectSystemBus()

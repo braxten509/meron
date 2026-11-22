@@ -119,7 +119,7 @@ func NewApp() *App {
 	app.window = loadWindowState(app.windowStatePath)
 	app.windowSaved = app.window
 	app.closeToTray.Store(true)
-	app.trayStylePath = filepath.Join(appConfigDir(), "tray.json")
+	app.trayStylePath = filepath.Join(appConfigDirectory(), "tray.json")
 	app.tray.desired.monochrome = loadTrayStyle(app.trayStylePath)
 	return app
 }
@@ -214,7 +214,7 @@ func (a *App) appPrefsSet(payload map[string]any) (any, error) {
 }
 
 func (a *App) systemCheck() (any, error) {
-	dbPath := filepath.Join(appConfigDir(), "meron.db")
+	dbPath := filepath.Join(appConfigDirectory(), "meron.db")
 	return map[string]any{
 		"platform":        runtime.GOOS,
 		"tray_monochrome": a.trayState().state().monochrome,
@@ -227,6 +227,6 @@ func (a *App) systemCheck() (any, error) {
 		"gmail_oauth_configured":   gmailOAuthConfigured(),
 		"outlook_oauth_configured": outlookOAuthConfigured(),
 		"database_path":            dbPath,
-		"log_path":                 filepath.Join(appConfigDir(), "meron.log"),
+		"log_path":                 filepath.Join(appConfigDirectory(), "meron.log"),
 	}, nil
 }

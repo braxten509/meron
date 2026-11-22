@@ -371,7 +371,7 @@ func (updaterState *updater) download(asset updateAsset) {
 // downloadTo streams the asset to the update cache dir, hashing as it goes, and
 // only returns a path once size and digest both match the manifest.
 func (updaterState *updater) downloadTo(asset updateAsset) (string, error) {
-	directory := updateCacheDir()
+	directory := updateCacheDirectory()
 	// One payload at a time: wipe anything left over from a previous attempt.
 	if operationError := os.RemoveAll(directory); operationError != nil {
 		return "", operationError
@@ -453,8 +453,8 @@ func (progress *progressReader) Read(buffer []byte) (int, error) {
 	return n, operationError
 }
 
-func updateCacheDir() string {
-	return filepath.Join(appCacheDir(), "updates")
+func updateCacheDirectory() string {
+	return filepath.Join(appCacheDirectory(), "updates")
 }
 
 // updateFileName keeps the asset's own extension — the install step dispatches
@@ -479,23 +479,23 @@ func (updaterState *updater) discardStagedLocked() {
 		return
 	}
 	updaterState.stagedPath = ""
-	_ = os.RemoveAll(updateCacheDir())
+	_ = os.RemoveAll(updateCacheDirectory())
 }
 
 // cleanupUpdateCache removes leftovers from a previous run. Called on startup:
 // a payload that survived a restart has either been installed already or was
 // abandoned, and either way it is re-downloadable.
 func cleanupUpdateCache() {
-	_ = os.RemoveAll(updateCacheDir())
+	_ = os.RemoveAll(updateCacheDirectory())
 }
 
 // ------------------------------------------------------------- Install shared
 
-// ensureWritableDir checks that we can create files in dir, which is what every
+// ensureWritableDirectory checks that we can create files in dir, which is what every
 // install strategy needs before it starts moving things around. A root-owned
 // /opt or /Applications gives a clear error up front instead of a half-applied
 // update.
-func ensureWritableDir(directory string) error {
+func ensureWritableDirectory(directory string) error {
 	probe, operationError := os.CreateTemp(directory, ".meron-write-probe-")
 	if operationError != nil {
 		return operationError

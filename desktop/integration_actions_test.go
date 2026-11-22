@@ -25,9 +25,9 @@ func checkMoveAndFlags(t *testing.T, sidecar *Sidecar, server *mailServer, nonce
 	}
 
 	message := pollInbox(t, sidecar, "bob", func(m map[string]any) bool {
-		return str(m, "subject") == moveSubject
+		return stringField(m, "subject") == moveSubject
 	})
-	uid := num(message, "uid")
+	uid := numericField(message, "uid")
 	if uid == 0 {
 		t.Fatalf("delivered move fixture has no uid: %v", message)
 	}
@@ -46,10 +46,10 @@ func checkMoveAndFlags(t *testing.T, sidecar *Sidecar, server *mailServer, nonce
 	})
 
 	updated := pollInbox(t, sidecar, "bob", func(m map[string]any) bool {
-		return str(m, "subject") == moveSubject && boolValue(m, "seen") && boolValue(m, "starred")
+		return stringField(m, "subject") == moveSubject && boolValue(m, "seen") && boolValue(m, "starred")
 	})
-	if num(updated, "uid") != uid {
-		t.Fatalf("flagged message uid = %d, want %d", num(updated, "uid"), uid)
+	if numericField(updated, "uid") != uid {
+		t.Fatalf("flagged message uid = %d, want %d", numericField(updated, "uid"), uid)
 	}
 	// The rows above came out of the same store the flag write updated, so
 	// check the server too: a STORE that never left the client would look
@@ -64,22 +64,22 @@ func checkMoveAndFlags(t *testing.T, sidecar *Sidecar, server *mailServer, nonce
 		"target_folder": "ITestFolder",
 		"uid":           uid,
 	})
-	if moved := num(result, "moved"); moved != 1 {
+	if moved := numericField(result, "moved"); moved != 1 {
 		t.Fatalf("messages.move moved = %d, want 1: %v", moved, result)
 	}
 
 	assertNoMessageInFolder(t, sidecar, "bob", "INBOX", func(m map[string]any) bool {
-		return str(m, "subject") == moveSubject
+		return stringField(m, "subject") == moveSubject
 	})
 	moved := pollFolder(t, sidecar, "bob", "ITestFolder", func(m map[string]any) bool {
-		return str(m, "subject") == moveSubject
+		return stringField(m, "subject") == moveSubject
 	})
 	if !boolValue(moved, "seen") || !boolValue(moved, "starred") {
 		t.Fatalf("moved message lost flags: %v", moved)
 	}
 	// A MOVE re-APPENDs at the destination, so the flags have to survive the
 	// copy on the server, under the new UID.
-	movedUID := num(moved, "uid")
+	movedUID := numericField(moved, "uid")
 	if movedUID == 0 {
 		t.Fatalf("moved message has no uid: %v", moved)
 	}
@@ -102,9 +102,9 @@ func checkDeleteMovesToTrash(t *testing.T, sidecar *Sidecar, nonce string) {
 		t.Fatalf("send delete fixture: %v", err)
 	}
 	message := pollInbox(t, sidecar, "bob", func(m map[string]any) bool {
-		return str(m, "subject") == deleteSubject
+		return stringField(m, "subject") == deleteSubject
 	})
-	uid := num(message, "uid")
+	uid := numericField(message, "uid")
 	if uid == 0 {
 		t.Fatalf("delete fixture has no uid: %v", message)
 	}
@@ -119,10 +119,10 @@ func checkDeleteMovesToTrash(t *testing.T, sidecar *Sidecar, nonce string) {
 	}
 
 	assertNoMessageInFolder(t, sidecar, "bob", "INBOX", func(m map[string]any) bool {
-		return str(m, "subject") == deleteSubject
+		return stringField(m, "subject") == deleteSubject
 	})
 	pollFolder(t, sidecar, "bob", "Trash", func(m map[string]any) bool {
-		return str(m, "subject") == deleteSubject
+		return stringField(m, "subject") == deleteSubject
 	})
 }
 
@@ -140,9 +140,9 @@ func checkCopyKeepsOriginal(t *testing.T, sidecar *Sidecar, nonce string) {
 		t.Fatalf("send copy fixture: %v", err)
 	}
 	message := pollInbox(t, sidecar, "bob", func(m map[string]any) bool {
-		return str(m, "subject") == copySubject
+		return stringField(m, "subject") == copySubject
 	})
-	uid := num(message, "uid")
+	uid := numericField(message, "uid")
 	if uid == 0 {
 		t.Fatalf("copy fixture has no uid: %v", message)
 	}
@@ -154,12 +154,12 @@ func checkCopyKeepsOriginal(t *testing.T, sidecar *Sidecar, nonce string) {
 		"target_folder":  "ITestFolder",
 		"uid":            uid,
 	})
-	if copied := num(result, "copied"); copied != 1 {
+	if copied := numericField(result, "copied"); copied != 1 {
 		t.Fatalf("messages.copy copied = %d, want 1: %v", copied, result)
 	}
 
 	pollFolder(t, sidecar, "bob", "ITestFolder", func(m map[string]any) bool {
-		return str(m, "subject") == copySubject
+		return stringField(m, "subject") == copySubject
 	})
 	// The original must still be in INBOX.
 	original := callMap(t, sidecar, "messages.recent", map[string]any{
@@ -199,7 +199,7 @@ func checkEmptyJunk(t *testing.T, sidecar *Sidecar, server *mailServer, nonce st
 		"Date: " + time.Now().Format(time.RFC1123Z),
 	}, "junk body"))
 	pollFolder(t, sidecar, "bob", "Junk", func(m map[string]any) bool {
-		return str(m, "subject") == junkSubject
+		return stringField(m, "subject") == junkSubject
 	})
 
 	callMap(t, sidecar, "messages.emptyFolder", map[string]any{

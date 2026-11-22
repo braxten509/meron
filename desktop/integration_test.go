@@ -68,12 +68,12 @@ func assertNoMessageInFolder(t *testing.T, sidecar *Sidecar, account, folder str
 	t.Fatalf("message still present in %s %s after deadline", account, folder)
 }
 
-func str(message map[string]any, key string) string {
+func stringField(message map[string]any, key string) string {
 	value, _ := message[key].(string)
 	return value
 }
 
-func num(message map[string]any, key string) uint32 {
+func numericField(message map[string]any, key string) uint32 {
 	switch value := message[key].(type) {
 	case float64:
 		return uint32(value)

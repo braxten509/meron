@@ -2,13 +2,13 @@
 // shows in the Inbox. The key goes to the keychain and never comes
 // back; the rest is saved whole, one save at a time, like Rules.
 
+import { LessonList, DecisionLog } from './AiSortHistory'
 import { useEffect, useRef, useState } from 'react'
-import { ChevronDown, ChevronLeft, ChevronRight, Eye, EyeOff, Play, ShieldCheck, Square, Undo2, X } from 'lucide-react'
+import { ChevronRight, Eye, EyeOff, Play, ShieldCheck, Square, X } from 'lucide-react'
 import { useTranslation } from '../../lib/i18n'
 import {
   aiSortMoveBack,
   checkAiSortKey,
-  costPer1000,
   EMPTY_AI_SORT_CONFIG,
   estimateAiSort,
   forgetAiSortLesson,
@@ -39,18 +39,15 @@ import type { Folder } from '../../types'
 import { Button } from '../button/Button'
 import { IconButton } from '../button/IconButton'
 import { TextInput } from '../field/Field'
-import { FloatingContextMenu } from '../menu/FloatingContextMenu'
-import { MenuItem } from '../menu/MenuItem'
-import { flyoutClass } from '../threads/ThreadMoveCopyItems'
 import { SegmentedRow, SettingRow, SettingsGroup, Switch } from './AccountSettingsRows'
 import { RuleFolderPicker, useRuleTargetLabel } from './RuleFolderPicker'
+import { ModelPicker, ModelFacts } from './AiModelPicker'
 
 const RUN_POLL_MS = 1500
 // History rows shown at first and added by each "View more".
 const LOG_PAGE = 50
 const MAX_FOLDERS = 25
 const MAX_NOTE = 120
-const MODELS_SHOWN = 100
 
 const PROVIDER_NAMES: Record<AiProvider, string> = { tinfoil: 'Tinfoil', openrouter: 'OpenRouter' }
 
@@ -327,44 +324,6 @@ export function AiSortPanel() {
     }
   }
 
-  const logLabel = (entry: AiSortLogEntry) => {
-    const folder = targetLabel({ accountId: entry.account, folderId: entry.to_folder })
-    switch (entry.state) {
-      case 'moving':
-      case 'moved':
-        // The core already answers with the Meron folder's current name.
-        return entry.meron_folder_id
-          ? t('aiSort.logMovedMeron', { folder: entry.to_folder })
-          : t('aiSort.logMoved', { folder })
-      case 'moved_back':
-        return t('aiSort.logMovedBack')
-      case 'left':
-        return t('aiSort.logLeft')
-      case 'slow':
-        return t('aiSort.logSlow')
-      default:
-        return t('aiSort.logFailed')
-    }
-  }
-
-  const tagLabel = (entry: AiSortLogEntry) => {
-    switch (entry.state) {
-      case 'moving':
-      case 'moved':
-        return entry.meron_folder_id
-          ? entry.to_folder
-          : targetLabel({ accountId: entry.account, folderId: entry.to_folder })
-      case 'moved_back':
-        return t('aiSort.tagMovedBack')
-      case 'left':
-        return t('aiSort.tagLeft')
-      case 'slow':
-        return t('aiSort.tagSlow')
-      default:
-        return t('aiSort.tagFailed')
-    }
-  }
-
   const forgetLesson = async (lesson: AiSortLesson) => {
     setForgetting(lesson.id)
     try {
@@ -377,153 +336,28 @@ export function AiSortPanel() {
     }
   }
 
-  const lessonPlace = (lesson: AiSortLesson) => {
-    if (lesson.place === 'spam') return t('aiSort.lessonSpam')
-    if (lesson.place === 'inbox') return t('aiSort.lessonInbox')
-    return lesson.place_name
-  }
-
-  const lessonUnused = (lesson: AiSortLesson) => {
-    if (lesson.used) return ''
-    return lesson.place === 'spam' ? t('aiSort.lessonUnusedSpam') : t('aiSort.lessonUnusedMeron')
-  }
-
-  if (lessonsOpen) {
+  if (lessonsOpen)
     return (
-      <div className="flex flex-col gap-3">
-        <div className="flex items-center gap-2">
-          <IconButton
-            icon={ChevronLeft}
-            iconSize={14}
-            label={t('buttons.back')}
-            size="sm"
-            onClick={() => setLessonsOpen(false)}
-          />
-          <h3 className="text-sm font-semibold text-primary">{t('aiSort.lessons')}</h3>
-        </div>
-        <p className="px-1 text-xs text-secondary">{t('aiSort.lessonsHint')}</p>
-        <div className="divide-y divide-border/40 overflow-hidden rounded-2xl border border-border/60 bg-raised/80 shadow-sm shadow-black/[0.03] dark:shadow-black/10">
-          {lessons.length === 0 && <p className="px-3.5 py-2.5 text-xs text-secondary">{t('aiSort.lessonsEmpty')}</p>}
-          {lessons.slice(0, lessonsShown).map((lesson) => {
-            const name = lessonSenderName(lesson.sender)
-            const tagClass = !lesson.used
-              ? 'bg-secondary/10 text-secondary'
-              : lesson.place === 'spam'
-                ? 'bg-rose-500/10 text-rose-500'
-                : lesson.place === 'inbox'
-                  ? 'bg-secondary/10 text-secondary'
-                  : 'bg-accent/10 text-accent'
-            return (
-              <div
-                key={lesson.id}
-                className="flex min-h-10 items-center gap-2 py-1 pr-1.5 pl-3.5 text-xs"
-                title={[
-                  lessonUnused(lesson),
-                  lesson.sender,
-                  lesson.subject,
-                  new Date(lesson.at * 1000).toLocaleString(),
-                ]
-                  .filter(Boolean)
-                  .join(' · ')}
-              >
-                <span className={`min-w-0 flex-1 truncate ${lesson.used ? 'text-primary' : 'text-secondary'}`}>
-                  {name}
-                  {name && lesson.subject && <span className="text-secondary">{' · '}</span>}
-                  <span className="text-secondary">{lesson.subject}</span>
-                </span>
-                <span
-                  className={`max-w-40 shrink-0 truncate rounded-full px-2 text-[0.625rem] font-medium leading-5 ${tagClass}`}
-                >
-                  {lessonPlace(lesson)}
-                </span>
-                {/* The same room on every line, so the tags line up. */}
-                <span className="flex w-7 shrink-0 justify-center">
-                  <IconButton
-                    icon={X}
-                    iconSize={13}
-                    label={t('aiSort.lessonForget')}
-                    size="sm"
-                    disabled={forgetting !== null}
-                    onClick={() => void forgetLesson(lesson)}
-                  />
-                </span>
-              </div>
-            )
-          })}
-        </div>
-        {lessons.length > lessonsShown && (
-          <Button variant="ghost" size="sm" onClick={() => setLessonsShown(lessonsShown + LOG_PAGE)}>
-            {t('aiSort.viewMore')}
-          </Button>
-        )}
-      </div>
+      <LessonList
+        lessons={lessons}
+        shown={lessonsShown}
+        onMore={() => setLessonsShown(lessonsShown + LOG_PAGE)}
+        onBack={() => setLessonsOpen(false)}
+        forgetting={forgetting}
+        forgetLesson={forgetLesson}
+      />
     )
-  }
-
-  if (logOpen) {
+  if (logOpen)
     return (
-      <div className="flex flex-col gap-3">
-        <div className="flex items-center gap-2">
-          <IconButton
-            icon={ChevronLeft}
-            iconSize={14}
-            label={t('buttons.back')}
-            size="sm"
-            onClick={() => setLogOpen(false)}
-          />
-          <h3 className="text-sm font-semibold text-primary">{t('aiSort.log')}</h3>
-        </div>
-        <div className="divide-y divide-border/40 overflow-hidden rounded-2xl border border-border/60 bg-raised/80 shadow-sm shadow-black/[0.03] dark:shadow-black/10">
-          {status.log.length === 0 && <p className="px-3.5 py-2.5 text-xs text-secondary">{t('aiSort.logEmpty')}</p>}
-          {status.log.slice(0, logShown).map((entry) => {
-            const moved = entry.state === 'moved' || entry.state === 'moving'
-            const failed = entry.state === 'failed'
-            const tagClass = failed
-              ? 'bg-rose-500/10 text-rose-500'
-              : moved
-                ? 'bg-accent/10 text-accent'
-                : 'bg-secondary/10 text-secondary'
-            return (
-              <div
-                key={entry.id}
-                className="flex min-h-10 items-center gap-2 py-1 pr-1.5 pl-3.5 text-xs"
-                title={[logLabel(entry), entry.sender, entry.reason, new Date(entry.at * 1000).toLocaleString()]
-                  .filter(Boolean)
-                  .join(' · ')}
-              >
-                <span className={`min-w-0 flex-1 truncate ${moved ? 'text-primary' : 'text-secondary'}`}>
-                  {entry.subject || entry.sender}
-                </span>
-                <span
-                  className={`max-w-40 shrink-0 truncate rounded-full px-2 text-[0.625rem] font-medium leading-5 ${tagClass}`}
-                >
-                  {tagLabel(entry)}
-                </span>
-                {/* The same room on every line, so the tags line up. */}
-                <span className="flex w-7 shrink-0 justify-center">
-                  {entry.state === 'moved' && (
-                    <IconButton
-                      icon={Undo2}
-                      iconSize={13}
-                      label={t('aiSort.moveBack')}
-                      size="sm"
-                      disabled={movingBack !== null}
-                      onClick={() => void moveBack(entry)}
-                    />
-                  )}
-                </span>
-              </div>
-            )
-          })}
-        </div>
-        {status.log.length > logShown && (
-          <Button variant="ghost" size="sm" onClick={() => setLogShown(logShown + LOG_PAGE)}>
-            {t('aiSort.viewMore')}
-          </Button>
-        )}
-      </div>
+      <DecisionLog
+        entries={status.log}
+        shown={logShown}
+        onMore={() => setLogShown(logShown + LOG_PAGE)}
+        onBack={() => setLogOpen(false)}
+        movingBack={movingBack}
+        moveBack={moveBack}
+      />
     )
-  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -808,153 +642,5 @@ export function AiSortPanel() {
         </span>
       </button>
     </div>
-  )
-}
-
-/** The name of a "Name <address>" sender, or the address when it has none. */
-function lessonSenderName(sender: string): string {
-  const at = sender.lastIndexOf('<')
-  const name = at > 0 ? sender.slice(0, at).trim() : ''
-  return name || sender.replace(/[<>]/g, '').trim()
-}
-
-function ModelFacts({ model, className }: { model: AiModel; className: string }) {
-  const { t } = useTranslation()
-  const cost = costPer1000(model)
-  return (
-    <p className={className}>
-      {cost !== null && t('aiSort.modelPrice', { cost: formatUsd(cost) })}
-      {cost !== null && model.decision && ' · '}
-      {model.decision && t('aiSort.modelDecision')}
-      {(cost !== null || model.decision) && model.reasoning && ' · '}
-      {model.reasoning && <span className="text-amber-600 dark:text-amber-400">{t('aiSort.modelSlow')}</span>}
-    </p>
-  )
-}
-
-// A button like the folder picker's that opens a searchable list of the
-// service's models, each with what 1,000 emails would cost.
-function ModelPicker({
-  value,
-  label,
-  models,
-  failed,
-  recent,
-  onOpen,
-  onPick,
-}: {
-  value: string
-  label: string
-  models: AiModel[] | undefined
-  failed: boolean
-  /** The last few models picked on this service, newest first. */
-  recent: string[]
-  onOpen: () => void
-  onPick: (id: string) => void
-}) {
-  const { t } = useTranslation()
-  const [position, setPosition] = useState<{ x: number; y: number } | null>(null)
-  const [query, setQuery] = useState('')
-  const buttonRef = useRef<HTMLButtonElement | null>(null)
-
-  const close = () => {
-    setPosition(null)
-    setQuery('')
-  }
-
-  const open = () => {
-    const rect = buttonRef.current?.getBoundingClientRect()
-    setPosition({ x: rect?.left ?? 0, y: (rect?.bottom ?? 0) + 4 })
-    onOpen()
-  }
-
-  const words = query.trim().toLowerCase()
-  const shown = (models ?? [])
-    .filter((model) => !words || `${model.id} ${model.name}`.toLowerCase().includes(words))
-    .slice(0, MODELS_SHOWN)
-  // The last few picked, on top while not searching.
-  const recentShown = words
-    ? []
-    : recent.map(
-        (id) =>
-          (models ?? []).find((model) => model.id === id) ?? {
-            id,
-            name: id,
-            price_in_per_m: null,
-            price_out_per_m: null,
-            structured: false,
-            reasoning: false,
-          },
-      )
-
-  const item = (model: AiModel, key: string) => (
-    <MenuItem
-      key={key}
-      pressed={model.id === value}
-      onClick={() => {
-        close()
-        onPick(model.id)
-      }}
-      label={
-        <span className="flex min-w-0 flex-col text-left">
-          <span className="truncate">{model.name || model.id}</span>
-          <ModelFacts model={model} className="truncate text-[0.65625rem] font-normal text-secondary" />
-        </span>
-      }
-    />
-  )
-
-  return (
-    <>
-      <button
-        ref={buttonRef}
-        type="button"
-        aria-label={t('aiSort.model')}
-        aria-expanded={position !== null}
-        onClick={() => (position ? close() : open())}
-        className="flex w-44 cursor-pointer items-center justify-between gap-2 rounded-xl bg-app py-1.5 pr-2.5 pl-3 text-left text-xs font-semibold text-primary ring-1 ring-border"
-      >
-        <span className="min-w-0 truncate" title={value || label}>
-          {label}
-        </span>
-        <ChevronDown size={12} className="shrink-0 text-secondary" />
-      </button>
-      {position && (
-        <FloatingContextMenu
-          x={position.x}
-          y={position.y}
-          onClose={close}
-          overlay
-          overlayClassName="fixed inset-0 z-[61]"
-          className={`${flyoutClass} w-[320px]`}
-        >
-          <div className="px-2 pt-1 pb-1.5">
-            <TextInput
-              autoFocus
-              value={query}
-              placeholder={t('aiSort.modelSearch')}
-              aria-label={t('aiSort.modelSearch')}
-              onChange={(event) => setQuery(event.target.value)}
-              className="w-full"
-            />
-          </div>
-          {!models && (
-            <div className="px-3 py-2 text-xs font-semibold text-secondary">
-              {failed ? t('aiSort.modelsFailed') : t('common.loading')}
-            </div>
-          )}
-          {recentShown.length > 0 && (
-            <>
-              <p className="px-3 pt-1.5 pb-0.5 text-[0.65625rem] font-semibold text-secondary">
-                {t('aiSort.recentModels')}
-              </p>
-              {recentShown.map((model) => item(model, `recent:${model.id}`))}
-              <p className="px-3 pt-2 pb-0.5 text-[0.65625rem] font-semibold text-secondary">{t('aiSort.allModels')}</p>
-            </>
-          )}
-          {shown.map((model) => item(model, model.id))}
-        </FloatingContextMenu>
-      )}
-    </>
   )
 }

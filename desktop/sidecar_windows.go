@@ -1,3 +1,7 @@
+// Starts the Windows sidecar without displaying a separate
+// console window. The desktop launcher applies the process
+// creation flags before running the bundled or configured core.
+
 package main
 
 import (

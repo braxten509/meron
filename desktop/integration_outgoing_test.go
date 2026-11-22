@@ -25,9 +25,9 @@ func checkDraftLifecycle(t *testing.T, sidecar *Sidecar, nonce string) {
 	}
 
 	draft := pollFolder(t, sidecar, "alice", "Drafts", func(m map[string]any) bool {
-		return str(m, "subject") == draftSubject
+		return stringField(m, "subject") == draftSubject
 	})
-	if str(draft, "thread_key") == "" {
+	if stringField(draft, "thread_key") == "" {
 		t.Fatalf("draft has empty thread_key: %v", draft)
 	}
 
@@ -38,7 +38,7 @@ func checkDraftLifecycle(t *testing.T, sidecar *Sidecar, nonce string) {
 		t.Fatalf("discard_draft: %v", err)
 	}
 	assertNoMessageInFolder(t, sidecar, "alice", "Drafts", func(m map[string]any) bool {
-		return str(m, "subject") == draftSubject
+		return stringField(m, "subject") == draftSubject
 	})
 }
 
@@ -59,9 +59,9 @@ func checkQuickReplyDraftLifecycle(t *testing.T, sidecar *Sidecar, nonce string)
 		t.Fatalf("send quick reply fixture: %v", err)
 	}
 	original := pollInbox(t, sidecar, "bob", func(m map[string]any) bool {
-		return str(m, "subject") == quickSubject
+		return stringField(m, "subject") == quickSubject
 	})
-	threadKey := str(original, "thread_key")
+	threadKey := stringField(original, "thread_key")
 	if threadKey == "" {
 		t.Fatalf("quick reply fixture has empty thread_key: %v", original)
 	}
@@ -83,9 +83,9 @@ func checkQuickReplyDraftLifecycle(t *testing.T, sidecar *Sidecar, nonce string)
 	}
 
 	draft := pollFolder(t, sidecar, "bob", "Drafts", func(m map[string]any) bool {
-		return str(m, "subject") == draftSubject
+		return stringField(m, "subject") == draftSubject
 	})
-	if got := str(draft, "thread_key"); got != threadKey {
+	if got := stringField(draft, "thread_key"); got != threadKey {
 		t.Fatalf("reply draft thread_key = %q, want %q (draft would not hydrate into its thread)", got, threadKey)
 	}
 	thread := callMap(t, sidecar, "messages.thread", map[string]any{
@@ -105,7 +105,7 @@ func checkQuickReplyDraftLifecycle(t *testing.T, sidecar *Sidecar, nonce string)
 		t.Fatalf("discard_draft: %v", err)
 	}
 	assertNoMessageInFolder(t, sidecar, "bob", "Drafts", func(m map[string]any) bool {
-		return str(m, "subject") == draftSubject
+		return stringField(m, "subject") == draftSubject
 	})
 	thread = callMap(t, sidecar, "messages.thread", map[string]any{
 		"account":    "bob",
@@ -136,7 +136,7 @@ func checkSentCopyHonorsTheAccountOverride(t *testing.T, sidecar *Sidecar, serve
 		t.Fatalf("send sentcopy fixture: %v", err)
 	}
 	pollFolder(t, sidecar, "alice", "Sent", func(m map[string]any) bool {
-		return str(m, "subject") == defaultSubject
+		return stringField(m, "subject") == defaultSubject
 	})
 	if uids := imapSearchSubject(t, server.imapPort, "alice@mail.test", testPassword, "Sent", defaultSubject); len(uids) != 1 {
 		t.Fatalf("Sent holds %d copies of the message, want 1: %v", len(uids), uids)
@@ -158,7 +158,7 @@ func checkSentCopyHonorsTheAccountOverride(t *testing.T, sidecar *Sidecar, serve
 	}
 	// Delivery is what proves the send itself went through.
 	pollInbox(t, sidecar, "bob", func(m map[string]any) bool {
-		return str(m, "subject") == suppressedSubject
+		return stringField(m, "subject") == suppressedSubject
 	})
 	if uids := imapSearchSubject(t, server.imapPort, "alice@mail.test", testPassword, "Sent", suppressedSubject); len(uids) != 0 {
 		t.Fatalf("override off still uploaded a Sent copy: %v", uids)
@@ -197,7 +197,7 @@ func checkSentFromAnotherClientSurfacesViaInboxSync(t *testing.T, sidecar *Sidec
 		rows, _ := cached["messages"].([]any)
 		for _, item := range rows {
 			message, ok := item.(map[string]any)
-			if ok && str(message, "subject") == externalSubject {
+			if ok && stringField(message, "subject") == externalSubject {
 				row = message
 				break
 			}
@@ -213,7 +213,7 @@ func checkSentFromAnotherClientSurfacesViaInboxSync(t *testing.T, sidecar *Sidec
 	thread := callMap(t, sidecar, "messages.thread", map[string]any{
 		"account":    "alice",
 		"folder":     "Sent",
-		"thread_key": str(row, "thread_key"),
+		"thread_key": stringField(row, "thread_key"),
 		"limit":      50,
 	})
 	entries, _ := thread["messages"].([]any)
@@ -222,7 +222,7 @@ func checkSentFromAnotherClientSurfacesViaInboxSync(t *testing.T, sidecar *Sidec
 		if !ok {
 			continue
 		}
-		if str(message, "subject") != externalSubject {
+		if stringField(message, "subject") != externalSubject {
 			continue
 		}
 		if !boolValue(message, "outgoing") {

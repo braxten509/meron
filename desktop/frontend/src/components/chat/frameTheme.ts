@@ -613,19 +613,19 @@ export function darkenedFloor(surface: string): string {
 }
 
 /**
- * The rules that draw a darkened body: inverted, with the hue turned back so
- * links and brand colors stay recognisable, and pictures inverted a second time
- * so they come out as sent — once only, so an image inside a re-inverted
- * background picture is left alone. The search highlight keeps its yellow too.
+ * Keep message content readable when the reader darkens an HTML document.
  *
- * Inverted white is black, not the surface the frame sits on, so a layer over
- * the body caps how light it gets before the filter runs: at the color that
- * inverts to that surface (see `darkenedFloor`). The layer is the first thing
- * positioned in the body, above everything in the flow and below whatever
- * comes after it with a filter of its own — the pictures, which a cap applied
- * to the whole body would tint with the surface instead. Whatever else paints
- * above it — a box the sender positioned, and all that is in one — has its
- * background capped one element at a time (see `cappedBackground`).
+ * The rules that draw a darkened body: inverted, with the hue turned back so links and brand colors stay
+ * recognisable, and pictures inverted a second time so they come out as sent — once only, so an image
+ * inside a re-inverted background picture is left alone. The search highlight keeps its yellow too.
+ *
+ * Inverted white is black, not the surface the frame sits on, so a layer over the body caps how light it
+ * gets before the filter runs: at the color that inverts to that surface (see `darkenedFloor`).
+ *
+ * The layer is the first thing positioned in the body, above everything in the flow and below whatever comes
+ * after it with a filter of its own — the pictures, which a cap applied to the whole body would tint with
+ * the surface instead. Whatever else paints above it — a box the sender positioned, and all that is in one —
+ * has its background capped one element at a time (see `cappedBackground`).
  */
 export const darkenedCss = (v: (name: string) => string) => `
   html[${DARKENED_ATTR}] body,

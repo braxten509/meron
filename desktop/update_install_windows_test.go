@@ -57,7 +57,7 @@ func TestWindowsUpdateInstallerFailureReopensApp(t *testing.T) {
 
 func TestWindowsUpdateFailureReportedAfterRestart(t *testing.T) {
 	t.Setenv("APPDATA", t.TempDir())
-	if err := os.MkdirAll(appConfigDir(), 0o755); err != nil {
+	if err := os.MkdirAll(appConfigDirectory(), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	message := "Windows update failed: elevation cancelled"

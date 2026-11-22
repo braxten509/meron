@@ -219,12 +219,12 @@ func parseImapThreadID(threadID string) (ImapThreadIDs, bool) {
 	return ImapThreadIDs{Account: threadID[:first], Folder: threadID[first+1 : last], UID: uint32(uid)}, true
 }
 
-// canonThreadFolder mirrors the sidecar's canon_folder so a thread always gets
-// the same id no matter which path mints it. Without this the inbox is spelled
-// "inbox" by the thread-list builder (the UI folder id) and "INBOX" by the
-// notification/cached-row paths, so a notification-opened thread's id never
-// matches its list card — selection/reply-target lookups then fall back to the
-// header-less card and replies go out unthreaded.
+// canonThreadFolder mirrors the sidecar's canon_folder so a thread always gets the same id no matter which path mints it.
+//
+// Without this the inbox is spelled "inbox" by the thread-list builder (the UI folder id) and "INBOX"
+// by the notification/cached-row paths, so a notification-opened thread's id never matches its list
+// card — selection/reply-target lookups then fall back to the header-less card and replies go out
+// unthreaded.
 func canonThreadFolder(folder string) string {
 	if strings.EqualFold(folder, "inbox") {
 		return "INBOX"

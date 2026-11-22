@@ -176,7 +176,7 @@ func isLiveDatabasePath(path string) bool {
 	targetInfo, statErr := os.Stat(path)
 	for _, db := range []string{"meron.db", "archive.db"} {
 		for _, suffix := range []string{"", "-wal", "-shm"} {
-			live := filepath.Join(appConfigDir(), db+suffix)
+			live := filepath.Join(appConfigDirectory(), db+suffix)
 			if target == resolve(live) {
 				return true
 			}

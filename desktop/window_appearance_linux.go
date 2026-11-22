@@ -1,5 +1,9 @@
 //go:build linux && !bindings
 
+// Applies desktop theme colors to GTK window decoration.
+// The native titlebar and its tiled appearance use
+// CSS derived from the current frontend palette.
+
 package main
 
 /*
@@ -70,10 +74,9 @@ func setNativeWindowDark(dark bool) {
 // maximised, fullscreen and tiled windows keep GTK's square frame.
 const floatingDecoration = `window.csd:not(.maximized):not(.fullscreen):not(.tiled):not(.tiled-top):not(.tiled-bottom):not(.tiled-left):not(.tiled-right) decoration`
 
-// decorationCss rounds all four corners of that frame (outline and shadow);
-// stock GTK 3 rounds only the top two. The webview rounds its own corners to
-// match (html.window-rounded). With the integrated title bar the window is
-// libadwaita's: 15px corners and its shadow (libadwaita 1.8 default.css,
+// decorationCss rounds all four corners of that frame (outline and shadow); stock GTK 3 rounds only
+// the top two. The webview rounds its own corners to match (html.window-rounded). With the integrated
+// title bar the window is libadwaita's: 15px corners and its shadow (libadwaita 1.8 default.css,
 // window.csd and window.csd:backdrop).
 func decorationCss(fg string) string {
 	if !integratedTitlebarActive() {
@@ -119,12 +122,12 @@ func refreshNativeTitlebarCss() {
 	setNativeTitlebarColors(bg, fg)
 }
 
-// setNativeTitlebarColors paints the title bar GTK draws itself (client-side
-// decorations, e.g. GNOME on Wayland) in the side nav's colors, so the window
-// top reads as one piece with the rail. Server-side frames drawn by the window
-// manager ignore it and keep following setNativeWindowDark. Anything but an
-// opaque #rrggbb pair clears the color override (the values are spliced into
-// CSS); the rounded corners stay.
+// setNativeTitlebarColors paints the title bar GTK draws itself (client-side decorations, e.g.
+//
+// GNOME on Wayland) in the side nav's colors, so the window top reads as one piece with the rail.
+// Server-side frames drawn by the window manager ignore it and keep following setNativeWindowDark.
+// Anything but an opaque #rrggbb pair clears the color override (the values are spliced into CSS); the
+// rounded corners stay.
 func setNativeTitlebarColors(bg, fg string) {
 	titlebarColorsMu.Lock()
 	titlebarBg, titlebarFg = bg, fg

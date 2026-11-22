@@ -1,5 +1,9 @@
 //go:build windows
 
+// Uses a hidden Windows message window to receive wake
+// events. The listener runs on its own OS thread and tells
+// the desktop sidecar to reconnect its mailbox watches.
+
 package main
 
 import (

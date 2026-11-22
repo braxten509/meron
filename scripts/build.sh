@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
 # Build a release Meron binary with the Rust core engine sidecar baked in.
 #
-# Plain `wails build` resolves the sidecar via a working-directory-relative
-# path, so the resulting binary only works when launched from the repo root.
-# This script builds the sidecar in release mode, stages it where the
-# `embed_sidecar` build tag expects it, and embeds it into the Go binary so the
-# app works regardless of where it is launched from.
+# Plain `wails build` resolves the sidecar via a working-directory-relative path, so the resulting binary
+# only works when launched from the repo root. This script builds the sidecar in release mode, stages it
+# where the `embed_sidecar` build tag expects it, and embeds it into the Go binary so the app works
+# regardless of where it is launched from.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."

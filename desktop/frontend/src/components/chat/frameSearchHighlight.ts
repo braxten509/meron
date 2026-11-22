@@ -89,13 +89,15 @@ function foldWithSourceMap(texts: string[]): { folded: string; sourceStart: numb
 }
 
 /**
- * Locate `needle` in the concatenation of `texts`, case-insensitively, and cut
- * each match back into per-text ranges: `ranges` maps a text's index to the
- * [from, to, hit) slices of it to wrap, in order, where `hit` is the match's
- * position in the document — a match spanning markup yields one slice per text
- * it covers, all carrying the same hit number, so the search bar can count and
- * navigate occurrences rather than messages. Split out from the DOM work so the
- * offset arithmetic — which is what makes a match span markup — is testable.
+ * Find search matches that extend across adjacent text nodes.
+ *
+ * Locate `needle` in the concatenation of `texts`, case-insensitively, and cut each match back into per-text ranges:
+ * `ranges` maps a text's index to the [from, to, hit) slices of it to wrap, in order, where `hit` is the match's
+ * position in the document — a match spanning markup yields one slice per text it covers, all carrying the same hit
+ * number, so the search bar can count and navigate occurrences rather than messages.
+ *
+ * Split out from the DOM work so the offset arithmetic — which is what makes a match span markup — is
+ * testable.
  */
 export function matchRanges(texts: string[], rawNeedle: string): { hits: number; ranges: Map<number, MatchRange[]> } {
   const ranges = new Map<number, MatchRange[]>()

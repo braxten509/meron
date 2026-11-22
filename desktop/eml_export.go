@@ -74,12 +74,14 @@ func (a *App) cancelEmlExport() {
 	}
 }
 
-// exportEml saves the messages of the given threads, or of a whole folder, as
-// .eml files: a lone message goes straight to a .eml, anything more into one
-// .zip. Raw bytes aren't cached locally, so every message is refetched over
-// IMAP in small batches; progress is pushed as "mail.exportProgress" events and
-// "mail.exportEmlCancel" stops the run between batches. A message that can't be
-// fetched is skipped and counted rather than failing the export.
+// exportEml writes a selected folder or conversation to disk.
+//
+// exportEml saves the messages of the given threads, or of a whole folder, as .eml files: a lone message
+// goes straight to a .eml, anything more into one .zip. Raw bytes aren't cached locally, so every message
+// is refetched over IMAP in small batches; progress is pushed as "mail.exportProgress" events and
+// "mail.exportEmlCancel" stops the run between batches.
+//
+// A message that can't be fetched is skipped and counted rather than failing the export.
 func (a *App) exportEml(payload map[string]any) (any, error) {
 	if a.sidecar == nil || !a.sidecar.Started() {
 		return nil, a.engineUnavailable()
@@ -224,10 +226,9 @@ func (a *App) fetchEmlBatch(source emlExportSource, uids []uint32, directory str
 	return uidsFromResult(result, "saved"), nil
 }
 
-// runEmlExport fetches every source message through fetch and writes it to
-// dest: the bare message when there is exactly one, a zip of them otherwise.
-// progress is called after each batch with the running exported and skipped
-// counts. The export is built in a staging file and only replaces dest once it
+// runEmlExport fetches every source message through fetch and writes it to dest: the bare message when
+// there is exactly one, a zip of them otherwise. progress is called after each batch with the running
+// exported and skipped counts. The export is built in a staging file and only replaces dest once it
 // has succeeded, so a cancelled or empty export leaves dest as it was.
 func runEmlExport(requestContext context.Context, sources []emlExportSource, dest string, fetch emlBatchFetcher, progress func(done, failed int)) (result emlExportResult, err error) {
 	total := 0

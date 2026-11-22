@@ -1,3 +1,7 @@
+// Tracks the lifecycle of pending desktop mail operations. The
+// service associates each request with its client and returns
+// the recorded result for an already resolved operation.
+
 package main
 
 import (
@@ -106,11 +110,11 @@ func (service *mcpService) previousOperation(c mcpClient, tool, requestID string
 	}
 	return nil, fingerprint, nil
 }
-func (service *mcpService) newOperation(c mcpClient, tool, account, requestID, fingerprint string, p mcpPermission, ask bool, preview any, execute func() (any, error)) any {
+func (service *mcpService) newOperation(c mcpClient, tool, account, requestID, fingerprint string, permission mcpPermission, ask bool, preview any, execute func() (any, error)) any {
 	if service.operations == nil {
 		service.operations = map[string]*mcpOperation{}
 	}
-	op := &mcpOperation{ID: uuid.NewString(), ClientName: c.Name, Account: account, Tool: tool, Status: "pending_approval", ExpiresAt: time.Now().Add(5 * time.Minute), Preview: preview, client: c, permission: p, requestID: requestID, fingerprint: fingerprint, created: time.Now(), execute: execute}
+	op := &mcpOperation{ID: uuid.NewString(), ClientName: c.Name, Account: account, Tool: tool, Status: "pending_approval", ExpiresAt: time.Now().Add(5 * time.Minute), Preview: preview, client: c, permission: permission, requestID: requestID, fingerprint: fingerprint, created: time.Now(), execute: execute}
 	service.operations[op.ID] = op
 	if ask {
 		service.notifyApprovals()

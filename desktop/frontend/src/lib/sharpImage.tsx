@@ -26,13 +26,13 @@ function remember(key: string, url: string | null) {
   }
 }
 
-async function shrink(src: string, px: number, fit: Fit): Promise<string | null> {
+async function shrink(imageSource: string, px: number, fit: Fit): Promise<string | null> {
   const image = new Image()
   // Remote pictures without CORS can't be read back; they fail here and the
   // original is used, so nothing is lost.
-  if (/^https?:/i.test(src) && !src.startsWith(window.location.origin)) image.crossOrigin = 'anonymous'
+  if (/^https?:/i.test(imageSource) && !imageSource.startsWith(window.location.origin)) image.crossOrigin = 'anonymous'
   image.decoding = 'async'
-  image.src = src
+  image.src = imageSource
   await image.decode()
   const { naturalWidth: w, naturalHeight: h } = image
   if (!w || !h) return null

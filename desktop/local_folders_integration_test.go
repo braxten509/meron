@@ -36,9 +36,9 @@ func TestIntegrationLocalFolders(t *testing.T) {
 		`Content-Type: multipart/mixed; boundary="b"`,
 	}, "--b\nContent-Type: text/plain\n\n"+body+"\n--b\nContent-Type: text/plain\nContent-Disposition: attachment; filename=\"notes.txt\"\n\nattached\n--b--"))
 	source := pollInbox(t, sidecar, "alice", func(message map[string]any) bool {
-		return str(message, "subject") == subject
+		return stringField(message, "subject") == subject
 	})
-	uid := num(source, "uid")
+	uid := numericField(source, "uid")
 
 	callMap(t, sidecar, "account.addLocal", map[string]any{"name": "Local Folders", "folder": "Archive"})
 	if !foldersContain(callMap(t, sidecar, "folders.list", map[string]any{"account": localAccountID}), "Archive") {
@@ -80,17 +80,17 @@ func TestIntegrationLocalFolders(t *testing.T) {
 	var localUID uint32
 	t.Run("read from the archive", func(t *testing.T) {
 		message := pollFolder(t, sidecar, localAccountID, "Old/2024", func(message map[string]any) bool {
-			return str(message, "subject") == subject
+			return stringField(message, "subject") == subject
 		})
-		localUID = num(message, "uid")
+		localUID = numericField(message, "uid")
 		thread := callMap(t, sidecar, "messages.thread", map[string]any{
 			"account":    localAccountID,
 			"folder":     "Old/2024",
-			"thread_key": str(message, "thread_key"),
+			"thread_key": stringField(message, "thread_key"),
 			"limit":      20,
 		})
 		first := firstThreadMessage(t, thread)
-		if !strings.Contains(str(first, "body"), body) {
+		if !strings.Contains(stringField(first, "body"), body) {
 			t.Fatalf("archived body missing: %v", first)
 		}
 		if rows := attachmentRows(t, first); len(rows) != 1 {
@@ -115,7 +115,7 @@ func TestIntegrationLocalFolders(t *testing.T) {
 			"starred": true,
 		})
 		message := pollFolder(t, sidecar, localAccountID, "Old/2024", func(message map[string]any) bool {
-			return str(message, "subject") == subject && boolValue(message, "starred")
+			return stringField(message, "subject") == subject && boolValue(message, "starred")
 		})
 		if starred := callMap(t, sidecar, "starred.items", map[string]any{}); !starredMailContainsSubject(starred, subject) {
 			t.Fatalf("archived star missing from the Starred view: %v", starred)
@@ -137,12 +137,12 @@ func TestIntegrationLocalFolders(t *testing.T) {
 			t.Fatalf("folders.rename did not move the subtree: %v", renamed)
 		}
 		message := pollFolder(t, sidecar, localAccountID, "Older/2024", func(message map[string]any) bool {
-			return str(message, "subject") == subject && boolValue(message, "starred")
+			return stringField(message, "subject") == subject && boolValue(message, "starred")
 		})
 		thread := callMap(t, sidecar, "messages.thread", map[string]any{
 			"account":    localAccountID,
 			"folder":     "Older/2024",
-			"thread_key": str(message, "thread_key"),
+			"thread_key": stringField(message, "thread_key"),
 			"limit":      20,
 		})
 		if rows := attachmentRows(t, firstThreadMessage(t, thread)); len(rows) != 1 {
@@ -150,8 +150,8 @@ func TestIntegrationLocalFolders(t *testing.T) {
 		}
 		// Back, so the steps below find it where they expect.
 		callMap(t, sidecar, "folders.rename", map[string]any{"account": localAccountID, "folder": "Older", "name": "Old"})
-		localUID = num(pollFolder(t, sidecar, localAccountID, "Old/2024", func(message map[string]any) bool {
-			return str(message, "subject") == subject
+		localUID = numericField(pollFolder(t, sidecar, localAccountID, "Old/2024", func(message map[string]any) bool {
+			return stringField(message, "subject") == subject
 		}), "uid")
 	})
 
@@ -175,7 +175,7 @@ func TestIntegrationLocalFolders(t *testing.T) {
 			t.Fatalf("flags = %q, want the local star and read state", flags)
 		}
 		assertNoMessageInFolder(t, sidecar, localAccountID, "Old/2024", func(message map[string]any) bool {
-			return str(message, "subject") == subject
+			return stringField(message, "subject") == subject
 		})
 	})
 
@@ -201,7 +201,7 @@ func TestIntegrationLocalFolders(t *testing.T) {
 			t.Fatalf("folders.delete left the subtree: %v", deleted)
 		}
 		callMap(t, sidecar, "account.remove", map[string]any{"id": localAccountID})
-		archive := filepath.Join(appConfigDir(), "archive.db")
+		archive := filepath.Join(appConfigDirectory(), "archive.db")
 		if _, err := os.Stat(archive); !os.IsNotExist(err) {
 			t.Fatalf("archive.db still present after removing local folders: %v", err)
 		}

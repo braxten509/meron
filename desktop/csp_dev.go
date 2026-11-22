@@ -6,17 +6,18 @@
 
 package main
 
-// contentSecurityPolicy for `wails dev`: Wails serves the page from
-// wails.localhost and proxies to the Vite dev server, so this middleware runs on
-// dev responses. The strict production policy breaks Vite, so we relax the two
-// directives it trips on:
+// contentSecurityPolicy permits the resources needed by the Wails development server.
+//
+// contentSecurityPolicy for `wails dev`: Wails serves the page from wails.localhost and proxies to the Vite
+// dev server, so this middleware runs on dev responses. The strict production policy breaks Vite, so we
+// relax the two directives it trips on:
 //   - script-src: Vite injects an inline @vitejs/plugin-react preamble and uses
 //     eval for HMR module evaluation, so allow 'unsafe-inline' and 'unsafe-eval'.
 //   - connect-src: HMR needs the Vite websocket (ws://127.0.0.1:5178) and the
 //     Wails runtime websocket (ws://wails.localhost:34115), so allow ws:/wss:.
 //
-// Everything else mirrors csp_prod.go. This file is never compiled into a
-// production build (which adds the `production` tag).
+// Everything else mirrors csp_prod.go. This file is never compiled into a production build (which adds the
+// `production` tag).
 const contentSecurityPolicy = "default-src 'self'; " +
 	"script-src 'self' 'unsafe-inline' 'unsafe-eval'; " +
 	"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +

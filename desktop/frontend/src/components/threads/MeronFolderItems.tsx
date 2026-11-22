@@ -20,12 +20,14 @@ import { flyoutClass, useFlyoutPosition } from './ThreadMoveCopyItems'
 const FLYOUT_WIDTH = 220
 
 /**
- * "Move to Meron folder ▸" and "Move out of Meron folder", shared by the
- * thread list's right-click menu, the open conversation's actions menu and the
- * bulk bar's menu. Meron folders exist only on this device; the flyout lists
- * them A–Z (minus the one the conversation is in) and ends with "New Meron
- * folder", which makes one and moves there. Callers decide whether the rows
- * apply at all (not for sender rows, feeds or local folders).
+ * Provides the local-folder entries shared by desktop conversation menus.
+ *
+ * "Move to Meron folder ▸" and "Move out of Meron folder", shared by the thread list's right-click menu,
+ * the open conversation's actions menu and the bulk bar's menu. Meron folders exist only on this device;
+ * the flyout lists them A–Z (minus the one the conversation is in) and ends with "New Meron folder", which
+ * makes one and moves there.
+ *
+ * Callers decide whether the rows apply at all (not for sender rows, feeds or local folders).
  */
 export function MeronFolderItems({
   threadIds,

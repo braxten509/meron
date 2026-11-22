@@ -62,12 +62,12 @@ func TestNotificationThreadIDEmptyWithoutKey(t *testing.T) {
 	}
 }
 
-// formatImapThreadID must fold the inbox folder casing so the same thread gets
-// one id no matter which path mints it. The thread-list builder spells the inbox
-// "inbox" (the UI folder id, since get_recent_page returns blank per-message
-// folders), while the notification/cached-row paths use "INBOX". If these
-// diverged, a notification-opened thread's selection never matched its list card
-// and quick replies fell back to the header-less card — going out unthreaded.
+// formatImapThreadID must fold the inbox folder casing so the same thread gets one id no matter which path mints it.
+//
+// The thread-list builder spells the inbox "inbox" (the UI folder id, since get_recent_page returns
+// blank per-message folders), while the notification/cached-row paths use "INBOX". If these diverged,
+// a notification-opened thread's selection never matched its list card and quick replies fell back to
+// the header-less card — going out unthreaded.
 func TestFormatImapThreadIDFoldsInboxCasing(t *testing.T) {
 	const (
 		account     = "acc-1"

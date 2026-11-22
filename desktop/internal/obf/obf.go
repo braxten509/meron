@@ -1,14 +1,13 @@
-// Package obf provides lightweight obfuscation for credentials that have to be
-// baked into the binary at source level — specifically the Google OAuth client
-// id/secret, which must travel inside the public repo because the Flatpak is
-// built on infrastructure we don't control and has no build-time secret
-// injection.
+// Package obf encodes and decodes credentials embedded in the desktop binary.
 //
-// This is NOT encryption. The key lives in the binary right next to the data,
-// so anyone can reverse it in a few lines. Its only purpose is to keep the raw
-// values out of plaintext grep and the automated secret scanners that crawl
-// public repositories. Per Google's installed-app model the client secret is
-// not treated as confidential, so this is an appropriate level of protection.
+// Package obf provides lightweight obfuscation for credentials that have to be baked into the binary at
+// source level — specifically the Google OAuth client id/secret, which must travel inside the public repo
+// because the Flatpak is built on infrastructure we don't control and has no build-time secret injection.
+//
+// This is NOT encryption. The key lives in the binary right next to the data, so anyone can reverse it in a
+// few lines. Its only purpose is to keep the raw values out of plaintext grep and the automated secret
+// scanners that crawl public repositories. Per Google's installed-app model the client secret is not
+// treated as confidential, so this is an appropriate level of protection.
 package obf
 
 import "encoding/base64"

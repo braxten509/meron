@@ -20,11 +20,10 @@ import (
 // include; the newest lines matter for troubleshooting.
 const maxLogViewLines = 1000
 
-// logSinks fans a log line out to every sink, ignoring the ones that fail.
-// io.MultiWriter is the wrong tool here: it stops at the first writer that
-// errors, so on a Windows GUI build — where the process has no console and
-// os.Stderr is an invalid handle whose every Write fails — pairing stderr with
-// the log file left meron.log empty, exactly when a user needs it most.
+// logSinks fans a log line out to every sink, ignoring the ones that fail. io.MultiWriter is the wrong
+// tool here: it stops at the first writer that errors, so on a Windows GUI build — where the process
+// has no console and os.Stderr is an invalid handle whose every Write fails — pairing stderr with the
+// log file left meron.log empty, exactly when a user needs it most.
 type logSinks []io.Writer
 
 func (sinks logSinks) Write(data []byte) (int, error) {
@@ -55,7 +54,7 @@ func redactLogEmails(text string) string {
 // appLogTail returns the newest maxLogViewLines of meron.log with email
 // addresses redacted, ready to show in the Settings log viewer or export.
 func appLogTail() (string, error) {
-	data, operationError := os.ReadFile(filepath.Join(appConfigDir(), "meron.log"))
+	data, operationError := os.ReadFile(filepath.Join(appConfigDirectory(), "meron.log"))
 	if operationError != nil {
 		if os.IsNotExist(operationError) {
 			return "", nil

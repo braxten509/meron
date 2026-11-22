@@ -11,7 +11,7 @@ import (
 	"testing"
 )
 
-func TestAppDirsUseProductionProfileByDefault(t *testing.T) {
+func TestAppDirectoriesUseProductionProfileByDefault(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_CONFIG_HOME", "")
@@ -28,7 +28,7 @@ func TestAppDirsUseProductionProfileByDefault(t *testing.T) {
 		wantCache = filepath.Join(home, ".cache", "meron")
 	}
 
-	if got, want := appDirName(), "meron"; got != want {
+	if got, want := appDirectoryName(), "meron"; got != want {
 		t.Fatalf("appDirName() = %q, want %q", got, want)
 	}
 	if got, want := appTitle(), "Meron"; got != want {
@@ -37,15 +37,15 @@ func TestAppDirsUseProductionProfileByDefault(t *testing.T) {
 	if got, want := appUniqueID(), "jp.nonbili.meron"; got != want {
 		t.Fatalf("appUniqueID() = %q, want %q", got, want)
 	}
-	if got, want := appConfigDir(), wantConfig; got != want {
+	if got, want := appConfigDirectory(), wantConfig; got != want {
 		t.Fatalf("appConfigDir() = %q, want %q", got, want)
 	}
-	if got, want := appCacheDir(), wantCache; got != want {
+	if got, want := appCacheDirectory(), wantCache; got != want {
 		t.Fatalf("appCacheDir() = %q, want %q", got, want)
 	}
 }
 
-func TestAppDirsUseDevProfileForWailsDev(t *testing.T) {
+func TestAppDirectoriesUseDevProfileForWailsDev(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_CONFIG_HOME", "")
@@ -62,7 +62,7 @@ func TestAppDirsUseDevProfileForWailsDev(t *testing.T) {
 		wantCache = filepath.Join(home, ".cache", "meron-dev")
 	}
 
-	if got, want := appDirName(), "meron-dev"; got != want {
+	if got, want := appDirectoryName(), "meron-dev"; got != want {
 		t.Fatalf("appDirName() = %q, want %q", got, want)
 	}
 	if got, want := appTitle(), "Meron-dev"; got != want {
@@ -71,15 +71,15 @@ func TestAppDirsUseDevProfileForWailsDev(t *testing.T) {
 	if got, want := appUniqueID(), "jp.nonbili.meron-dev"; got != want {
 		t.Fatalf("appUniqueID() = %q, want %q", got, want)
 	}
-	if got, want := appConfigDir(), wantConfig; got != want {
+	if got, want := appConfigDirectory(), wantConfig; got != want {
 		t.Fatalf("appConfigDir() = %q, want %q", got, want)
 	}
-	if got, want := appCacheDir(), wantCache; got != want {
+	if got, want := appCacheDirectory(), wantCache; got != want {
 		t.Fatalf("appCacheDir() = %q, want %q", got, want)
 	}
 }
 
-func TestAppDirsRespectXDGBaseDirs(t *testing.T) {
+func TestAppDirectoriesRespectXDGBaseDirectories(t *testing.T) {
 	if runtime.GOOS == "darwin" {
 		t.Skip("XDG base directories are not respected on macOS (os.UserConfigDir uses ~/Library/Application Support)")
 	}
@@ -100,13 +100,13 @@ func TestAppDirsRespectXDGBaseDirs(t *testing.T) {
 		cacheHomeReal = cacheHome
 	}
 
-	gotConfig := appConfigDir()
+	gotConfig := appConfigDirectory()
 	gotConfigReal, err := filepath.EvalSymlinks(gotConfig)
 	if err != nil {
 		gotConfigReal = gotConfig
 	}
 
-	gotCache := appCacheDir()
+	gotCache := appCacheDirectory()
 	gotCacheReal, err := filepath.EvalSymlinks(gotCache)
 	if err != nil {
 		gotCacheReal = gotCache
@@ -120,7 +120,7 @@ func TestAppDirsRespectXDGBaseDirs(t *testing.T) {
 	}
 }
 
-func TestSidecarEnvUsesProfileDirs(t *testing.T) {
+func TestSidecarEnvUsesProfileDirectories(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_CONFIG_HOME", "")

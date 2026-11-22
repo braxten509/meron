@@ -29,14 +29,14 @@ const (
 // close-to-tray setting does not apply there.
 var hideOnCloseNatively = runtime.GOOS == "darwin"
 
-// windowState is the main window geometry carried from one launch to the
-// next. Width and Height are the unmaximised size, kept while the window is
-// maximised so that unmaximising after a restart goes back to it. Position is
-// left to the window manager: Wayland does not let clients place themselves,
-// and elsewhere a remembered position can land on a monitor that is gone.
+// windowState is the main window geometry carried from one launch to the next.
 //
-// It lives in its own file rather than the core's prefs because the window is
-// created before the core is started.
+// Width and Height are the unmaximised size, kept while the window is maximised so that unmaximising
+// after a restart goes back to it. Position is left to the window manager: Wayland does not let
+// clients place themselves, and elsewhere a remembered position can land on a monitor that is gone.
+//
+// It lives in its own file rather than the core's prefs because the window is created before the core
+// is started.
 type windowState struct {
 	Width     int  `json:"width"`
 	Height    int  `json:"height"`
@@ -54,7 +54,7 @@ var (
 )
 
 func windowStatePath() string {
-	return filepath.Join(appConfigDir(), "window.json")
+	return filepath.Join(appConfigDirectory(), "window.json")
 }
 
 // loadWindowState reads the saved geometry, falling back to a maximised
@@ -91,11 +91,10 @@ func saveWindowState(path string, state windowState) error {
 // stop changing, so dragging an edge does not write the file every frame.
 var windowSaveDelay = 500 * time.Millisecond
 
-// sampleWindowState reads the window's current geometry into memory. It runs
-// on every resize, so the unmaximised size is on record before a maximise hides
-// it, and before the window is hidden or the app quits. A hidden window was
-// sampled when it was hidden, and a minimised or fullscreen one says nothing
-// about the size to come back to, so both keep what was recorded before.
+// sampleWindowState reads the window's current geometry into memory. It runs on every resize, so the
+// unmaximised size is on record before a maximise hides it, and before the window is hidden or the app
+// quits. A hidden window was sampled when it was hidden, and a minimised or fullscreen one says
+// nothing about the size to come back to, so both keep what was recorded before.
 func (a *App) sampleWindowState(requestContext context.Context) {
 	if a.windowHidden.Load() {
 		return
