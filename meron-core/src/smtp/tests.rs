@@ -3,9 +3,7 @@
 //! Tests access the parent module directly to exercise its internal behavior.
 //! They run as part of the shared core test suite.
 
-use super::{
-    as_smtp_cert_error, bare_addr, bare_id, build_message, parse_addrs, split_name_addr,
-};
+use super::{as_smtp_cert_error, bare_addr, bare_id, build_message, parse_addrs, split_name_addr};
 
 /// A send and a sync fail the same way inside rustls; only the marker tells
 /// the UI which server to show and which pin to write. Without the re-tag a
@@ -252,8 +250,7 @@ fn inline_image_send_parses_back_with_media_refs() {
     )
     .expect("build_message");
 
-    let root =
-        std::env::temp_dir().join(format!("meron-inline-roundtrip-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("meron-inline-roundtrip-{}", std::process::id()));
     let ctx = crate::parse::MediaCtx {
         root: root.clone(),
         account: "acct".into(),

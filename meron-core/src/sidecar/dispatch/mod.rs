@@ -59,7 +59,10 @@ pub(crate) async fn dispatch(
         .zip(&items)
         .map(|(result, item)| {
             result.unwrap_or_else(|err| {
-                eprintln!("meron-core: {} (in a bulk run) failed: {err:#}", item.method);
+                eprintln!(
+                    "meron-core: {} (in a bulk run) failed: {err:#}",
+                    item.method
+                );
                 serde_json::json!({ "error": format!("{err:#}") })
             })
         })
@@ -68,11 +71,7 @@ pub(crate) async fn dispatch(
 }
 
 /// Route one request to its domain handler.
-async fn dispatch_one(
-    engine: &Arc<Engine>,
-    req: &Request,
-    out: &Writer,
-) -> anyhow::Result<Value> {
+async fn dispatch_one(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::Result<Value> {
     let p = &req.params;
     if crate::sidecar::local::handles(req) {
         return crate::sidecar::local::dispatch(engine, req, out).await;
@@ -215,7 +214,8 @@ async fn dispatch_one(
         // Copy setup to another device: setupCopy.host, .join, .status,
         // .setKeep, .copy, .cancel, .safetyInfo, .restoreSafety.
         method if method.starts_with("setupCopy.") => {
-            meron_core::setup_copy::dispatch(engine, &method["setupCopy.".len()..], p, "computer").await
+            meron_core::setup_copy::dispatch(engine, &method["setupCopy.".len()..], p, "computer")
+                .await
         }
 
         // Meron folders (this device only): meronFolders.list, .create,
@@ -225,15 +225,21 @@ async fn dispatch_one(
         // Out of the built-in Archive (and the Undo of that) moves mail on
         // the server; everything else stays store-only.
         "meronFolders.moveIn" | "meronFolders.moveOut" => {
-            meron_core::meron_folders::move_with_server(engine, &req.method["meronFolders.".len()..], p)
-                .await
+            meron_core::meron_folders::move_with_server(
+                engine,
+                &req.method["meronFolders.".len()..],
+                p,
+            )
+            .await
         }
-        method if method.starts_with("meronFolders.") => meron_core::meron_folders::dispatch_marked(
-            engine,
-            &engine.db.lock().unwrap(),
-            &method["meronFolders.".len()..],
-            p,
-        ),
+        method if method.starts_with("meronFolders.") => {
+            meron_core::meron_folders::dispatch_marked(
+                engine,
+                &engine.db.lock().unwrap(),
+                &method["meronFolders.".len()..],
+                p,
+            )
+        }
 
         other => Err(anyhow::anyhow!("unknown method: {other}")),
     }

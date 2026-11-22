@@ -23,7 +23,11 @@ fn a_device_keeps_one_claim_id_of_its_own() {
     assert_ne!(ai_sort_claim_id(&test_conn()).unwrap(), id);
     // Not a setting: settings travel with backups and setup copies.
     let settings: i64 = conn
-        .query_row("SELECT COUNT(*) FROM settings WHERE value LIKE ?1", [format!("%{id}%")], |row| row.get(0))
+        .query_row(
+            "SELECT COUNT(*) FROM settings WHERE value LIKE ?1",
+            [format!("%{id}%")],
+            |row| row.get(0),
+        )
         .unwrap();
     assert_eq!(settings, 0);
 }
@@ -99,10 +103,13 @@ fn only_new_unsorted_inbox_mail_without_rule_work_is_sorted() {
     ];
 
     // The first sync of a folder has no new mail to give.
-    let first =
-        super::super::first_seen_messages(&conn, "acct", "INBOX", 0, 10, &headers).unwrap();
+    let first = super::super::first_seen_messages(&conn, "acct", "INBOX", 0, 10, &headers).unwrap();
     assert!(first.is_empty());
-    assert!(ai_sort_hold(&conn, "acct", "Archive", 7, &headers, 100).unwrap().is_empty());
+    assert!(
+        ai_sort_hold(&conn, "acct", "Archive", 7, &headers, 100)
+            .unwrap()
+            .is_empty()
+    );
 
     let held = ai_sort_hold(&conn, "acct", "INBOX", 7, &headers, 100).unwrap();
     let uids: Vec<u32> = held.iter().map(|candidate| candidate.uid).collect();
@@ -120,9 +127,18 @@ fn only_new_unsorted_inbox_mail_without_rule_work_is_sorted() {
     super::super::rules::queue_rule_actions(&conn, "acct", &BTreeMap::from([(4, action)]), 0)
         .unwrap();
     let kept = ai_sort_skip_rule_actions(&conn, "acct", "INBOX", held).unwrap();
-    assert_eq!(kept.iter().map(|candidate| candidate.uid).collect::<Vec<_>>(), [1]);
+    assert_eq!(
+        kept.iter()
+            .map(|candidate| candidate.uid)
+            .collect::<Vec<_>>(),
+        [1]
+    );
     let hidden: i64 = conn
-        .query_row("SELECT COUNT(*) FROM ai_sort_hidden WHERE uid = 4", [], |row| row.get(0))
+        .query_row(
+            "SELECT COUNT(*) FROM ai_sort_hidden WHERE uid = 4",
+            [],
+            |row| row.get(0),
+        )
         .unwrap();
     assert_eq!(hidden, 0);
 }

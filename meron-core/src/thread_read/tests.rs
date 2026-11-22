@@ -227,9 +227,7 @@ async fn paged_read_shows_first_body_when_fetch_completion_fails() {
         "First body"
     );
     assert!(engine.body_fetches.lock().unwrap().is_empty());
-    assert!(
-        crate::store::has_cached_body(&engine.db.lock().unwrap(), "acc", "INBOX", 1).unwrap()
-    );
+    assert!(crate::store::has_cached_body(&engine.db.lock().unwrap(), "acc", "INBOX", 1).unwrap());
     server.await.unwrap();
 }
 
@@ -288,8 +286,7 @@ async fn an_active_fill_does_not_block_a_new_message_in_the_same_thread() {
             ..header(uid, true)
         })
         .collect();
-    crate::store::upsert_messages(&engine.db.lock().unwrap(), "acc", "INBOX", &headers)
-        .unwrap();
+    crate::store::upsert_messages(&engine.db.lock().unwrap(), "acc", "INBOX", &headers).unwrap();
     let older = message_key("acc", "INBOX", 1);
     let newest = message_key("acc", "INBOX", 2);
     engine.body_fetches.lock().unwrap().insert(older.clone());
@@ -418,8 +415,7 @@ fn an_old_body_failure_does_not_stand_in_for_a_new_attempt() {
 
 #[test]
 fn media_recovery_only_refetches_referenced_files() {
-    let root =
-        std::env::temp_dir().join(format!("meron-media-recovery-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("meron-media-recovery-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join("acc/INBOX/3")).unwrap();
     std::fs::write(root.join("acc/INBOX/3/0.png"), [1]).unwrap();

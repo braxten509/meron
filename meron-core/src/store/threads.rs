@@ -341,8 +341,22 @@ pub fn card_root_subjects(
     // be cached in another folder.
     let scope = ChatScope::for_folder(conn, account, folder)?;
     let mut candidates: HashMap<String, Vec<RootCandidate>> = HashMap::new();
-    collect_root_candidates(conn, account, Some(folder), &scope, &uid_roots, &mut candidates)?;
-    collect_root_candidates(conn, account, None, &scope, &threaded_roots, &mut candidates)?;
+    collect_root_candidates(
+        conn,
+        account,
+        Some(folder),
+        &scope,
+        &uid_roots,
+        &mut candidates,
+    )?;
+    collect_root_candidates(
+        conn,
+        account,
+        None,
+        &scope,
+        &threaded_roots,
+        &mut candidates,
+    )?;
 
     Ok(candidates
         .into_iter()
@@ -446,7 +460,14 @@ pub fn card_attachments(
         }
     };
     let scope = ChatScope::for_folder(conn, account, folder)?;
-    for_each_card_row(conn, account, Some(folder), &scope, &uid_roots, &mut collect)?;
+    for_each_card_row(
+        conn,
+        account,
+        Some(folder),
+        &scope,
+        &uid_roots,
+        &mut collect,
+    )?;
     for_each_card_row(conn, account, None, &scope, &threaded_roots, &mut collect)?;
 
     Ok(rows
@@ -500,7 +521,14 @@ pub fn card_tags(
     let mut collect =
         |card: String, row: CardRow| keys_by_card.entry(card).or_default().push(row.tag_key);
     let scope = ChatScope::for_folder(conn, account, folder)?;
-    for_each_card_row(conn, account, Some(folder), &scope, &uid_roots, &mut collect)?;
+    for_each_card_row(
+        conn,
+        account,
+        Some(folder),
+        &scope,
+        &uid_roots,
+        &mut collect,
+    )?;
     for_each_card_row(conn, account, None, &scope, &threaded_roots, &mut collect)?;
     tags_of_cards(conn, account, keys_by_card)
 }
@@ -544,7 +572,14 @@ pub fn card_senders(
     let mut rows: HashMap<String, Vec<CardRow>> = HashMap::new();
     let mut collect = |key: String, row: CardRow| rows.entry(key).or_default().push(row);
     let scope = ChatScope::for_folder(conn, account, folder)?;
-    for_each_card_row(conn, account, Some(folder), &scope, &uid_roots, &mut collect)?;
+    for_each_card_row(
+        conn,
+        account,
+        Some(folder),
+        &scope,
+        &uid_roots,
+        &mut collect,
+    )?;
     for_each_card_row(conn, account, None, &scope, &threaded_roots, &mut collect)?;
 
     Ok(rows

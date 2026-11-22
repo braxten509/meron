@@ -97,7 +97,12 @@ impl crate::engine::EngineHost for MobileHost {
         let blob = store::load_secret(&db.lock().unwrap(), name)?;
         Ok(blob
             .and_then(|blob| serde_json::from_str::<Value>(&blob).ok())
-            .and_then(|value| value.get("api_key").and_then(Value::as_str).map(str::to_string))
+            .and_then(|value| {
+                value
+                    .get("api_key")
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+            })
             .filter(|value| !value.is_empty()))
     }
 

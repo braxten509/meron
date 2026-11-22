@@ -17,7 +17,8 @@ fn plain_folds_a_trailing_quote_with_its_attribution() {
 
 #[test]
 fn plain_takes_a_wrapped_attribution_whole() {
-    let body = "Yes.\n\nOn Mon, Sep 1, 2025 at 9:00 AM Jane Doe <\njane@example.com> wrote:\n\n> Lunch?\n";
+    let body =
+        "Yes.\n\nOn Mon, Sep 1, 2025 at 9:00 AM Jane Doe <\njane@example.com> wrote:\n\n> Lunch?\n";
     let start = plain_quote_start(body).expect("quote");
     assert!(body[start..].starts_with("On Mon"), "{:?}", &body[start..]);
 }
@@ -70,7 +71,8 @@ fn plain_keeps_a_body_that_is_only_a_quote() {
 
 #[test]
 fn plain_takes_an_attribution_wrapped_after_the_address() {
-    let body = "Yes.\n\nOn Mon, Sep 1, 2025 at 9:00 AM Jane Doe <jane@example.com>\nwrote:\n> Lunch?\n";
+    let body =
+        "Yes.\n\nOn Mon, Sep 1, 2025 at 9:00 AM Jane Doe <jane@example.com>\nwrote:\n> Lunch?\n";
     let start = plain_quote_start(body).expect("quote");
     assert_eq!(&body[..start], "Yes.\n\n");
 }

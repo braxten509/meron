@@ -919,8 +919,7 @@ pub(crate) fn spawn_fill_thread_bodies(
         if result.is_ok() {
             let stale: BTreeSet<&String> = uncached.iter().map(|(folder, _)| *folder).collect();
             for folder in stale {
-                if let Err(err) =
-                    crate::engine::sync_messages(&engine, &account, folder, 50).await
+                if let Err(err) = crate::engine::sync_messages(&engine, &account, folder, 50).await
                 {
                     crate::mlog!(
                         crate::log::Level::Warn,

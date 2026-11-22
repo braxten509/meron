@@ -303,7 +303,10 @@ pub(crate) async fn dispatch(
             let trashed = delete_to_trash(engine, &account, &folder, &uids).await?;
             // One of a bulk run with more to come: Trash is re-read once, by
             // the run's last delete, instead of after every conversation.
-            let more_coming = p.get("more_coming").and_then(Value::as_bool).unwrap_or(false);
+            let more_coming = p
+                .get("more_coming")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
             let meron_released = meron_core::meron_folders::release_after_action(
                 &engine.db.lock().unwrap(),
                 meron_entry,
@@ -532,7 +535,10 @@ pub(crate) async fn dispatch(
             // One of a bulk run with more to come: the target is re-read once,
             // by the run's last move. Never put off for an archive or an Undo:
             // both read the moved copies from the cache straight after.
-            let reread_target = !p.get("more_coming").and_then(Value::as_bool).unwrap_or(false)
+            let reread_target = !p
+                .get("more_coming")
+                .and_then(Value::as_bool)
+                .unwrap_or(false)
                 || archive_keys.is_some()
                 || undo.is_some();
             // What this move teaches AI sorting (into Spam, back to the

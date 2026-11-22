@@ -61,9 +61,7 @@ fn upsert(conn: &Connection, folder: &str, messages: &[MessageHeader]) {
 fn the_key_index_matches_every_query_form() {
     let conn = db();
     for query in [
-        format!(
-            "SELECT 1 FROM messages WHERE account = 'a' AND uid <> 0 AND {TAG_KEY_SQL} = 'x'"
-        ),
+        format!("SELECT 1 FROM messages WHERE account = 'a' AND uid <> 0 AND {TAG_KEY_SQL} = 'x'"),
         format!(
             "SELECT 1 FROM messages m WHERE m.account = 'a' AND m.uid <> 0 AND {} = 'x'",
             qualified_tag_key("m")
@@ -235,8 +233,7 @@ fn mail_filed_from_another_folder_has_not_arrived() {
     let filed = message(7, "m@x", Some(&[]));
     let fresh = message(8, "new@x", Some(&[]));
     let first_seen =
-        crate::store::first_seen_messages(&conn, "a", "Archive", 7, 9, &[filed, fresh])
-            .unwrap();
+        crate::store::first_seen_messages(&conn, "a", "Archive", 7, 9, &[filed, fresh]).unwrap();
     let uids: Vec<u32> = first_seen.iter().map(|message| message.uid).collect();
     assert_eq!(uids, [8]);
 }

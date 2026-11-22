@@ -322,7 +322,12 @@ fn an_ai_sorting_key_never_reaches_a_backup() {
         .unwrap();
     let conn = source.lock().unwrap();
     insert_mail_account(&conn, "ada@example.com", sample_config(), json!({}));
-    store::setting_set(&conn, store::AI_SORT_KEY, &json!({ "provider": "openrouter" })).unwrap();
+    store::setting_set(
+        &conn,
+        store::AI_SORT_KEY,
+        &json!({ "provider": "openrouter" }),
+    )
+    .unwrap();
     let load = |account: &str| crate::protocol::load_mobile_secret(&conn, account);
 
     let plain = export(&conn, false, None, Host::default(), &load).unwrap();

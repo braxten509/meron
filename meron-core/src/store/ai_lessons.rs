@@ -173,7 +173,10 @@ pub fn ai_lesson_seeds(
     let mut seeds: Vec<LessonSeed> = seeds.into_iter().map(|(seed, _)| seed).collect();
     let mut seen = BTreeSet::new();
     seeds.retain(|seed| {
-        seen.insert((seed.from_addr.trim().to_lowercase(), subject_words(&seed.subject)))
+        seen.insert((
+            seed.from_addr.trim().to_lowercase(),
+            subject_words(&seed.subject),
+        ))
     });
     seeds.truncate(AI_LESSON_PER_ACTION);
     Ok(seeds)
@@ -187,9 +190,10 @@ fn live_lesson_tags(conn: &Connection, account: &str, key: &str) -> Result<Vec<S
          ORDER BY updated_at DESC, tag"
     ))?;
     let tags = stmt
-        .query_map(params![account, key, format!("{LESSON_TAG_PREFIX}%")], |row| {
-            row.get::<_, String>(0)
-        })?
+        .query_map(
+            params![account, key, format!("{LESSON_TAG_PREFIX}%")],
+            |row| row.get::<_, String>(0),
+        )?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     Ok(tags)
 }
@@ -222,7 +226,9 @@ static UNPUSHED: std::sync::Mutex<BTreeSet<String>> = std::sync::Mutex::new(BTre
 /// caller to push (see `engine::push_lesson_tags`). A push never asked for
 /// still happens with the account's next sync, as for every tag.
 pub fn ai_lessons_take_unpushed() -> Vec<String> {
-    std::mem::take(&mut *UNPUSHED.lock().unwrap()).into_iter().collect()
+    std::mem::take(&mut *UNPUSHED.lock().unwrap())
+        .into_iter()
+        .collect()
 }
 
 /// Drop the lessons past [`AI_LESSON_MAX`], oldest first, with their tags.
@@ -232,7 +238,9 @@ fn trim_lessons(conn: &Connection) -> Result<()> {
             "SELECT id, account, tag_key FROM ai_sort_lessons
              ORDER BY at DESC, id DESC LIMIT -1 OFFSET ?1",
         )?
-        .query_map(params![AI_LESSON_MAX], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
+        .query_map(params![AI_LESSON_MAX], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+        })?
         .collect::<rusqlite::Result<_>>()?;
     for (id, account, key) in old {
         conn.execute("DELETE FROM ai_sort_lessons WHERE id = ?1", params![id])?;
@@ -343,7 +351,10 @@ pub fn ai_lesson_forget(conn: &Connection, id: i64) -> Result<Option<String>> {
 
 /// A removed account: its lessons go (its tags go with the account's).
 pub fn ai_lessons_forget_account(conn: &Connection, account: &str) -> Result<()> {
-    conn.execute("DELETE FROM ai_sort_lessons WHERE account = ?1", params![account])?;
+    conn.execute(
+        "DELETE FROM ai_sort_lessons WHERE account = ?1",
+        params![account],
+    )?;
     Ok(())
 }
 
@@ -352,7 +363,9 @@ pub fn ai_lessons_forget_account(conn: &Connection, account: &str) -> Result<()>
 pub fn ai_lessons_forget_meron_folder(conn: &Connection, id: &str) -> Result<()> {
     let rows: Vec<(i64, String, String)> = conn
         .prepare("SELECT id, account, tag_key FROM ai_sort_lessons WHERE place = ?1")?
-        .query_map(params![id], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
+        .query_map(params![id], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+        })?
         .collect::<rusqlite::Result<_>>()?;
     for (lesson, account, key) in rows {
         conn.execute("DELETE FROM ai_sort_lessons WHERE id = ?1", params![lesson])?;
@@ -393,7 +406,9 @@ pub fn ai_lessons_reconcile(conn: &Connection) -> Result<()> {
     // Lessons whose tag changed or went away.
     let rows: Vec<(i64, String, String, String)> = tx
         .prepare("SELECT id, account, tag_key, place FROM ai_sort_lessons")?
-        .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)))?
+        .query_map([], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+        })?
         .collect::<rusqlite::Result<_>>()?;
     for (id, account, key, place) in rows {
         if !key_travels(&key) || super::is_local_account(&account) {
@@ -433,7 +448,9 @@ pub fn ai_lessons_reconcile(conn: &Connection) -> Result<()> {
                                WHERE l.account = t.account AND l.tag_key = t.tag_key)
              ORDER BY t.updated_at DESC"
         ))?
-        .query_map(params![pattern], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
+        .query_map(params![pattern], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+        })?
         .collect::<rusqlite::Result<_>>()?;
     let own = super::contacts::own_addresses(&tx)?;
     // Only while there is room: what doesn't fit waits for a lesson to go,
@@ -574,7 +591,10 @@ pub fn ai_lesson_before_move(
         // Nothing is learned while AI sorting is off (an Undo above still
         // forgets), and drafts and the reader's sent mail teach nothing.
         if !teaching(conn, account)?
-            || matches!(super::folder_role(conn, account, folder)?.as_str(), "sent" | "drafts")
+            || matches!(
+                super::folder_role(conn, account, folder)?.as_str(),
+                "sent" | "drafts"
+            )
         {
             return Ok(MoveLesson::default());
         }
@@ -700,9 +720,10 @@ pub fn ai_lesson_from_log(conn: &Connection, entry: &super::AiSortLogEntry) {
         .to_lowercase();
     let sender = entry.sender.trim();
     let (from_name, from_addr) = match sender.rsplit_once('<') {
-        Some((name, addr)) if addr.ends_with('>') => {
-            (name.trim().to_string(), addr.trim_end_matches('>').trim().to_string())
-        }
+        Some((name, addr)) if addr.ends_with('>') => (
+            name.trim().to_string(),
+            addr.trim_end_matches('>').trim().to_string(),
+        ),
         _ if sender.contains('@') => (String::new(), sender.to_string()),
         _ => (sender.to_string(), String::new()),
     };

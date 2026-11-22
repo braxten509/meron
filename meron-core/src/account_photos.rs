@@ -20,7 +20,11 @@ pub const COPY_TOTAL_BYTES: usize = 16 * 1024 * 1024;
 /// is not local (`https://...`, empty) or tries to leave the root.
 pub fn local_file(root: &Path, url: &str) -> Option<PathBuf> {
     let relative = url.trim().strip_prefix("/media/")?;
-    if relative.is_empty() || relative.split('/').any(|part| part.is_empty() || part == "." || part == "..") {
+    if relative.is_empty()
+        || relative
+            .split('/')
+            .any(|part| part.is_empty() || part == "." || part == "..")
+    {
         return None;
     }
     Some(root.join(relative))
@@ -41,7 +45,10 @@ pub fn hide_missing(root: &Path, accounts: &mut [serde_json::Value]) {
             .and_then(serde_json::Value::as_str)
             .is_some_and(|url| is_missing(root, url));
         if missing && let Some(obj) = account.as_object_mut() {
-            obj.insert("avatar_url".to_string(), serde_json::Value::String(String::new()));
+            obj.insert(
+                "avatar_url".to_string(),
+                serde_json::Value::String(String::new()),
+            );
         }
     }
 }
@@ -66,10 +73,23 @@ pub fn image_ext(bytes: &[u8]) -> Option<&'static str> {
 pub fn save(root: &Path, account: &str, ext: &str, bytes: &[u8]) -> std::io::Result<String> {
     let segment: String = account
         .chars()
-        .map(|ch| if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' { ch } else { '_' })
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' {
+                ch
+            } else {
+                '_'
+            }
+        })
         .collect();
-    let segment = if segment.is_empty() { "account".to_string() } else { segment };
-    let stamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis();
+    let segment = if segment.is_empty() {
+        "account".to_string()
+    } else {
+        segment
+    };
+    let stamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
     let dir = root.join("avatars").join(&segment);
     std::fs::create_dir_all(&dir)?;
     let name = format!("{stamp}.{ext}");
@@ -126,13 +146,21 @@ pub async fn fetch_missing(engine: &Arc<Engine>) -> Vec<String> {
             .filter(|(_, creds)| creds.is_oauth())
             .filter(|(id, _)| {
                 let url: String = db
-                    .query_row("SELECT avatar_url FROM accounts WHERE id = ?1", [id.as_str()], |row| row.get(0))
+                    .query_row(
+                        "SELECT avatar_url FROM accounts WHERE id = ?1",
+                        [id.as_str()],
+                        |row| row.get(0),
+                    )
                     .unwrap_or_default();
                 url.trim().is_empty() || is_missing(&root, &url)
             })
             .map(|(id, _)| {
                 let url: String = db
-                    .query_row("SELECT avatar_url FROM accounts WHERE id = ?1", [id.as_str()], |row| row.get(0))
+                    .query_row(
+                        "SELECT avatar_url FROM accounts WHERE id = ?1",
+                        [id.as_str()],
+                        |row| row.get(0),
+                    )
                     .unwrap_or_default();
                 (id.clone(), url)
             })
@@ -140,13 +168,22 @@ pub async fn fetch_missing(engine: &Arc<Engine>) -> Vec<String> {
     };
     let mut changed = Vec::new();
     for (account, seen) in candidates {
-        if !TRIED.lock().unwrap().get_or_insert_with(HashSet::new).insert(account.clone()) {
+        if !TRIED
+            .lock()
+            .unwrap()
+            .get_or_insert_with(HashSet::new)
+            .insert(account.clone())
+        {
             continue;
         }
         let creds = match engine.ensure_valid_creds(&account).await {
             Ok(creds) => creds,
             Err(err) => {
-                crate::mlog!(crate::log::Level::Info, "avatar", "no sign-in to fetch the photo of {account}: {err:#}");
+                crate::mlog!(
+                    crate::log::Level::Info,
+                    "avatar",
+                    "no sign-in to fetch the photo of {account}: {err:#}"
+                );
                 continue;
             }
         };
@@ -155,18 +192,28 @@ pub async fn fetch_missing(engine: &Arc<Engine>) -> Vec<String> {
         let own = creds.oauth_client_id.trim();
         let client = crate::oauth::Client {
             provider: app.provider.clone(),
-            client_id: if own.is_empty() { app.client_id.clone() } else { own.to_string() },
+            client_id: if own.is_empty() {
+                app.client_id.clone()
+            } else {
+                own.to_string()
+            },
             token_url: creds.oauth_token_url.trim().to_string(),
             ..Default::default()
         };
         let access = creds.access_token.clone().unwrap_or_default();
         let refresh = creds.refresh_token.clone().unwrap_or_default();
-        let fetched =
-            tokio::task::spawn_blocking(move || crate::oauth::fetch_photo(&client, &access, &refresh, "")).await;
+        let fetched = tokio::task::spawn_blocking(move || {
+            crate::oauth::fetch_photo(&client, &access, &refresh, "")
+        })
+        .await;
         let photo = match fetched {
             Ok(Ok(photo)) => photo,
             Ok(Err(err)) => {
-                crate::mlog!(crate::log::Level::Info, "avatar", "no photo for {account}: {err}");
+                crate::mlog!(
+                    crate::log::Level::Info,
+                    "avatar",
+                    "no photo for {account}: {err}"
+                );
                 continue;
             }
             Err(_) => continue,
@@ -190,15 +237,21 @@ pub async fn fetch_missing(engine: &Arc<Engine>) -> Vec<String> {
         match saved {
             Ok(0) => {}
             Ok(_) => {
-                crate::ffi::emit_event("account.photoChanged", serde_json::json!({ "account": account }));
+                crate::ffi::emit_event(
+                    "account.photoChanged",
+                    serde_json::json!({ "account": account }),
+                );
                 if let Some(tell) = engine.account_changed.get() {
                     tell(&account);
                 }
                 changed.push(account);
             }
-            Err(err) => crate::mlog!(crate::log::Level::Warn, "avatar", "could not save the photo of {account}: {err:#}"),
+            Err(err) => crate::mlog!(
+                crate::log::Level::Warn,
+                "avatar",
+                "could not save the photo of {account}: {err:#}"
+            ),
         }
     }
     changed
 }
-

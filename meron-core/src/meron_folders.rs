@@ -67,7 +67,11 @@ pub fn mobile_stub(command: &str) -> Value {
 }
 
 fn str_param<'a>(params: &'a Value, key: &str) -> &'a str {
-    params.get(key).and_then(Value::as_str).unwrap_or_default().trim()
+    params
+        .get(key)
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .trim()
 }
 
 fn required<'a>(params: &'a Value, key: &str) -> Result<&'a str> {
@@ -213,7 +217,10 @@ pub fn dispatch_with_marks(
         "moveOut" => return move_out(conn, params),
         "delete" => {
             let id = required(params, "id")?;
-            anyhow::ensure!(!store::meron_is_builtin(id), "The Archive folder can't be changed.");
+            anyhow::ensure!(
+                !store::meron_is_builtin(id),
+                "The Archive folder can't be changed."
+            );
             let entries: Vec<String> = conn
                 .prepare("SELECT id FROM meron_folder_entries WHERE folder_id = ?1")?
                 .query_map(params![id], |row| row.get(0))?
@@ -246,8 +253,11 @@ fn dispatch_plain(conn: &Connection, command: &str, params: &Value) -> Result<Va
             Ok(json!({ "folder": folder_json(conn, &folder)?, "folders": folders_json(conn)? }))
         }
         "rename" => {
-            let folder =
-                store::rename_meron_folder(conn, required(params, "id")?, str_param(params, "name"))?;
+            let folder = store::rename_meron_folder(
+                conn,
+                required(params, "id")?,
+                str_param(params, "name"),
+            )?;
             Ok(json!({ "folder": folder_json(conn, &folder)?, "folders": folders_json(conn)? }))
         }
         "setNotify" => {
@@ -264,7 +274,10 @@ fn dispatch_plain(conn: &Connection, command: &str, params: &Value) -> Result<Va
         }
         "threads" => {
             let folder_id = required(params, "folder_id")?;
-            anyhow::ensure!(store::meron_folder_exists(conn, folder_id)?, "That Meron folder is gone.");
+            anyhow::ensure!(
+                store::meron_folder_exists(conn, folder_id)?,
+                "That Meron folder is gone."
+            );
             let limit = params
                 .get("limit")
                 .and_then(Value::as_u64)
@@ -276,8 +289,15 @@ fn dispatch_plain(conn: &Connection, command: &str, params: &Value) -> Result<Va
                 conn,
                 folder_id,
                 str_param(params, "query"),
-                if filter.eq_ignore_ascii_case("all") { "" } else { filter },
-                params.get("attachments").and_then(Value::as_bool).unwrap_or(false),
+                if filter.eq_ignore_ascii_case("all") {
+                    ""
+                } else {
+                    filter
+                },
+                params
+                    .get("attachments")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false),
                 limit,
                 params
                     .get("before_cursor")
@@ -350,7 +370,10 @@ fn teach_filing(conn: &Connection, entry: &str, place: &store::LessonPlace, undo
 /// put it back: `previous_folder_id` null means "out of Meron folders".
 fn move_in(conn: &Connection, params: &Value) -> Result<(Value, Vec<MarkJob>)> {
     let folder_id = required(params, "folder_id")?;
-    anyhow::ensure!(store::meron_folder_exists(conn, folder_id)?, "That Meron folder is gone.");
+    anyhow::ensure!(
+        store::meron_folder_exists(conn, folder_id)?,
+        "That Meron folder is gone."
+    );
     let undo = is_undo(params);
     let tx = Transaction::new_unchecked(conn, TransactionBehavior::Immediate)?;
     let mut moved = 0;
@@ -379,8 +402,13 @@ fn move_in(conn: &Connection, params: &Value) -> Result<(Value, Vec<MarkJob>)> {
         {
             continue;
         }
-        let result =
-            store::meron_move_in_in(&tx, &parsed.account, &key, folder_id, store::MeronFiling::User)?;
+        let result = store::meron_move_in_in(
+            &tx,
+            &parsed.account,
+            &key,
+            folder_id,
+            store::MeronFiling::User,
+        )?;
         filed_entries.insert(result.entry_id.clone());
         // Filed by hand: AI sorting learns where this kind of mail goes (an
         // Undo forgets what the undone action taught). Not for the built-in
@@ -475,7 +503,10 @@ pub async fn mark_all_read(engine: &Arc<Engine>, params: &Value) -> Result<Value
     let folder_id = required(params, "folder_id")?.to_string();
     let targets: BTreeMap<String, BTreeMap<String, Vec<u32>>> = {
         let db = engine.db.lock().unwrap();
-        anyhow::ensure!(store::meron_folder_exists(&db, &folder_id)?, "That Meron folder is gone.");
+        anyhow::ensure!(
+            store::meron_folder_exists(&db, &folder_id)?,
+            "That Meron folder is gone."
+        );
         store::meron_folder_unseen_uids(&db, &folder_id)?
     };
     let mut updated = 0;
@@ -488,9 +519,9 @@ pub async fn mark_all_read(engine: &Arc<Engine>, params: &Value) -> Result<Value
                     &account,
                     |session| {
                         let folder = folder.clone();
-                        Box::pin(async move {
-                            crate::imap::prepare_flag_update(session, &folder).await
-                        })
+                        Box::pin(
+                            async move { crate::imap::prepare_flag_update(session, &folder).await },
+                        )
                     },
                     |session| {
                         let uids = uids.clone();
@@ -613,7 +644,11 @@ pub fn archive_filing_keys(
     }
     let keys: BTreeSet<String> = uids
         .iter()
-        .filter_map(|uid| store::meron_conversation_key(conn, account, folder, *uid).ok().flatten())
+        .filter_map(|uid| {
+            store::meron_conversation_key(conn, account, folder, *uid)
+                .ok()
+                .flatten()
+        })
         .collect();
     (!keys.is_empty()).then_some(keys)
 }
@@ -658,7 +693,11 @@ pub fn archive_card_of_copies(
 /// - Every other `moveIn` is store-only, as before.
 ///
 /// The store lock is only held between the server steps.
-pub async fn move_with_server(engine: &Arc<Engine>, command: &str, params: &Value) -> Result<Value> {
+pub async fn move_with_server(
+    engine: &Arc<Engine>,
+    command: &str,
+    params: &Value,
+) -> Result<Value> {
     let result = match command {
         "moveOut" => move_out_with_server(engine, params).await,
         "moveIn" if str_param(params, "folder_id") == store::MERON_ARCHIVE_FOLDER_ID => {
@@ -685,7 +724,10 @@ pub async fn move_with_server(engine: &Arc<Engine>, command: &str, params: &Valu
 /// `meron_only: true`, `folder` and `thread_id` (unchanged: the mail didn't
 /// move) and, when it came from another Meron folder, `meron_folder_id` and
 /// `meron_source` for an Undo to put it back there.
-pub fn archive_meron_only(conn: &Connection, thread_id: &str) -> Result<Option<(Value, Vec<MarkJob>)>> {
+pub fn archive_meron_only(
+    conn: &Connection,
+    thread_id: &str,
+) -> Result<Option<(Value, Vec<MarkJob>)>> {
     let Some(parsed) = crate::protocol::parse_thread_id(thread_id) else {
         return Ok(None);
     };
@@ -695,18 +737,24 @@ pub fn archive_meron_only(conn: &Connection, thread_id: &str) -> Result<Option<(
     if resolve_thread(conn, thread_id)?.is_err() {
         return Ok(None);
     }
-    let previous = store::meron_entry_of_thread(conn, &parsed.account, &parsed.folder, &parsed.thread_key, None)?
-        .map(|(entry, folder)| {
-            let source: String = conn
-                .query_row(
-                    "SELECT source FROM meron_folder_entries WHERE id = ?1",
-                    params![entry],
-                    |row| row.get(0),
-                )
-                .unwrap_or_else(|_| "user".to_string());
-            (folder, source)
-        })
-        .filter(|(folder, _)| folder != store::MERON_ARCHIVE_FOLDER_ID);
+    let previous = store::meron_entry_of_thread(
+        conn,
+        &parsed.account,
+        &parsed.folder,
+        &parsed.thread_key,
+        None,
+    )?
+    .map(|(entry, folder)| {
+        let source: String = conn
+            .query_row(
+                "SELECT source FROM meron_folder_entries WHERE id = ?1",
+                params![entry],
+                |row| row.get(0),
+            )
+            .unwrap_or_else(|_| "user".to_string());
+        (folder, source)
+    })
+    .filter(|(folder, _)| folder != store::MERON_ARCHIVE_FOLDER_ID);
     let (mut result, jobs) = move_in(
         conn,
         &json!({ "folder_id": store::MERON_ARCHIVE_FOLDER_ID, "thread_ids": [thread_id] }),
@@ -766,7 +814,10 @@ async fn move_out_with_server(engine: &Arc<Engine>, params: &Value) -> Result<Va
                 plain.push(thread_id);
                 continue;
             };
-            if unarchive.iter().any(|known| known.card.entry_id == card.entry_id && known.card.rows == card.rows) {
+            if unarchive
+                .iter()
+                .any(|known| known.card.entry_id == card.entry_id && known.card.rows == card.rows)
+            {
                 continue;
             }
             let archive_folder = store::meron_archive_mailbox(&db, &parsed.account);
@@ -795,8 +846,13 @@ async fn move_out_with_server(engine: &Arc<Engine>, params: &Value) -> Result<Va
         // Inbox) lose the Archive's mark, and it leaves Archive where it is.
         if item.uids.is_empty() {
             let rows: Vec<(String, u32)> = item.card.rows.iter().cloned().collect();
-            let marked = crate::meron_marks::uids_marked(&engine.db.lock().unwrap(), &item.account, &rows);
-            crate::meron_marks::write_all(engine, crate::meron_marks::jobs_for(&item.account, marked, None)).await;
+            let marked =
+                crate::meron_marks::uids_marked(&engine.db.lock().unwrap(), &item.account, &rows);
+            crate::meron_marks::write_all(
+                engine,
+                crate::meron_marks::jobs_for(&item.account, marked, None),
+            )
+            .await;
             inbox_uids = item
                 .card
                 .rows
@@ -805,7 +861,11 @@ async fn move_out_with_server(engine: &Arc<Engine>, params: &Value) -> Result<Va
                 .map(|(_, uid)| *uid)
                 .collect();
         }
-        if let Some(archive) = item.archive_folder.as_deref().filter(|_| !item.uids.is_empty()) {
+        if let Some(archive) = item
+            .archive_folder
+            .as_deref()
+            .filter(|_| !item.uids.is_empty())
+        {
             // The Archive's mark first, so the copies don't carry it back.
             crate::meron_marks::write_all(
                 engine,
@@ -817,7 +877,15 @@ async fn move_out_with_server(engine: &Arc<Engine>, params: &Value) -> Result<Va
                 }],
             )
             .await;
-            match crate::engine::move_within_account(engine, &item.account, archive, "INBOX", &item.uids).await {
+            match crate::engine::move_within_account(
+                engine,
+                &item.account,
+                archive,
+                "INBOX",
+                &item.uids,
+            )
+            .await
+            {
                 Ok(copies) => {
                     inbox_uids = copies.uids;
                     touched.insert((item.account.clone(), archive.to_string()));
@@ -1003,7 +1071,13 @@ async fn archive_again(engine: &Arc<Engine>, params: &Value) -> Result<Value> {
         };
         let db = engine.db.lock().unwrap();
         release_after_action(&db, job.card);
-        touched.extend(file_after_archive(&db, &job.account, &job.archive_folder, &copies.uids, &job.keys));
+        touched.extend(file_after_archive(
+            &db,
+            &job.account,
+            &job.archive_folder,
+            &copies.uids,
+            &job.keys,
+        ));
         touched.insert((job.account.clone(), "INBOX".to_string()));
         touched.insert((job.account.clone(), job.archive_folder.clone()));
         moved += 1;
@@ -1128,7 +1202,11 @@ pub fn restore_marks_after_failed_archive(
         target: None,
     }];
     if let Some(card) = card {
-        jobs.extend(crate::meron_marks::job_for_filed_entry(conn, &card.entry_id, &card.folder_id));
+        jobs.extend(crate::meron_marks::job_for_filed_entry(
+            conn,
+            &card.entry_id,
+            &card.folder_id,
+        ));
     }
     crate::meron_marks::spawn_writes(engine, jobs);
 }
@@ -1142,7 +1220,10 @@ pub fn restore_archive_card_marks(
     conn: &Connection,
     card: &Option<store::MeronCardRelease>,
 ) {
-    let Some(card) = card.as_ref().filter(|card| card.folder_id == store::MERON_ARCHIVE_FOLDER_ID) else {
+    let Some(card) = card
+        .as_ref()
+        .filter(|card| card.folder_id == store::MERON_ARCHIVE_FOLDER_ID)
+    else {
         return;
     };
     let jobs = crate::meron_marks::job_for_filed_entry(conn, &card.entry_id, &card.folder_id);
@@ -1176,7 +1257,9 @@ pub fn file_after_archive(
     // The conversation key of each archived copy, for its mark below.
     let mut key_of_uid: Vec<(u32, Option<String>)> = Vec::with_capacity(target_uids.len());
     for uid in target_uids {
-        let key = store::meron_conversation_key(conn, account, archive_folder, *uid).ok().flatten();
+        let key = store::meron_conversation_key(conn, account, archive_folder, *uid)
+            .ok()
+            .flatten();
         if let Some(key) = &key {
             wanted.insert(key.clone());
         }
@@ -1204,7 +1287,12 @@ pub fn file_after_archive(
                 store::MERON_ARCHIVE_FOLDER_ID,
                 store::MeronFiling::User,
             )?;
-            touched.extend(moved.touched.into_iter().map(|folder| (account.to_string(), folder)));
+            touched.extend(
+                moved
+                    .touched
+                    .into_iter()
+                    .map(|folder| (account.to_string(), folder)),
+            );
         }
         tx.commit()?;
         Ok(())
@@ -1287,8 +1375,8 @@ pub fn release_after_action(
         folder_id: card.folder_id.clone(),
         source: card.source.clone(),
     };
-    let Err(err) = store::meron_release_card(conn, &card)
-        .or_else(|_| store::meron_release_card(conn, &card))
+    let Err(err) =
+        store::meron_release_card(conn, &card).or_else(|_| store::meron_release_card(conn, &card))
     else {
         return Some(released);
     };
@@ -1391,15 +1479,25 @@ impl UndoRestore {
         uids: &[u32],
     ) -> Vec<MarkJob> {
         if let Some(folder_id) = &self.meron_folder_id {
-            refile_after_undo(conn, account, folder, uids, root, folder_id, &self.meron_source);
+            refile_after_undo(
+                conn,
+                account,
+                folder,
+                uids,
+                root,
+                folder_id,
+                &self.meron_source,
+            );
             // Back in its Meron folder: its mark-folder copies get the mark
             // again.
-            let rows: Vec<(String, u32)> = uids.iter().map(|uid| (folder.to_string(), *uid)).collect();
+            let rows: Vec<(String, u32)> =
+                uids.iter().map(|uid| (folder.to_string(), *uid)).collect();
             let by_folder = crate::meron_marks::uids_to_mark(conn, account, &rows, Some(folder_id));
             return crate::meron_marks::jobs_for(account, by_folder, Some(folder_id));
         }
         if self.show_in_inbox
-            && let Err(err) = store::ai_sort_inbox_show_again_after_undo(conn, account, folder, uids)
+            && let Err(err) =
+                store::ai_sort_inbox_show_again_after_undo(conn, account, folder, uids)
         {
             crate::mlog!(
                 crate::log::Level::Warn,

@@ -189,7 +189,11 @@ impl AiError {
 impl std::fmt::Display for AiError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self.status {
-            Some(status) => write!(f, "AI service error ({}, HTTP {status})", self.kind.as_str()),
+            Some(status) => write!(
+                f,
+                "AI service error ({}, HTTP {status})",
+                self.kind.as_str()
+            ),
             None => write!(f, "AI service error ({})", self.kind.as_str()),
         }
     }
@@ -310,7 +314,8 @@ pub fn bulk_header_signal(header: &[u8]) -> Option<&'static str> {
     if value("Precedence").is_some_and(|value| matches!(value.as_str(), "bulk" | "list" | "junk")) {
         return Some("marked as bulk mail");
     }
-    if value("Auto-Submitted").is_some_and(|value| value.split(';').next().unwrap_or("").trim() != "no")
+    if value("Auto-Submitted")
+        .is_some_and(|value| value.split(';').next().unwrap_or("").trim() != "no")
     {
         return Some("sent automatically");
     }
@@ -473,7 +478,11 @@ pub fn system_prompt(folders: &[PromptFolder]) -> String {
 /// [`system_prompt`] for a request whose emails list `earlier` ones
 /// (`taught`), and where `spam` may be answered for the emails it is backed
 /// for.
-pub fn system_prompt_taught(folders: &[PromptFolder], taught: bool, spam: Option<&SpamChoice>) -> String {
+pub fn system_prompt_taught(
+    folders: &[PromptFolder],
+    taught: bool,
+    spam: Option<&SpamChoice>,
+) -> String {
     let mut prompt = base_system_prompt(folders);
     if taught {
         prompt.push_str(EARLIER_INSTRUCTIONS);
@@ -781,7 +790,11 @@ pub fn parse_decision_taught(
     let Some(answer) = value.pointer(&format!("/answers/{DECISION_QUESTION}")) else {
         return (None, String::new());
     };
-    if answer.get("type").and_then(Value::as_str).is_some_and(|kind| kind != "choice") {
+    if answer
+        .get("type")
+        .and_then(Value::as_str)
+        .is_some_and(|kind| kind != "choice")
+    {
         return (None, "No answer".to_string());
     }
     let Some(mut choice) = answer.get("choice").and_then(Value::as_str).map(str::trim) else {

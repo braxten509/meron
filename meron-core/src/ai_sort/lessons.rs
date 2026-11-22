@@ -54,16 +54,27 @@ pub struct PromptLesson {
 /// rough cut without a suffix list: the last two labels, or three under a
 /// country's common second level (`shop.co.uk`).
 pub fn site_of(addr: &str) -> String {
-    let domain = addr.trim().rsplit('@').next().unwrap_or_default().to_lowercase();
+    let domain = addr
+        .trim()
+        .rsplit('@')
+        .next()
+        .unwrap_or_default()
+        .to_lowercase();
     if !addr.contains('@') || domain.is_empty() {
         return String::new();
     }
-    let labels: Vec<&str> = domain.split('.').filter(|label| !label.is_empty()).collect();
+    let labels: Vec<&str> = domain
+        .split('.')
+        .filter(|label| !label.is_empty())
+        .collect();
     let keep = match labels.as_slice() {
         [.., second, top]
             if labels.len() >= 3
                 && top.len() == 2
-                && matches!(*second, "co" | "com" | "org" | "net" | "ac" | "gov" | "edu" | "or" | "ne") =>
+                && matches!(
+                    *second,
+                    "co" | "com" | "org" | "net" | "ac" | "gov" | "edu" | "or" | "ne"
+                ) =>
         {
             3
         }
@@ -185,10 +196,30 @@ mod tests {
     #[test]
     fn only_alike_lessons_are_shown_and_spam_needs_a_close_one() {
         let lessons = vec![
-            lesson("promo@shop.com", "Big weekend sale: 50% off", LessonPlace::Spam, 10),
-            lesson("orders@shop.com", "Your receipt for order 1234", LessonPlace::Inbox, 20),
-            lesson("stranger@bigmail.com", "You won a prize", LessonPlace::Spam, 30),
-            lesson("news@other.org", "Monthly news", LessonPlace::Meron("mf_a".into()), 40),
+            lesson(
+                "promo@shop.com",
+                "Big weekend sale: 50% off",
+                LessonPlace::Spam,
+                10,
+            ),
+            lesson(
+                "orders@shop.com",
+                "Your receipt for order 1234",
+                LessonPlace::Inbox,
+                20,
+            ),
+            lesson(
+                "stranger@bigmail.com",
+                "You won a prize",
+                LessonPlace::Spam,
+                30,
+            ),
+            lesson(
+                "news@other.org",
+                "Monthly news",
+                LessonPlace::Meron("mf_a".into()),
+                40,
+            ),
         ];
         let subjects = |found: Vec<&Lesson>| -> Vec<String> {
             found.iter().map(|lesson| lesson.subject.clone()).collect()
@@ -201,17 +232,30 @@ mod tests {
             ["Your receipt for order 1234", "Big weekend sale: 50% off"]
         );
         // Another address of the same company with an alike subject: close.
-        assert!(close(&lessons[0], "deals@mail.shop.com", "Weekend sale: 30% off"));
+        assert!(close(
+            &lessons[0],
+            "deals@mail.shop.com",
+            "Weekend sale: 30% off"
+        ));
         // The same company with another kind of subject: the Spam lesson is
         // not shown at all, the Inbox one is.
         assert_eq!(
-            subjects(alike(&lessons, "orders@shop.com", "Your receipt for order 9876")),
+            subjects(alike(
+                &lessons,
+                "orders@shop.com",
+                "Your receipt for order 9876"
+            )),
             ["Your receipt for order 1234"]
         );
         // The reader later moved such an advert back to the Inbox: their
         // latest word counts, and the older Spam lesson stays out.
         let mut taken_back = lessons.clone();
-        taken_back.push(lesson("promo@shop.com", "Big spring sale: 50% off", LessonPlace::Inbox, 50));
+        taken_back.push(lesson(
+            "promo@shop.com",
+            "Big spring sale: 50% off",
+            LessonPlace::Inbox,
+            50,
+        ));
         assert!(
             alike(&taken_back, "promo@shop.com", "Flash sale today")
                 .iter()
@@ -219,7 +263,12 @@ mod tests {
         );
         // As new as the Spam lesson: the one that isn't Spam still counts.
         let mut tied = lessons.clone();
-        tied.push(lesson("promo@shop.com", "Big spring sale: 50% off", LessonPlace::Inbox, 10));
+        tied.push(lesson(
+            "promo@shop.com",
+            "Big spring sale: 50% off",
+            LessonPlace::Inbox,
+            10,
+        ));
         assert!(
             alike(&tied, "promo@shop.com", "Flash sale today")
                 .iter()

@@ -58,8 +58,12 @@ pub(crate) async fn emit_meron_arrivals(
             .take(mail_model::NEW_MESSAGES_DETAIL_MAX)
             .map(|header| header.uid)
             .collect();
-        let fetch = fetch_bodies_for_uids(engine, account, &group.folder, &uids, parse::media_root());
-        if tokio::time::timeout(NOTIFY_PREVIEW_TIMEOUT, fetch).await.is_err() {
+        let fetch =
+            fetch_bodies_for_uids(engine, account, &group.folder, &uids, parse::media_root());
+        if tokio::time::timeout(NOTIFY_PREVIEW_TIMEOUT, fetch)
+            .await
+            .is_err()
+        {
             eprintln!("meron-core: notification bodies for {account}: timed out");
         }
         let account_name = account_label(engine, account);

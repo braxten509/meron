@@ -241,7 +241,11 @@ const MODEL_LIST_WAIT: Duration = Duration::from_secs(5);
 /// Whether `model` is an OpenRouter decision model, from the day's full model
 /// list (fetched when not cached). A list that can't be had fails the batch
 /// rather than send a decision model to the chat endpoint.
-async fn model_decision(engine: &Arc<Engine>, provider: &str, model: &str) -> Result<bool, AiError> {
+async fn model_decision(
+    engine: &Arc<Engine>,
+    provider: &str,
+    model: &str,
+) -> Result<bool, AiError> {
     if provider != "openrouter" {
         return Ok(false);
     }
@@ -313,7 +317,9 @@ async fn decide_batch_by_decision(
         let email = asked.next();
         let automated = email.is_some_and(|email| email.automated.is_some());
         let spam = spam.filter(|_| email.is_some_and(|email| email.spam_backed));
-        picks.push(ai::parse_decision_taught(&answer?, folders, automated, spam));
+        picks.push(ai::parse_decision_taught(
+            &answer?, folders, automated, spam,
+        ));
     }
     Ok(batch
         .iter()
@@ -379,7 +385,9 @@ pub fn push_lesson_tags(engine: &Arc<Engine>) {
         let engine = engine.clone();
         let work = async move {
             if let Err(err) = push_pending_tags(&engine, &account).await {
-                warn(format_args!("account={account}: lesson tag push failed: {err:#}"));
+                warn(format_args!(
+                    "account={account}: lesson tag push failed: {err:#}"
+                ));
             }
         };
         match tokio::runtime::Handle::try_current() {
@@ -594,7 +602,10 @@ async fn decide_batch(
 /// email (its first) and the answer stands for every email of the group (see
 /// [`expand_decisions`]).
 fn representatives(groups: &[Vec<AiSortCandidate>]) -> Vec<AiSortCandidate> {
-    groups.iter().filter_map(|group| group.first().cloned()).collect()
+    groups
+        .iter()
+        .filter_map(|group| group.first().cloned())
+        .collect()
 }
 
 /// Give each group's answer to every email of the group.
@@ -651,11 +662,16 @@ fn group_conversations(
     folder: &str,
     candidates: Vec<AiSortCandidate>,
 ) -> Vec<Vec<AiSortCandidate>> {
-    let fallback: Vec<Vec<AiSortCandidate>> =
-        candidates.iter().cloned().map(|candidate| vec![candidate]).collect();
+    let fallback: Vec<Vec<AiSortCandidate>> = candidates
+        .iter()
+        .cloned()
+        .map(|candidate| vec![candidate])
+        .collect();
     store::ai_sort_group_conversations(&engine.db.lock().unwrap(), account, folder, candidates)
         .unwrap_or_else(|err| {
-            warn(format_args!("account={account}: grouping by conversation: {err:#}"));
+            warn(format_args!(
+                "account={account}: grouping by conversation: {err:#}"
+            ));
             fallback
         })
 }
@@ -754,7 +770,9 @@ async fn mark_sorted(
         Ok(Ok(false)) => warn(format_args!(
             "account={account}: the mailbox takes no new keywords; sorted mail is remembered here only"
         )),
-        Ok(Err(err)) => warn(format_args!("account={account}: sorted mark failed: {err:#}")),
+        Ok(Err(err)) => warn(format_args!(
+            "account={account}: sorted mark failed: {err:#}"
+        )),
         Err(_) => warn(format_args!("account={account}: sorted mark timed out")),
     }
 }
@@ -773,8 +791,11 @@ async fn mark_filed(engine: &Arc<Engine>, account: &str, filed: &[(u32, String)]
     for (id, rows) in by_folder {
         let uids =
             crate::meron_marks::uids_to_mark(&engine.db.lock().unwrap(), account, &rows, Some(id));
-        crate::meron_marks::write_all(engine, crate::meron_marks::jobs_for(account, uids, Some(id)))
-            .await;
+        crate::meron_marks::write_all(
+            engine,
+            crate::meron_marks::jobs_for(account, uids, Some(id)),
+        )
+        .await;
     }
 }
 
@@ -889,7 +910,9 @@ async fn claim_mail(
         },
         Ok(Ok(None)) => all(),
         Ok(Err(err)) => {
-            warn(format_args!("account={account}: claiming mail failed: {err:#}"));
+            warn(format_args!(
+                "account={account}: claiming mail failed: {err:#}"
+            ));
             all()
         }
         Err(_) => {
@@ -911,7 +934,10 @@ async fn confirm_claims(
     decisions: Vec<AiSortDecision>,
     id: &str,
 ) -> (Vec<AiSortDecision>, Vec<u32>) {
-    let uids: Vec<u32> = decisions.iter().map(|decision| decision.candidate.uid).collect();
+    let uids: Vec<u32> = decisions
+        .iter()
+        .map(|decision| decision.candidate.uid)
+        .collect();
     let read = tokio::time::timeout(
         MARK_WAIT,
         engine.with_read_session(account, |session| {
@@ -922,7 +948,9 @@ async fn confirm_claims(
     )
     .await;
     let Ok(Ok(states)) = read else {
-        warn(format_args!("account={account}: claims not confirmed, sorting on"));
+        warn(format_args!(
+            "account={account}: claims not confirmed, sorting on"
+        ));
         return (decisions, Vec::new());
     };
     let held: BTreeSet<u32> = states
@@ -933,7 +961,12 @@ async fn confirm_claims(
     let (kept, lost): (Vec<_>, Vec<_>) = decisions
         .into_iter()
         .partition(|decision| held.contains(&decision.candidate.uid));
-    (kept, lost.into_iter().map(|decision| decision.candidate.uid).collect())
+    (
+        kept,
+        lost.into_iter()
+            .map(|decision| decision.candidate.uid)
+            .collect(),
+    )
 }
 
 /// Take the claims of the devices `ids` off `uids`. Best effort.
@@ -959,8 +992,12 @@ async fn unclaim_mail(
     .await;
     match done {
         Ok(Ok(())) => {}
-        Ok(Err(err)) => warn(format_args!("account={account}: taking a claim off failed: {err:#}")),
-        Err(_) => warn(format_args!("account={account}: taking a claim off timed out")),
+        Ok(Err(err)) => warn(format_args!(
+            "account={account}: taking a claim off failed: {err:#}"
+        )),
+        Err(_) => warn(format_args!(
+            "account={account}: taking a claim off timed out"
+        )),
     }
 }
 
@@ -1002,7 +1039,9 @@ async fn await_other_device(
         let states = match read {
             Ok(Ok(states)) => states,
             Ok(Err(err)) => {
-                warn(format_args!("account={account}: reading claims failed: {err:#}"));
+                warn(format_args!(
+                    "account={account}: reading claims failed: {err:#}"
+                ));
                 break;
             }
             Err(_) => break,
@@ -1152,7 +1191,9 @@ pub async fn take_over_stuck(engine: &Arc<Engine>, account: &str) {
     let mut take: Vec<AiSortCandidate> = Vec::new();
     let mut again: Vec<(AiSortCandidate, Vec<String>)> = Vec::new();
     for watched in due {
-        let state = states.iter().find(|state| state.uid == watched.candidate.uid);
+        let state = states
+            .iter()
+            .find(|state| state.uid == watched.candidate.uid);
         // Moved away, decided, or the mailbox started over: no longer open.
         let Some(state) = state.filter(|state| !state.sorted) else {
             continue;
@@ -1226,7 +1267,10 @@ pub async fn plan_for(engine: &Arc<Engine>, account: &str, folder: &str) -> Opti
         // Meron folders take every mail account's Inbox, but never a feed's.
         let meron = store::meron_folder_names(&db).ok()?;
         let folders = ai::prompt_folders(&config, account, &meron);
-        let sortable = store::sort_accounts(&db).ok()?.iter().any(|id| id == account);
+        let sortable = store::sort_accounts(&db)
+            .ok()?
+            .iter()
+            .any(|id| id == account);
         if !sortable {
             return None;
         }
@@ -1383,7 +1427,8 @@ pub async fn sort_new_mail(
         let _turn = lock.lock().await;
         if plan.config.reads == "start" {
             let uids: Vec<u32> = candidates.iter().map(|candidate| candidate.uid).collect();
-            let fetch = fetch_bodies_for_uids(engine, account, folder, &uids, engine.host.media_root());
+            let fetch =
+                fetch_bodies_for_uids(engine, account, folder, &uids, engine.host.media_root());
             let wait = BODY_WAIT.min(deadline.saturating_duration_since(Instant::now()));
             // Mail whose body isn't here by then goes with sender and subject.
             let _ = tokio::time::timeout(wait, fetch).await;
@@ -1429,12 +1474,18 @@ pub async fn sort_new_mail(
                 spawn_rule_worker(engine, account, store::EXISTING_RULE_FOLDER);
             }
             moving.lock().unwrap().extend(recorded.moving);
-            filed.lock().unwrap().extend(recorded.filed_to.iter().cloned());
+            filed
+                .lock()
+                .unwrap()
+                .extend(recorded.filed_to.iter().cloned());
             // After the decision, before the move, so the mark travels with it;
             // only on what the store took on. Not outside the Inbox: sorting
             // there is this device's view only and writes nothing to the server.
             if inbox {
-                marked.lock().unwrap().extend(recorded.accepted.iter().copied());
+                marked
+                    .lock()
+                    .unwrap()
+                    .extend(recorded.accepted.iter().copied());
                 mark_sorted(engine, account, folder, recorded.accepted, claim.as_deref()).await;
                 mark_filed(engine, account, &recorded.filed_to).await;
             }
@@ -1473,13 +1524,17 @@ pub async fn sort_new_mail(
     match outcome {
         Ok(Ok(())) => {}
         Ok(Err(Some(err))) => {
-            warn(format_args!("account={account}: new mail left in Inbox: {err}"));
+            warn(format_args!(
+                "account={account}: new mail left in Inbox: {err}"
+            ));
             engine.ai_sort.set_error(&err);
             let detail = err.message.clone();
             give_up(engine, account, folder, uidvalidity, rest, "failed", detail).await;
         }
         Ok(Err(None)) | Err(_) => {
-            warn(format_args!("account={account}: the AI took too long; new mail left in Inbox"));
+            warn(format_args!(
+                "account={account}: the AI took too long; new mail left in Inbox"
+            ));
             let detail = "The AI took too long.".to_string();
             give_up(engine, account, folder, uidvalidity, rest, "slow", detail).await;
         }
@@ -1495,7 +1550,9 @@ pub async fn sort_new_mail(
             &[],
         );
         if let Err(err) = left {
-            warn(format_args!("could not show mail another device sorts: {err:#}"));
+            warn(format_args!(
+                "could not show mail another device sorts: {err:#}"
+            ));
         }
     }
     // Mail another device sorts: what it moved away isn't shown or announced
@@ -1513,7 +1570,9 @@ pub async fn sort_new_mail(
             &shown,
             &other.gone,
         ) {
-            warn(format_args!("could not show mail another device sorts: {err:#}"));
+            warn(format_args!(
+                "could not show mail another device sorts: {err:#}"
+            ));
         }
         moving.extend(other.gone.iter().copied());
         let mut open = other.open;
@@ -1589,8 +1648,9 @@ static FOLDER_CHECK_FAILED: std::sync::Mutex<BTreeSet<(String, String)>> =
 /// Spam mail already looked at for another device's lesson, per account, so
 /// mail a sync can't reach doesn't start one every check: mail found with the
 /// lesson's tag, and (`1`) mail found to have lost it.
-static SPAM_LESSONS_SEEN: std::sync::Mutex<Option<HashMap<String, (BTreeSet<u32>, BTreeSet<u32>)>>> =
-    std::sync::Mutex::new(None);
+static SPAM_LESSONS_SEEN: std::sync::Mutex<
+    Option<HashMap<String, (BTreeSet<u32>, BTreeSet<u32>)>>,
+> = std::sync::Mutex::new(None);
 
 /// Most Spam mail one check reads for its lesson tag; the rest waits for the
 /// next check.
@@ -1623,7 +1683,9 @@ async fn check_taught_spam(engine: &Arc<Engine>, account: &str) {
     let uids = match found {
         Ok(uids) => uids,
         Err(err) => {
-            warn(format_args!("account={account}: Spam lesson check: {err:#}"));
+            warn(format_args!(
+                "account={account}: Spam lesson check: {err:#}"
+            ));
             return;
         }
     };
@@ -1684,7 +1746,9 @@ async fn check_taught_spam(engine: &Arc<Engine>, account: &str) {
         store::upsert_read_messages(&engine.db.lock().unwrap(), account, &junk, &headers)
     });
     if let Err(err) = stored {
-        warn(format_args!("account={account}: Spam lessons not read: {err:#}"));
+        warn(format_args!(
+            "account={account}: Spam lessons not read: {err:#}"
+        ));
         look_again(&wanted);
     }
 }
@@ -1742,7 +1806,9 @@ pub async fn check_watched_folders(engine: &Arc<Engine>, account: &str) -> Vec<M
     let folders = {
         let db = engine.db.lock().unwrap();
         store::ai_sort_check_folders(&db, &plan.config, account).unwrap_or_else(|err| {
-            warn(format_args!("account={account}: folder check skipped: {err:#}"));
+            warn(format_args!(
+                "account={account}: folder check skipped: {err:#}"
+            ));
             Vec::new()
         })
     };
@@ -1813,9 +1879,9 @@ pub async fn check_watched_folders(engine: &Arc<Engine>, account: &str) -> Vec<M
         match sync_background_messages(engine, account, folder, FOLDER_CHECK_LIMIT).await {
             Ok(synced) => alerts.extend(synced.meron_arrivals),
             Err(err) if err.is::<BackgroundSyncCancelled>() => {}
-            Err(err) => {
-                warn(format_args!("account={account} folder={folder}: check sync failed: {err:#}"))
-            }
+            Err(err) => warn(format_args!(
+                "account={account} folder={folder}: check sync failed: {err:#}"
+            )),
         }
     }
     // More new mail than one sync's window holds: read the rest, oldest first,
@@ -1956,9 +2022,17 @@ pub async fn estimate(engine: &Arc<Engine>) -> anyhow::Result<serde_json::Value>
             for (_, folders, groups) in &work {
                 let overhead = ai::decision_overhead(folders);
                 for candidate in groups.iter().filter_map(|group| group.first()) {
-                    let start = if config.reads == "start" { ai::START_CHARS } else { 0 };
-                    tokens_in +=
-                        (sender_of(candidate).len() + candidate.subject.len() + 20 + start + overhead) / 4;
+                    let start = if config.reads == "start" {
+                        ai::START_CHARS
+                    } else {
+                        0
+                    };
+                    tokens_in += (sender_of(candidate).len()
+                        + candidate.subject.len()
+                        + 20
+                        + start
+                        + overhead)
+                        / 4;
                 }
             }
             return tokens_in as f64 * price_in / 1_000_000.0;
@@ -1967,11 +2041,17 @@ pub async fn estimate(engine: &Arc<Engine>) -> anyhow::Result<serde_json::Value>
         // each email, its JSON and the answer's line for it.
         let mut tokens_in = 0usize;
         for (_, folders, groups) in &work {
-            let system = ai::system_prompt(folders).len() + ai::answer_schema(folders).to_string().len();
+            let system =
+                ai::system_prompt(folders).len() + ai::answer_schema(folders).to_string().len();
             tokens_in += groups.len().div_ceil(ai::BATCH) * system / 4;
             for candidate in groups.iter().filter_map(|group| group.first()) {
-                let start = if config.reads == "start" { ai::START_CHARS } else { 0 };
-                tokens_in += (sender_of(candidate).len() + candidate.subject.len() + 40 + start) / 4;
+                let start = if config.reads == "start" {
+                    ai::START_CHARS
+                } else {
+                    0
+                };
+                tokens_in +=
+                    (sender_of(candidate).len() + candidate.subject.len() + 40 + start) / 4;
             }
         }
         let tokens_out = asked * 30 + requests * 10;
@@ -2078,8 +2158,7 @@ async fn run_job(engine: &Arc<Engine>, config: &AiSortConfig, key: &str, work: W
             let chunk: Vec<Vec<AiSortCandidate>> = match &claim {
                 Some(id) => {
                     let uids: Vec<u32> = chunk.iter().flatten().map(|it| it.uid).collect();
-                    let claimed =
-                        claim_mail(engine, &account, folder, &uids, id, CLAIM_WAIT).await;
+                    let claimed = claim_mail(engine, &account, folder, &uids, id, CLAIM_WAIT).await;
                     exact = claimed.exact;
                     chunk
                         .into_iter()
@@ -2102,8 +2181,11 @@ async fn run_job(engine: &Arc<Engine>, config: &AiSortConfig, key: &str, work: W
             // This device's claim goes off whatever it doesn't decide here.
             let claimed: Vec<u32> = chunk.iter().flatten().map(|it| it.uid).collect();
             let unclaim = |decided: Vec<u32>| {
-                let open: Vec<u32> =
-                    claimed.iter().copied().filter(|uid| !decided.contains(uid)).collect();
+                let open: Vec<u32> = claimed
+                    .iter()
+                    .copied()
+                    .filter(|uid| !decided.contains(uid))
+                    .collect();
                 let ids: Vec<String> = claim.iter().cloned().collect();
                 unclaim_mail(engine, &account, folder, open, ids)
             };
@@ -2111,14 +2193,21 @@ async fn run_job(engine: &Arc<Engine>, config: &AiSortConfig, key: &str, work: W
             let batch = batch.as_slice();
             if config.reads == "start" {
                 let uids: Vec<u32> = batch.iter().map(|candidate| candidate.uid).collect();
-                let fetch =
-                    fetch_bodies_for_uids(engine, &account, folder, &uids, engine.host.media_root());
+                let fetch = fetch_bodies_for_uids(
+                    engine,
+                    &account,
+                    folder,
+                    &uids,
+                    engine.host.media_root(),
+                );
                 let _ = tokio::time::timeout(JOB_BODY_WAIT, fetch).await;
             }
             let deadline = Instant::now() + JOB_BATCH_BUDGET;
             let decided = tokio::time::timeout(
                 JOB_BATCH_BUDGET,
-                decide_batch(engine, config, key, &folders, &account, folder, batch, deadline),
+                decide_batch(
+                    engine, config, key, &folders, &account, folder, batch, deadline,
+                ),
             )
             .await
             .unwrap_or_else(|_| Err(AiError::network("The AI took too long.")));
@@ -2135,7 +2224,9 @@ async fn run_job(engine: &Arc<Engine>, config: &AiSortConfig, key: &str, work: W
                     }
                     let decisions = match &claim {
                         Some(id) if !exact => {
-                            confirm_claims(engine, &account, folder, decisions, id).await.0
+                            confirm_claims(engine, &account, folder, decisions, id)
+                                .await
+                                .0
                         }
                         _ => decisions,
                     };
@@ -2171,10 +2262,21 @@ async fn run_job(engine: &Arc<Engine>, config: &AiSortConfig, key: &str, work: W
                     engine.ai_sort.set_error(&err);
                     let detail = err.message.clone();
                     let members: Vec<AiSortCandidate> = chunk.iter().flatten().cloned().collect();
-                    give_up(engine, &account, folder, uidvalidity, members, "failed", detail)
-                        .await;
+                    give_up(
+                        engine,
+                        &account,
+                        folder,
+                        uidvalidity,
+                        members,
+                        "failed",
+                        detail,
+                    )
+                    .await;
                     unclaim(Vec::new()).await;
-                    if matches!(err.kind, ErrorKind::Key | ErrorKind::Credit | ErrorKind::Verify) {
+                    if matches!(
+                        err.kind,
+                        ErrorKind::Key | ErrorKind::Credit | ErrorKind::Verify
+                    ) {
                         break 'accounts;
                     }
                 }
@@ -2231,7 +2333,8 @@ pub async fn move_back(engine: &Arc<Engine>, id: i64) -> anyhow::Result<()> {
                     let media_root = media_root.clone();
                     let account = entry.account.clone();
                     Box::pin(async move {
-                        imap::fetch_by_message_ids(session, &target, &ids, &media_root, &account).await
+                        imap::fetch_by_message_ids(session, &target, &ids, &media_root, &account)
+                            .await
                     })
                 })
                 .await?;

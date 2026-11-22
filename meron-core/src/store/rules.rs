@@ -666,7 +666,14 @@ pub fn log_rule_lost_moves(conn: &Connection, account: &str, lost: &[RuleAction]
         for rule_id in &action.rule_ids {
             if super::is_ai_rule_id(rule_id) {
                 let reason = "a rule moved it first";
-                super::ai_sort::ai_sort_log_failed(conn, account, &action.folder, action, reason, false)?;
+                super::ai_sort::ai_sort_log_failed(
+                    conn,
+                    account,
+                    &action.folder,
+                    action,
+                    reason,
+                    false,
+                )?;
                 continue;
             }
             let reason = "another rule had already moved this message";

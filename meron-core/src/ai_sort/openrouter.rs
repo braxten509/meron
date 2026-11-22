@@ -9,7 +9,8 @@ use super::{AiError, ErrorKind, HTTP_TIMEOUT, Model};
 const BASE: &str = "https://openrouter.ai/api/v1";
 
 fn agent() -> Result<ureq::Agent, AiError> {
-    crate::proxy::agent().map_err(|_| AiError::new(ErrorKind::Other, "The app proxy setting is invalid."))
+    crate::proxy::agent()
+        .map_err(|_| AiError::new(ErrorKind::Other, "The app proxy setting is invalid."))
 }
 
 /// Read a response: its status, `Retry-After` and body.
@@ -84,7 +85,10 @@ pub fn chat(key: &str, mut body: Value, structured: bool) -> Result<String, AiEr
     if let Some(err) = body_error(&value) {
         return Err(err);
     }
-    if let Some(err) = value.pointer("/choices/0/error").and_then(|error| body_error(&json!({ "error": error }))) {
+    if let Some(err) = value
+        .pointer("/choices/0/error")
+        .and_then(|error| body_error(&json!({ "error": error })))
+    {
         return Err(err);
     }
     Ok(value
@@ -145,7 +149,10 @@ pub fn check_key(key: &str) -> Result<(), AiError> {
         .and_then(Value::as_f64)
         .is_some_and(|left| left <= 0.0)
     {
-        return Err(AiError::new(ErrorKind::Credit, "This key has no credit left."));
+        return Err(AiError::new(
+            ErrorKind::Credit,
+            "This key has no credit left.",
+        ));
     }
     Ok(())
 }
@@ -185,7 +192,10 @@ fn model_of(item: &Value) -> Option<Model> {
 /// and whether the decision models are in it: a decision list that fails
 /// leaves the chat models listed rather than none.
 pub fn models(key: Option<&str>) -> Result<(Vec<Model>, bool), AiError> {
-    let mut out = list(&format!("{BASE}/models?supported_parameters=structured_outputs"), key)?;
+    let mut out = list(
+        &format!("{BASE}/models?supported_parameters=structured_outputs"),
+        key,
+    )?;
     let decisions = list(&format!("{BASE}/models?output_modalities=decisions"), key);
     let complete = decisions.is_ok();
     for mut model in decisions.unwrap_or_default() {
@@ -237,7 +247,14 @@ fn list(first: &str, key: Option<&str>) -> Result<Vec<Model>, AiError> {
                 url = if next.starts_with("http") {
                     next.to_string()
                 } else {
-                    format!("https://openrouter.ai{}", if next.starts_with('/') { next.to_string() } else { format!("/{next}") })
+                    format!(
+                        "https://openrouter.ai{}",
+                        if next.starts_with('/') {
+                            next.to_string()
+                        } else {
+                            format!("/{next}")
+                        }
+                    )
                 };
             }
             _ => break,

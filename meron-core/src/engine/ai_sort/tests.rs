@@ -65,5 +65,9 @@ fn ai_moved_mail_does_not_alert_until_its_move_fails_for_good() {
     let mut arrivals = Vec::new();
     settle_arrivals(&mut arrivals, &BTreeSet::new(), late);
     assert_eq!(arrivals.iter().map(|it| it.uid).collect::<Vec<_>>(), [1]);
-    assert!(store::ai_sort_take_alerts(&conn, "acct", "INBOX").unwrap().is_empty());
+    assert!(
+        store::ai_sort_take_alerts(&conn, "acct", "INBOX")
+            .unwrap()
+            .is_empty()
+    );
 }

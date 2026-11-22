@@ -261,8 +261,8 @@ pub(crate) async fn dispatch(
             // whole LIST, once per archived conversation). Only an account it
             // names no archive mailbox for still asks the server.
             let saved = {
-                let folders = store::get_folders(&engine.db.lock().unwrap(), &account)
-                    .unwrap_or_default();
+                let folders =
+                    store::get_folders(&engine.db.lock().unwrap(), &account).unwrap_or_default();
                 cached_archive_folder_from_folders(folders, "")
             };
             let archive = match saved {
@@ -278,7 +278,11 @@ pub(crate) async fn dispatch(
             match archive {
                 Some(folder) => Ok(json!({ "folder": folder })),
                 // The caller archives Meron-only then (`allow_missing`).
-                None if p.get("allow_missing").and_then(Value::as_bool).unwrap_or(false) => {
+                None if p
+                    .get("allow_missing")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false) =>
+                {
                     Ok(json!({ "folder": Value::Null }))
                 }
                 None => Err(anyhow::anyhow!("Archive folder not found for this account")),

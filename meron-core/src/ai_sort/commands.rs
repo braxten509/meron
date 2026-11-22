@@ -41,7 +41,11 @@ fn check_result(result: Result<(), AiError>) -> Value {
 
 /// Run one command: `get`, `set`, `setKey`, `checkKey`, `models`, `estimate`,
 /// `run`, `stop`, `status`, `moveBack`, `lessons` or `forgetLesson`.
-pub async fn dispatch(engine: &Arc<Engine>, command: &str, params: &Value) -> anyhow::Result<Value> {
+pub async fn dispatch(
+    engine: &Arc<Engine>,
+    command: &str,
+    params: &Value,
+) -> anyhow::Result<Value> {
     match command {
         "get" => {
             let config = store::ai_sort_config(&engine.db.lock().unwrap())?;

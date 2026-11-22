@@ -129,7 +129,10 @@ fn own_replies_of_deleted(
     }
     let Some(addr) = sender_key_addr(thread_key) else {
         let by_folder = thread_uids_by_folder(conn, account, folder, thread_key, subject, false)?;
-        if by_folder.keys().any(|other| scope.keeps_conversation(other)) {
+        if by_folder
+            .keys()
+            .any(|other| scope.keeps_conversation(other))
+        {
             return Ok(copies);
         }
         copies.extend(
@@ -346,7 +349,8 @@ mod tests {
             .map(|header| (header.folder, header.uid))
             .collect();
         let card = branch_compound_key(thread, "topic");
-        let counts = card_message_counts(conn, "acct", folder, std::slice::from_ref(&card)).unwrap();
+        let counts =
+            card_message_counts(conn, "acct", folder, std::slice::from_ref(&card)).unwrap();
         (shown, counts.get(&card).copied().unwrap_or(0))
     }
 
@@ -362,7 +366,10 @@ mod tests {
         add(&conn, "Junk", 3, "k");
         add(&conn, "Sent", 4, "k");
 
-        assert_eq!(read(&conn, "INBOX", "k"), (vec![at("INBOX", 1), at("Sent", 4)], 2));
+        assert_eq!(
+            read(&conn, "INBOX", "k"),
+            (vec![at("INBOX", 1), at("Sent", 4)], 2)
+        );
         assert_eq!(
             read(&conn, "Trash", "k"),
             (vec![at("INBOX", 1), at("Trash", 2), at("Sent", 4)], 3)

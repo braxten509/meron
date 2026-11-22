@@ -372,7 +372,10 @@ pub fn get_recent_page_from(
     // the LIMIT, so pages stay full and the cursor exact; a card shows while
     // any of its Inbox messages is new enough, since its newest row decides.
     let recent = if super::inbox_hides_old(account, folder) {
-        format!(" AND {}", super::inbox_listed_sql("messages", super::now_unix()))
+        format!(
+            " AND {}",
+            super::inbox_listed_sql("messages", super::now_unix())
+        )
     } else {
         String::new()
     };
@@ -463,7 +466,8 @@ pub fn get_recent_page_from(
         stmt.query_map(all.as_slice(), map)?
             .collect::<rusqlite::Result<_>>()?
     } else {
-        stmt.query_map(base, map)?.collect::<rusqlite::Result<_>>()?
+        stmt.query_map(base, map)?
+            .collect::<rusqlite::Result<_>>()?
     };
     let has_more = out.len() > limit as usize;
     if has_more {
@@ -476,7 +480,10 @@ pub fn get_recent_page_from(
     } else {
         None
     };
-    Ok((out.into_iter().map(|(header, _)| header).collect(), next_cursor))
+    Ok((
+        out.into_iter().map(|(header, _)| header).collect(),
+        next_cursor,
+    ))
 }
 
 #[cfg(test)]
@@ -760,14 +767,19 @@ pub fn get_starred_page_from(
         stmt.query_map(all.as_slice(), map)?
             .collect::<rusqlite::Result<_>>()?
     } else {
-        stmt.query_map(base, map)?.collect::<rusqlite::Result<_>>()?
+        stmt.query_map(base, map)?
+            .collect::<rusqlite::Result<_>>()?
     };
     let has_more = out.len() > limit as usize;
     if has_more {
         out.truncate(limit as usize);
     }
     let next_cursor = has_more.then(|| out.last()).flatten().map(|header| {
-        format_mail_cursor(header.date, header.uid, mixed.then_some(header.folder.as_str()))
+        format_mail_cursor(
+            header.date,
+            header.uid,
+            mixed.then_some(header.folder.as_str()),
+        )
     });
     Ok((out, next_cursor))
 }

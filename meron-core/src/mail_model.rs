@@ -356,8 +356,10 @@ fn thread_cards_json_keyed(
         };
         (folder.to_string(), header.uid)
     };
-    let meron_rows: Vec<(String, u32)> =
-        cards.iter().map(|card| card_location(&card.header)).collect();
+    let meron_rows: Vec<(String, u32)> = cards
+        .iter()
+        .map(|card| card_location(&card.header))
+        .collect();
     let meron_of = store::meron_folder_of_rows(conn, account_id, &meron_rows)?;
 
     cards
@@ -643,7 +645,11 @@ pub fn starred_page(
     before_cursor: Option<&str>,
 ) -> Value {
     // Starred cards are all starred already; only "unread" narrows them.
-    let filter = if filter.eq_ignore_ascii_case("unread") { "unread" } else { "" };
+    let filter = if filter.eq_ignore_ascii_case("unread") {
+        "unread"
+    } else {
+        ""
+    };
     narrow_cards(&mut items, query, filter, attachments_only);
     items.sort_by(|a, b| {
         b.get("date")
@@ -806,7 +812,11 @@ pub fn meron_folder_page(
                 &mut draft_keys_by_account,
             )?);
         }
-        let filter = if filter.eq_ignore_ascii_case("all") { "" } else { filter };
+        let filter = if filter.eq_ignore_ascii_case("all") {
+            ""
+        } else {
+            filter
+        };
         narrow_cards(&mut chunk_cards, query, filter, attachments_only);
         cards.extend(chunk_cards);
     }
@@ -845,7 +855,9 @@ fn meron_entry_cards(
         Some(keys) => keys,
         None => {
             let keys = store::draft_thread_keys(conn, account)?;
-            draft_keys_by_account.entry(account.to_string()).or_insert(keys)
+            draft_keys_by_account
+                .entry(account.to_string())
+                .or_insert(keys)
         }
     };
     let mut cards: Vec<Value> = Vec::new();

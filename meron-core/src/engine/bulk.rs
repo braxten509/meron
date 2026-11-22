@@ -21,11 +21,11 @@ use futures::future::join_all;
 use serde_json::Value;
 use tokio::sync::{Notify, OwnedSemaphorePermit, Semaphore, oneshot};
 
+use super::Engine;
 use super::sync::{
     CopiesAsk, MovedCopies, Trashed, delete_to_trash_alone, move_on_server_alone,
     refresh_moved_copies_shared,
 };
-use super::Engine;
 use crate::meron_marks::MarkJob;
 
 /// How long the waiting members are held for one that is busy with something
@@ -265,7 +265,8 @@ impl Seat {
     /// the target folder that serves every member. `None` when the run has
     /// stopped doing the steps.
     pub(crate) async fn copies(&self, ask: CopiesAsk) -> Option<MovedCopies> {
-        self.wait(Step::Copies, |state| &mut state.copies, ask).await
+        self.wait(Step::Copies, |state| &mut state.copies, ask)
+            .await
     }
 
     /// Take the member out of the run.
@@ -328,7 +329,10 @@ async fn answer_moves(engine: &Arc<Engine>, waiting: Vec<Waiting<MoveAsk, anyhow
     }
     join_all(groups.into_iter().map(|group| async move {
         let first = &group[0].ask;
-        let mut uids: Vec<u32> = group.iter().flat_map(|member| member.ask.uids.iter().copied()).collect();
+        let mut uids: Vec<u32> = group
+            .iter()
+            .flat_map(|member| member.ask.uids.iter().copied())
+            .collect();
         uids.sort_unstable();
         uids.dedup();
         let moved = match &first.to {
@@ -350,7 +354,9 @@ async fn answer_moves(engine: &Arc<Engine>, waiting: Vec<Waiting<MoveAsk, anyhow
             Err(err) => {
                 let err = Arc::new(err);
                 for member in group {
-                    let _ = member.answer.send(Err(anyhow::Error::new(SharedError(err.clone()))));
+                    let _ = member
+                        .answer
+                        .send(Err(anyhow::Error::new(SharedError(err.clone()))));
                 }
             }
         }
@@ -371,8 +377,10 @@ async fn answer_copies(engine: &Arc<Engine>, waiting: Vec<Waiting<CopiesAsk, Mov
         }
     }
     join_all(groups.into_iter().map(|group| async move {
-        let (asks, answers): (Vec<CopiesAsk>, Vec<oneshot::Sender<MovedCopies>>) =
-            group.into_iter().map(|member| (member.ask, member.answer)).unzip();
+        let (asks, answers): (Vec<CopiesAsk>, Vec<oneshot::Sender<MovedCopies>>) = group
+            .into_iter()
+            .map(|member| (member.ask, member.answer))
+            .unzip();
         let copies = refresh_moved_copies_shared(engine, &asks).await;
         for (answer, copies) in answers.into_iter().zip(copies) {
             let _ = answer.send(copies);
@@ -389,11 +397,16 @@ pub async fn run_together<F: Future>(engine: &Arc<Engine>, mut actions: Vec<F>) 
     }
     let run = BulkRun::new();
     let seats: Vec<Arc<Seat>> = actions.iter().map(|_| run.seat()).collect();
-    let members = join_all(actions.into_iter().zip(seats).map(|(action, seat)| async move {
-        let answer = SEAT.scope(seat.clone(), action).await;
-        seat.leave();
-        answer
-    }));
+    let members = join_all(
+        actions
+            .into_iter()
+            .zip(seats)
+            .map(|(action, seat)| async move {
+                let answer = SEAT.scope(seat.clone(), action).await;
+                seat.leave();
+                answer
+            }),
+    );
     let (answers, ()) = tokio::join!(members, run.drive(engine));
     run.close();
     answers

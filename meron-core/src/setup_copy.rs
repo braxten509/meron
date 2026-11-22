@@ -37,10 +37,10 @@ use anyhow::{Result, anyhow};
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use ring::rand::{SecureRandom, SystemRandom};
 use ring::{aead, hkdf, hmac};
-use spake2::{Ed25519Group, Identity, Password, Spake2};
 use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior, params};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use spake2::{Ed25519Group, Identity, Password, Spake2};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{mpsc, watch};
@@ -167,7 +167,8 @@ fn fail(code: &'static str) -> anyhow::Error {
 }
 
 fn failure_code(err: &anyhow::Error) -> &'static str {
-    err.downcast_ref::<Failure>().map_or("broken", |failure| failure.0)
+    err.downcast_ref::<Failure>()
+        .map_or("broken", |failure| failure.0)
 }
 
 // ---- Session state ------------------------------------------------------------
@@ -263,7 +264,10 @@ fn current() -> Option<Arc<Session>> {
 fn status_json(status: &Status) -> Value {
     let mut value = serde_json::to_value(status).unwrap_or_else(|_| json!({}));
     if let Some(object) = value.as_object_mut() {
-        object.insert("active".to_string(), json!(!matches!(status.stage, "idle" | "done" | "failed")));
+        object.insert(
+            "active".to_string(),
+            json!(!matches!(status.stage, "idle" | "done" | "failed")),
+        );
         object.insert("now".to_string(), json!(store::now_unix()));
     }
     value
@@ -323,14 +327,26 @@ fn new_session(engine: &Arc<Engine>, host: bool, status: Status) -> Arc<Session>
 /// | `cancel`        | `{}`                            |
 /// | `safetyInfo`    | `{}`                            |
 /// | `restoreSafety` | `{}`                            |
-pub async fn dispatch(engine: &Arc<Engine>, command: &str, params: &Value, device: &str) -> Result<Value> {
-    let device = if device == "phone" { "phone" } else { "computer" };
+pub async fn dispatch(
+    engine: &Arc<Engine>,
+    command: &str,
+    params: &Value,
+    device: &str,
+) -> Result<Value> {
+    let device = if device == "phone" {
+        "phone"
+    } else {
+        "computer"
+    };
     match command {
         "host" => host(engine, device).await,
         "join" => join(engine, params, device).await,
         "status" => Ok(status()),
         "setKeep" => {
-            let keep = params.get("keep").and_then(Value::as_str).unwrap_or_default();
+            let keep = params
+                .get("keep")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
             set_keep(keep);
             Ok(status())
         }
@@ -340,7 +356,9 @@ pub async fn dispatch(engine: &Arc<Engine>, command: &str, params: &Value, devic
         }
         "cancel" => {
             // A copy on its way finishes: leaving the screen must not cut it.
-            if current().is_some_and(|session| matches!(session.snapshot().stage, "copying" | "applying")) {
+            if current()
+                .is_some_and(|session| matches!(session.snapshot().stage, "copying" | "applying"))
+            {
                 return Ok(status());
             }
             end_current();
@@ -417,7 +435,14 @@ fn start_copy(session: &Arc<Session>) {
 async fn host(engine: &Arc<Engine>, device: &str) -> Result<Value> {
     let addresses = lan_addresses();
     if addresses.is_empty() {
-        let session = new_session(engine, true, Status { me: device.to_string(), ..Default::default() });
+        let session = new_session(
+            engine,
+            true,
+            Status {
+                me: device.to_string(),
+                ..Default::default()
+            },
+        );
         session.fail("no_network");
         retire(&session);
         return Ok(status());
@@ -431,7 +456,11 @@ async fn host(engine: &Arc<Engine>, device: &str) -> Result<Value> {
     let port = listener.local_addr()?.port();
     let code = new_code();
     let mine = counts(engine).await;
-    let list = addresses.iter().map(Ipv4Addr::to_string).collect::<Vec<_>>().join(",");
+    let list = addresses
+        .iter()
+        .map(Ipv4Addr::to_string)
+        .collect::<Vec<_>>()
+        .join(",");
     let qr = format!("{QR_PREFIX}{list}:{port}/{code}");
     let session = new_session(
         engine,
@@ -517,16 +546,29 @@ async fn accept_loop(session: Arc<Session>, listener: TcpListener, code: String)
 
 /// Where to connect, from a scanned QR code or the typed address and code.
 fn parse_target(params: &Value) -> Result<(Vec<Ipv4Addr>, u16, String)> {
-    let qr = params.get("qr").and_then(Value::as_str).unwrap_or_default().trim();
+    let qr = params
+        .get("qr")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .trim();
     let (hosts, port, code) = if !qr.is_empty() {
         let rest = qr.strip_prefix(QR_PREFIX).ok_or_else(|| fail("bad_qr"))?;
         let (address, code) = rest.split_once('/').ok_or_else(|| fail("bad_qr"))?;
         let (hosts, port) = address.rsplit_once(':').ok_or_else(|| fail("bad_qr"))?;
         (hosts.to_string(), port.to_string(), code.to_string())
     } else {
-        let address = params.get("address").and_then(Value::as_str).unwrap_or_default().trim();
-        let code = params.get("code").and_then(Value::as_str).unwrap_or_default();
-        let (hosts, port) = address.rsplit_once(':').ok_or_else(|| fail("bad_address"))?;
+        let address = params
+            .get("address")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .trim();
+        let code = params
+            .get("code")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        let (hosts, port) = address
+            .rsplit_once(':')
+            .ok_or_else(|| fail("bad_address"))?;
         (hosts.to_string(), port.to_string(), code.to_string())
     };
     let port: u16 = port.trim().parse().map_err(|_| fail("bad_address"))?;
@@ -548,7 +590,15 @@ async fn join(engine: &Arc<Engine>, params: &Value, device: &str) -> Result<Valu
     let (hosts, port, code) = match parse_target(params) {
         Ok(target) => target,
         Err(err) => {
-            let session = new_session(engine, false, Status { me: device.to_string(), role: "guest", ..Default::default() });
+            let session = new_session(
+                engine,
+                false,
+                Status {
+                    me: device.to_string(),
+                    role: "guest",
+                    ..Default::default()
+                },
+            );
             session.fail(failure_code(&err));
             retire(&session);
             return Ok(status());
@@ -648,9 +698,22 @@ fn lan_addresses() -> Vec<Ipv4Addr> {
         .filter(|(name, ip)| {
             let name = name.to_ascii_lowercase();
             ip.is_private()
-                && !["tun", "wg", "mullvad", "tailscale", "docker", "br-", "veth", "virbr", "vmnet", "lo", "utun", "zt"]
-                    .iter()
-                    .any(|prefix| name.starts_with(prefix))
+                && ![
+                    "tun",
+                    "wg",
+                    "mullvad",
+                    "tailscale",
+                    "docker",
+                    "br-",
+                    "veth",
+                    "virbr",
+                    "vmnet",
+                    "lo",
+                    "utun",
+                    "zt",
+                ]
+                .iter()
+                .any(|prefix| name.starts_with(prefix))
         })
         .collect();
     if found.is_empty() {
@@ -672,7 +735,10 @@ fn lan_addresses() -> Vec<Ipv4Addr> {
     // A Tailscale address last: it reaches this computer when the two aren't
     // on one Wi-Fi, or a VPN keeps the phone off the local network.
     for (name, ip) in interfaces {
-        if name.to_ascii_lowercase().starts_with("tailscale") && is_tailscale(ip) && !out.contains(&ip) {
+        if name.to_ascii_lowercase().starts_with("tailscale")
+            && is_tailscale(ip)
+            && !out.contains(&ip)
+        {
             out.push(ip);
         }
     }
@@ -715,7 +781,9 @@ fn interface_addresses() -> Vec<(String, Ipv4Addr)> {
             {
                 let addr = &*(item.ifa_addr as *const libc::sockaddr_in);
                 let ip = Ipv4Addr::from(u32::from_be(addr.sin_addr.s_addr));
-                let name = std::ffi::CStr::from_ptr(item.ifa_name).to_string_lossy().into_owned();
+                let name = std::ffi::CStr::from_ptr(item.ifa_name)
+                    .to_string_lossy()
+                    .into_owned();
                 out.push((name, ip));
             }
             node = item.ifa_next;
@@ -833,12 +901,17 @@ fn proof_ok(keys: &Keys, who: &[u8], transcript: &[u8], tag: &[u8]) -> bool {
 }
 
 fn b64_field(value: &Value, key: &str) -> Result<Vec<u8>> {
-    let text = value.get(key).and_then(Value::as_str).ok_or_else(|| fail("broken"))?;
+    let text = value
+        .get(key)
+        .and_then(Value::as_str)
+        .ok_or_else(|| fail("broken"))?;
     STANDARD.decode(text).map_err(|_| fail("broken"))
 }
 
 async fn write_frame<W: AsyncWrite + Unpin>(writer: &mut W, bytes: &[u8]) -> Result<()> {
-    writer.write_all(&(bytes.len() as u32).to_be_bytes()).await?;
+    writer
+        .write_all(&(bytes.len() as u32).to_be_bytes())
+        .await?;
     writer.write_all(bytes).await?;
     writer.flush().await?;
     Ok(())
@@ -950,7 +1023,11 @@ async fn host_handshake(mut stream: TcpStream, code: &str, left: u32) -> Result<
 /// The phone's side.
 async fn guest_handshake(mut stream: TcpStream, code: &str) -> Result<Channel> {
     let (state, message) = spake_start(code, false);
-    write_json(&mut stream, &json!({ "meron_setup": 2, "spake": STANDARD.encode(&message) })).await?;
+    write_json(
+        &mut stream,
+        &json!({ "meron_setup": 2, "spake": STANDARD.encode(&message) }),
+    )
+    .await?;
     let answer = read_json(&mut stream).await?;
     let host_message = b64_field(&answer, "spake")?;
     let transcript = [message.as_slice(), host_message.as_slice()].concat();
@@ -961,13 +1038,17 @@ async fn guest_handshake(mut stream: TcpStream, code: &str) -> Result<Channel> {
         &json!({ "proof": STANDARD.encode(proof(&keys, b"guest", &transcript)) }),
     )
     .await?;
-    let reply = read_json(&mut stream).await.map_err(|_| fail("wrong_code"))?;
+    let reply = read_json(&mut stream)
+        .await
+        .map_err(|_| fail("wrong_code"))?;
     if reply.get("error").and_then(Value::as_str) == Some("wrong_code") {
-        return Err(fail(if reply.get("left").and_then(Value::as_u64) == Some(0) {
-            "too_many_attempts"
-        } else {
-            "wrong_code"
-        }));
+        return Err(fail(
+            if reply.get("left").and_then(Value::as_u64) == Some(0) {
+                "too_many_attempts"
+            } else {
+                "wrong_code"
+            },
+        ));
     }
     let tag = b64_field(&reply, "proof")?;
     if !proof_ok(&keys, b"host", &transcript, &tag) {
@@ -1010,9 +1091,9 @@ async fn run(session: Arc<Session>, channel: Channel) {
             _ = stopped(&mut stop) => break,
             frame = read_frame(&mut reader, MAX_FRAME) => frame,
         };
-        let message = frame.and_then(|frame| opener.open(frame)).and_then(|plain| {
-            serde_json::from_slice::<Value>(&plain).map_err(|_| fail("broken"))
-        });
+        let message = frame
+            .and_then(|frame| opener.open(frame))
+            .and_then(|plain| serde_json::from_slice::<Value>(&plain).map_err(|_| fail("broken")));
         match message {
             Ok(message) => handle(&session, message),
             Err(_) => {
@@ -1032,7 +1113,13 @@ async fn run(session: Arc<Session>, channel: Channel) {
 
 fn handle(session: &Arc<Session>, message: Value) {
     let kind = message.get("t").and_then(Value::as_str).unwrap_or_default();
-    let text = |key: &str| message.get(key).and_then(Value::as_str).unwrap_or_default().to_string();
+    let text = |key: &str| {
+        message
+            .get(key)
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string()
+    };
     match kind {
         "hello" => {
             let device = text("device");
@@ -1106,7 +1193,11 @@ fn handle(session: &Arc<Session>, message: Value) {
                     }
                     Err(err) => {
                         let code = failure_code(&err);
-                        crate::mlog!(crate::log::Level::Warn, "setupCopy", "the copy was not applied: {err:#}");
+                        crate::mlog!(
+                            crate::log::Level::Warn,
+                            "setupCopy",
+                            "the copy was not applied: {err:#}"
+                        );
                         session.send(json!({ "t": "failed", "error": code }));
                         session.fail(code);
                     }
@@ -1150,7 +1241,11 @@ fn spawn_send_payload(session: Arc<Session>) {
                 }
             },
             Err(err) => {
-                crate::mlog!(crate::log::Level::Warn, "setupCopy", "could not read this setup: {err:#}");
+                crate::mlog!(
+                    crate::log::Level::Warn,
+                    "setupCopy",
+                    "could not read this setup: {err:#}"
+                );
                 session.send(json!({ "t": "failed", "error": "broken" }));
                 session.fail("collect_failed");
             }
@@ -1164,9 +1259,15 @@ async fn counts(engine: &Arc<Engine>) -> Counts {
     let (accounts, folders) = {
         let db = engine.db.lock().unwrap();
         let accounts: u32 = db
-            .query_row("SELECT COUNT(*) FROM accounts WHERE engine <> 'local'", [], |row| row.get(0))
+            .query_row(
+                "SELECT COUNT(*) FROM accounts WHERE engine <> 'local'",
+                [],
+                |row| row.get(0),
+            )
             .unwrap_or(0);
-        let folders = store::list_meron_folders(&db).map(|folders| folders.len() as u32).unwrap_or(0);
+        let folders = store::list_meron_folders(&db)
+            .map(|folders| folders.len() as u32)
+            .unwrap_or(0);
         (accounts, folders)
     };
     let keys = crate::engine::ai_sort::loaded_keys(engine).await.len() as u32;
@@ -1233,7 +1334,12 @@ async fn receive(engine: &Arc<Engine>, payload: Value, device: &str) -> Result<V
     if payload.version != PAYLOAD_VERSION || payload.device == device {
         return Err(fail("bad_copy"));
     }
-    if payload.backup.accounts.iter().any(|account| account.id.trim().is_empty()) {
+    if payload
+        .backup
+        .accounts
+        .iter()
+        .any(|account| account.id.trim().is_empty())
+    {
         return Err(fail("bad_copy"));
     }
     replace_setup(engine, payload, device).await
@@ -1242,9 +1348,17 @@ async fn receive(engine: &Arc<Engine>, payload: Value, device: &str) -> Result<V
 /// Save a safety copy of this setup, wipe it and apply `payload`. Nothing is
 /// erased when the safety copy can't be saved; the wipe and the apply are one
 /// transaction.
-pub async fn replace_setup(engine: &Arc<Engine>, payload: SetupPayload, device: &str) -> Result<Value> {
+pub async fn replace_setup(
+    engine: &Arc<Engine>,
+    payload: SetupPayload,
+    device: &str,
+) -> Result<Value> {
     save_safety(engine, device).await.map_err(|err| {
-        crate::mlog!(crate::log::Level::Warn, "setupCopy", "no safety copy, nothing erased: {err:#}");
+        crate::mlog!(
+            crate::log::Level::Warn,
+            "setupCopy",
+            "no safety copy, nothing erased: {err:#}"
+        );
         fail("safety_failed")
     })?;
     // Today's account secrets, read before anything changes, to put back if
@@ -1255,7 +1369,8 @@ pub async fn replace_setup(engine: &Arc<Engine>, payload: SetupPayload, device: 
         tokio::task::spawn_blocking(move || {
             let ids: Vec<String> = {
                 let db = engine.db.lock().unwrap();
-                let mut statement = db.prepare("SELECT id FROM accounts WHERE engine <> 'local'")?;
+                let mut statement =
+                    db.prepare("SELECT id FROM accounts WHERE engine <> 'local'")?;
                 let ids = statement
                     .query_map([], |row| row.get(0))?
                     .collect::<rusqlite::Result<Vec<String>>>()?;
@@ -1272,7 +1387,11 @@ pub async fn replace_setup(engine: &Arc<Engine>, payload: SetupPayload, device: 
         .map_err(anyhow::Error::from)
         .and_then(|read| read)
         .map_err(|err| {
-            crate::mlog!(crate::log::Level::Warn, "setupCopy", "could not read this device's passwords, nothing erased: {err:#}");
+            crate::mlog!(
+                crate::log::Level::Warn,
+                "setupCopy",
+                "could not read this device's passwords, nothing erased: {err:#}"
+            );
             fail("apply_failed")
         })?
     };
@@ -1280,15 +1399,27 @@ pub async fn replace_setup(engine: &Arc<Engine>, payload: SetupPayload, device: 
         let engine = engine.clone();
         let backup = payload.backup.clone();
         tokio::task::spawn_blocking(move || {
-            wipe_and_apply(&engine.db.lock().unwrap(), engine.host.as_ref(), &backup, &old_secrets)
+            wipe_and_apply(
+                &engine.db.lock().unwrap(),
+                engine.host.as_ref(),
+                &backup,
+                &old_secrets,
+            )
         })
         .await
     };
     // A crashed apply counts as failed: the transaction never committed.
-    let (old_ids, summary) = applied.map_err(anyhow::Error::from).and_then(|applied| applied).map_err(|err| {
-        crate::mlog!(crate::log::Level::Warn, "setupCopy", "applying the copy failed, nothing changed: {err:#}");
-        fail("apply_failed")
-    })?;
+    let (old_ids, summary) = applied
+        .map_err(anyhow::Error::from)
+        .and_then(|applied| applied)
+        .map_err(|err| {
+            crate::mlog!(
+                crate::log::Level::Warn,
+                "setupCopy",
+                "applying the copy failed, nothing changed: {err:#}"
+            );
+            fail("apply_failed")
+        })?;
     // The old accounts' warm state goes; same ids load their new settings.
     for id in &old_ids {
         engine.accounts.lock().await.remove(id);
@@ -1297,7 +1428,12 @@ pub async fn replace_setup(engine: &Arc<Engine>, payload: SetupPayload, device: 
     }
     // The photos came along: save them here and point the accounts at them.
     for (id, data) in &payload.photos {
-        if !payload.backup.accounts.iter().any(|account| &account.id == id) {
+        if !payload
+            .backup
+            .accounts
+            .iter()
+            .any(|account| &account.id == id)
+        {
             continue;
         }
         let saved = STANDARD
@@ -1305,7 +1441,11 @@ pub async fn replace_setup(engine: &Arc<Engine>, payload: SetupPayload, device: 
             .map_err(anyhow::Error::from)
             .and_then(|bytes| crate::account_photos::apply_copied(engine, id, &bytes));
         if let Err(err) = saved {
-            crate::mlog!(crate::log::Level::Warn, "setupCopy", "could not save the photo of {id}: {err:#}");
+            crate::mlog!(
+                crate::log::Level::Warn,
+                "setupCopy",
+                "could not save the photo of {id}: {err:#}"
+            );
         }
     }
     // Load the copied accounts with their sign-ins now: the account list is
@@ -1315,7 +1455,9 @@ pub async fn replace_setup(engine: &Arc<Engine>, payload: SetupPayload, device: 
         let loaded = store::load_accounts(&engine.db.lock().unwrap()).unwrap_or_default();
         let mut accounts = engine.accounts.lock().await;
         for (id, mut creds) in loaded {
-            engine.host.apply_secret(&engine.db.lock().unwrap(), &id, &mut creds);
+            engine
+                .host
+                .apply_secret(&engine.db.lock().unwrap(), &id, &mut creds);
             accounts.insert(id, creds);
         }
     }
@@ -1324,7 +1466,11 @@ pub async fn replace_setup(engine: &Arc<Engine>, payload: SetupPayload, device: 
         let key = payload.keys.get(provider).cloned();
         if let Err(err) = crate::engine::ai_sort::store_key(engine, provider, key).await {
             secret_failures += 1;
-            crate::mlog!(crate::log::Level::Warn, "setupCopy", "could not save the {provider} key: {err:#}");
+            crate::mlog!(
+                crate::log::Level::Warn,
+                "setupCopy",
+                "could not save the {provider} key: {err:#}"
+            );
         }
     }
     {
@@ -1418,7 +1564,10 @@ fn wipe_and_apply(
     tx.commit()?;
     restore.done = true;
     // Old accounts the copy doesn't have: their secrets go.
-    for id in old_ids.iter().filter(|id| !secrets.iter().any(|(new, _)| new == *id)) {
+    for id in old_ids
+        .iter()
+        .filter(|id| !secrets.iter().any(|(new, _)| new == *id))
+    {
         host.delete_account_secret(id);
     }
     Ok((old_ids, summary))
@@ -1445,7 +1594,11 @@ impl Drop for RestoreSecrets<'_> {
             match self.old.iter().find(|(old_id, _)| old_id == id) {
                 Some((_, secret)) if !secret.is_empty() => {
                     if let Err(err) = self.host.store_secret(self.conn, id, secret) {
-                        crate::mlog!(crate::log::Level::Warn, "setupCopy", "could not put back a secret: {err:#}");
+                        crate::mlog!(
+                            crate::log::Level::Warn,
+                            "setupCopy",
+                            "could not put back a secret: {err:#}"
+                        );
                     }
                 }
                 _ => self.host.delete_account_secret(id),
@@ -1487,8 +1640,12 @@ async fn save_safety(engine: &Arc<Engine>, device: &str) -> Result<()> {
     };
     let engine2 = engine.clone();
     let encoded_key = STANDARD.encode(key);
-    tokio::task::spawn_blocking(move || engine2.host.store_named_secret(&engine2.db, slot, Some(&encoded_key)))
-        .await??;
+    tokio::task::spawn_blocking(move || {
+        engine2
+            .host
+            .store_named_secret(&engine2.db, slot, Some(&encoded_key))
+    })
+    .await??;
     let row = json!({
         "created_at": store::now_unix(),
         "counts": mine,
@@ -1504,7 +1661,10 @@ async fn save_safety(engine: &Arc<Engine>, device: &str) -> Result<()> {
     // The old copy is gone: so is its key. Best effort.
     if let Some(old) = old_slot.filter(|old| old != slot) {
         let engine2 = engine.clone();
-        let _ = tokio::task::spawn_blocking(move || engine2.host.store_named_secret(&engine2.db, &old, None)).await;
+        let _ = tokio::task::spawn_blocking(move || {
+            engine2.host.store_named_secret(&engine2.db, &old, None)
+        })
+        .await;
     }
     Ok(())
 }
@@ -1519,7 +1679,11 @@ fn safety_slot(row: &Value) -> String {
 
 fn safety_row(conn: &Connection) -> Result<Option<Value>> {
     let text: Option<String> = conn
-        .query_row("SELECT value FROM meta WHERE key = ?1", params![SAFETY_META_KEY], |row| row.get(0))
+        .query_row(
+            "SELECT value FROM meta WHERE key = ?1",
+            params![SAFETY_META_KEY],
+            |row| row.get(0),
+        )
         .optional()?;
     Ok(text.and_then(|text| serde_json::from_str(&text).ok()))
 }
@@ -1542,19 +1706,22 @@ async fn restore_safety(engine: &Arc<Engine>, device: &str) -> Result<Value> {
     if current().is_some() {
         anyhow::bail!("Finish or cancel the copy first.");
     }
-    let row = safety_row(&engine.db.lock().unwrap())?.ok_or_else(|| anyhow!("There is no safety copy."))?;
+    let row = safety_row(&engine.db.lock().unwrap())?
+        .ok_or_else(|| anyhow!("There is no safety copy."))?;
     let engine2 = engine.clone();
     let slot = safety_slot(&row);
-    let key = tokio::task::spawn_blocking(move || engine2.host.load_named_secret(&engine2.db, &slot))
-        .await??
-        .ok_or_else(|| anyhow!("The safety copy's key is missing."))?;
+    let key =
+        tokio::task::spawn_blocking(move || engine2.host.load_named_secret(&engine2.db, &slot))
+            .await??
+            .ok_or_else(|| anyhow!("The safety copy's key is missing."))?;
     let key = STANDARD.decode(key)?;
     let nonce: [u8; 12] = b64_field(&row, "nonce")?
         .try_into()
         .map_err(|_| anyhow!("The safety copy is damaged."))?;
     let mut sealed = b64_field(&row, "data")?;
     let opening = aead::LessSafeKey::new(
-        aead::UnboundKey::new(&aead::AES_256_GCM, &key).map_err(|_| anyhow!("The safety copy is damaged."))?,
+        aead::UnboundKey::new(&aead::AES_256_GCM, &key)
+            .map_err(|_| anyhow!("The safety copy is damaged."))?,
     );
     let plain = opening
         .open_in_place(

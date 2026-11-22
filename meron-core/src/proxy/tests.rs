@@ -236,10 +236,9 @@ async fn http_connect_tunnels_and_authenticates() {
 
 #[tokio::test]
 async fn http_connect_reports_a_rejection() {
-    let (port, _server) = with_proxy_server(|_req| {
-        b"HTTP/1.1 407 Proxy Authentication Required\r\n\r\n".to_vec()
-    })
-    .await;
+    let (port, _server) =
+        with_proxy_server(|_req| b"HTTP/1.1 407 Proxy Authentication Required\r\n\r\n".to_vec())
+            .await;
     let proxy = ProxyConfig {
         kind: ProxyKind::Http,
         host: "127.0.0.1".into(),

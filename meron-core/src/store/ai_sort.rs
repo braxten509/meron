@@ -84,16 +84,22 @@ fn inbox_floor_key(account: &str) -> String {
 }
 
 fn inbox_floor(conn: &Connection, account: &str, uidvalidity: u32) -> Result<Option<u32>> {
-    Ok(super::db::meta_get(conn, &inbox_floor_key(account))?.and_then(|value| {
-        let (validity, uid) = value.split_once(':')?;
-        (validity.parse::<u32>().ok()? == uidvalidity)
-            .then(|| uid.parse::<u32>().ok())
-            .flatten()
-    }))
+    Ok(
+        super::db::meta_get(conn, &inbox_floor_key(account))?.and_then(|value| {
+            let (validity, uid) = value.split_once(':')?;
+            (validity.parse::<u32>().ok()? == uidvalidity)
+                .then(|| uid.parse::<u32>().ok())
+                .flatten()
+        }),
+    )
 }
 
 fn set_inbox_floor(conn: &Connection, account: &str, uidvalidity: u32, uid: u32) -> Result<()> {
-    super::db::meta_set(conn, &inbox_floor_key(account), &format!("{uidvalidity}:{uid}"))
+    super::db::meta_set(
+        conn,
+        &inbox_floor_key(account),
+        &format!("{uidvalidity}:{uid}"),
+    )
 }
 
 /// Which of `messages`, a window just read from the server's `folder` (under
@@ -146,7 +152,10 @@ pub fn inbox_backfill_uids(
         return Ok(below);
     }
     let cached = super::cached_uids_in_folder(conn, account, folder, &below)?;
-    Ok(below.into_iter().filter(|uid| !cached.contains(uid)).collect())
+    Ok(below
+        .into_iter()
+        .filter(|uid| !cached.contains(uid))
+        .collect())
 }
 
 /// Cache a window `batch` just read from the server's `folder`, marking the
@@ -409,7 +418,10 @@ pub fn set_ai_sort_config(conn: &Connection, config: AiSortConfig) -> Result<AiS
     let mut config = clean_ai_sort_config(conn, config)?;
     // The stored list, with the model in use before this feature counted too.
     let mut recent = before.recent_models;
-    for (provider, model) in [(&before.provider, &before.model), (&config.provider, &config.model)] {
+    for (provider, model) in [
+        (&before.provider, &before.model),
+        (&config.provider, &config.model),
+    ] {
         if model.is_empty() {
             continue;
         }
@@ -572,7 +584,12 @@ fn bare_message_id(message_id: &str) -> String {
 /// `folder` was decided on by the AI, or is held for it right now. Gmail shows
 /// one message in INBOX and in each of its labels; whichever copy came first is
 /// the one sorted (and paid for), once.
-fn sorted_elsewhere(conn: &Connection, account: &str, folder: &str, message_id: &str) -> Result<bool> {
+fn sorted_elsewhere(
+    conn: &Connection,
+    account: &str,
+    folder: &str,
+    message_id: &str,
+) -> Result<bool> {
     let id = bare_message_id(message_id);
     if id.is_empty() {
         return Ok(false);
@@ -634,7 +651,13 @@ fn queue_inbox_copy_move(
     conn.execute(
         "INSERT OR REPLACE INTO ai_sort_hidden(account, folder, uid, uidvalidity, hide_until)
          VALUES(?1, ?2, ?3, ?4, ?5)",
-        params![account, folder, inbox_uid, validity, now + AI_SORT_MOVE_HOLD_SECS],
+        params![
+            account,
+            folder,
+            inbox_uid,
+            validity,
+            now + AI_SORT_MOVE_HOLD_SECS
+        ],
     )?;
     Ok(true)
 }
@@ -661,7 +684,8 @@ pub fn ai_sort_reuse_for_inbox(
     let mut queued = Vec::new();
     for header in headers {
         let id = bare_message_id(&header.message_id);
-        if header.ai_sorted || header.uid == 0 || id.is_empty() || ai_sort_too_old(header.date, now) {
+        if header.ai_sorted || header.uid == 0 || id.is_empty() || ai_sort_too_old(header.date, now)
+        {
             continue;
         }
         let found: Option<(i64, String)> = conn
@@ -748,7 +772,17 @@ fn hold(
     add_usage(conn, held.len())?;
     for candidate in &over_cap {
         let detail = format!("the daily limit of {AI_SORT_DAILY_CAP} emails was reached");
-        insert_log(conn, account, folder, uidvalidity, candidate, "", "", "left", &detail)?;
+        insert_log(
+            conn,
+            account,
+            folder,
+            uidvalidity,
+            candidate,
+            "",
+            "",
+            "left",
+            &detail,
+        )?;
     }
     if !over_cap.is_empty() {
         // Left by the AI: mail from another folder shows in the Inbox.
@@ -815,12 +849,21 @@ const CLAIM_ID_KEY: &str = "ai_sort_claim_id";
 /// setup copy carries: two devices must never share one.
 pub fn ai_sort_claim_id(conn: &Connection) -> Result<String> {
     let known: Option<String> = conn
-        .query_row("SELECT value FROM meta WHERE key = ?1", params![CLAIM_ID_KEY], |row| row.get(0))
+        .query_row(
+            "SELECT value FROM meta WHERE key = ?1",
+            params![CLAIM_ID_KEY],
+            |row| row.get(0),
+        )
         .optional()?;
     if let Some(id) = known.filter(|id| !id.is_empty()) {
         return Ok(id);
     }
-    let id: String = uuid::Uuid::new_v4().simple().to_string().chars().take(8).collect();
+    let id: String = uuid::Uuid::new_v4()
+        .simple()
+        .to_string()
+        .chars()
+        .take(8)
+        .collect();
     conn.execute(
         "INSERT INTO meta(key, value) VALUES(?1, ?2)
          ON CONFLICT(key) DO UPDATE SET value = excluded.value",
@@ -931,12 +974,19 @@ fn conversation_of(
     folder: &str,
     candidate: &AiSortCandidate,
 ) -> Result<String> {
-    Ok(super::meron_conversation_key(conn, account, folder, candidate.uid)?
-        .unwrap_or_else(|| format!("\u{0}{}", candidate.identity)))
+    Ok(
+        super::meron_conversation_key(conn, account, folder, candidate.uid)?
+            .unwrap_or_else(|| format!("\u{0}{}", candidate.identity)),
+    )
 }
 
 /// The UIDs in `folder` of the conversation `key` names.
-fn conversation_uids(conn: &Connection, account: &str, folder: &str, key: &str) -> Result<Vec<u32>> {
+fn conversation_uids(
+    conn: &Connection,
+    account: &str,
+    folder: &str,
+    key: &str,
+) -> Result<Vec<u32>> {
     let mut stmt = conn.prepare_cached(
         "SELECT uid FROM messages
           WHERE account = ?1 AND lower(COALESCE(thread_key, '')) = ?2 AND folder = ?3 AND uid <> 0",
@@ -947,9 +997,8 @@ fn conversation_uids(conn: &Connection, account: &str, folder: &str, key: &str) 
 
 /// Show held-back mail again.
 pub fn ai_sort_release(conn: &Connection, account: &str, folder: &str, uids: &[u32]) -> Result<()> {
-    let mut stmt = conn.prepare(
-        "DELETE FROM ai_sort_hidden WHERE account = ?1 AND folder = ?2 AND uid = ?3",
-    )?;
+    let mut stmt =
+        conn.prepare("DELETE FROM ai_sort_hidden WHERE account = ?1 AND folder = ?2 AND uid = ?3")?;
     for uid in uids {
         stmt.execute(params![account, folder, uid])?;
     }
@@ -1131,7 +1180,13 @@ pub fn ai_sort_record_decisions(
                     "The Meron folder was deleted.",
                 )?;
                 if outside {
-                    super::ai_sort_show_in_inbox(&tx, account, folder, uidvalidity, std::slice::from_ref(candidate))?;
+                    super::ai_sort_show_in_inbox(
+                        &tx,
+                        account,
+                        folder,
+                        uidvalidity,
+                        std::slice::from_ref(candidate),
+                    )?;
                 }
                 shown.push(candidate.uid);
                 continue;
@@ -1216,7 +1271,8 @@ pub fn ai_sort_record_decisions(
                     "moving",
                     "",
                 )?;
-                if queue_inbox_copy_move(&tx, account, inbox_validity, inbox_uid, id, target, now)? {
+                if queue_inbox_copy_move(&tx, account, inbox_validity, inbox_uid, id, target, now)?
+                {
                     inbox_moving.push(inbox_uid);
                     shown.push(candidate.uid);
                     continue;
@@ -1253,7 +1309,13 @@ pub fn ai_sort_record_decisions(
                 )?;
             }
             if outside {
-                super::ai_sort_show_in_inbox(&tx, account, folder, uidvalidity, std::slice::from_ref(candidate))?;
+                super::ai_sort_show_in_inbox(
+                    &tx,
+                    account,
+                    folder,
+                    uidvalidity,
+                    std::slice::from_ref(candidate),
+                )?;
             }
             shown.push(candidate.uid);
             continue;
@@ -1411,7 +1473,17 @@ pub fn ai_sort_give_up(
     let uids: Vec<u32> = open.iter().map(|candidate| candidate.uid).collect();
     ai_sort_release(conn, account, folder, &uids)?;
     for candidate in &open {
-        insert_log(conn, account, folder, uidvalidity, candidate, "", "", state, detail)?;
+        insert_log(
+            conn,
+            account,
+            folder,
+            uidvalidity,
+            candidate,
+            "",
+            "",
+            state,
+            detail,
+        )?;
     }
     // Mail from another folder the AI failed on shows in the Inbox. (Not tried
     // again: "Sort Inbox now" covers the Inbox's own mail only.)
@@ -1636,7 +1708,10 @@ pub fn ai_sort_set_log_state(conn: &Connection, id: i64, state: &str, detail: &s
 /// The cached Inbox mail of `account` that "Sort Inbox now" would send: stored
 /// on this device, not decided yet, not held back, with no rule work queued,
 /// and not past [`AI_SORT_MAX_AGE_DAYS`].
-pub fn ai_sort_existing_candidates(conn: &Connection, account: &str) -> Result<Vec<AiSortCandidate>> {
+pub fn ai_sort_existing_candidates(
+    conn: &Connection,
+    account: &str,
+) -> Result<Vec<AiSortCandidate>> {
     let now = super::now_unix();
     let folder = super::EXISTING_RULE_FOLDER;
     let pending: BTreeSet<u32> = super::pending_rule_actions(conn, account, folder)?
@@ -1658,16 +1733,19 @@ pub fn ai_sort_existing_candidates(conn: &Connection, account: &str) -> Result<V
         hidden = super::meron_hidden_sql("messages"),
     ))?;
     let rows = stmt
-        .query_map(params![account, folder, ai_sort_age_cutoff(now), now], |row| {
-            Ok(AiSortCandidate {
-                uid: row.get(0)?,
-                from_name: row.get(1)?,
-                from_addr: row.get(2)?,
-                subject: row.get(3)?,
-                message_id: row.get(4)?,
-                identity: row.get(5)?,
-            })
-        })?
+        .query_map(
+            params![account, folder, ai_sort_age_cutoff(now), now],
+            |row| {
+                Ok(AiSortCandidate {
+                    uid: row.get(0)?,
+                    from_name: row.get(1)?,
+                    from_addr: row.get(2)?,
+                    subject: row.get(3)?,
+                    message_id: row.get(4)?,
+                    identity: row.get(5)?,
+                })
+            },
+        )?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     let mut out = Vec::new();
     for candidate in rows {
@@ -1747,7 +1825,11 @@ pub fn ai_sort_forget_meron_folder(conn: &Connection, id: &str) -> Result<()> {
     )?;
     super::ai_lessons_forget_meron_folder(conn, id)?;
     let mut config = ai_sort_config(conn)?;
-    if config.folders.iter().any(|folder| folder.meron_folder_id == id) {
+    if config
+        .folders
+        .iter()
+        .any(|folder| folder.meron_folder_id == id)
+    {
         config.folders.retain(|folder| folder.meron_folder_id != id);
         if config.folders.is_empty() {
             config.enabled = false;

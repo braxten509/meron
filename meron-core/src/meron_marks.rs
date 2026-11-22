@@ -40,7 +40,9 @@ pub fn keyword_for(folder_id: &str) -> Option<String> {
     let rest = folder_id.strip_prefix(store::MERON_FOLDER_ID_PREFIX)?;
     let valid = !rest.is_empty()
         && rest.len() <= 64
-        && rest.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-');
+        && rest
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-');
     valid.then(|| format!("{KEYWORD_PREFIX}{}", rest.to_ascii_lowercase()))
 }
 
@@ -156,7 +158,8 @@ pub fn uids_marked(
     }
     let mut out: BTreeMap<String, Vec<u32>> = BTreeMap::new();
     for (folder, uids) in by_folder {
-        let mut marked = store::meron_marked_uids(conn, account, &folder, &uids).unwrap_or_default();
+        let mut marked =
+            store::meron_marked_uids(conn, account, &folder, &uids).unwrap_or_default();
         for uid in uids {
             if !marked.contains(&uid) && pending_mark(account, &folder, uid) {
                 marked.push(uid);
@@ -172,8 +175,14 @@ pub fn uids_marked(
 /// The `(folder, uid)` of an entry's cached messages.
 pub fn entry_rows(conn: &Connection, entry_id: &str) -> (String, Vec<(String, u32)>) {
     let members = store::meron_entry_members(conn, entry_id).unwrap_or_default();
-    let account = members.first().map(|m| m.account.clone()).unwrap_or_default();
-    (account, members.into_iter().map(|m| (m.folder, m.uid)).collect())
+    let account = members
+        .first()
+        .map(|m| m.account.clone())
+        .unwrap_or_default();
+    (
+        account,
+        members.into_iter().map(|m| (m.folder, m.uid)).collect(),
+    )
 }
 
 /// The jobs that mark an entry's mark-folder copies with the folder it is in
@@ -230,7 +239,8 @@ struct Pending {
 }
 
 /// Keyed by `(account, folder)`.
-static PENDING: LazyLock<Mutex<HashMap<(String, String), Pending>>> = LazyLock::new(Default::default);
+static PENDING: LazyLock<Mutex<HashMap<(String, String), Pending>>> =
+    LazyLock::new(Default::default);
 /// Woken each time a worker finishes a round of writes.
 static WRITTEN: LazyLock<Notify> = LazyLock::new(Notify::new);
 
@@ -238,22 +248,26 @@ static WRITTEN: LazyLock<Notify> = LazyLock::new(Notify::new);
 /// this device hasn't finished writing.
 fn pending_mark(account: &str, folder: &str, uid: u32) -> bool {
     let pending = PENDING.lock().unwrap();
-    pending.get(&(account.to_string(), folder.to_string())).is_some_and(|state| {
-        state
-            .want
-            .get(&uid)
-            .or_else(|| state.writing.get(&uid))
-            .is_some_and(|target| target.is_some())
-    })
+    pending
+        .get(&(account.to_string(), folder.to_string()))
+        .is_some_and(|state| {
+            state
+                .want
+                .get(&uid)
+                .or_else(|| state.writing.get(&uid))
+                .is_some_and(|target| target.is_some())
+        })
 }
 
 /// Whether any of `uids` of `folder` still waits to be written.
 fn any_pending(account: &str, folder: &str, uids: &[u32]) -> bool {
     let pending = PENDING.lock().unwrap();
-    pending.get(&(account.to_string(), folder.to_string())).is_some_and(|state| {
-        uids.iter()
-            .any(|uid| state.want.contains_key(uid) || state.writing.contains_key(uid))
-    })
+    pending
+        .get(&(account.to_string(), folder.to_string()))
+        .is_some_and(|state| {
+            uids.iter()
+                .any(|uid| state.want.contains_key(uid) || state.writing.contains_key(uid))
+        })
 }
 
 /// Record each job's wish and make sure the account's worker runs. On the
@@ -263,10 +277,15 @@ fn enqueue(engine: &Arc<Engine>, jobs: Vec<MarkJob>) {
     {
         let mut pending = PENDING.lock().unwrap();
         for job in jobs {
-            if job.uids.is_empty() || job.folder.is_empty() || store::is_local_account(&job.account) {
+            if job.uids.is_empty() || job.folder.is_empty() || store::is_local_account(&job.account)
+            {
                 continue;
             }
-            if job.target.as_deref().is_some_and(|id| keyword_for(id).is_none()) {
+            if job
+                .target
+                .as_deref()
+                .is_some_and(|id| keyword_for(id).is_none())
+            {
                 continue;
             }
             let key = (job.account.clone(), job.folder.clone());
@@ -433,7 +452,9 @@ async fn write_now(
         let remove: Vec<String> = ids.iter().filter_map(|id| keyword_for(id)).collect();
         // Only mark folders' marks are remembered: a copy marked in another
         // folder (just before an Archive moves it) is read in its new one.
-        let remembers = mark_folders(&db, &account).iter().any(|known| known == &folder);
+        let remembers = mark_folders(&db, &account)
+            .iter()
+            .any(|known| known == &folder);
         (remove, remembers)
     };
     let written = tokio::time::timeout(
@@ -444,7 +465,8 @@ async fn write_now(
             let add = add.clone();
             let folder = folder.clone();
             Box::pin(async move {
-                crate::imap::store_meron_marks(session, &folder, &uids, &remove, add.as_deref()).await
+                crate::imap::store_meron_marks(session, &folder, &uids, &remove, add.as_deref())
+                    .await
             })
         }),
     )
@@ -460,14 +482,20 @@ async fn write_now(
                 target.as_deref(),
                 store::meron_mark_tick(),
             ) {
-                warn(format_args!("account={account}: could not remember marks: {err:#}"));
+                warn(format_args!(
+                    "account={account}: could not remember marks: {err:#}"
+                ));
             }
         }
         Ok(Ok(true)) => {}
         // The mailbox keeps no keywords of its own: filing stays on this device.
         Ok(Ok(false)) => {}
-        Ok(Err(err)) => warn(format_args!("account={account}: Meron folder mark failed: {err:#}")),
-        Err(_) => warn(format_args!("account={account}: Meron folder mark timed out")),
+        Ok(Err(err)) => warn(format_args!(
+            "account={account}: Meron folder mark failed: {err:#}"
+        )),
+        Err(_) => warn(format_args!(
+            "account={account}: Meron folder mark timed out"
+        )),
     }
 }
 

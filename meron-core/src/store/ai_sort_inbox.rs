@@ -303,7 +303,8 @@ fn show_again(
     if folder.is_empty() || folder.eq_ignore_ascii_case("INBOX") || uid == 0 {
         return Ok(());
     }
-    let Some(current) = super::get_folder_state(conn, account, folder)?.map(|(validity, _)| validity)
+    let Some(current) =
+        super::get_folder_state(conn, account, folder)?.map(|(validity, _)| validity)
     else {
         return Ok(());
     };
@@ -349,8 +350,8 @@ pub fn ai_sort_inbox_uids(conn: &Connection, account: &str, folder: &str) -> Res
     if folder.eq_ignore_ascii_case("INBOX") {
         return Ok(BTreeSet::new());
     }
-    let mut stmt = conn
-        .prepare_cached("SELECT uid FROM ai_sort_inbox WHERE account = ?1 AND folder = ?2")?;
+    let mut stmt =
+        conn.prepare_cached("SELECT uid FROM ai_sort_inbox WHERE account = ?1 AND folder = ?2")?;
     let rows = stmt.query_map(params![account, folder], |row| row.get(0))?;
     Ok(rows.collect::<rusqlite::Result<_>>()?)
 }
@@ -444,7 +445,11 @@ pub fn tidy_at_start(conn: &Connection) {
                 }
             }
         }
-        Err(err) => crate::mlog!(crate::log::Level::Warn, "store", "shown-in-Inbox accounts: {err:#}"),
+        Err(err) => crate::mlog!(
+            crate::log::Level::Warn,
+            "store",
+            "shown-in-Inbox accounts: {err:#}"
+        ),
     }
     match super::meron_release_old_ai_entries(conn, now) {
         Ok(0) => {}
@@ -474,11 +479,13 @@ pub fn ai_sort_inbox_after_sync(
     }
     ai_sort_inbox_drop_old(conn, account, super::now_unix())?;
     if folder.eq_ignore_ascii_case("INBOX") {
-        let mut forget = conn.prepare_cached(
-            "DELETE FROM ai_sort_inbox WHERE account = ?1 AND identity = ?2",
-        )?;
+        let mut forget =
+            conn.prepare_cached("DELETE FROM ai_sort_inbox WHERE account = ?1 AND identity = ?2")?;
         for header in headers {
-            forget.execute(params![account, super::messages::message_identity(header, folder)])?;
+            forget.execute(params![
+                account,
+                super::messages::message_identity(header, folder)
+            ])?;
             // A copy read without Gmail's id names itself by its Message-ID.
             let message_id = header.message_id.trim();
             if !message_id.is_empty() {
@@ -560,7 +567,11 @@ pub fn ai_sort_inbox_drop(
 }
 
 /// A folder deleted or renamed: its watch and its shown rows go.
-pub(super) fn ai_sort_inbox_forget_folder(conn: &Connection, account: &str, folder: &str) -> Result<()> {
+pub(super) fn ai_sort_inbox_forget_folder(
+    conn: &Connection,
+    account: &str,
+    folder: &str,
+) -> Result<()> {
     conn.execute(
         "DELETE FROM ai_sort_inbox WHERE account = ?1 AND folder = ?2",
         params![account, folder],
@@ -574,7 +585,13 @@ pub(super) fn ai_sort_inbox_forget_folder(conn: &Connection, account: &str, fold
 
 /// A removed account: its watches and shown rows go.
 pub(super) fn ai_sort_inbox_forget_account(conn: &Connection, account: &str) -> Result<()> {
-    conn.execute("DELETE FROM ai_sort_inbox WHERE account = ?1", params![account])?;
-    conn.execute("DELETE FROM ai_sort_watch WHERE account = ?1", params![account])?;
+    conn.execute(
+        "DELETE FROM ai_sort_inbox WHERE account = ?1",
+        params![account],
+    )?;
+    conn.execute(
+        "DELETE FROM ai_sort_watch WHERE account = ?1",
+        params![account],
+    )?;
     Ok(())
 }

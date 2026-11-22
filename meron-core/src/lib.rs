@@ -29,9 +29,9 @@ pub mod reply;
 pub mod rss;
 pub mod search_query;
 pub mod secrets;
-pub mod setup_copy;
 #[cfg(target_os = "linux")]
 mod secrets_portal;
+pub mod setup_copy;
 pub mod smtp;
 pub mod store;
 pub mod tags;

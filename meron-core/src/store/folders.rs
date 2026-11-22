@@ -368,9 +368,15 @@ pub fn get_folder_unread(conn: &Connection, account: &str, folder: &str) -> Resu
     // Mail the AI left in another folder counts in the Inbox, not there.
     if super::ai_sort_inbox_has_rows(conn, account)? {
         if folder.eq_ignore_ascii_case("INBOX") {
-            sql.push_str(&format!(" + {}", super::ai_sort_inbox_unread_sql("?1", None)));
+            sql.push_str(&format!(
+                " + {}",
+                super::ai_sort_inbox_unread_sql("?1", None)
+            ));
         } else {
-            sql.push_str(&format!(" - {}", super::ai_sort_inbox_unread_sql("?1", Some("?2"))));
+            sql.push_str(&format!(
+                " - {}",
+                super::ai_sort_inbox_unread_sql("?1", Some("?2"))
+            ));
         }
     }
     let unread = conn.query_row(&sql, params![account, folder], |row| row.get::<_, i64>(0))?;

@@ -48,7 +48,10 @@ fn only_sure_picks_of_known_folders_move() {
         {\"id\":\"2\",\"folder\":\"Work\",\"sure\":true,\"why\":\"\"},\
         {\"id\":\"2\",\"folder\":\"Work\",\"sure\":true,\"why\":\"\"},\
         {\"id\":\"9\",\"folder\":\"Work\",\"sure\":true,\"why\":\"\"}]}\n```";
-    assert_eq!(targets(fenced), [Some("INBOX/Work".into()), None, None, None]);
+    assert_eq!(
+        targets(fenced),
+        [Some("INBOX/Work".into()), None, None, None]
+    );
 
     assert_eq!(targets("Sorry, I can't help."), [None, None, None, None]);
 }
@@ -73,11 +76,26 @@ fn spam_only_counts_with_a_backing_lesson_and_a_sure_answer() {
         .map(|(pick, _)| pick.map(|pick| pick.target))
         .collect();
     // Only the backed email the AI is sure about goes to the Spam folder.
-    assert_eq!(to, [Some(SortTarget::Server("Junk".into())), None, None, None]);
+    assert_eq!(
+        to,
+        [Some(SortTarget::Server("Junk".into())), None, None, None]
+    );
     // Without a lesson "Spam" is no answer at all, and the AI isn't offered it.
-    assert!(parse_answer(text, &ids, &folders).values().all(|(pick, _)| pick.is_none()));
-    assert!(!answer_schema_taught(&folders, None).to_string().contains("\"Spam\""));
-    assert!(answer_schema_taught(&folders, Some(&spam)).to_string().contains("\"Spam\""));
+    assert!(
+        parse_answer(text, &ids, &folders)
+            .values()
+            .all(|(pick, _)| pick.is_none())
+    );
+    assert!(
+        !answer_schema_taught(&folders, None)
+            .to_string()
+            .contains("\"Spam\"")
+    );
+    assert!(
+        answer_schema_taught(&folders, Some(&spam))
+            .to_string()
+            .contains("\"Spam\"")
+    );
 }
 
 /// Keys kept in memory, as the keychain or keyed DB would.
@@ -123,16 +141,27 @@ async fn settings_show_only_a_hint_of_the_key() {
     let host = KeyHost(Default::default());
     let engine = Arc::new(crate::engine::Engine::new(Box::new(host)).unwrap());
     let long = "sk-or-v1-testvalue1234";
-    dispatch(&engine, "setKey", &json!({ "provider": "openrouter", "key": long }))
-        .await
-        .unwrap();
-    dispatch(&engine, "setKey", &json!({ "provider": "tinfoil", "key": "abcd" }))
-        .await
-        .unwrap();
+    dispatch(
+        &engine,
+        "setKey",
+        &json!({ "provider": "openrouter", "key": long }),
+    )
+    .await
+    .unwrap();
+    dispatch(
+        &engine,
+        "setKey",
+        &json!({ "provider": "tinfoil", "key": "abcd" }),
+    )
+    .await
+    .unwrap();
 
     let got = dispatch(&engine, "get", &json!({})).await.unwrap();
     assert_eq!(got["keys"]["openrouter"]["key_hint"], "1234");
-    assert_eq!(got["keys"]["tinfoil"], json!({ "has_key": true, "key_hint": null }));
+    assert_eq!(
+        got["keys"]["tinfoil"],
+        json!({ "has_key": true, "key_hint": null })
+    );
     let text = got.to_string();
     assert!(!text.contains(long) && !text.contains("abcd"));
 }

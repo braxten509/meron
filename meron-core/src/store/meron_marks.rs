@@ -96,13 +96,20 @@ pub fn meron_mark_tick() -> i64 {
 }
 
 /// `(folder_id, written_at)` remembered for one copy.
-fn remembered(conn: &Connection, account: &str, folder: &str, uid: u32) -> Result<Option<(String, i64)>> {
+fn remembered(
+    conn: &Connection,
+    account: &str,
+    folder: &str,
+    uid: u32,
+) -> Result<Option<(String, i64)>> {
     Ok(conn
         .prepare_cached(
             "SELECT folder_id, written_at FROM meron_marks
               WHERE account = ?1 AND folder = ?2 AND uid = ?3",
         )?
-        .query_row(params![account, folder, uid], |row| Ok((row.get(0)?, row.get(1)?)))
+        .query_row(params![account, folder, uid], |row| {
+            Ok((row.get(0)?, row.get(1)?))
+        })
         .optional()?)
 }
 
@@ -143,7 +150,12 @@ pub fn meron_marks_written(
 }
 
 /// Of `uids` in `folder`, those this device knows to carry a mark.
-pub fn meron_marked_uids(conn: &Connection, account: &str, folder: &str, uids: &[u32]) -> Result<Vec<u32>> {
+pub fn meron_marked_uids(
+    conn: &Connection,
+    account: &str,
+    folder: &str,
+    uids: &[u32],
+) -> Result<Vec<u32>> {
     let mut out = Vec::new();
     for uid in uids {
         if remembered(conn, account, folder, *uid)?.is_some_and(|(id, _)| !id.is_empty()) {
@@ -164,7 +176,10 @@ pub fn meron_marks_prune(
         .prepare_cached("SELECT uid FROM meron_marks WHERE account = ?1 AND folder = ?2")?
         .query_map(params![account, folder], |row| row.get(0))?
         .collect::<rusqlite::Result<_>>()?;
-    let gone: Vec<u32> = known.into_iter().filter(|uid| !server_uids.contains(uid)).collect();
+    let gone: Vec<u32> = known
+        .into_iter()
+        .filter(|uid| !server_uids.contains(uid))
+        .collect();
     if gone.is_empty() {
         return Ok(());
     }
@@ -242,8 +257,10 @@ pub fn meron_marks_observe(
     let mut filed_keys: BTreeSet<String> = BTreeSet::new();
     // The marks this read brought, for telling an Inbox copy's mark before
     // the loop below has remembered it (see [`file_copy`]).
-    let seen_marks: BTreeMap<u32, &str> =
-        seen.iter().map(|item| (item.uid, item.mark.as_deref().unwrap_or_default())).collect();
+    let seen_marks: BTreeMap<u32, &str> = seen
+        .iter()
+        .map(|item| (item.uid, item.mark.as_deref().unwrap_or_default()))
+        .collect();
     // What the server says now comes first: a fresh mark replaces a waiting
     // one for the same copy, and its filing wins over the waiting ones below.
     for item in seen {
@@ -288,7 +305,8 @@ pub fn meron_marks_observe(
         if mark.is_empty() {
             // Gone: out of the Meron folder it named, if it is there and no
             // other Inbox copy of the conversation still carries that mark.
-            if let Some(card) = super::meron_card_release(conn, account, folder, "", Some(item.uid))?
+            if let Some(card) =
+                super::meron_card_release(conn, account, folder, "", Some(item.uid))?
                 && card.folder_id == before
             {
                 let mut still_marked = false;
@@ -298,7 +316,9 @@ pub fn meron_marks_observe(
                     if !other_marks || (other_folder == folder && *other_uid == item.uid) {
                         continue;
                     }
-                    if remembered(conn, account, other_folder, *other_uid)?.is_some_and(|(id, _)| id == before) {
+                    if remembered(conn, account, other_folder, *other_uid)?
+                        .is_some_and(|(id, _)| id == before)
+                    {
                         still_marked = true;
                         break;
                     }
@@ -309,11 +329,24 @@ pub fn meron_marks_observe(
             }
             continue;
         }
-        if in_archive && super::meron_is_builtin(mark) && has_inbox_copy(conn, account, folder, item.uid)? {
+        if in_archive
+            && super::meron_is_builtin(mark)
+            && has_inbox_copy(conn, account, folder, item.uid)?
+        {
             remember(conn, account, folder, item.uid, mark, WAITING_FOR_INBOX)?;
             continue;
         }
-        file_copy(conn, account, folder, item.uid, mark, filing(mark), &seen_marks, &mut filed_keys, &mut out)?;
+        file_copy(
+            conn,
+            account,
+            folder,
+            item.uid,
+            mark,
+            filing(mark),
+            &seen_marks,
+            &mut filed_keys,
+            &mut out,
+        )?;
     }
     // Marks that waited for their folder (still the newest this device knows
     // for their copy): filed once the folder is here, unless this read filed
@@ -324,19 +357,27 @@ pub fn meron_marks_observe(
             "SELECT uid, folder_id FROM meron_marks
               WHERE account = ?1 AND folder = ?2 AND written_at = ?3",
         )?
-        .query_map(params![account, folder, WAITING_FOR_FOLDER], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .query_map(params![account, folder, WAITING_FOR_FOLDER], |row| {
+            Ok((row.get(0)?, row.get(1)?))
+        })?
         .collect::<rusqlite::Result<_>>()?;
     for (uid, mark) in waiting {
-        let current = cached_date(conn, account, folder, uid)?.filter(|date| !too_old(*date, &mark));
+        let current =
+            cached_date(conn, account, folder, uid)?.filter(|date| !too_old(*date, &mark));
         if current.is_none() {
-            conn.prepare_cached("DELETE FROM meron_marks WHERE account = ?1 AND folder = ?2 AND uid = ?3")?
-                .execute(params![account, folder, uid])?;
+            conn.prepare_cached(
+                "DELETE FROM meron_marks WHERE account = ?1 AND folder = ?2 AND uid = ?3",
+            )?
+            .execute(params![account, folder, uid])?;
             continue;
         }
         if !super::meron_folder_exists(conn, &mark)? {
             continue;
         }
-        if in_archive && super::meron_is_builtin(&mark) && has_inbox_copy(conn, account, folder, uid)? {
+        if in_archive
+            && super::meron_is_builtin(&mark)
+            && has_inbox_copy(conn, account, folder, uid)?
+        {
             remember(conn, account, folder, uid, &mark, WAITING_FOR_INBOX)?;
             continue;
         }
@@ -345,7 +386,17 @@ pub fn meron_marks_observe(
         if key.as_ref().is_some_and(|key| filed_keys.contains(key)) {
             continue;
         }
-        file_copy(conn, account, folder, uid, &mark, filing(&mark), &seen_marks, &mut filed_keys, &mut out)?;
+        file_copy(
+            conn,
+            account,
+            folder,
+            uid,
+            &mark,
+            filing(&mark),
+            &seen_marks,
+            &mut filed_keys,
+            &mut out,
+        )?;
     }
     // Archive marks that waited for their conversation's Inbox mail to go:
     // filed once none of it is cached. Forgotten when the copy is gone.
@@ -355,12 +406,16 @@ pub fn meron_marks_observe(
                 "SELECT uid, folder_id FROM meron_marks
                   WHERE account = ?1 AND folder = ?2 AND written_at = ?3",
             )?
-            .query_map(params![account, folder, WAITING_FOR_INBOX], |row| Ok((row.get(0)?, row.get(1)?)))?
+            .query_map(params![account, folder, WAITING_FOR_INBOX], |row| {
+                Ok((row.get(0)?, row.get(1)?))
+            })?
             .collect::<rusqlite::Result<_>>()?;
         for (uid, mark) in waiting {
             if cached_date(conn, account, folder, uid)?.is_none() {
-                conn.prepare_cached("DELETE FROM meron_marks WHERE account = ?1 AND folder = ?2 AND uid = ?3")?
-                    .execute(params![account, folder, uid])?;
+                conn.prepare_cached(
+                    "DELETE FROM meron_marks WHERE account = ?1 AND folder = ?2 AND uid = ?3",
+                )?
+                .execute(params![account, folder, uid])?;
                 continue;
             }
             if has_inbox_copy(conn, account, folder, uid)? {
@@ -371,7 +426,17 @@ pub fn meron_marks_observe(
             if key.as_ref().is_some_and(|key| filed_keys.contains(key)) {
                 continue;
             }
-            file_copy(conn, account, folder, uid, &mark, filing(&mark), &seen_marks, &mut filed_keys, &mut out)?;
+            file_copy(
+                conn,
+                account,
+                folder,
+                uid,
+                &mark,
+                filing(&mark),
+                &seen_marks,
+                &mut filed_keys,
+                &mut out,
+            )?;
         }
     }
     Ok(out)
@@ -442,7 +507,9 @@ fn file_copy(
         for (row_uid, date) in super::meron_conversation_inbox_rows(conn, account, &key)? {
             let row_mark = match seen_marks.get(&row_uid) {
                 Some(seen) => seen.to_string(),
-                None => remembered(conn, account, folder, row_uid)?.map(|(id, _)| id).unwrap_or_default(),
+                None => remembered(conn, account, folder, row_uid)?
+                    .map(|(id, _)| id)
+                    .unwrap_or_default(),
             };
             if row_mark == mark {
                 marked.push((row_uid, date));
@@ -450,7 +517,11 @@ fn file_copy(
                 unmarked_newest = unmarked_newest.max(date);
             }
         }
-        let marked_newest = marked.iter().map(|(_, date)| *date).max().unwrap_or(i64::MIN);
+        let marked_newest = marked
+            .iter()
+            .map(|(_, date)| *date)
+            .max()
+            .unwrap_or(i64::MIN);
         if unmarked_newest > marked_newest {
             let mut uids: Vec<u32> = marked.into_iter().map(|(uid, _)| uid).collect();
             uids.sort_unstable();

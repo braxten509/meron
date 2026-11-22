@@ -81,7 +81,11 @@ pub fn ensure_meron_archive_folder(conn: &Connection) -> Result<()> {
     conn.execute(
         "INSERT OR IGNORE INTO meron_folders(id, name, sort_order, created_at, notify)
          VALUES(?1, ?2, 0, ?3, 0)",
-        params![MERON_ARCHIVE_FOLDER_ID, MERON_ARCHIVE_FOLDER_NAME, super::now_unix()],
+        params![
+            MERON_ARCHIVE_FOLDER_ID,
+            MERON_ARCHIVE_FOLDER_NAME,
+            super::now_unix()
+        ],
     )?;
     Ok(())
 }
@@ -188,7 +192,9 @@ pub fn meron_hides_folder(conn: &Connection, account: &str, folder: &str) -> Res
     if super::is_local_account(account) || !meron_account_has_entries(conn, account)? {
         return Ok(false);
     }
-    Ok(meron_hides_role(&super::folder_role(conn, account, folder)?))
+    Ok(meron_hides_role(&super::folder_role(
+        conn, account, folder,
+    )?))
 }
 
 /// The conversation key of one cached message: its thread root, or its tag
@@ -408,7 +414,9 @@ pub fn delete_meron_folder(conn: &Connection, id: &str) -> Result<MeronReleased>
 pub fn meron_folder_counts(conn: &Connection) -> Result<HashMap<String, u32>> {
     let mut stmt =
         conn.prepare("SELECT folder_id, COUNT(*) FROM meron_folder_entries GROUP BY folder_id")?;
-    let rows = stmt.query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?)))?;
+    let rows = stmt.query_map([], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+    })?;
     let mut out = HashMap::new();
     for row in rows {
         let (folder, count) = row?;
@@ -543,7 +551,11 @@ pub fn meron_folder_entries(conn: &Connection, folder_id: &str) -> Result<Vec<Me
         }
     }
     let mut out: Vec<MeronEntryRows> = by_entry.into_values().collect();
-    out.sort_by(|a, b| b.newest.cmp(&a.newest).then_with(|| b.entry_id.cmp(&a.entry_id)));
+    out.sort_by(|a, b| {
+        b.newest
+            .cmp(&a.newest)
+            .then_with(|| b.entry_id.cmp(&a.entry_id))
+    });
     Ok(out)
 }
 
@@ -560,7 +572,10 @@ pub fn meron_row_header(
                     json_extract(json, '$.to') FROM messages
               WHERE account = ?1 AND folder = ?2 AND uid = ?3",
         )?
-        .query_row(params![account, folder, uid], super::message_header_from_row)
+        .query_row(
+            params![account, folder, uid],
+            super::message_header_from_row,
+        )
         .optional()?;
     Ok(header.map(|mut header| {
         header.folder = folder.to_string();
@@ -654,7 +669,11 @@ pub fn meron_folder_unseen_uids(
         .collect::<rusqlite::Result<Vec<_>>>()?;
     for (account, folder, uid) in rows {
         if roles.hides(conn, &account, &folder)? {
-            out.entry(account).or_default().entry(folder).or_default().insert(uid);
+            out.entry(account)
+                .or_default()
+                .entry(folder)
+                .or_default()
+                .insert(uid);
         }
     }
     Ok(out
@@ -817,7 +836,12 @@ pub fn meron_foldered_uids(
 }
 
 /// Whether the cached message `(folder, uid)` is in a Meron folder.
-pub fn meron_uid_in_folder(conn: &Connection, account: &str, folder: &str, uid: u32) -> Result<bool> {
+pub fn meron_uid_in_folder(
+    conn: &Connection,
+    account: &str,
+    folder: &str,
+    uid: u32,
+) -> Result<bool> {
     Ok(meron_foldered_uids(conn, account, folder, &[uid])?.contains(&uid))
 }
 
@@ -852,7 +876,9 @@ pub fn meron_header_in_folder(
     }
     for id in [&header.message_id, &header.in_reply_to] {
         let raw = id.trim().to_lowercase();
-        let tag = raw.trim_matches(|c| c == ' ' || c == '<' || c == '>').to_string();
+        let tag = raw
+            .trim_matches(|c| c == ' ' || c == '<' || c == '>')
+            .to_string();
         for key in [raw, tag] {
             if is_alias_key(&key) {
                 keys.push(key);
@@ -882,7 +908,10 @@ pub fn retain_outside_meron_folders(
     }
     let mut by_folder: BTreeMap<String, Vec<u32>> = BTreeMap::new();
     for header in headers.iter() {
-        by_folder.entry(header.folder.clone()).or_default().push(header.uid);
+        by_folder
+            .entry(header.folder.clone())
+            .or_default()
+            .push(header.uid);
     }
     let mut hidden: HashSet<(String, u32)> = HashSet::new();
     for (folder, uids) in by_folder {
@@ -928,7 +957,14 @@ fn rows_by_root(conn: &Connection, account: &str, root: &str) -> Result<Vec<Keye
           WHERE account = ?1 AND lower(COALESCE(thread_key, '')) = ?2 AND uid <> 0"
     ))?;
     let rows = stmt.query_map(params![account, root], |row| {
-        Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?))
+        Ok((
+            row.get(0)?,
+            row.get(1)?,
+            row.get(2)?,
+            row.get(3)?,
+            row.get(4)?,
+            row.get(5)?,
+        ))
     })?;
     Ok(rows.collect::<rusqlite::Result<_>>()?)
 }
@@ -940,7 +976,14 @@ fn rows_by_tag(conn: &Connection, account: &str, tag: &str) -> Result<Vec<KeyedR
           WHERE account = ?1 AND uid <> 0 AND {TAG_KEY_SQL} = ?2"
     ))?;
     let rows = stmt.query_map(params![account, tag], |row| {
-        Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?))
+        Ok((
+            row.get(0)?,
+            row.get(1)?,
+            row.get(2)?,
+            row.get(3)?,
+            row.get(4)?,
+            row.get(5)?,
+        ))
     })?;
     Ok(rows.collect::<rusqlite::Result<_>>()?)
 }
@@ -970,7 +1013,10 @@ fn merge_entry(conn: &Connection, from: &str, into: &str) -> Result<()> {
         "UPDATE meron_folder_uids SET entry_id = ?2 WHERE entry_id = ?1",
         params![from, into],
     )?;
-    conn.execute("DELETE FROM meron_folder_entries WHERE id = ?1", params![from])?;
+    conn.execute(
+        "DELETE FROM meron_folder_entries WHERE id = ?1",
+        params![from],
+    )?;
     Ok(())
 }
 
@@ -1164,7 +1210,11 @@ pub fn meron_move_in_in(
 }
 
 /// Whether the conversation `key` names has a cached Inbox copy.
-pub fn meron_conversation_has_inbox_copy(conn: &Connection, account: &str, key: &str) -> Result<bool> {
+pub fn meron_conversation_has_inbox_copy(
+    conn: &Connection,
+    account: &str,
+    key: &str,
+) -> Result<bool> {
     let key = normalize_key(key);
     if !is_alias_key(&key) {
         return Ok(false);
@@ -1176,7 +1226,11 @@ pub fn meron_conversation_has_inbox_copy(conn: &Connection, account: &str, key: 
 }
 
 /// The conversation `key` names' cached Inbox copies: (uid, date).
-pub fn meron_conversation_inbox_rows(conn: &Connection, account: &str, key: &str) -> Result<Vec<(u32, i64)>> {
+pub fn meron_conversation_inbox_rows(
+    conn: &Connection,
+    account: &str,
+    key: &str,
+) -> Result<Vec<(u32, i64)>> {
     let key = normalize_key(key);
     if !is_alias_key(&key) {
         return Ok(Vec::new());
@@ -1228,7 +1282,8 @@ pub fn meron_card_release(
     root: &str,
     uid: Option<u32>,
 ) -> Result<Option<MeronCardRelease>> {
-    let Some((entry_id, folder_id)) = meron_entry_of_thread(conn, account, folder, root, uid)? else {
+    let Some((entry_id, folder_id)) = meron_entry_of_thread(conn, account, folder, root, uid)?
+    else {
         return Ok(None);
     };
     let Some(key) = meron_thread_key(conn, account, folder, root, uid)? else {
@@ -1385,7 +1440,9 @@ pub fn meron_release_old_ai_entries(conn: &Connection, now: i64) -> Result<usize
     let tx = Transaction::new_unchecked(conn, TransactionBehavior::Immediate)?;
     let entries: Vec<(String, String, i64, String)> = tx
         .prepare("SELECT id, account, added_at, source FROM meron_folder_entries")?
-        .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)))?
+        .query_map([], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+        })?
         .collect::<rusqlite::Result<_>>()?;
     let mut identity_of = tx.prepare(&format!(
         "SELECT {} FROM messages WHERE account = ?1 AND folder = ?2 AND uid = ?3",
@@ -1403,7 +1460,9 @@ pub fn meron_release_old_ai_entries(conn: &Connection, now: i64) -> Result<usize
         if !by_ai {
             for member in &members {
                 let identity: Option<String> = identity_of
-                    .query_row(params![account, member.folder, member.uid], |row| row.get(0))
+                    .query_row(params![account, member.folder, member.uid], |row| {
+                        row.get(0)
+                    })
                     .optional()?;
                 if let Some(identity) = identity
                     && done_near.exists(params![
@@ -1454,9 +1513,18 @@ pub fn meron_release_entry_in(conn: &Connection, entry_id: &str) -> Result<Meron
     for member in meron_entry_members(conn, entry_id)? {
         touched.insert((member.account, member.folder));
     }
-    let removed = conn.execute("DELETE FROM meron_folder_entries WHERE id = ?1", params![entry_id])?;
-    conn.execute("DELETE FROM meron_folder_aliases WHERE entry_id = ?1", params![entry_id])?;
-    conn.execute("DELETE FROM meron_folder_uids WHERE entry_id = ?1", params![entry_id])?;
+    let removed = conn.execute(
+        "DELETE FROM meron_folder_entries WHERE id = ?1",
+        params![entry_id],
+    )?;
+    conn.execute(
+        "DELETE FROM meron_folder_aliases WHERE entry_id = ?1",
+        params![entry_id],
+    )?;
+    conn.execute(
+        "DELETE FROM meron_folder_uids WHERE entry_id = ?1",
+        params![entry_id],
+    )?;
     Ok(MeronReleased {
         released: removed,
         touched,
@@ -1555,8 +1623,14 @@ pub fn meron_forget_account(conn: &Connection, account: &str) -> Result<()> {
         "DELETE FROM meron_folder_aliases WHERE account = ?1",
         params![account],
     )?;
-    conn.execute("DELETE FROM meron_folder_uids WHERE account = ?1", params![account])?;
-    conn.execute("DELETE FROM meron_marks WHERE account = ?1", params![account])?;
+    conn.execute(
+        "DELETE FROM meron_folder_uids WHERE account = ?1",
+        params![account],
+    )?;
+    conn.execute(
+        "DELETE FROM meron_marks WHERE account = ?1",
+        params![account],
+    )?;
     Ok(())
 }
 
@@ -1679,7 +1753,13 @@ pub(super) fn meron_adopt(
 }
 
 /// Whether `(folder, uid)` is remembered as a member of entry `entry_id`.
-fn uid_is_member(conn: &Connection, account: &str, folder: &str, uid: u32, entry_id: &str) -> Result<bool> {
+fn uid_is_member(
+    conn: &Connection,
+    account: &str,
+    folder: &str,
+    uid: u32,
+    entry_id: &str,
+) -> Result<bool> {
     Ok(conn
         .prepare_cached(
             "SELECT 1 FROM meron_folder_uids
@@ -1845,7 +1925,11 @@ pub fn meron_backup_restore(
                     id,
                     name,
                     folder.sort_order,
-                    if folder.created_at > 0 { folder.created_at } else { super::now_unix() },
+                    if folder.created_at > 0 {
+                        folder.created_at
+                    } else {
+                        super::now_unix()
+                    },
                     folder.notify as i64
                 ],
             )?;
