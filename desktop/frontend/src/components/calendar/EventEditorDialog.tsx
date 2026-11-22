@@ -1,3 +1,8 @@
+// Create or change an event made here. An accepted invitation
+// opens read-only but for its notes and alerts: its time and title
+// are the organizer's to change. Mirrors mobile's
+// EventEditorSheet.
+
 import { CalendarDays, Check, Copy, Mail, Trash2, X } from 'lucide-react'
 import { useState } from 'react'
 import { useValue } from '@legendapp/state/react'
@@ -218,9 +223,6 @@ function InviteLocation({ location }: { location: string }) {
   )
 }
 
-// Create or change an event made here. An accepted invitation opens read-only
-// but for its notes and alerts: its time and title are the organizer's to change. Mirrors
-// mobile's EventEditorSheet.
 export function EventEditorDialog({ editor }: { editor: EventEditor }) {
   const { t } = useTranslation()
   const [form, setForm] = useState(() => initialForm(editor))

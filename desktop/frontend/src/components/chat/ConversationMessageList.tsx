@@ -1,3 +1,8 @@
+// The scrollable conversation body: the "load earlier" affordance, date dividers and
+// one MessageBubble per message. Scroll positioning lives in the parent's
+// useConversationScroll hook, which owns the refs wired up here and reaches this
+// component through ConversationScrollContext.
+
 import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { Loader2 } from 'lucide-react'
@@ -33,10 +38,6 @@ function HoveredLinkPreview() {
   return <LinkHoverPreview url={useValue(thread$.hoveredLink)} />
 }
 
-// The scrollable conversation body: the "load earlier" affordance, date dividers
-// and one MessageBubble per message. Scroll positioning lives in the parent's
-// useConversationScroll hook, which owns the refs wired up here and reaches
-// this component through ConversationScrollContext.
 export function ConversationMessageList({
   messages,
   showThreadLoading,

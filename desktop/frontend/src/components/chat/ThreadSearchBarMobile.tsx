@@ -1,11 +1,14 @@
+// The narrow-viewport in-thread search bar (the
+// desktop equivalent lives inside
+// ConversationHeader). Rendered only while thread
+// search is open.
+
 import type { RefObject } from 'react'
 import { ChevronDown, ChevronUp, Search, X } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'
 import { goToSearchMatch, thread$ } from '../../states/thread'
 
-// The narrow-viewport in-thread search bar (the desktop equivalent lives inside
-// ConversationHeader). Rendered only while thread search is open.
 export function ThreadSearchBarMobile({ inputRef }: { inputRef: RefObject<HTMLInputElement | null> }) {
   const { t } = useTranslation()
   const threadSearch = useValue(thread$.search)

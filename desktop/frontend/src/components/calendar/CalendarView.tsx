@@ -1,3 +1,7 @@
+// The optional calendar: a month of events, accepted
+// invitations and (with Tasks on) the open tasks due,
+// in place of mail. Mirrors mobile's CalendarScreen.
+
 import { useValue } from '@legendapp/state/react'
 import { CalendarDays, Check, ChevronLeft, ChevronRight, Minimize2, Plus, Repeat, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -23,9 +27,6 @@ import { EventEditorDialog } from './EventEditorDialog'
 /** How many items a day cell lists before folding the rest into "+N more". */
 const VISIBLE_PER_DAY = 3
 
-// The optional calendar: a month of events, accepted invitations and (with
-// Tasks on) the open tasks due, in place of mail. Mirrors mobile's
-// CalendarScreen.
 export function CalendarView() {
   const { t } = useTranslation()
   const month = new Date(useValue(calendar$.month))

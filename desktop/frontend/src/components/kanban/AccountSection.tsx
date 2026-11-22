@@ -1,3 +1,7 @@
+// One account's collapsible section in the
+// column picker: an inline "new folder" form
+// (for non-RSS accounts) and its folder tree.
+
 import { useEffect, useRef, useState } from 'react'
 import type { MouseEvent } from 'react'
 import { ChevronRight, CornerDownRight, Loader2, Plus, X } from 'lucide-react'
@@ -11,8 +15,6 @@ import { FolderTreeRow } from './FolderTreeRow'
 import { pickDelimiter } from '../../lib/folderTree'
 import type { AccountGroup, TreeNode } from '../../lib/folderTree'
 
-// One account's collapsible section in the column picker: an inline "new folder"
-// form (for non-RSS accounts) and its folder tree.
 export function AccountSection({
   group,
   selected,

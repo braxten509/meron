@@ -1,3 +1,8 @@
+// Right-click menu for a message (or a link inside
+// it). Clamps itself inside the viewport on mount
+// since clientX/clientY can land near the right/bottom
+// edge.
+
 import {
   Archive,
   CheckSquare,
@@ -41,8 +46,6 @@ import { MenuItem } from '../menu/MenuItem'
 import type { MessageContextMenuState } from '../../states/thread'
 import type { Message } from '../../types'
 
-// Right-click menu for a message (or a link inside it). Clamps itself inside the
-// viewport on mount since clientX/clientY can land near the right/bottom edge.
 export function MessageContextMenu({
   state,
   isRSS,

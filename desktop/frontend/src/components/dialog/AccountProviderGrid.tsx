@@ -1,9 +1,12 @@
+// The setup provider picker is a three-option tab
+// group. Keep the labels and icons prominent; long
+// helper text lives in the selected panel, not in the
+// tab.
+
 import { useTranslation } from '../../lib/i18n'
 import type { SetupMode } from '../../states/ui'
 import { PROVIDERS } from './providerIcons'
 
-// The setup provider picker is a three-option tab group. Keep the labels and
-// icons prominent; long helper text lives in the selected panel, not in the tab.
 export function AccountProviderGrid({
   mode,
   setMode,

@@ -1,3 +1,7 @@
+// One folder node in the column picker tree: an expander, a checkbox for the
+// folder itself, and its children, rendered recursively. A structural node
+// without a real folder keeps a tri-state checkbox covering its descendants.
+
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronRight, Rss } from 'lucide-react'
 import { folderIcon } from '../../lib/folderIcon'
@@ -6,9 +10,6 @@ import { kanbanColumnKey } from '../../states/kanban'
 import { Checkbox } from '../field/Checkbox'
 import { selectableFolderIds, type TreeNode } from '../../lib/folderTree'
 
-// One folder node in the column picker tree: an expander, a checkbox for the
-// folder itself, and its children, rendered recursively. A structural node
-// without a real folder keeps a tri-state checkbox covering its descendants.
 export function FolderTreeRow({
   node,
   accountId,

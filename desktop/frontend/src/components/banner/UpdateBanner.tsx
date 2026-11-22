@@ -1,3 +1,8 @@
+// Thin banner announcing a new release. It only appears for a version the user hasn't
+// dismissed, and only for the two states where there's something to do: a download to
+// start, or a staged update to apply. Everything else about the updater lives in About
+// (UpdateSection) so this stays a single action.
+
 import { Download, Sparkles, X } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'
@@ -11,10 +16,6 @@ import {
   update$,
 } from '../../states/update'
 
-// Thin banner announcing a new release. It only appears for a version the user
-// hasn't dismissed, and only for the two states where there's something to do:
-// a download to start, or a staged update to apply. Everything else about the
-// updater lives in About (UpdateSection) so this stays a single action.
 export function UpdateBanner() {
   const { t } = useTranslation()
   const status = useValue(update$.status)

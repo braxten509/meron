@@ -1,9 +1,11 @@
+// Small info icon with a hover/focus tooltip. The bubble is
+// fixed-positioned from the icon's rect because settings panels scroll
+// inside an overflow-hidden dialog, which would clip an
+// absolutely-positioned bubble.
+
 import { useState } from 'react'
 import { Info } from 'lucide-react'
 
-// Small info icon with a hover/focus tooltip. The bubble is fixed-positioned
-// from the icon's rect because settings panels scroll inside an
-// overflow-hidden dialog, which would clip an absolutely-positioned bubble.
 export function InfoTip({ hint }: { hint?: string }) {
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
 

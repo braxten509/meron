@@ -1,3 +1,8 @@
+// Thin banner shown across the top when the last sync failed. State is
+// driven by sidecar `error` / `mail.synced` events wired up in
+// useAppEffects; this just reflects connectivity$. Renders nothing while
+// sync is healthy.
+
 import { useState } from 'react'
 import { AlertCircle, RefreshCw, X } from 'lucide-react'
 import { useTranslation } from '../../lib/i18n'
@@ -9,9 +14,6 @@ import { syncMail } from '../../states/mail'
 import { showToast, ui$ } from '../../states/ui'
 import { connectivityAccountLabel, proxyEndpointFromSyncError } from './connectivityBannerHelpers'
 
-// Thin banner shown across the top when the last sync failed. State is driven by
-// sidecar `error` / `mail.synced` events wired up in useAppEffects; this just
-// reflects connectivity$. Renders nothing while sync is healthy.
 export function ConnectivityBanner() {
   const { t } = useTranslation()
   const error = useValue(connectivity$.error)

@@ -1,3 +1,7 @@
+// Send-as alias editor. Keeps all rows locally
+// (including a half-typed one) and persists the
+// list minus blank-email rows on every change.
+
 import { useEffect, useState } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import { useTranslation } from '../../lib/i18n'
@@ -6,8 +10,6 @@ import type { Account, Alias } from '../../types'
 import { TextInput } from '../field/Field'
 import { SettingRow, SettingsGroup } from './AccountSettingsRows'
 
-// Send-as alias editor. Keeps all rows locally (including a half-typed one) and
-// persists the list minus blank-email rows on every change.
 export function AccountAliasesCard({ account }: { account: Account }) {
   const { t } = useTranslation()
   const [aliasesVal, setAliasesVal] = useState<Alias[]>([])

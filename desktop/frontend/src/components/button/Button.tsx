@@ -1,3 +1,8 @@
+// Labeled button. Variants mirror the styles already in use across dialogs
+// and headers (accent CTA, bordered secondary, ghost, soft-danger) so call
+// sites stop re-deriving them by hand. `className` is additive (see clsx
+// note).
+
 import { forwardRef } from 'react'
 import type { ButtonHTMLAttributes, ReactNode } from 'react'
 import type { LucideIcon } from 'lucide-react'
@@ -27,9 +32,6 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   children: ReactNode
 }
 
-// Labeled button. Variants mirror the styles already in use across dialogs and
-// headers (accent CTA, bordered secondary, ghost, soft-danger) so call sites stop
-// re-deriving them by hand. `className` is additive (see clsx note).
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
   { variant = 'primary', size = 'md', leftIcon: Left, rightIcon: Right, children, className, type, ...rest },
   ref,

@@ -1,12 +1,14 @@
+// The folded quote under a reply: the message it answers goes out
+// beneath the body without filling the editor. The dots unfold it into
+// the body to be edited; the right-click menu can also drop it from the
+// reply.
+
 import { useState } from 'react'
 import { Trash2, UnfoldVertical } from 'lucide-react'
 import { useTranslation } from '../../lib/i18n'
 import { FloatingContextMenu } from '../menu/FloatingContextMenu'
 import { MenuItem } from '../menu/MenuItem'
 
-// The folded quote under a reply: the message it answers goes out beneath the
-// body without filling the editor. The dots unfold it into the body to be
-// edited; the right-click menu can also drop it from the reply.
 export function ComposerQuote({ onExpand, onRemove }: { onExpand: () => void; onRemove: () => void }) {
   const { t } = useTranslation()
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null)

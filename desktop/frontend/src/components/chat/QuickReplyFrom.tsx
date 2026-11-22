@@ -1,3 +1,8 @@
+// The quick reply's send-as identity: shows which address the reply goes out from, and
+// opens a picker to override it. Renders nothing unless the account actually has more
+// than one identity to choose between — with a single address there is nothing to
+// disclose.
+
 import { useState } from 'react'
 import { Check, ChevronDown } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
@@ -15,10 +20,6 @@ const ITEM_HEIGHT_PX = 32
 const MENU_PADDING_PX = 8
 const MENU_GAP_PX = 6
 
-// The quick reply's send-as identity: shows which address the reply goes out
-// from, and opens a picker to override it. Renders nothing unless the account
-// actually has more than one identity to choose between — with a single
-// address there is nothing to disclose.
 export function QuickReplyFrom() {
   const { t } = useTranslation()
   const { identities, selected } = useValue(quickReplyFromState)

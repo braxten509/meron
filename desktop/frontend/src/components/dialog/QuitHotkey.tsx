@@ -1,12 +1,13 @@
+// The quit shortcut, kept apart from AppHotkeys so it can be mounted on the first-run
+// setup screen too, where the rest of the app's shortcuts have nothing to act on.
+// Keystrokes forwarded out of a message iframe are replayed on window by AppHotkeys,
+// so they reach this listener as well.
+
 import { useEffect } from 'react'
 import { invoke } from '../../lib/bridge'
 import { isBareKeystroke, isMac, isTyping, matchShortcut } from '../../lib/shortcuts'
 import { modalOpen } from '../../states/ui'
 
-// The quit shortcut, kept apart from AppHotkeys so it can be mounted on the
-// first-run setup screen too, where the rest of the app's shortcuts have
-// nothing to act on. Keystrokes forwarded out of a message iframe are replayed
-// on window by AppHotkeys, so they reach this listener as well.
 export function QuitHotkey() {
   useEffect(() => {
     // macOS quits natively on ⌘Q.

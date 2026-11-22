@@ -1,10 +1,12 @@
+// The dialog-variant provider picker: a vertical rail (mirrors the
+// Settings dialog nav). Selecting one swaps the form shown in the
+// panel to its right, so "pick a type -> fill in details" reads as one
+// flow.
+
 import type { SetupMode } from '../../states/ui'
 import { useTranslation } from '../../lib/i18n'
 import { PROVIDERS } from './providerIcons'
 
-// The dialog-variant provider picker: a vertical rail (mirrors the Settings
-// dialog nav). Selecting one swaps the form shown in the panel to its right, so
-// "pick a type -> fill in details" reads as one flow.
 export function AccountProviderRail({ mode, setMode }: { mode: SetupMode; setMode: (mode: SetupMode) => void }) {
   const { t } = useTranslation()
   return (

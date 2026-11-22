@@ -1,3 +1,8 @@
+// Everything below a message's header: image attachments, videos, a calendar
+// invitation's card, the body and the file attachment list. Blocked remote content is
+// revealed from the message's actions menu rather than a banner over every newsletter.
+// Shared by both conversation layouts (see useMessageView).
+
 import { Download } from 'lucide-react'
 import { useTranslation } from '../../lib/i18n'
 import { downloadAttachment, openAttachment } from '../../states/mail'
@@ -11,11 +16,6 @@ import { VideoAttachment } from './VideoAttachment'
 import type { MessageView } from './useMessageView'
 import type { FrameSurface } from './frameTheme'
 
-// Everything below a message's header: image attachments, videos, a calendar
-// invitation's card, the body and the file attachment list. Blocked remote
-// content is revealed from the message's actions menu rather than a banner over
-// every newsletter.
-// Shared by both conversation layouts (see useMessageView).
 export function MessageContent({
   message,
   view,

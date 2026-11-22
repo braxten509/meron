@@ -1,8 +1,10 @@
+// Corner trash button for the settings-header pictures (account avatar,
+// board image). Rendered as a sibling of the picture's change button
+// inside a `relative group` wrapper: it shows on hover, and on keyboard
+// focus.
+
 import { Trash2 } from 'lucide-react'
 
-// Corner trash button for the settings-header pictures (account avatar, board
-// image). Rendered as a sibling of the picture's change button inside a
-// `relative group` wrapper: it shows on hover, and on keyboard focus.
 export function RemoveImageBadge({
   label,
   disabled,

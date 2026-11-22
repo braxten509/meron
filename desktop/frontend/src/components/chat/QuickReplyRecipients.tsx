@@ -1,3 +1,8 @@
+// Who the quick reply goes to. The box has no address fields, and a plain reply keeps
+// the Cc while dropping the other To recipients — a recipient set worth disclosing
+// rather than leaving to be discovered in the Sent copy. Read-only: clicking opens the
+// full editor, where the addresses can actually be edited.
+
 import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'
 import { openReplyInFullEditor } from '../../states/compose'
@@ -13,10 +18,6 @@ function summarize(items: AddressItem[]): string {
   return `${shown.join(', ')} +${items.length - VISIBLE_NAMES}`
 }
 
-// Who the quick reply goes to. The box has no address fields, and a plain reply
-// keeps the Cc while dropping the other To recipients — a recipient set worth
-// disclosing rather than leaving to be discovered in the Sent copy. Read-only:
-// clicking opens the full editor, where the addresses can actually be edited.
 export function QuickReplyRecipients() {
   const { t } = useTranslation()
   const { to, cc } = useValue(quickReplyRecipients)

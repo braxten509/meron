@@ -1,3 +1,8 @@
+// Shared overflow menu for a list of threads: filter (all / unread /
+// starred) plus mark-all-as-read. Used by the chat thread list header and
+// each kanban column header. Purely presentational; the host wires state and
+// actions.
+
 import { useRef, useState } from 'react'
 import { MenuSurface } from '../menu/MenuSurface'
 import type { ReactNode } from 'react'
@@ -346,9 +351,6 @@ export function ThreadActionsMenuItems({
   )
 }
 
-// Shared overflow menu for a list of threads: filter (all / unread / starred)
-// plus mark-all-as-read. Used by the chat thread list header and each kanban
-// column header. Purely presentational; the host wires state and actions.
 export function ThreadActionsMenu({
   filterMode,
   onFilterChange,

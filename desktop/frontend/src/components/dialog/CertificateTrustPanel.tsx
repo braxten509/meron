@@ -1,3 +1,8 @@
+// Used inline by the account dialog (where a
+// save was refused) and inside a modal by the
+// send path (where a message could not be
+// submitted).
+
 import { ShieldAlert } from 'lucide-react'
 import { useTranslation } from '../../lib/i18n'
 import { commonName, formatFingerprint, type CertificatePrompt } from '../../lib/certificateTrust'
@@ -8,8 +13,6 @@ import { Button } from '../button/Button'
 // against the one the server is supposed to have and decides; accepting pins
 // that exact certificate for that account's server, and nothing else.
 //
-// Used inline by the account dialog (where a save was refused) and inside a
-// modal by the send path (where a message could not be submitted).
 export function CertificateTrustPanel({
   prompt,
   busy = false,

@@ -1,3 +1,7 @@
+// The grouped toggle sections of the account panel: visibility, notifications/sync
+// (incl. the RSS interval), and content rendering. `isLocal`: local folders, which
+// have no inbox to merge, nothing to check or notify about, and nothing to send.
+
 import { useEffect, useState } from 'react'
 import { BellOff, Clock, Code, Eye, Image as ImageIcon, Inbox, Pause, Send } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
@@ -95,10 +99,6 @@ function FolderNotificationsGroup({ accountId }: { accountId: string }) {
   )
 }
 
-// The grouped toggle sections of the account panel: visibility,
-// notifications/sync (incl. the RSS interval), and content rendering.
-// `isLocal`: local folders, which have no inbox to merge, nothing to check or
-// notify about, and nothing to send.
 export function AccountTogglesSection({
   account,
   isRSS,

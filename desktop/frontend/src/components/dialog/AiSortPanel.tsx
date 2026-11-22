@@ -1,3 +1,7 @@
+// Lets the AI move new mail into the owner's own folders before it
+// shows in the Inbox. The key goes to the keychain and never comes
+// back; the rest is saved whole, one save at a time, like Rules.
+
 import { useEffect, useRef, useState } from 'react'
 import { ChevronDown, ChevronLeft, ChevronRight, Eye, EyeOff, Play, ShieldCheck, Square, Undo2, X } from 'lucide-react'
 import { useTranslation } from '../../lib/i18n'
@@ -67,9 +71,6 @@ type FolderKeyInput = Pick<AiSortFolder, 'account' | 'folder' | 'meron_folder_id
 const folderKey = ({ account, folder, meron_folder_id }: FolderKeyInput) =>
   meron_folder_id ? `meron\u0000${meron_folder_id}` : `${account}\u0000${folder}`
 
-// Lets the AI move new mail into the owner's own folders before it shows in the
-// Inbox. The key goes to the keychain and never comes back; the rest is saved
-// whole, one save at a time, like Rules.
 export function AiSortPanel() {
   const { t } = useTranslation()
   const targetLabel = useRuleTargetLabel()

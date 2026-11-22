@@ -1,12 +1,13 @@
+// Meron-only display name and outgoing sender name. The avatar itself
+// is edited by clicking the header avatar above this group. Owns its
+// own form state, seeded from the account and persisted on change.
+
 import { useEffect, useState } from 'react'
 import { useTranslation } from '../../lib/i18n'
 import { setAccountName, setAccountSenderName } from '../../states/accounts'
 import type { Account } from '../../types'
 import { SettingsGroup, TextRow } from './AccountSettingsRows'
 
-// Meron-only display name and outgoing sender name. The avatar itself is edited
-// by clicking the header avatar above this group. Owns its own form state,
-// seeded from the account and persisted on change.
 export function AccountProfileGroup({ account, isRSS }: { account: Account; isRSS: boolean }) {
   const { t } = useTranslation()
   const [displayNameVal, setDisplayNameVal] = useState('')

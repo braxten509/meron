@@ -1,3 +1,8 @@
+// The conversation header's twin of AddMailToTasksMenu. Lists are read on press rather
+// than on mount, so one made in the panel meanwhile is offered; with a single list the
+// press adds straight away, otherwise it asks which. A thread with an open task
+// already is only pointed out, not added again.
+
 import { useEffect, useRef, useState } from 'react'
 import { useValue } from '@legendapp/state/react'
 import { Check, ListPlus } from 'lucide-react'
@@ -8,10 +13,6 @@ import { IconButton } from '../button/IconButton'
 import { FloatingContextMenu } from '../menu/FloatingContextMenu'
 import { MenuItem } from '../menu/MenuItem'
 
-// The conversation header's twin of AddMailToTasksMenu. Lists are read on press
-// rather than on mount, so one made in the panel meanwhile is offered; with a
-// single list the press adds straight away, otherwise it asks which. A thread
-// with an open task already is only pointed out, not added again.
 export function AddToTasksButton({ title, account, threadId }: { title: string; account: string; threadId: string }) {
   const { t } = useTranslation()
   const selectedList = useValue(ui$.activeTaskList)

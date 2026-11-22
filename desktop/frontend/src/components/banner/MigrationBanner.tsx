@@ -1,11 +1,12 @@
+// Thin banner shown while the core upgrades its store on the first
+// start after an update. Nothing can load until that finishes, and it
+// has no progress to report, so this only says what the wait is for.
+
 import { Loader2 } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'
 import { connectivity$ } from '../../states/connectivity'
 
-// Thin banner shown while the core upgrades its store on the first start after
-// an update. Nothing can load until that finishes, and it has no progress to
-// report, so this only says what the wait is for.
 export function MigrationBanner() {
   const { t } = useTranslation()
   const migrating = useValue(connectivity$.migrating)

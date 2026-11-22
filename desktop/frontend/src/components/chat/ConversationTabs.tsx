@@ -1,3 +1,8 @@
+// The tab strip above the conversation: the "Current" tab (when
+// a conversation is open behind the tabs) plus open thread,
+// reader and compose tabs. Renders nothing when no tabs are
+// open.
+
 import { useEffect, useRef, useState } from 'react'
 import { DndContext, closestCenter } from '@dnd-kit/core'
 import { restrictToHorizontalAxis } from '@dnd-kit/modifiers'
@@ -56,9 +61,6 @@ function revealTab(strip: HTMLElement, tabId: string) {
   else if (tabRect.right > stripRect.right) strip.scrollLeft += tabRect.right - stripRect.right
 }
 
-// The tab strip above the conversation: the "Current" tab (when a conversation
-// is open behind the tabs) plus open thread, reader and compose tabs. Renders
-// nothing when no tabs are open.
 export function ConversationTabs() {
   const { t } = useTranslation()
   const tabs = useValue(compose$.tabs)

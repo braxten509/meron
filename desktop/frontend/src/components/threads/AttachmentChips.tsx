@@ -1,11 +1,13 @@
+// Gmail-style attachment chips under a thread row:
+// the first files by name, then a count of the rest.
+// Display only — the row itself is the click target.
+
 import type { Message } from '../../types'
 import { fileIconFor } from '../chat/messageHelpers'
 
 /** How many chips a row names before collapsing the rest into "+N". */
 const MAX_CHIPS = 2
 
-// Gmail-style attachment chips under a thread row: the first files by name,
-// then a count of the rest. Display only — the row itself is the click target.
 export function AttachmentChips({ files }: { files: NonNullable<Message['files']> }) {
   const shown = files.slice(0, MAX_CHIPS)
   const rest = files.length - shown.length

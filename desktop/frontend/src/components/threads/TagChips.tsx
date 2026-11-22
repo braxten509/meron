@@ -1,7 +1,9 @@
+// A thread's tags, on their own line of a list
+// or board row, so they leave the subject its
+// room. Past a few of them a count stands in.
+
 const MAX_CHIPS = 3
 
-// A thread's tags, on their own line of a list or board row, so they leave the
-// subject its room. Past a few of them a count stands in.
 export function TagChips({ tags }: { tags?: string[] }) {
   if (!tags?.length) return null
   const hidden = tags.length - MAX_CHIPS

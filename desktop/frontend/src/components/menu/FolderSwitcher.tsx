@@ -1,3 +1,8 @@
+// A folder name that doubles as a picker: clicking it lists the other
+// folders of the same account so the surface showing it (a kanban column,
+// the thread list) can be pointed elsewhere without being torn down and
+// rebuilt.
+
 import { useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { useValue } from '@legendapp/state/react'
 import { Bell, BellOff, Check, ChevronDown, ChevronRight, FolderPen } from 'lucide-react'
@@ -112,9 +117,6 @@ function FolderNodeRow({
   )
 }
 
-// A folder name that doubles as a picker: clicking it lists the other folders of
-// the same account so the surface showing it (a kanban column, the thread list)
-// can be pointed elsewhere without being torn down and rebuilt.
 export function FolderSwitcher({
   accountId,
   folderId,

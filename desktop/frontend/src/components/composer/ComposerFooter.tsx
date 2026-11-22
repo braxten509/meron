@@ -1,3 +1,8 @@
+// The composer's bottom action bar:
+// attach/inline-image buttons, the rich/plain
+// toggle, autosave status and the Discard/Send
+// buttons.
+
 import { Paperclip, Image as ImageIcon, RefreshCw, Send, Type } from 'lucide-react'
 import { useTranslation } from '../../lib/i18n'
 import { sendShortcutLabel } from '../../states/settings'
@@ -37,8 +42,6 @@ function CloudStatusIcon({ saved, size }: { saved: boolean; size: number }) {
   )
 }
 
-// The composer's bottom action bar: attach/inline-image buttons, the rich/plain
-// toggle, autosave status and the Discard/Send buttons.
 export function ComposerFooter({
   rich,
   sending,

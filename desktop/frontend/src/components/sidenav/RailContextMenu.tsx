@@ -1,3 +1,8 @@
+// Shared popover shell for the side navigation
+// rail's right-click menus: a full-screen
+// click-catcher plus a card positioned at the
+// cursor.
+
 import type { ReactNode } from 'react'
 import { FloatingContextMenu } from '../menu/FloatingContextMenu'
 
@@ -5,8 +10,6 @@ import { FloatingContextMenu } from '../menu/FloatingContextMenu'
 // rail's local name so existing call sites keep importing from here.
 export { MenuItem as RailMenuItem } from '../menu/MenuItem'
 
-// Shared popover shell for the side navigation rail's right-click menus: a full-screen
-// click-catcher plus a card positioned at the cursor.
 export function RailContextMenu({
   x,
   y,

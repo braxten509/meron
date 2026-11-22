@@ -1,3 +1,8 @@
+// This directory and its history are local: opening
+// Contacts never changes the mailbox query, filters
+// or folder, and never merges unrelated email
+// threads.
+
 import { useEffect, useRef, useState } from 'react'
 import { useValue } from '@legendapp/state/react'
 import { ArrowUpDown, Check, ChevronLeft, Copy, Pin, PinOff, SquarePen, Users, X } from 'lucide-react'
@@ -28,8 +33,6 @@ const SORT_LABELS = {
   name: 'contacts.sortName',
 } as const satisfies Record<ContactSort, string>
 
-// This directory and its history are local: opening Contacts never changes the
-// mailbox query, filters or folder, and never merges unrelated email threads.
 export function ContactsView() {
   const { t } = useTranslation()
   const narrow = useNarrowWindow()

@@ -1,3 +1,8 @@
+// Renders an email's HTML body in a self-sizing sandboxed iframe, wraps
+// each standalone <pre> in a copy-code affordance and tracks the content
+// height so the frame grows to fit while the bubble wrapper owns
+// scrolling.
+
 import type { Attachment } from '../../types'
 import { useValue } from '@legendapp/state/react'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
@@ -35,9 +40,6 @@ const naturalWidths = new Map<string, number | null>()
 // Anything whose layout depends on the width it is given rather than on its text.
 const NON_TEXT_SELECTOR = 'table, img, video, iframe, svg, pre, [width], [style*="width"]'
 
-// Renders an email's HTML body in a self-sizing sandboxed iframe, wraps each
-// standalone <pre> in a copy-code affordance and tracks the content height so
-// the frame grows to fit while the bubble wrapper owns scrolling.
 export function BubbleHtmlFrame({
   html,
   attachments,

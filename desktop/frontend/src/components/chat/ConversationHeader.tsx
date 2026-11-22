@@ -1,3 +1,8 @@
+// The conversation header: back/close affordances, the subject, add-to-tasks, the
+// desktop in-thread search box and the overflow actions menu (view mode, star,
+// archive, delete). Search match state is published to thread$ by
+// useThreadSearch.
+
 import { useEffect, useRef, useState } from 'react'
 import type { RefObject } from 'react'
 import {
@@ -53,9 +58,6 @@ import { ThreadTagItem } from '../threads/ThreadTagItem'
 import { ConversationSubject } from './ConversationSubject'
 import { useConversationMode } from './useMessageView'
 
-// The conversation header: back/close affordances, the subject, add-to-tasks, the desktop in-thread search box and
-// the overflow actions menu (view mode, star, archive, delete). Search match
-// state is published to thread$ by useThreadSearch.
 export function ConversationHeader({
   activeThread,
   desktopSearchInputRef,

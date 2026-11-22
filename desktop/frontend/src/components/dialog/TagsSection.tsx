@@ -1,3 +1,7 @@
+// A row that opens a dialog, so a long
+// list of tags never pushes the settings
+// below it out of sight.
+
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Pencil, Tag, Trash2, X } from 'lucide-react'
@@ -13,8 +17,6 @@ import { Dialog } from './Dialog'
 const nameClass =
   'min-w-0 flex-1 rounded-lg bg-hover px-2 py-1 text-xs text-primary outline-none ring-1 ring-border focus:ring-accent'
 
-// A row that opens a dialog, so a long list of tags never pushes the settings
-// below it out of sight.
 export function TagsSection() {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)

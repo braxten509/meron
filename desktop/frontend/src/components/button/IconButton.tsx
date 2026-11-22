@@ -1,3 +1,8 @@
+// Square, icon-only button. Centralizes the rounded-full + slate hover treatment
+// repeated across the headers so the hover token and radius can't drift per call site.
+// Spreads through refs, dnd-kit listeners, onPointerDown, disabled, etc.; `className`
+// is additive (see clsx note).
+
 import { forwardRef } from 'react'
 import type { ButtonHTMLAttributes, ReactNode } from 'react'
 import type { LucideIcon } from 'lucide-react'
@@ -46,10 +51,6 @@ export interface IconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement>
   active?: boolean
 }
 
-// Square, icon-only button. Centralizes the rounded-full + slate hover treatment
-// repeated across the headers so the hover token and
-// radius can't drift per call site. Spreads through refs, dnd-kit listeners,
-// onPointerDown, disabled, etc.; `className` is additive (see clsx note).
 export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(function IconButton(
   {
     label,

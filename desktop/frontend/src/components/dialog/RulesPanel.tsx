@@ -1,3 +1,8 @@
+// What to do with new mail that matches some conditions, filled in as
+// fields. A rule stores them as search text, which the form never
+// shows; conditions it has no field for stay in that text across an
+// edit.
+
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { DndContext, closestCenter } from '@dnd-kit/core'
 import { restrictToVerticalAxis } from '@dnd-kit/modifiers'
@@ -127,9 +132,6 @@ function RuleRow({ id, at, locked, editing, onMove, children }: RuleRowProps) {
   )
 }
 
-// What to do with new mail that matches some conditions, filled in as fields. A
-// rule stores them as search text, which the form never shows; conditions it has
-// no field for stay in that text across an edit.
 export function RulesPanel() {
   const { t } = useTranslation()
   const allAccounts = useValue(accounts$)

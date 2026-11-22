@@ -1,3 +1,8 @@
+// The event a calendar invitation carries, above the
+// message body, with Accept / Maybe / Decline when
+// the invitation is open. Mirrors mobile's
+// InviteCard.
+
 import { CalendarDays, CalendarPlus, CalendarX, Check, Clock, HelpCircle, MapPin, Repeat, User, X } from 'lucide-react'
 import { useState } from 'react'
 import { formatEventRange } from '../../lib/date'
@@ -34,9 +39,6 @@ function replyLine(invite: Invite, outgoing: boolean): { key: string; name: stri
   return key ? { key, name: attendee.name || attendee.addr } : null
 }
 
-// The event a calendar invitation carries, above the message body, with
-// Accept / Maybe / Decline when the invitation is open. Mirrors mobile's
-// InviteCard.
 export function InviteCard({ message, invite }: { message: Message; invite: Invite }) {
   const { t } = useTranslation()
   const [sending, setSending] = useState(false)

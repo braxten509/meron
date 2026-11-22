@@ -1,3 +1,8 @@
+// The message body: the sandboxed HTML view, or the plain/markdown
+// renderer with inline bold/italic/code, fenced code blocks (with copy
+// buttons) and links, highlighting the in-thread search query when one is
+// active.
+
 import { useContext, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Copy } from 'lucide-react'
@@ -22,9 +27,6 @@ import type { FrameSurface } from './frameTheme'
 
 const setHoveredLink = (url: string | null) => thread$.hoveredLink.set(url)
 
-// The message body: the sandboxed HTML view, or the plain/markdown renderer with
-// inline bold/italic/code, fenced code blocks (with copy buttons) and links,
-// highlighting the in-thread search query when one is active.
 export function MessageBubbleBody({
   message,
   useHtmlBody,

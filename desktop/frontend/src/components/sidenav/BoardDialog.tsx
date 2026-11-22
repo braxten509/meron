@@ -1,3 +1,8 @@
+// Modal for creating a kanban board.
+// Renaming, image, and background live in the
+// board's settings panel (Settings → Kanban
+// Boards).
+
 import { X } from 'lucide-react'
 import { useTranslation } from '../../lib/i18n'
 import { Dialog } from '../dialog/Dialog'
@@ -8,8 +13,6 @@ import { TextInput } from '../field/Field'
 
 export type BoardDialogState = { mode: 'create'; name: string }
 
-// Modal for creating a kanban board. Renaming, image, and background live in
-// the board's settings panel (Settings → Kanban Boards).
 export function BoardDialog({
   state,
   onChange,

@@ -1,10 +1,12 @@
+// Floating status for a running bulk .eml export: how
+// far along it is, and a way out. Sits above the toast
+// slot so a toast raised meanwhile doesn't cover it.
+
 import { Loader2 } from 'lucide-react'
 import { useValue } from '@legendapp/state/react'
 import { useTranslation } from '../../lib/i18n'
 import { cancelEmlExport, emlExport$ } from '../../states/emlExport'
 
-// Floating status for a running bulk .eml export: how far along it is, and a way
-// out. Sits above the toast slot so a toast raised meanwhile doesn't cover it.
 export function EmlExportProgress() {
   const { t } = useTranslation()
   const { active, done, total } = useValue(emlExport$)

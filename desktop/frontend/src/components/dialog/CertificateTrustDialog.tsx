@@ -1,13 +1,14 @@
+// The app-level certificate prompt: raised when an action on an existing account hits
+// a server certificate we cannot validate — today, a send whose submission server was
+// refused. Setup-time failures are handled inline by the account dialog instead, where
+// the servers are already on screen.
+
 import { useValue } from '@legendapp/state/react'
 import { Dialog } from './Dialog'
 import { useTranslation } from '../../lib/i18n'
 import { certTrust$, dismissCertificatePrompt, trustPromptedCertificate } from '../../states/certificateTrust'
 import { CertificateTrustPanel } from './CertificateTrustPanel'
 
-// The app-level certificate prompt: raised when an action on an existing
-// account hits a server certificate we cannot validate — today, a send whose
-// submission server was refused. Setup-time failures are handled inline by the
-// account dialog instead, where the servers are already on screen.
 export function CertificateTrustDialog() {
   const { t } = useTranslation()
   const prompt = useValue(certTrust$.prompt)

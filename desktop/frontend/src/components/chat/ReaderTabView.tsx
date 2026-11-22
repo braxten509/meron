@@ -1,3 +1,8 @@
+// Renders the active reader/compose tab: a compose tab shows the Composer, a
+// reader tab shows the message's subject, addresses and HTML/plain body in
+// one scroll, under a floating bar and, with the setting on, floating
+// actions.
+
 import { ChevronDown, Code, FileText, Forward, MoreHorizontal, Reply, ReplyAll, Trash2 } from 'lucide-react'
 import { type ReactNode, useState } from 'react'
 import { useValue } from '@legendapp/state/react'
@@ -31,9 +36,6 @@ import {
   parseAddressList,
 } from './messageHelpers'
 
-// Renders the active reader/compose tab: a compose tab shows the Composer, a
-// reader tab shows the message's subject, addresses and HTML/plain body in one
-// scroll, under a floating bar and, with the setting on, floating actions.
 export function ReaderTabView({ tab }: { tab: MessageTab }) {
   const { t } = useTranslation()
   const accounts = useValue(accounts$)

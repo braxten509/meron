@@ -1,3 +1,8 @@
+// Wallpaper picker shared by account chat
+// backgrounds and kanban board backgrounds: the
+// owner decides where the selection persists via
+// callbacks.
+
 import { useState } from 'react'
 import { X, Check, Upload, Image as ImageIcon } from 'lucide-react'
 import { useTranslation } from '../../lib/i18n'
@@ -13,8 +18,6 @@ function wallpaperKey(wallpaper: ChatWallpaper | null) {
   return wallpaper.kind === 'preset' ? `preset:${wallpaper.presetId}` : `custom:${wallpaper.url}`
 }
 
-// Wallpaper picker shared by account chat backgrounds and kanban board
-// backgrounds: the owner decides where the selection persists via callbacks.
 export function WallpaperDialog({
   title,
   previewName,

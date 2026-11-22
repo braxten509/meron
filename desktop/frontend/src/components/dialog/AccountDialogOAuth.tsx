@@ -1,10 +1,12 @@
+// The OAuth sign-in section mirrors mobile: one row per supported
+// OAuth provider. The outer provider rail stays generic so more
+// providers can be added here later without adding more account-type
+// tabs.
+
 import type { AccountDialogController } from './useAccountDialog'
 import { GoogleIcon, MicrosoftIcon } from './providerIcons'
 import { useTranslation } from '../../lib/i18n'
 
-// The OAuth sign-in section mirrors mobile: one row per supported OAuth
-// provider. The outer provider rail stays generic so more providers can be added
-// here later without adding more account-type tabs.
 export function AccountDialogOAuth({ ctl, isSetup }: { ctl: AccountDialogController; isSetup: boolean }) {
   const { t } = useTranslation()
   const {

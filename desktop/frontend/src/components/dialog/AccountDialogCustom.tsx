@@ -1,3 +1,8 @@
+// The custom IMAP/SMTP section: email (with
+// autodiscovery), sender name, password, the
+// app-password hint, and the collapsible advanced
+// server settings.
+
 import { useState } from 'react'
 import { ChevronDown, ChevronRight, Eye, EyeOff, Info, RefreshCw } from 'lucide-react'
 import { useTranslation } from '../../lib/i18n'
@@ -6,8 +11,6 @@ import { securityAfterPortEdit, type MailSecurity } from './accountSecurity'
 import type { AccountDialogController } from './useAccountDialog'
 import type { DialogClasses } from './accountDialogStyles'
 
-// The custom IMAP/SMTP section: email (with autodiscovery), sender name, password,
-// the app-password hint, and the collapsible advanced server settings.
 export function AccountDialogCustom({
   ctl,
   classes,

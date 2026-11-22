@@ -1,3 +1,8 @@
+// Collapsed column: a vertical strip showing the
+// account avatar, folder name and unread badge.
+// Clicking it (or any unminimize) expands back to the
+// full column.
+
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { MouseEvent as ReactMouseEvent } from 'react'
 import { Loader2, Pause, Rss, Search } from 'lucide-react'
@@ -24,8 +29,6 @@ import { AccountAvatar } from '../avatar/AccountAvatar'
 import type { ColumnWrapper } from './KanbanBoardColumn'
 import { boardWallpaper } from '../../lib/wallpapers'
 
-// Collapsed column: a vertical strip showing the account avatar, folder name and
-// unread badge. Clicking it (or any unminimize) expands back to the full column.
 export function KanbanColumnMinimized({
   boardId,
   column,
