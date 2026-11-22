@@ -642,9 +642,6 @@ meron-core/src/quote.rs
 meron-core/src/reminders.rs
 meron-core/src/reminders/tests.rs
 meron-core/src/reply.rs
-meron-core/src/rss.rs
-meron-core/src/rss/opml.rs
-meron-core/src/rss/tests.rs
 meron-core/src/search_query.rs
 meron-core/src/search_query/tests.rs
 meron-core/src/secrets.rs
@@ -808,7 +805,6 @@ mobile/shared/src/commonTest/kotlin/jp/nonbili/meron/shared/CoreEventStreamTest.
 mobile/shared/src/commonTest/kotlin/jp/nonbili/meron/shared/CoreProtocolTest.kt
 mobile/shared/src/commonTest/kotlin/jp/nonbili/meron/shared/LocalizerTest.kt
 mobile/shared/src/commonTest/kotlin/jp/nonbili/meron/shared/MailViewModelTest.kt
-mobile/shared/src/commonTest/kotlin/jp/nonbili/meron/shared/MobileCommandsTest.kt
 mobile/shared/src/commonTest/kotlin/jp/nonbili/meron/shared/MobileResponseParsersTest.kt
 mobile/shared/src/commonTest/kotlin/jp/nonbili/meron/shared/NotificationThreadIdsTest.kt
 mobile/shared/src/commonTest/kotlin/jp/nonbili/meron/shared/OAuthFlowTest.kt

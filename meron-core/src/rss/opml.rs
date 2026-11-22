@@ -1,3 +1,7 @@
+//! Imports and exports subscription lists for RSS accounts.
+//! The public commands exchange OPML outlines with other feed readers.
+//! Import flattens nested folders and records subscriptions for the next sync.
+
 use anyhow::{Result, anyhow};
 use quick_xml::Reader;
 use quick_xml::events::Event;
@@ -57,7 +61,7 @@ pub fn export_opml(conn: &Connection, account: &str) -> Result<String> {
     for (title, feed_title, url, site_url) in feeds {
         let label = [title.trim(), feed_title.trim()]
             .into_iter()
-            .find(|s| !s.is_empty())
+            .find(|label| !label.is_empty())
             .map(str::to_string)
             .unwrap_or_else(|| feed_host_label(&url));
         body.push_str(&format!(
@@ -80,11 +84,10 @@ pub fn export_opml(conn: &Connection, account: &str) -> Result<String> {
     ))
 }
 
-/// Import an OPML document into an existing RSS account. Every feed in the
-/// document (flattened across any folder `<outline>`s) is added to `account`.
-/// Subscriptions are inserted without fetching (deduped by URL across all
-/// accounts) — the next sync pulls their items. Returns the number of feeds
-/// actually added (existing feeds are skipped).
+/// Import the feeds in an OPML document into an existing RSS account.
+///
+/// Flatten nested outlines and skip URLs already subscribed to across accounts.
+/// Return the count of subscriptions added. Their entries arrive on the next sync.
 pub fn import_opml(db: &Mutex<Connection>, opml: &str, account: &str) -> Result<u32> {
     let groups = parse_opml(opml)?;
     let conn = db.lock().unwrap();
@@ -148,16 +151,16 @@ enum OpmlFrame {
 fn parse_opml(xml: &str) -> Result<Vec<OpmlGroup>> {
     let mut reader = Reader::from_str(xml);
     let decoder = reader.decoder();
-    let mut buf = Vec::new();
+    let mut buffer = Vec::new();
     let mut groups: Vec<OpmlGroup> = Vec::new();
     let mut default_group: Option<usize> = None;
     let mut stack: Vec<OpmlFrame> = Vec::new();
 
     loop {
-        match reader.read_event_into(&mut buf) {
+        match reader.read_event_into(&mut buffer) {
             Ok(Event::Eof) => break,
-            Ok(Event::Start(e)) if e.name().as_ref() == b"outline" => {
-                let (label, xml_url, html_url) = parse_outline_attrs(&e, decoder)?;
+            Ok(Event::Start(element)) if element.name().as_ref() == b"outline" => {
+                let (label, xml_url, html_url) = parse_outline_attrs(&element, decoder)?;
                 if !xml_url.is_empty() {
                     let gi = feed_group(&stack, &mut groups, &mut default_group);
                     groups[gi].feeds.push(OpmlFeed {
@@ -179,8 +182,8 @@ fn parse_opml(xml: &str) -> Result<Vec<OpmlGroup>> {
                     stack.push(OpmlFrame::Folder(gi));
                 }
             }
-            Ok(Event::Empty(e)) if e.name().as_ref() == b"outline" => {
-                let (label, xml_url, html_url) = parse_outline_attrs(&e, decoder)?;
+            Ok(Event::Empty(element)) if element.name().as_ref() == b"outline" => {
+                let (label, xml_url, html_url) = parse_outline_attrs(&element, decoder)?;
                 // Self-closing outlines are feeds; an empty folder has no feeds.
                 if !xml_url.is_empty() {
                     let gi = feed_group(&stack, &mut groups, &mut default_group);
@@ -191,13 +194,13 @@ fn parse_opml(xml: &str) -> Result<Vec<OpmlGroup>> {
                     });
                 }
             }
-            Ok(Event::End(e)) if e.name().as_ref() == b"outline" => {
+            Ok(Event::End(element)) if element.name().as_ref() == b"outline" => {
                 stack.pop();
             }
             Ok(_) => {}
-            Err(e) => return Err(anyhow!("invalid OPML: {e}")),
+            Err(error) => return Err(anyhow!("invalid OPML: {error}")),
         }
-        buf.clear();
+        buffer.clear();
     }
     Ok(groups)
 }
@@ -224,18 +227,18 @@ fn feed_group(
 /// Pull the display label (`text`, falling back to `title`) and feed/site URLs
 /// off an `<outline>` element, with XML entities decoded.
 fn parse_outline_attrs(
-    e: &quick_xml::events::BytesStart,
+    element: &quick_xml::events::BytesStart,
     decoder: quick_xml::Decoder,
 ) -> Result<(String, String, String)> {
     let mut text = String::new();
     let mut title = String::new();
     let mut xml_url = String::new();
     let mut html_url = String::new();
-    for attr in e.attributes() {
-        let attr = attr.map_err(|err| anyhow!("invalid OPML attribute: {err}"))?;
+    for attr in element.attributes() {
+        let attr = attr.map_err(|error| anyhow!("invalid OPML attribute: {error}"))?;
         let value = attr
             .decode_and_unescape_value(decoder)
-            .map_err(|err| anyhow!("invalid OPML attribute value: {err}"))?
+            .map_err(|error| anyhow!("invalid OPML attribute value: {error}"))?
             .to_string();
         match attr.key.as_ref() {
             b"xmlUrl" | b"xmlurl" => xml_url = value,

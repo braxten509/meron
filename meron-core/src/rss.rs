@@ -246,7 +246,7 @@ fn feed_icon_url(feed: &feed_rs::model::Feed) -> String {
     feed.icon
         .as_ref()
         .or(feed.logo.as_ref())
-        .map(|img| img.uri.trim().to_string())
+        .map(|image| image.uri.trim().to_string())
         .unwrap_or_default()
 }
 
@@ -275,7 +275,7 @@ fn fetch_parsed(feed_url: &str) -> Result<FetchedParsed> {
     let site_url = feed
         .links
         .first()
-        .map(|l| l.href.clone())
+        .map(|link| link.href.clone())
         .unwrap_or_default();
     let icon_url = feed_icon_url(&feed);
     let items = parse_items(&feed, now_unix());
@@ -330,11 +330,10 @@ fn store_parsed_feed(tx: &Connection, account: &str, parsed: &FetchedParsed) -> 
     Ok(())
 }
 
-/// Re-fetch every enabled subscription of an account (conditional GET via
-/// stored ETag / Last-Modified), upserting new items and refreshing sub state.
-/// Returns the genuinely new items stored across all of the account's feeds,
-/// newest first, so the caller can raise a "new items" notification that names
-/// the entries that actually arrived.
+/// Sync every enabled subscription and return its newly stored entries.
+///
+/// Each feed uses its saved ETag or Last-Modified value for the conditional request.
+/// New arrivals are returned newest first for the notification clients.
 pub fn sync_account(db: &Mutex<Connection>, account: &str) -> Result<Vec<NewItem>> {
     let subs = {
         let conn = crate::log::timed_db_lock(db, "rss.sync.load_subscriptions");
@@ -358,12 +357,11 @@ pub fn sync_account(db: &Mutex<Connection>, account: &str) -> Result<Vec<NewItem
     Ok(new_items)
 }
 
-/// The `mail.newMessages` payload for a batch of feed arrivals, shaped exactly
-/// like the mail one ([`crate::mail_model::new_messages_detail`]): the top-level
-/// `from`/`subject`/`preview`/`threadKey` describe the newest arrival for
-/// single-notification clients (desktop), and `messages` carries one entry per
-/// arrival for clients that post a notification each. `items` must be newest
-/// first, as [`sync_account`] returns them.
+/// Build the same notification payload as [`crate::mail_model::new_messages_detail`].
+///
+/// The top-level fields describe the newest arrival. The messages array identifies
+/// individual arrivals for per-message notifications. Pass entries in the order
+/// returned by [`sync_account`].
 pub fn new_items_detail(
     account: &str,
     account_name: &str,
@@ -443,7 +441,7 @@ fn sync_subscription(db: &Mutex<Connection>, sub: &Subscription) -> Result<Vec<N
     let site_url = feed
         .links
         .first()
-        .map(|l| l.href.clone())
+        .map(|link| link.href.clone())
         .unwrap_or_default();
     let icon_url = feed_icon_url(&feed);
     // Cache the feed's own icon to disk (off the DB lock) so the avatar renders
@@ -601,8 +599,8 @@ fn stable_hash(value: &str) -> String {
 fn feed_host_label(raw: &str) -> String {
     url::Url::parse(raw)
         .ok()
-        .and_then(|u| {
-            u.host_str()
+        .and_then(|url| {
+            url.host_str()
                 .map(|h| h.trim_start_matches("www.").to_string())
         })
         .unwrap_or_default()
@@ -611,7 +609,7 @@ fn feed_host_label(raw: &str) -> String {
 fn now_unix() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
+        .map(|duration| duration.as_secs() as i64)
         .unwrap_or(0)
 }
 
