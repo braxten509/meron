@@ -73,7 +73,7 @@ fn build_message_rejects_undecodable_attachment() {
         data: "not!!valid@@base64".into(),
         inline_id: String::new(),
     }];
-    let err = build_message(
+    let error = build_message(
         "Alice",
         "alice@x.com",
         "bob@y.com",
@@ -90,7 +90,7 @@ fn build_message_rejects_undecodable_attachment() {
         "",
     )
     .expect_err("must fail instead of sending without the attachment");
-    assert!(err.to_string().contains("broken.bin"), "{err:#}");
+    assert!(error.to_string().contains("broken.bin"), "{error:#}");
 }
 
 #[test]
@@ -251,13 +251,13 @@ fn inline_image_send_parses_back_with_media_refs() {
     .expect("build_message");
 
     let root = std::env::temp_dir().join(format!("meron-inline-roundtrip-{}", std::process::id()));
-    let ctx = crate::parse::MediaCtx {
+    let context = crate::parse::MediaCtx {
         root: root.clone(),
         account: "acct".into(),
         folder: "Sent".into(),
         uid: 1,
     };
-    let msg = crate::parse::parse_message(&raw, Some(&ctx));
+    let msg = crate::parse::parse_message(&raw, Some(&context));
     let _ = std::fs::remove_dir_all(&root);
 
     let html_out = msg.body_html.expect("html kept");

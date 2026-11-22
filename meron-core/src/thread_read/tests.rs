@@ -80,8 +80,8 @@ async fn failed_fill_notifies_a_pending_reader_and_surfaces_its_error_once() {
         .unwrap()
         .unwrap();
     assert!(engine.body_fetches.lock().unwrap().is_empty());
-    let err = read().await.unwrap_err();
-    assert!(format!("{err:#}").contains("UID FETCH"), "{err:#}");
+    let error = read().await.unwrap_err();
+    assert!(format!("{error:#}").contains("UID FETCH"), "{error:#}");
     assert!(engine.body_fetches.lock().unwrap().is_empty());
     assert!(engine.body_fetch_failures.lock().unwrap().is_empty());
     server.await.unwrap();
@@ -292,7 +292,7 @@ async fn an_active_fill_does_not_block_a_new_message_in_the_same_thread() {
     engine.body_fetches.lock().unwrap().insert(older.clone());
     // The missing credentials prove that the new UID gets an inline attempt
     // rather than being silently skipped because an older UID is filling.
-    let err = super::read_thread_page(
+    let error = super::read_thread_page(
         &engine,
         super::ThreadReadArgs {
             account: "acc",
@@ -310,8 +310,8 @@ async fn an_active_fill_does_not_block_a_new_message_in_the_same_thread() {
     .await
     .unwrap_err();
     assert!(
-        err.to_string().contains("account needs reconnect"),
-        "{err:#}"
+        error.to_string().contains("account needs reconnect"),
+        "{error:#}"
     );
     let filling = engine.body_fetches.lock().unwrap();
     assert!(filling.contains(&older));
@@ -336,9 +336,9 @@ fn successful_fetch_omissions_are_held_until_restart_but_failures_expire() {
     let key = message_key("acc", "INBOX", 1);
     assert!(engine.media_recovery_hold.lock().unwrap()[&key].is_some());
     let slots = (0..3)
-        .map(|idx| Slot {
+        .map(|index| Slot {
             folder: "INBOX".into(),
-            cached: if idx == 0 {
+            cached: if index == 0 {
                 Some(Message {
                     message_id: "cached-1".into(),
                     ..Default::default()

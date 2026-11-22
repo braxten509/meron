@@ -1,5 +1,6 @@
-//! Mobile `calendar.*`: the vocabulary the desktop sidecar serves, against the
-//! same tables, with the store opened per call.
+//! Routes mobile calendar commands to local event storage.
+//! The host selects a command and supplies its event or date-range parameters.
+//! The protocol returns the event payload expected by the calendar screen.
 
 use super::*;
 
@@ -8,11 +9,11 @@ use crate::calendar::events;
 /// Route one `calendar.*` request. Mutations emit `calendar.changed` so a
 /// screen that isn't the one showing the calendar re-reads.
 pub(crate) fn dispatch_mobile_calendar(
-    data_dir: &str,
+    data_directory: &str,
     method: &str,
     params: &Value,
 ) -> Option<Result<Value, String>> {
-    let err_str = |result: anyhow::Result<Value>| result.map_err(|err| format!("{err:#}"));
+    let err_str = |result: anyhow::Result<Value>| result.map_err(|error| format!("{error:#}"));
     let result = match method {
         "calendar.events" => {
             let from = params.get("from").and_then(Value::as_i64).unwrap_or(0);
@@ -21,52 +22,52 @@ pub(crate) fn dispatch_mobile_calendar(
                 .get("include_tasks")
                 .and_then(Value::as_bool)
                 .unwrap_or(false);
-            return Some(with_mobile_db(data_dir, |conn| {
+            return Some(with_mobile_db(data_directory, |conn| {
                 err_str(events::events_payload(&conn, from, to, include_tasks))
             }));
         }
         "calendar.get" => {
             let event_id = match req_str(params, "event_id") {
                 Ok(value) => value,
-                Err(err) => return Some(Err(err)),
+                Err(error) => return Some(Err(error)),
             };
-            return Some(with_mobile_db(data_dir, |conn| {
+            return Some(with_mobile_db(data_directory, |conn| {
                 err_str(events::event_payload(&conn, &event_id))
             }));
         }
         "calendar.create" => {
             let input = events::EventInput::from_params(params);
-            with_mobile_db(data_dir, |conn| {
+            with_mobile_db(data_directory, |conn| {
                 err_str(events::create_event(&conn, &input))
             })
         }
         "calendar.update" => {
             let event_id = match req_str(params, "event_id") {
                 Ok(value) => value,
-                Err(err) => return Some(Err(err)),
+                Err(error) => return Some(Err(error)),
             };
             let input = events::EventInput::from_params(params);
-            with_mobile_db(data_dir, |conn| {
+            with_mobile_db(data_directory, |conn| {
                 err_str(events::update_event(&conn, &event_id, &input))
             })
         }
         "calendar.delete" => {
             let event_id = match req_str(params, "event_id") {
                 Ok(value) => value,
-                Err(err) => return Some(Err(err)),
+                Err(error) => return Some(Err(error)),
             };
-            with_mobile_db(data_dir, |conn| {
+            with_mobile_db(data_directory, |conn| {
                 err_str(events::delete_event(&conn, &event_id))
             })
         }
         "invite.addToCalendar" => {
             let message = match req_str(params, "message") {
                 Ok(value) => value,
-                Err(err) => return Some(Err(err)),
+                Err(error) => return Some(Err(error)),
             };
             let thread_id = opt_str(params, "thread_id");
-            let media_root = std::path::PathBuf::from(data_dir).join("attachments");
-            with_mobile_db(data_dir, |conn| {
+            let media_root = std::path::PathBuf::from(data_directory).join("attachments");
+            with_mobile_db(data_directory, |conn| {
                 err_str(
                     crate::calendar::add_to_calendar(&conn, &message, &thread_id, &media_root)
                         .map(|event_id| json!({ "ok": true, "event_id": event_id })),
@@ -76,10 +77,10 @@ pub(crate) fn dispatch_mobile_calendar(
         "invite.removeFromCalendar" => {
             let message = match req_str(params, "message") {
                 Ok(value) => value,
-                Err(err) => return Some(Err(err)),
+                Err(error) => return Some(Err(error)),
             };
-            let media_root = std::path::PathBuf::from(data_dir).join("attachments");
-            with_mobile_db(data_dir, |conn| {
+            let media_root = std::path::PathBuf::from(data_directory).join("attachments");
+            with_mobile_db(data_directory, |conn| {
                 err_str(
                     crate::calendar::remove_from_calendar(&conn, &message, &media_root)
                         .map(|()| json!({ "ok": true })),
@@ -88,7 +89,7 @@ pub(crate) fn dispatch_mobile_calendar(
         }
         "calendar.restore" => {
             let restore = params.get("restore").cloned().unwrap_or(Value::Null);
-            with_mobile_db(data_dir, |conn| {
+            with_mobile_db(data_directory, |conn| {
                 err_str(events::restore_event(&conn, &restore))
             })
         }

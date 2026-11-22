@@ -1,3 +1,7 @@
+//! Exercises calendar invitations and meeting responses using iCalendar fixtures.
+//! Coverage includes UTC, all-day events and Outlook time-zone definitions.
+//! Organizer revisions determine whether a previously recorded response still applies.
+
 use super::*;
 
 fn mine(addrs: &[&str]) -> HashSet<String> {

@@ -1,4 +1,6 @@
-//! Resolving role folders (Sent, Drafts, Archive) from cached folder lists.
+//! Resolves the engine's Inbox companions and other special folders.
+//! Server role attributes and cached names identify Sent, Drafts and Archive.
+//! Search and thread recovery use these choices when constructing a mailbox scope.
 
 use rusqlite::Connection;
 use std::sync::Arc;

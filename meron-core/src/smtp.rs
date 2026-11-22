@@ -82,22 +82,23 @@ pub async fn check_certificate(creds: &Creds) -> Result<()> {
     }
 }
 
-fn is_cert_failure(err: &anyhow::Error) -> bool {
-    err.downcast_ref::<crate::tls::UntrustedCertificate>()
+fn is_cert_failure(error: &anyhow::Error) -> bool {
+    error
+        .downcast_ref::<crate::tls::UntrustedCertificate>()
         .is_some()
 }
 
 /// Re-tag a certificate rejection with the submission server's marker. Both
 /// servers hand back the same typed error, and the UI has to know which one to
 /// probe and which pin to write.
-fn as_smtp_cert_error(err: anyhow::Error) -> anyhow::Error {
-    match err.downcast_ref::<crate::tls::UntrustedCertificate>() {
+fn as_smtp_cert_error(error: anyhow::Error) -> anyhow::Error {
+    match error.downcast_ref::<crate::tls::UntrustedCertificate>() {
         Some(untrusted) => anyhow::anyhow!(
             "{}: {}",
             crate::tls::UNTRUSTED_SMTP_CERT_MARKER,
             untrusted.detail()
         ),
-        None => err,
+        None => error,
     }
 }
 
@@ -227,7 +228,10 @@ pub fn build_message(
     let cc_list = parse_addrs(cc);
     let bcc_list = parse_addrs(bcc);
     let reply_to_list = parse_addrs(reply_to);
-    let to_pairs: Vec<(String, String)> = to_list.iter().map(|s| split_name_addr(s)).collect();
+    let to_pairs: Vec<(String, String)> = to_list
+        .iter()
+        .map(|address| split_name_addr(address))
+        .collect();
 
     let mut builder = MessageBuilder::new()
         .from((sender_name, from))
@@ -244,8 +248,10 @@ pub fn build_message(
     }
 
     if !reply_to_list.is_empty() {
-        let reply_to_pairs: Vec<(String, String)> =
-            reply_to_list.iter().map(|s| split_name_addr(s)).collect();
+        let reply_to_pairs: Vec<(String, String)> = reply_to_list
+            .iter()
+            .map(|address| split_name_addr(address))
+            .collect();
         builder = builder.reply_to(reply_to_pairs);
     }
 
@@ -256,13 +262,18 @@ pub fn build_message(
     };
 
     if !cc_list.is_empty() {
-        let cc_pairs: Vec<(String, String)> = cc_list.iter().map(|s| split_name_addr(s)).collect();
+        let cc_pairs: Vec<(String, String)> = cc_list
+            .iter()
+            .map(|address| split_name_addr(address))
+            .collect();
         builder = builder.cc(cc_pairs);
     }
 
     if include_bcc && !bcc_list.is_empty() {
-        let bcc_pairs: Vec<(String, String)> =
-            bcc_list.iter().map(|s| split_name_addr(s)).collect();
+        let bcc_pairs: Vec<(String, String)> = bcc_list
+            .iter()
+            .map(|address| split_name_addr(address))
+            .collect();
         builder = builder.bcc(bcc_pairs);
     }
 
@@ -481,7 +492,7 @@ async fn submit(
     if !secret.is_empty() {
         let mut authed = false;
         let mut auth_unsupported = true;
-        let mut last_err: Option<SmtpError> = None;
+        let mut last_error: Option<SmtpError> = None;
         for mechanism in &mechanisms {
             match with_timeout(
                 SMTP_COMMAND_TIMEOUT,
@@ -503,13 +514,13 @@ async fn submit(
                     if !command_rejected {
                         auth_unsupported = false;
                     }
-                    last_err = Some(err);
+                    last_error = Some(err);
                 }
             }
         }
         if !authed {
             if !auth_unsupported {
-                let err = last_err.expect("auth failed without an error");
+                let err = last_error.expect("auth failed without an error");
                 return Err(anyhow::Error::new(err).context("smtp auth"));
             }
             crate::mlog!(
@@ -558,7 +569,7 @@ pub fn build_invite_reply(
 
     let to_pairs: Vec<(String, String)> = parse_addrs(&reply.to)
         .iter()
-        .map(|s| split_name_addr(s))
+        .map(|address| split_name_addr(address))
         .collect();
     let domain = from.rsplit('@').next().unwrap_or("localhost");
     let mut builder = MessageBuilder::new()

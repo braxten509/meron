@@ -1,3 +1,7 @@
+//! Resolves common account, database and credential inputs for mobile requests.
+//! The mobile command handlers share these conversions and store lookups.
+//! Account identity determines which credentials and provider state are used.
+
 use super::*;
 
 pub(crate) fn req_account_id(params: &Value) -> Result<String, String> {
@@ -9,7 +13,7 @@ pub(crate) fn is_rss_account(
     account_id: &str,
 ) -> Result<bool, String> {
     Ok(store::account_engine(conn, account_id)
-        .map_err(|err| err.to_string())?
+        .map_err(|error| error.to_string())?
         .as_deref()
         == Some("rss"))
 }
@@ -45,8 +49,9 @@ pub(crate) fn store_mobile_secret(
     account_id: &str,
     creds: &Creds,
 ) -> Result<(), String> {
-    let blob = serde_json::to_string(&Secrets::from_creds(creds)).map_err(|err| err.to_string())?;
-    store::upsert_secret(conn, account_id, &blob).map_err(|err| err.to_string())
+    let blob =
+        serde_json::to_string(&Secrets::from_creds(creds)).map_err(|error| error.to_string())?;
+    store::upsert_secret(conn, account_id, &blob).map_err(|error| error.to_string())
 }
 
 pub(crate) fn load_mobile_secret(conn: &rusqlite::Connection, account_id: &str) -> Secrets {
@@ -84,7 +89,7 @@ impl crate::engine::EngineHost for MobileHost {
         secrets: &Secrets,
     ) -> anyhow::Result<()> {
         let blob = serde_json::to_string(secrets)?;
-        store::upsert_secret(conn, account, &blob).map_err(|err| anyhow::anyhow!(err))
+        store::upsert_secret(conn, account, &blob).map_err(|error| anyhow::anyhow!(error))
     }
 
     /// An AI sorting key, in the same encrypted, app-private table as account
@@ -147,7 +152,7 @@ pub(crate) fn load_mobile_account_creds(
     account_id: &str,
 ) -> Result<Creds, String> {
     let mut creds = store::load_accounts(conn)
-        .map_err(|err| err.to_string())?
+        .map_err(|error| error.to_string())?
         .into_iter()
         .find(|(id, _)| id == account_id)
         .map(|(_, creds)| creds)
@@ -162,7 +167,7 @@ pub(crate) fn parse_mobile_attachments(params: &Value) -> Result<Vec<AttachmentI
             .iter()
             .map(|value| {
                 serde_json::from_value::<AttachmentInput>(value.clone())
-                    .map_err(|err| format!("invalid attachment: {err}"))
+                    .map_err(|error| format!("invalid attachment: {error}"))
             })
             .collect(),
         Some(_) => Err("attachments must be an array".to_string()),
@@ -180,24 +185,24 @@ pub(crate) fn resolve_mobile_send_from(
     requested_from: &str,
 ) -> Result<(String, String), String> {
     store::resolve_send_from(conn, account_id, &creds.user, requested_from)
-        .map_err(|err| format!("{err:#}"))
+        .map_err(|error| format!("{error:#}"))
 }
 
-pub(crate) fn with_mobile_db<F>(data_dir: &str, f: F) -> Result<Value, String>
+pub(crate) fn with_mobile_db<F>(data_directory: &str, f: F) -> Result<Value, String>
 where
     F: FnOnce(rusqlite::Connection) -> Result<Value, String>,
 {
-    let data_dir = data_dir.trim();
-    if data_dir.is_empty() {
+    let data_directory = data_directory.trim();
+    if data_directory.is_empty() {
         return Err("mobile core is not initialized".to_string());
     }
-    let db_path = Path::new(data_dir).join("meron.db");
+    let db_path = Path::new(data_directory).join("meron.db");
     let conn = match mobile_db_key() {
         Some(key) => store::open_at_keyed(&db_path, &key),
         // No key set (tests/unkeyed init): plaintext, matching prior behavior.
         None => store::open_at(&db_path),
     }
-    .map_err(|err| format!("{err:#}"))?;
+    .map_err(|error| format!("{error:#}"))?;
     f(conn)
 }
 
@@ -209,18 +214,18 @@ static MOBILE_DB_KEY: Mutex<Option<String>> = Mutex::new(None);
 
 /// Set (or clear, with an empty/`None` key) the mobile store's SQLCipher key.
 pub fn set_mobile_db_key(key: Option<String>) {
-    *MOBILE_DB_KEY.lock().unwrap() = key.filter(|k| !k.is_empty());
+    *MOBILE_DB_KEY.lock().unwrap() = key.filter(|key_value| !key_value.is_empty());
 }
 
 pub(crate) fn mobile_db_key() -> Option<String> {
     MOBILE_DB_KEY.lock().unwrap().clone()
 }
 
-pub(crate) fn with_mobile_db_mutex<F>(data_dir: &str, f: F) -> Result<Value, String>
+pub(crate) fn with_mobile_db_mutex<F>(data_directory: &str, f: F) -> Result<Value, String>
 where
     F: FnOnce(Mutex<rusqlite::Connection>) -> Result<Value, String>,
 {
-    with_mobile_db(data_dir, |conn| f(Mutex::new(conn)))
+    with_mobile_db(data_directory, |conn| f(Mutex::new(conn)))
 }
 
 pub(crate) fn account_id(email: &str) -> String {

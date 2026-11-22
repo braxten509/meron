@@ -441,7 +441,7 @@ async fn fetch_recent_against(fetch_reply: &'static str) -> anyhow::Error {
             "canned reply should not produce a batch ({} messages)",
             batch.messages.len()
         ),
-        Err(err) => err,
+        Err(error) => error,
     }
 }
 
@@ -454,15 +454,15 @@ async fn unparseable_response_marker_matches_async_imap() {
     // only accepts 0x01..=0x7F, so it rejects the whole response. This is
     // the shape from the original report; any response the parser refuses
     // would do.
-    let err = fetch_recent_against(
+    let error = fetch_recent_against(
         "* 1 FETCH (UID 1691 FLAGS (\\Seen) ENVELOPE (\"Sun, 12 Jul 2026 17:01:36 +0000\" \
              \"Re: caf\u{e9}\" NIL NIL NIL NIL NIL NIL NIL \"<c@d>\"))\r\n\
              {tag} OK FETCH completed\r\n",
     )
     .await;
     assert!(
-        super::is_unparseable_response(&err),
-        "should be recognised as unparseable: {err:#}"
+        super::is_unparseable_response(&error),
+        "should be recognised as unparseable: {error:#}"
     );
 }
 
@@ -471,14 +471,14 @@ async fn unparseable_response_marker_matches_async_imap() {
 #[tokio::test]
 async fn a_dropped_connection_is_not_treated_as_unparseable() {
     // Server hangs up part-way through a perfectly well-formed response.
-    let err = fetch_recent_against("* 1 FETCH (UID 1691 FLAGS (\\See").await;
+    let error = fetch_recent_against("* 1 FETCH (UID 1691 FLAGS (\\See").await;
     assert!(
-        !super::is_unparseable_response(&err),
-        "a dropped connection should not look unparseable: {err:#}"
+        !super::is_unparseable_response(&error),
+        "a dropped connection should not look unparseable: {error:#}"
     );
-    let err = anyhow::anyhow!(std::io::Error::from(std::io::ErrorKind::ConnectionReset))
+    let error = anyhow::anyhow!(std::io::Error::from(std::io::ErrorKind::ConnectionReset))
         .context("FETCH item");
-    assert!(!super::is_unparseable_response(&err));
+    assert!(!super::is_unparseable_response(&error));
 }
 
 #[test]

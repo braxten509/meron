@@ -90,10 +90,10 @@ pub fn save(root: &Path, account: &str, ext: &str, bytes: &[u8]) -> std::io::Res
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis();
-    let dir = root.join("avatars").join(&segment);
-    std::fs::create_dir_all(&dir)?;
+    let directory = root.join("avatars").join(&segment);
+    std::fs::create_dir_all(&directory)?;
     let name = format!("{stamp}.{ext}");
-    std::fs::write(dir.join(&name), bytes)?;
+    std::fs::write(directory.join(&name), bytes)?;
     Ok(format!("/media/avatars/{segment}/{name}"))
 }
 

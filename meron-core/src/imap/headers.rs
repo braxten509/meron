@@ -264,14 +264,12 @@ pub(super) fn normalize_message_id(value: &str) -> String {
         .to_string()
 }
 
-/// The first RFC message id in a header value that may hold several, such as
-/// `References` (thread root first) or an `In-Reply-To` carrying more than one.
+/// The first RFC message id in a header value that may hold several, such as `References` (thread root first) or an `In-Reply-To` carrying more than one.
 ///
-/// Angle brackets decide where the id starts, not whitespace: RFC 822 allowed a
-/// leading phrase, and senders still emit `In-Reply-To: Your message of Tuesday
-/// <parent@example.com>`. Splitting on whitespace first would take `Your` as the
-/// id and, absent `References`, thread every such message together. Only a value
-/// with no brackets at all falls back to its first whitespace-separated token.
+/// Angle brackets decide where the id starts, not whitespace: RFC 822 allowed a leading phrase, and
+/// senders still emit `In-Reply-To: Your message of Tuesday <parent@example.com>`. Splitting on
+/// whitespace first would take `Your` as the id and, absent `References`, thread every such message
+/// together. Only a value with no brackets at all falls back to its first whitespace-separated token.
 pub(super) fn first_message_id(value: &str) -> Option<String> {
     if value.contains('<') {
         let id = normalize_message_id(value);

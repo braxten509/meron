@@ -242,7 +242,9 @@ fn find_and_mark_html_quote(html: &str, forward: bool) -> Option<String> {
 /// client.
 fn outlook_header<'a>(doc: &'a Html, containers: &Selector) -> Option<ElementRef<'a>> {
     let selector = Selector::parse(OUTLOOK_HEADER_SELECTOR).ok()?;
-    let header = doc.select(&selector).find(|el| is_outlook_header(*el))?;
+    let header = doc
+        .select(&selector)
+        .find(|element| is_outlook_header(*element))?;
     let contained = header
         .ancestors()
         .filter_map(ElementRef::wrap)
@@ -292,11 +294,11 @@ fn outlook_quote(doc: &Html, header: ElementRef) -> Option<Vec<NodeId>> {
     // web, which is what writes the id, says where the sender typed.
     let typed = Selector::parse(&format!(".{OUTLOOK_TYPED_CLASS}")).ok()?;
     if header.value().id().is_some()
-        && doc.select(&typed).any(|el| {
-            el.descendants().any(is_content)
-                && el
+        && doc.select(&typed).any(|element| {
+            element.descendants().any(is_content)
+                && element
                     .ancestors()
-                    .chain(std::iter::once(*el))
+                    .chain(std::iter::once(*element))
                     .any(|node| after.contains(&node.id()))
         })
     {

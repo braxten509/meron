@@ -28,7 +28,7 @@ fn local_after_server_change<T>(action: &str, account: &str, result: anyhow::Res
 /// Returns whether the cache now holds the move, so its unread counts are real.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn cache_server_move(
-    data_dir: &str,
+    data_directory: &str,
     conn: &rusqlite::Connection,
     action: &str,
     account: &str,
@@ -59,17 +59,17 @@ pub(super) fn cache_server_move(
         resync.push(target);
     }
     if !resync.is_empty() {
-        crate::ffi::spawn_folder_resync(data_dir, account, &resync);
+        crate::ffi::spawn_folder_resync(data_directory, account, &resync);
     }
     target_cached && removed_ok
 }
 
-pub(crate) fn delete_mobile_thread(data_dir: &str, params: &Value) -> Result<Value, String> {
+pub(crate) fn delete_mobile_thread(data_directory: &str, params: &Value) -> Result<Value, String> {
     let thread_id = req_str(params, "thread_id")?;
     let parsed = parse_thread_id_with_request_folder(&thread_id, params)
         .ok_or_else(|| "invalid thread_id".to_string())?;
-    let engine = crate::ffi::engine_for(data_dir)?;
-    with_mobile_db(data_dir, |conn| {
+    let engine = crate::ffi::engine_for(data_directory)?;
+    with_mobile_db(data_directory, |conn| {
         let uids = requested_mobile_uids(&conn, &parsed, params)?;
         // Deleting a sender row also takes their older mail in this folder
         // that the cache never held.
@@ -93,7 +93,7 @@ pub(crate) fn delete_mobile_thread(data_dir: &str, params: &Value) -> Result<Val
             return Err(format!("account needs reconnect: {}", parsed.account));
         }
         let cached_ids = store::cached_message_ids(&conn, &parsed.account, &parsed.folder, &uids)
-            .map_err(|err| err.to_string())?;
+            .map_err(|error| error.to_string())?;
         let moved_ids = crate::ffi::engine_block_on(async {
             anyhow::Ok(
                 crate::engine::moved_message_ids(
@@ -139,10 +139,10 @@ pub(crate) fn delete_mobile_thread(data_dir: &str, params: &Value) -> Result<Val
                         .await,
                     )
                 })?;
-                if let Err(err) = copies.store(&conn, &parsed.account, &trashed.folder) {
-                    local_after_server_change("delete", &parsed.account, Err::<(), _>(err));
+                if let Err(error) = copies.store(&conn, &parsed.account, &trashed.folder) {
+                    local_after_server_change("delete", &parsed.account, Err::<(), _>(error));
                     crate::ffi::spawn_folder_resync(
-                        data_dir,
+                        data_directory,
                         &parsed.account,
                         &[trashed.folder.as_str()],
                     );
@@ -178,14 +178,18 @@ pub(crate) fn delete_mobile_thread(data_dir: &str, params: &Value) -> Result<Val
                     .map(|trashed| (trashed.folder.as_str(), trash_copies.as_slice())),
             )
         {
-            crate::ffi::spawn_tag_push(data_dir, &parsed.account);
+            crate::ffi::spawn_tag_push(data_directory, &parsed.account);
         }
         if !cache_ok {
             // Deleted rows are still cached: resync the folder, whose server
             // UID list no longer has them, so the sync prunes them.
             local_after_server_change("delete", &parsed.account, siblings);
             local_after_server_change("delete", &parsed.account, rows);
-            crate::ffi::spawn_folder_resync(data_dir, &parsed.account, &[parsed.folder.as_str()]);
+            crate::ffi::spawn_folder_resync(
+                data_directory,
+                &parsed.account,
+                &[parsed.folder.as_str()],
+            );
         }
         // Report the successful server operation, not the racy local row count.
         let deleted = uids.len();
@@ -242,7 +246,7 @@ pub(crate) fn delete_mobile_thread(data_dir: &str, params: &Value) -> Result<Val
             crate::meron_folders::ReleasedCard::annotate(&meron_released, &mut out);
             out
         })
-        .map_err(|err| err.to_string())
+        .map_err(|error| error.to_string())
     })
 }
 
@@ -252,15 +256,15 @@ pub(crate) fn delete_mobile_thread(data_dir: &str, params: &Value) -> Result<Val
 /// once for all of them (see [`crate::engine::bulk`]). `results` answers each item in order: the
 /// single delete's result, or `{ "error": "…" }`: the message as plain text, so the answer as a
 /// whole does not read as a failed command.
-pub(crate) fn delete_mobile_threads(data_dir: &str, params: &Value) -> Result<Value, String> {
+pub(crate) fn delete_mobile_threads(data_directory: &str, params: &Value) -> Result<Value, String> {
     let items = params
         .get("items")
         .and_then(Value::as_array)
         .ok_or_else(|| "missing items".to_string())?;
-    let engine = crate::ffi::engine_for(data_dir)?;
+    let engine = crate::ffi::engine_for(data_directory)?;
     let results: Vec<Value> =
         crate::engine::bulk::run_together_blocking(&engine, items.len(), |index| {
-            delete_mobile_thread(data_dir, &items[index])
+            delete_mobile_thread(data_directory, &items[index])
         })
         .into_iter()
         .map(|result| result.unwrap_or_else(|err| json!({ "error": err })))
@@ -268,11 +272,11 @@ pub(crate) fn delete_mobile_threads(data_dir: &str, params: &Value) -> Result<Va
     Ok(json!({ "ok": true, "results": results }))
 }
 
-pub(crate) fn archive_mobile_thread(data_dir: &str, params: &Value) -> Result<Value, String> {
+pub(crate) fn archive_mobile_thread(data_directory: &str, params: &Value) -> Result<Value, String> {
     let thread_id = req_str(params, "thread_id")?;
     let parsed = parse_thread_id(&thread_id).ok_or_else(|| "invalid thread_id".to_string())?;
-    let engine = crate::ffi::engine_for(data_dir)?;
-    with_mobile_db(data_dir, |conn| {
+    let engine = crate::ffi::engine_for(data_directory)?;
+    with_mobile_db(data_directory, |conn| {
         let target_folder = match find_cached_archive_folder(&conn, &parsed.account) {
             Ok(folder) => folder,
             // No archive mailbox: a whole conversation is archived Meron-only
@@ -280,7 +284,7 @@ pub(crate) fn archive_mobile_thread(data_dir: &str, params: &Value) -> Result<Va
             Err(no_archive) => {
                 let Some((result, jobs)) =
                     crate::meron_folders::archive_meron_only(&conn, &thread_id)
-                        .map_err(|err| format!("{err:#}"))?
+                        .map_err(|error| format!("{error:#}"))?
                 else {
                     return Err(no_archive);
                 };
@@ -310,7 +314,7 @@ pub(crate) fn archive_mobile_thread(data_dir: &str, params: &Value) -> Result<Va
             return Err(format!("account needs reconnect: {}", parsed.account));
         }
         let cached_ids = store::cached_message_ids(&conn, &parsed.account, &parsed.folder, &uids)
-            .map_err(|err| err.to_string())?;
+            .map_err(|error| error.to_string())?;
         let moved_ids = crate::ffi::engine_block_on(async {
             anyhow::Ok(
                 crate::engine::moved_message_ids(
@@ -373,7 +377,7 @@ pub(crate) fn archive_mobile_thread(data_dir: &str, params: &Value) -> Result<Va
         ));
         let uid_next_before = match moved_on_server {
             Ok(uid_next_before) => uid_next_before,
-            Err(err) => {
+            Err(error) => {
                 if archive_keys.is_some() {
                     crate::meron_folders::restore_marks_after_failed_archive(
                         &engine,
@@ -384,7 +388,7 @@ pub(crate) fn archive_mobile_thread(data_dir: &str, params: &Value) -> Result<Va
                         &uids,
                     );
                 }
-                return Err(err);
+                return Err(error);
             }
         };
         let meron_released = crate::meron_folders::release_after_action(&conn, meron_entry);
@@ -402,7 +406,7 @@ pub(crate) fn archive_mobile_thread(data_dir: &str, params: &Value) -> Result<Va
             )
         })?;
         let cache_ok = cache_server_move(
-            data_dir,
+            data_directory,
             &conn,
             "archive",
             &parsed.account,
@@ -448,6 +452,6 @@ pub(crate) fn archive_mobile_thread(data_dir: &str, params: &Value) -> Result<Va
             None,
             true,
         )
-        .map_err(|err| err.to_string())
+        .map_err(|error| error.to_string())
     })
 }

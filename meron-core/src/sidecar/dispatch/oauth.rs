@@ -9,54 +9,59 @@ use meron_core::engine::default_oauth_client;
 use meron_core::oauth;
 use meron_core::protocol::Request;
 
-pub(crate) async fn dispatch(req: &Request) -> anyhow::Result<Value> {
-    let p = req.params.clone();
-    let method = req.method.clone();
+pub(crate) async fn dispatch(request: &Request) -> anyhow::Result<Value> {
+    let parameters = request.params.clone();
+    let method = request.method.clone();
     tokio::task::spawn_blocking(move || match method.as_str() {
-        "oauth.authorizeUrl" => authorize_url(&p),
-        "oauth.exchangeCode" => exchange_code(&p),
-        "oauth.fetchPhoto" => fetch_photo(&p),
+        "oauth.authorizeUrl" => authorize_url(&parameters),
+        "oauth.exchangeCode" => exchange_code(&parameters),
+        "oauth.fetchPhoto" => fetch_photo(&parameters),
         _ => Err(format!("unknown method: {method}")),
     })
     .await?
     .map_err(anyhow::Error::msg)
 }
 
-fn str_param(p: &Value, key: &str) -> String {
-    p.get(key)
+fn str_param(parameters: &Value, key: &str) -> String {
+    parameters
+        .get(key)
         .and_then(Value::as_str)
         .unwrap_or("")
         .trim()
         .to_string()
 }
 
-fn client(p: &Value) -> Result<oauth::Client, String> {
-    match p.get("provider").and_then(Value::as_str).unwrap_or("") {
+fn client(parameters: &Value) -> Result<oauth::Client, String> {
+    match parameters
+        .get("provider")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+    {
         provider @ ("gmail" | "outlook") => Ok(default_oauth_client(provider)),
         _ => Err("unsupported oauth provider".to_string()),
     }
 }
 
 /// `{provider, redirect_uri, state, code_challenge}` → `{url}`.
-fn authorize_url(p: &Value) -> Result<Value, String> {
+fn authorize_url(parameters: &Value) -> Result<Value, String> {
     let url = oauth::authorize_url(
-        &client(p)?,
-        &str_param(p, "redirect_uri"),
-        &str_param(p, "state"),
-        &str_param(p, "code_challenge"),
+        &client(parameters)?,
+        &str_param(parameters, "redirect_uri"),
+        &str_param(parameters, "state"),
+        &str_param(parameters, "code_challenge"),
         "",
     )?;
     Ok(json!({ "url": url }))
 }
 
 /// `{provider, code, code_verifier, redirect_uri}` → the tokens and profile.
-fn exchange_code(p: &Value) -> Result<Value, String> {
-    let client = client(p)?;
+fn exchange_code(parameters: &Value) -> Result<Value, String> {
+    let client = client(parameters)?;
     let tokens = oauth::exchange_code(
         &client,
-        &str_param(p, "code"),
-        &str_param(p, "redirect_uri"),
-        &str_param(p, "code_verifier"),
+        &str_param(parameters, "code"),
+        &str_param(parameters, "redirect_uri"),
+        &str_param(parameters, "code_verifier"),
     )?;
     let refresh_token = tokens.refresh_token.clone().unwrap_or_default();
     if refresh_token.is_empty() {
@@ -74,11 +79,11 @@ fn exchange_code(p: &Value) -> Result<Value, String> {
 }
 
 /// `{provider, access_token, refresh_token}` → `{data, ext}`, the base64 photo.
-fn fetch_photo(p: &Value) -> Result<Value, String> {
+fn fetch_photo(parameters: &Value) -> Result<Value, String> {
     let photo = oauth::fetch_photo(
-        &client(p)?,
-        &str_param(p, "access_token"),
-        &str_param(p, "refresh_token"),
+        &client(parameters)?,
+        &str_param(parameters, "access_token"),
+        &str_param(parameters, "refresh_token"),
         "",
     )?;
     Ok(json!({

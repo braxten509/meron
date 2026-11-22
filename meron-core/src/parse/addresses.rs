@@ -195,8 +195,8 @@ fn decode_words_lenient(text: &str) -> String {
 }
 
 /// Byte length of the `=?charset?enc?text?=` encoded-word at the start of `s`.
-fn encoded_word_len(s: &str) -> Option<usize> {
-    let mut parts = s[2..].splitn(3, '?');
+fn encoded_word_len(text: &str) -> Option<usize> {
+    let mut parts = text[2..].splitn(3, '?');
     let charset = parts.next()?;
     let enc = parts.next()?;
     let tail = parts.next()?;

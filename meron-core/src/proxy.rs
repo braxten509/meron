@@ -33,8 +33,8 @@ pub enum ProxyKind {
 }
 
 impl ProxyKind {
-    fn parse(s: &str) -> Option<Self> {
-        match s {
+    fn parse(text: &str) -> Option<Self> {
+        match text {
             "http" => Some(ProxyKind::Http),
             "socks5" => Some(ProxyKind::Socks5),
             _ => None,
@@ -122,7 +122,7 @@ impl ProxyChoice {
         match self {
             ProxyChoice::Global => json!({ "mode": "global" }),
             ProxyChoice::Direct => json!({ "mode": "direct" }),
-            ProxyChoice::Custom(cfg) => cfg.to_json(),
+            ProxyChoice::Custom(configuration) => configuration.to_json(),
         }
     }
 
@@ -131,7 +131,7 @@ impl ProxyChoice {
         match self {
             ProxyChoice::Global => global(),
             ProxyChoice::Direct => None,
-            ProxyChoice::Custom(cfg) => Some(cfg.clone()),
+            ProxyChoice::Custom(configuration) => Some(configuration.clone()),
         }
     }
 }
@@ -151,9 +151,9 @@ static GLOBAL: RwLock<Option<ProxyConfig>> = RwLock::new(None);
 ///
 /// Existing pooled IMAP sessions and IDLE watchers keep their current sockets; the new setting
 /// takes effect as those reconnect.
-pub fn set_global(cfg: Option<ProxyConfig>) {
+pub fn set_global(configuration: Option<ProxyConfig>) {
     if let Ok(mut slot) = GLOBAL.write() {
-        *slot = cfg;
+        *slot = configuration;
     }
 }
 
@@ -176,7 +176,7 @@ pub fn load_global(conn: &rusqlite::Connection) -> Result<()> {
     #[cfg(test)]
     let _serialize = TEST_GLOBAL_LOCK
         .read()
-        .unwrap_or_else(|err| err.into_inner());
+        .unwrap_or_else(|error| error.into_inner());
     let stored = crate::store::settings_get(conn, &[SETTING_KEY.to_string()])?;
     set_global(parse_global(&stored[SETTING_KEY]));
     Ok(())
@@ -225,15 +225,15 @@ async fn http_connect(
     host: &str,
     port: u16,
 ) -> Result<()> {
-    let mut req = format!("CONNECT {host}:{port} HTTP/1.1\r\nHost: {host}:{port}\r\n");
+    let mut request = format!("CONNECT {host}:{port} HTTP/1.1\r\nHost: {host}:{port}\r\n");
     if !proxy.username.is_empty() {
         use base64::Engine as _;
         let token = base64::engine::general_purpose::STANDARD
             .encode(format!("{}:{}", proxy.username, proxy.password));
-        req.push_str(&format!("Proxy-Authorization: Basic {token}\r\n"));
+        request.push_str(&format!("Proxy-Authorization: Basic {token}\r\n"));
     }
-    req.push_str("\r\n");
-    tcp.write_all(req.as_bytes())
+    request.push_str("\r\n");
+    tcp.write_all(request.as_bytes())
         .await
         .context("send CONNECT")?;
     tcp.flush().await.context("send CONNECT")?;
@@ -264,7 +264,7 @@ async fn http_connect(
     let code = status_line
         .split_whitespace()
         .nth(1)
-        .and_then(|s| s.parse::<u16>().ok())
+        .and_then(|text| text.parse::<u16>().ok())
         .ok_or_else(|| anyhow!("malformed response: {status_line:?}"))?;
     match code {
         200..=299 => Ok(()),
@@ -368,11 +368,11 @@ async fn socks5_userpass(tcp: &mut TcpStream, proxy: &ProxyConfig) -> Result<()>
     if user.len() > 255 || pass.len() > 255 {
         return Err(anyhow!("proxy credentials too long"));
     }
-    let mut msg = vec![0x01, user.len() as u8]; // sub-negotiation version 1
-    msg.extend_from_slice(user);
-    msg.push(pass.len() as u8);
-    msg.extend_from_slice(pass);
-    tcp.write_all(&msg).await.context("send credentials")?;
+    let mut message = vec![0x01, user.len() as u8]; // sub-negotiation version 1
+    message.extend_from_slice(user);
+    message.push(pass.len() as u8);
+    message.extend_from_slice(pass);
+    tcp.write_all(&message).await.context("send credentials")?;
     tcp.flush().await.context("send credentials")?;
 
     let mut reply = [0u8; 2];
@@ -414,30 +414,32 @@ pub fn agent() -> Result<ureq::Agent> {
 
 /// Build an HTTP agent for a resolved account route. `None` is deliberately
 /// direct; callers that want the app-wide route should use [`agent`].
-pub fn agent_for(cfg: Option<&ProxyConfig>) -> Result<ureq::Agent> {
-    let Some(cfg) = cfg else {
+pub fn agent_for(configuration: Option<&ProxyConfig>) -> Result<ureq::Agent> {
+    let Some(configuration) = configuration else {
         return Ok(ureq::Agent::new_with_defaults());
     };
-    let protocol = match cfg.kind {
+    let protocol = match configuration.kind {
         ProxyKind::Http => ureq::ProxyProtocol::Http,
         // Socks5h: the proxy resolves the hostname, matching the mail path.
         ProxyKind::Socks5 => ureq::ProxyProtocol::Socks5h,
     };
     // ureq accepts a URI authority here, so an IPv6 literal needs brackets.
     // Keep the stored/raw host unchanged for Tokio's resolver.
-    let http_host = match cfg.host.parse::<std::net::IpAddr>() {
-        Ok(std::net::IpAddr::V6(_)) => format!("[{}]", cfg.host),
-        _ => cfg.host.clone(),
+    let http_host = match configuration.host.parse::<std::net::IpAddr>() {
+        Ok(std::net::IpAddr::V6(_)) => format!("[{}]", configuration.host),
+        _ => configuration.host.clone(),
     };
     let mut builder = ureq::Proxy::builder(protocol)
         .host(&http_host)
-        .port(cfg.port);
-    if !cfg.username.is_empty() {
-        builder = builder.username(&cfg.username).password(&cfg.password);
+        .port(configuration.port);
+    if !configuration.username.is_empty() {
+        builder = builder
+            .username(&configuration.username)
+            .password(&configuration.password);
     }
     let proxy = builder
         .build()
-        .with_context(|| format!("invalid proxy {}", cfg.endpoint()))?;
+        .with_context(|| format!("invalid proxy {}", configuration.endpoint()))?;
     Ok(ureq::Agent::new_with_config(
         ureq::Agent::config_builder().proxy(Some(proxy)).build(),
     ))

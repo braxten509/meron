@@ -283,7 +283,7 @@ pub fn claim(conn: &Connection, key: &str, now: i64) -> Result<Option<Reminder>>
     Ok(reminder)
 }
 
-pub fn dispatch(conn: &Connection, method: &str, p: &Value) -> Result<Value> {
+pub fn dispatch(conn: &Connection, method: &str, parameters: &Value) -> Result<Value> {
     let now = store::now_unix();
     if method == "reminders.skipPast" {
         reset_start(conn, now)?;
@@ -291,7 +291,7 @@ pub fn dispatch(conn: &Connection, method: &str, p: &Value) -> Result<Value> {
     }
     if method == "reminders.acknowledge" {
         let keys: Vec<String> =
-            serde_json::from_value(p.get("keys").cloned().unwrap_or(json!([])))?;
+            serde_json::from_value(parameters.get("keys").cloned().unwrap_or(json!([])))?;
         let tx = conn.unchecked_transaction()?;
         for key in keys {
             anyhow::ensure!(
@@ -311,14 +311,16 @@ pub fn dispatch(conn: &Connection, method: &str, p: &Value) -> Result<Value> {
         return Ok(json!({"ok": true}));
     }
     if method == "reminders.claim" {
-        return Ok(json!({"reminder": claim(conn, p["key"].as_str().unwrap_or_default(), now)?}));
+        return Ok(
+            json!({"reminder": claim(conn, parameters["key"].as_str().unwrap_or_default(), now)?}),
+        );
     }
-    let from = if p["upcoming"] == true {
+    let from = if parameters["upcoming"] == true {
         now + 1
     } else {
         now - DAY
     };
-    let to = if p["due_only"] == true {
+    let to = if parameters["due_only"] == true {
         now + 1
     } else {
         now + 30 * DAY

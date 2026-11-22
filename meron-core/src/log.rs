@@ -138,7 +138,7 @@ pub fn install_panic_hook() {
             let message = info
                 .payload()
                 .downcast_ref::<&str>()
-                .map(|s| (*s).to_string())
+                .map(|text| (*text).to_string())
                 .or_else(|| info.payload().downcast_ref::<String>().cloned())
                 .unwrap_or_else(|| "panic".to_string());
             let thread = std::thread::current();

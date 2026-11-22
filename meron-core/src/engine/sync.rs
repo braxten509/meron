@@ -1,4 +1,6 @@
-//! Folder and message sync against the server, including companion folders.
+//! Coordinates folder, message and flag synchronization with the mail server.
+//! The public engine entry points delegate to the folder, transfer and message workers.
+//! Policy helpers select companion folders and bound background work.
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;

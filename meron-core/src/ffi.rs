@@ -65,8 +65,8 @@ fn engine_runtime() -> Option<&'static tokio::runtime::Runtime> {
             Ok(rt) => {
                 let _ = ENGINE_RT.set(rt);
             }
-            Err(err) => {
-                eprintln!("meron-core: engine runtime build failed: {err}");
+            Err(error) => {
+                eprintln!("meron-core: engine runtime build failed: {error}");
                 return None;
             }
         }
@@ -99,16 +99,16 @@ pub(crate) fn evict_engine_account(account_id: &str) {
 /// one (own connection, no pooling) built on demand for background/one-off calls (e.g. a
 /// `BGAppRefreshTask` sync before any foreground transition). Either way the command path is
 /// identical, so there is only one implementation to maintain.
-pub(crate) fn engine_for(data_dir: &str) -> Result<Arc<Engine>, String> {
+pub(crate) fn engine_for(data_directory: &str) -> Result<Arc<Engine>, String> {
     if let Some(engine) = current_engine() {
         return Ok(engine);
     }
     let host = Box::new(MobileHost {
-        data_dir: data_dir.to_string(),
+        data_dir: data_directory.to_string(),
     });
     Engine::new(host)
         .map(Arc::new)
-        .map_err(|err| format!("{err:#}"))
+        .map_err(|error| format!("{error:#}"))
 }
 
 /// Run an async engine op on the shared runtime, blocking the calling FFI thread
@@ -118,7 +118,7 @@ pub(crate) fn engine_block_on<F, T>(future: F) -> Result<T, String>
 where
     F: std::future::Future<Output = anyhow::Result<T>>,
 {
-    engine_block_on_anyhow(future).map_err(|err| format!("{err:#}"))
+    engine_block_on_anyhow(future).map_err(|error| format!("{error:#}"))
 }
 
 /// Folder resyncs running, by [`watch_key`]. `true` when another request came
@@ -131,7 +131,7 @@ static FOLDER_RESYNCS: Mutex<Option<HashMap<String, bool>>> = Mutex::new(None);
 /// runs, telling listeners with the same event when it is done, so lists and
 /// counts refresh. Per account and folder at most one runs and one waits;
 /// further requests fold into the waiting one.
-pub(crate) fn spawn_folder_resync(data_dir: &str, account: &str, folders: &[&str]) {
+pub(crate) fn spawn_folder_resync(data_directory: &str, account: &str, folders: &[&str]) {
     for folder in folders {
         let key = watch_key(account, folder);
         {
@@ -143,7 +143,7 @@ pub(crate) fn spawn_folder_resync(data_dir: &str, account: &str, folders: &[&str
             }
             resyncs.insert(key.clone(), false);
         }
-        let data_dir = data_dir.to_string();
+        let data_directory = data_directory.to_string();
         let account = account.to_string();
         let folder = folder.to_string();
         let thread_key = key.clone();
@@ -151,7 +151,7 @@ pub(crate) fn spawn_folder_resync(data_dir: &str, account: &str, folders: &[&str
             .name("meron-resync".to_string())
             .spawn(move || {
                 loop {
-                    match sync_mobile_folder(&data_dir, &account, &folder) {
+                    match sync_mobile_folder(&data_directory, &account, &folder) {
                         Ok(sync) => emit_mobile_sync_result(&account, &folder, &sync),
                         Err(err) => crate::mlog!(
                             crate::log::Level::Warn,
@@ -181,8 +181,8 @@ pub(crate) fn spawn_folder_resync(data_dir: &str, account: &str, folders: &[&str
 }
 
 /// Push pending tag changes in the background, on the engine runtime.
-pub(crate) fn spawn_tag_push(data_dir: &str, account: &str) {
-    let (Ok(engine), Some(runtime)) = (engine_for(data_dir), engine_runtime()) else {
+pub(crate) fn spawn_tag_push(data_directory: &str, account: &str) {
+    let (Ok(engine), Some(runtime)) = (engine_for(data_directory), engine_runtime()) else {
         return;
     };
     let account = account.to_string();
@@ -279,7 +279,7 @@ fn watch_interest(interests: &Mutex<Vec<(String, String)>>, account: &str, folde
 /// open view live. The Engine holds its own DB connection and warm session pool
 /// for the lifetime of the foreground state.
 fn engine_foreground() -> Result<Value, String> {
-    let data_dir = MOBILE_CONFIG
+    let data_directory = MOBILE_CONFIG
         .lock()
         .unwrap()
         .as_ref()
@@ -291,9 +291,9 @@ fn engine_foreground() -> Result<Value, String> {
         let mut slot = ENGINE.lock().unwrap();
         if slot.is_none() {
             let host = Box::new(MobileHost {
-                data_dir: data_dir.clone(),
+                data_dir: data_directory.clone(),
             });
-            let engine = Engine::new(host).map_err(|err| format!("{err:#}"))?;
+            let engine = Engine::new(host).map_err(|error| format!("{error:#}"))?;
             let _ = engine.rule_progress.set(Arc::new(|account, folder| {
                 emit_event(
                     "mail.synced",
@@ -307,8 +307,8 @@ fn engine_foreground() -> Result<Value, String> {
         let _ownership = WATCH_OWNERSHIP.lock().unwrap();
         FOREGROUND_SESSION.store(true, Ordering::SeqCst);
     }
-    ensure_notify_poller(&data_dir);
-    start_foreground_idle(&data_dir);
+    ensure_notify_poller(&data_directory);
+    start_foreground_idle(&data_directory);
     Ok(json!({ "ok": true }))
 }
 
@@ -339,13 +339,13 @@ fn engine_background() -> Result<Value, String> {
 /// conversation view. Records the watches we actually
 /// started so `engine_background` stops exactly those, leaving any opt-in
 /// live-push watches alone.
-fn start_foreground_idle(data_dir: &str) {
-    let accounts = match mobile_db(data_dir) {
+fn start_foreground_idle(data_directory: &str) {
+    let accounts = match mobile_db(data_directory) {
         Ok(conn) => crate::store::load_accounts(&conn).unwrap_or_default(),
         Err(_) => return,
     };
     for (id, _creds) in accounts {
-        let (skip, sent, notify) = match mobile_db(data_dir) {
+        let (skip, sent, notify) = match mobile_db(data_directory) {
             Ok(conn) => {
                 let skip = is_rss_account(&conn, &id).unwrap_or(false)
                     || crate::store::account_paused(&conn, &id).unwrap_or(false);
@@ -369,15 +369,15 @@ fn start_foreground_idle(data_dir: &str) {
         if skip {
             continue;
         }
-        start_owned_watch(data_dir, &id, "INBOX");
+        start_owned_watch(data_directory, &id, "INBOX");
         if let Some(sent) = sent
             && !sent.eq_ignore_ascii_case("INBOX")
         {
-            start_owned_watch(data_dir, &id, &sent);
+            start_owned_watch(data_directory, &id, &sent);
         }
         // Already-running watches (Sent, above) are skipped by the dedupe.
         for folder in notify {
-            start_owned_watch(data_dir, &id, &folder);
+            start_owned_watch(data_directory, &id, &folder);
         }
     }
 }
@@ -394,7 +394,7 @@ pub(crate) fn forget_deleted_folder_watch(account: &str, folder: &str) {
 /// start watching it now, or drop the foreground session's interest in it. A
 /// no-op in the background, where the host decides what is watched.
 pub(crate) fn sync_foreground_notify_watch(
-    data_dir: &str,
+    data_directory: &str,
     account: &str,
     folder: &str,
     enabled: bool,
@@ -412,21 +412,21 @@ pub(crate) fn sync_foreground_notify_watch(
             let _ = stop_mobile_idle_watch(account, folder);
         }
     }
-    start_live_notify_watches(data_dir, account);
+    start_live_notify_watches(data_directory, account);
 }
 
 /// Watch an account's live opted-in folders for the foreground session.
 /// Called whenever the opt-ins change: an enabled folder inside the live set
 /// starts now, and one that was polled moves into a slot a disable or delete
 /// freed. Skipped while the session is in the background.
-pub(crate) fn start_live_notify_watches(data_dir: &str, account: &str) {
-    let live = mobile_db(data_dir)
+pub(crate) fn start_live_notify_watches(data_directory: &str, account: &str) {
+    let live = mobile_db(data_directory)
         .ok()
         .and_then(|conn| crate::store::notify_folder_plan(&conn, account).ok())
         .map(|plan| plan.live)
         .unwrap_or_default();
     for folder in live {
-        start_owned_watch(data_dir, account, &folder);
+        start_owned_watch(data_directory, account, &folder);
     }
 }
 
@@ -440,11 +440,11 @@ static NOTIFY_POLLER_RUNNING: AtomicBool = AtomicBool::new(false);
 
 /// Make sure the poller runs. Call after recording the interest (foreground
 /// session or host watch) that needs it.
-fn ensure_notify_poller(data_dir: &str) {
+fn ensure_notify_poller(data_directory: &str) {
     if NOTIFY_POLLER_RUNNING.swap(true, Ordering::SeqCst) {
         return;
     }
-    let data_dir = data_dir.to_string();
+    let data_directory = data_directory.to_string();
     let spawned = std::thread::Builder::new()
         .name("meron-notify-poll".to_string())
         .spawn(move || {
@@ -459,7 +459,7 @@ fn ensure_notify_poller(data_dir: &str) {
                         return;
                     }
                 }
-                poll_notify_folders_once(&data_dir);
+                poll_notify_folders_once(&data_directory);
             }
         });
     if spawned.is_err() {
@@ -470,8 +470,8 @@ fn ensure_notify_poller(data_dir: &str) {
 /// Check the opted-in folders that have no IDLE connection of their own, over
 /// pooled sessions. Covers every active account while the app is in the
 /// foreground, and otherwise the accounts the host (live push) is watching.
-fn poll_notify_folders_once(data_dir: &str) {
-    let Ok(conn) = mobile_db(data_dir) else {
+fn poll_notify_folders_once(data_directory: &str) {
+    let Ok(conn) = mobile_db(data_directory) else {
         return;
     };
     let accounts = crate::store::load_accounts(&conn).unwrap_or_default();
@@ -506,7 +506,7 @@ fn poll_notify_folders_once(data_dir: &str) {
         if watched {
             continue;
         }
-        match sync_mobile_folder(data_dir, &account, &folder) {
+        match sync_mobile_folder(data_directory, &account, &folder) {
             Ok(sync) => emit_mobile_sync_result(&account, &folder, &sync),
             Err(err) => crate::mlog!(
                 crate::log::Level::Warn,
@@ -518,9 +518,9 @@ fn poll_notify_folders_once(data_dir: &str) {
 }
 
 /// One folder's `mail.sync`, without relisting the account's folders.
-fn sync_mobile_folder(data_dir: &str, account: &str, folder: &str) -> Result<Value, String> {
+fn sync_mobile_folder(data_directory: &str, account: &str, folder: &str) -> Result<Value, String> {
     sync_mobile_mail(
-        data_dir,
+        data_directory,
         &json!({
             "account_id": account,
             "folder_id": folder,
@@ -557,12 +557,13 @@ fn emit_mobile_sync_result(account: &str, folder: &str, sync: &Value) {
 /// as rss/paused, record the session's interest in it — also when the host
 /// already had it running, so it survives the host letting go. Does nothing
 /// once the session has gone to the background.
-fn start_owned_watch(data_dir: &str, account: &str, folder: &str) {
+fn start_owned_watch(data_directory: &str, account: &str, folder: &str) {
     let _ownership = WATCH_OWNERSHIP.lock().unwrap();
     if !FOREGROUND_SESSION.load(Ordering::SeqCst) {
         return;
     }
-    if let Ok(result) = start_mobile_idle_watch(data_dir, account.to_string(), folder.to_string())
+    if let Ok(result) =
+        start_mobile_idle_watch(data_directory, account.to_string(), folder.to_string())
         && watch_is_running(&result)
     {
         set_watch_interest(&ENGINE_OWNED_WATCHES, account, folder, true);
@@ -680,9 +681,9 @@ pub extern "system" fn Java_jp_nonbili_meron_MeronCoreNative_meronCoreInvokeJson
 pub extern "system" fn Java_jp_nonbili_meron_MeronCoreNative_meronCoreInitJson(
     mut env: JNIEnv,
     _class: JClass,
-    data_dir: JString,
+    data_directory: JString,
 ) -> jstring {
-    let data_dir = match env.get_string(&data_dir) {
+    let data_directory = match env.get_string(&data_directory) {
         Ok(value) => value.to_string_lossy().into_owned(),
         Err(err) => {
             return java_string(
@@ -692,25 +693,25 @@ pub extern "system" fn Java_jp_nonbili_meron_MeronCoreNative_meronCoreInitJson(
             );
         }
     };
-    java_string(&env, init_mobile_core(&data_dir, None).to_string())
+    java_string(&env, init_mobile_core(&data_directory, None).to_string())
 }
 
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_jp_nonbili_meron_MeronCoreNative_meronCoreConfigureJsonKeyed(
     mut env: JNIEnv,
     _class: JClass,
-    data_dir: JString,
+    data_directory: JString,
     db_key: JString,
 ) -> jstring {
     let strings = env
-        .get_string(&data_dir)
+        .get_string(&data_directory)
         .map(|value| value.to_string_lossy().into_owned())
-        .and_then(|data_dir| {
+        .and_then(|data_directory| {
             env.get_string(&db_key)
-                .map(|value| (data_dir, value.to_string_lossy().into_owned()))
+                .map(|value| (data_directory, value.to_string_lossy().into_owned()))
         });
     let response = match strings {
-        Ok((data_dir, db_key)) => configure_mobile_core(&data_dir, Some(&db_key)),
+        Ok((data_directory, db_key)) => configure_mobile_core(&data_directory, Some(&db_key)),
         Err(err) => serde_json::json!({ "error": { "message": format!("bad JNI string: {err}") } }),
     };
     java_string(&env, response.to_string())
@@ -720,10 +721,10 @@ pub extern "system" fn Java_jp_nonbili_meron_MeronCoreNative_meronCoreConfigureJ
 pub extern "system" fn Java_jp_nonbili_meron_MeronCoreNative_meronCoreInitJsonKeyed(
     mut env: JNIEnv,
     _class: JClass,
-    data_dir: JString,
+    data_directory: JString,
     db_key: JString,
 ) -> jstring {
-    let data_dir = match env.get_string(&data_dir) {
+    let data_directory = match env.get_string(&data_directory) {
         Ok(value) => value.to_string_lossy().into_owned(),
         Err(err) => {
             return java_string(
@@ -743,7 +744,10 @@ pub extern "system" fn Java_jp_nonbili_meron_MeronCoreNative_meronCoreInitJsonKe
             );
         }
     };
-    java_string(&env, init_mobile_core(&data_dir, Some(&db_key)).to_string())
+    java_string(
+        &env,
+        init_mobile_core(&data_directory, Some(&db_key)).to_string(),
+    )
 }
 
 #[unsafe(no_mangle)]
@@ -801,43 +805,43 @@ pub unsafe extern "C" fn meron_core_invoke_json(request: *const c_char) -> *mut 
 /// Set up the core without opening the store; see [`configure_mobile_core`].
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn meron_core_configure_json_keyed(
-    data_dir: *const c_char,
+    data_directory: *const c_char,
     db_key: *const c_char,
 ) -> *mut c_char {
-    if data_dir.is_null() || db_key.is_null() {
+    if data_directory.is_null() || db_key.is_null() {
         return json_to_c_string(serde_json::json!({
             "error": { "message": "data_dir and db_key are required" }
         }));
     }
-    let data_dir = unsafe { CStr::from_ptr(data_dir) }.to_string_lossy();
+    let data_directory = unsafe { CStr::from_ptr(data_directory) }.to_string_lossy();
     let db_key = unsafe { CStr::from_ptr(db_key) }.to_string_lossy();
-    json_to_c_string(configure_mobile_core(&data_dir, Some(&db_key)))
+    json_to_c_string(configure_mobile_core(&data_directory, Some(&db_key)))
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn meron_core_init_json(data_dir: *const c_char) -> *mut c_char {
-    if data_dir.is_null() {
+pub unsafe extern "C" fn meron_core_init_json(data_directory: *const c_char) -> *mut c_char {
+    if data_directory.is_null() {
         return json_to_c_string(serde_json::json!({
             "error": { "message": "data_dir pointer is null" }
         }));
     }
-    let data_dir = unsafe { CStr::from_ptr(data_dir) }.to_string_lossy();
-    json_to_c_string(init_mobile_core(&data_dir, None))
+    let data_directory = unsafe { CStr::from_ptr(data_directory) }.to_string_lossy();
+    json_to_c_string(init_mobile_core(&data_directory, None))
 }
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn meron_core_init_json_keyed(
-    data_dir: *const c_char,
+    data_directory: *const c_char,
     db_key: *const c_char,
 ) -> *mut c_char {
-    if data_dir.is_null() || db_key.is_null() {
+    if data_directory.is_null() || db_key.is_null() {
         return json_to_c_string(serde_json::json!({
             "error": { "message": "data_dir and db_key pointers are required" }
         }));
     }
-    let data_dir = unsafe { CStr::from_ptr(data_dir) }.to_string_lossy();
+    let data_directory = unsafe { CStr::from_ptr(data_directory) }.to_string_lossy();
     let db_key = unsafe { CStr::from_ptr(db_key) }.to_string_lossy();
-    json_to_c_string(init_mobile_core(&data_dir, Some(&db_key)))
+    json_to_c_string(init_mobile_core(&data_directory, Some(&db_key)))
 }
 
 /// Registers the mobile host event callback.
@@ -875,12 +879,12 @@ pub extern "C" fn meron_core_emit_ready_event() -> bool {
 /// function documented as returning an owned C string. Passing any other pointer
 /// is undefined behavior.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn meron_core_string_free(ptr: *mut c_char) {
-    if ptr.is_null() {
+pub unsafe extern "C" fn meron_core_string_free(pointer: *mut c_char) {
+    if pointer.is_null() {
         return;
     }
     unsafe {
-        drop(CString::from_raw(ptr));
+        drop(CString::from_raw(pointer));
     }
 }
 
@@ -902,14 +906,14 @@ static STORE_UPGRADING: std::sync::atomic::AtomicBool = std::sync::atomic::Atomi
 /// Everything a host needs to set up without touching the store: safe on a main
 /// thread, where a migration would stall the launch until the OS kills it and
 /// rolls the migration back. The first command prepares the store.
-fn configure_mobile_core(data_dir: &str, db_key: Option<&str>) -> serde_json::Value {
-    let data_dir = data_dir.trim();
-    if data_dir.is_empty() {
+fn configure_mobile_core(data_directory: &str, db_key: Option<&str>) -> serde_json::Value {
+    let data_directory = data_directory.trim();
+    if data_directory.is_empty() {
         return serde_json::json!({ "error": { "message": "data_dir is required" } });
     }
     let db_key = db_key.map(str::trim).unwrap_or_default();
     *MOBILE_CONFIG.lock().unwrap() = Some(MobileConfig {
-        data_dir: data_dir.to_string(),
+        data_dir: data_directory.to_string(),
         db_key: db_key.to_string(),
     });
     // Publish the key so `with_mobile_db` opens the encrypted store. An empty
@@ -935,16 +939,16 @@ fn configure_mobile_core(data_dir: &str, db_key: Option<&str>) -> serde_json::Va
     serde_json::json!({
         "ok": true,
         "protocol": PROTOCOL_VERSION,
-        "data_dir": data_dir,
+        "data_dir": data_directory,
     })
 }
 
 /// [`configure_mobile_core`] plus the store, for hosts already off the main
 /// thread that want it ready before their first command.
-fn init_mobile_core(data_dir: &str, db_key: Option<&str>) -> serde_json::Value {
-    let configured = configure_mobile_core(data_dir, db_key);
+fn init_mobile_core(data_directory: &str, db_key: Option<&str>) -> serde_json::Value {
+    let configured = configure_mobile_core(data_directory, db_key);
     if configured.get("error").is_none() {
-        prepare_mobile_store(data_dir.trim());
+        prepare_mobile_store(data_directory.trim());
     }
     configured
 }
@@ -952,14 +956,14 @@ fn init_mobile_core(data_dir: &str, db_key: Option<&str>) -> serde_json::Value {
 /// Upgrade the store and load what commands assume is loaded. Once per process
 /// and data dir; every command comes through here, so none can run ahead of it,
 /// and a failure is retried by the next one, which then reports its own error.
-fn prepare_mobile_store(data_dir: &str) {
+fn prepare_mobile_store(data_directory: &str) {
     let mut prepared = STORE_PREPARED
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
-    if prepared.as_deref() == Some(data_dir) {
+    if prepared.as_deref() == Some(data_directory) {
         return;
     }
-    let db_path = Path::new(data_dir).join("meron.db");
+    let db_path = Path::new(data_directory).join("meron.db");
     let key = crate::protocol::mobile_db_key();
     let opened = crate::store::open_at_notifying(&db_path, key.as_deref(), || {
         STORE_UPGRADING.store(true, Ordering::SeqCst);
@@ -980,7 +984,7 @@ fn prepare_mobile_store(data_dir: &str) {
     }
     crate::store::tidy_at_start(&conn);
     drop(conn);
-    *prepared = Some(data_dir.to_string());
+    *prepared = Some(data_directory.to_string());
     drop(prepared);
     // List cards name attachments from a column older caches lack. Fill it on
     // its own connection, a batch at a time, so commands opening the store in
@@ -988,9 +992,9 @@ fn prepare_mobile_store(data_dir: &str) {
     static FILES_BACKFILL_STARTED: std::sync::atomic::AtomicBool =
         std::sync::atomic::AtomicBool::new(false);
     if !FILES_BACKFILL_STARTED.swap(true, Ordering::SeqCst) {
-        let data_dir = data_dir.to_string();
+        let data_directory = data_directory.to_string();
         std::thread::spawn(move || {
-            let result = crate::protocol::with_mobile_db(&data_dir, |conn| {
+            let result = crate::protocol::with_mobile_db(&data_directory, |conn| {
                 while !crate::store::backfill_files_batch(
                     &conn,
                     crate::engine::FILES_BACKFILL_BATCH,
@@ -1013,7 +1017,7 @@ fn prepare_mobile_store(data_dir: &str) {
 }
 
 fn invoke_mobile_request_json(request: &str) -> serde_json::Value {
-    let data_dir = MOBILE_CONFIG
+    let data_directory = MOBILE_CONFIG
         .lock()
         .unwrap()
         .as_ref()
@@ -1026,11 +1030,11 @@ fn invoke_mobile_request_json(request: &str) -> serde_json::Value {
         return json!({ "id": req.map(|req| req.id), "result": { "migrating": migrating } });
     }
     if method != Some("ping")
-        && let Some(data_dir) = data_dir.as_deref()
+        && let Some(data_directory) = data_directory.as_deref()
     {
-        prepare_mobile_store(data_dir);
+        prepare_mobile_store(data_directory);
     }
-    if let Some(data_dir) = data_dir.as_deref()
+    if let Some(data_directory) = data_directory.as_deref()
         && let Some(req) = req
         && matches!(
             req.method.as_str(),
@@ -1040,14 +1044,14 @@ fn invoke_mobile_request_json(request: &str) -> serde_json::Value {
         let result = match req.method.as_str() {
             "engine.foreground" => engine_foreground(),
             "engine.background" => engine_background(),
-            _ => dispatch_mobile_watch_request(data_dir, &req),
+            _ => dispatch_mobile_watch_request(data_directory, &req),
         };
         return match result {
             Ok(result) => json!({ "id": req.id, "result": result }),
             Err(message) => json!({ "id": req.id, "error": { "message": message } }),
         };
     }
-    invoke_mobile_protocol_json(request, data_dir.as_deref())
+    invoke_mobile_protocol_json(request, data_directory.as_deref())
 }
 
 fn event_envelope(name: &str, detail: serde_json::Value) -> serde_json::Value {
@@ -1068,20 +1072,20 @@ pub(crate) fn emit_event(name: &str, detail: serde_json::Value) -> bool {
     true
 }
 
-fn dispatch_mobile_watch_request(data_dir: &str, req: &Request) -> Result<Value, String> {
-    let account = req_account_id(&req.params)?;
+fn dispatch_mobile_watch_request(data_directory: &str, request: &Request) -> Result<Value, String> {
+    let account = req_account_id(&request.params)?;
     let folder =
-        canon_folder(&req_str(&req.params, "folder").unwrap_or_else(|_| "INBOX".to_string()));
-    match req.method.as_str() {
+        canon_folder(&req_str(&request.params, "folder").unwrap_or_else(|_| "INBOX".to_string()));
+    match request.method.as_str() {
         "watch.start" => {
             let _ownership = WATCH_OWNERSHIP.lock().unwrap();
-            let result = start_mobile_idle_watch(data_dir, account.clone(), folder.clone())?;
+            let result = start_mobile_idle_watch(data_directory, account.clone(), folder.clone())?;
             // The host (the live-push service) now counts on this watch, even
             // one `engine.foreground` started first; going to the background
             // must not stop it.
             if watch_is_running(&result) {
                 set_watch_interest(&HOST_WATCHES, &account, &folder, true);
-                ensure_notify_poller(data_dir);
+                ensure_notify_poller(data_directory);
             }
             Ok(result)
         }
@@ -1094,7 +1098,7 @@ fn dispatch_mobile_watch_request(data_dir: &str, req: &Request) -> Result<Value,
             }
             stop_mobile_idle_watch(&account, &folder)
         }
-        _ => Err(format!("unknown watch method: {}", req.method)),
+        _ => Err(format!("unknown watch method: {}", request.method)),
     }
 }
 
@@ -1102,26 +1106,26 @@ fn watch_key(account: &str, folder: &str) -> String {
     format!("{account}\n{folder}")
 }
 
-fn mobile_db(data_dir: &str) -> Result<rusqlite::Connection, String> {
-    let db_path = Path::new(data_dir.trim()).join("meron.db");
+fn mobile_db(data_directory: &str) -> Result<rusqlite::Connection, String> {
+    let db_path = Path::new(data_directory.trim()).join("meron.db");
     match mobile_db_key() {
         Some(key) => crate::store::open_at_keyed(&db_path, &key),
         None => crate::store::open_at(&db_path),
     }
-    .map_err(|err| format!("{err:#}"))
+    .map_err(|error| format!("{error:#}"))
 }
 
 fn start_mobile_idle_watch(
-    data_dir: &str,
+    data_directory: &str,
     account: String,
     folder: String,
 ) -> Result<Value, String> {
     {
-        let conn = mobile_db(data_dir)?;
+        let conn = mobile_db(data_directory)?;
         if is_rss_account(&conn, &account)? {
             return Ok(json!({ "ok": true, "rss": true }));
         }
-        if crate::store::account_paused(&conn, &account).map_err(|err| format!("{err:#}"))? {
+        if crate::store::account_paused(&conn, &account).map_err(|error| format!("{error:#}"))? {
             return Ok(json!({ "ok": true, "paused": true }));
         }
         let creds = load_mobile_account_creds(&conn, &account)?;
@@ -1138,15 +1142,15 @@ fn start_mobile_idle_watch(
     }
     let stop = Arc::new(AtomicBool::new(false));
     watches.insert(key, stop.clone());
-    let data_dir = data_dir.to_string();
+    let data_directory = data_directory.to_string();
     std::thread::Builder::new()
         .name(format!("meron-idle-{account}-{folder}"))
         .spawn({
             let account = account.clone();
             let folder = folder.clone();
-            move || mobile_idle_thread(data_dir, account, folder, stop)
+            move || mobile_idle_thread(data_directory, account, folder, stop)
         })
-        .map_err(|err| format!("spawn idle watcher: {err}"))?;
+        .map_err(|error| format!("spawn idle watcher: {error}"))?;
     Ok(json!({ "ok": true, "already": false }))
 }
 
@@ -1163,7 +1167,12 @@ fn stop_mobile_idle_watch(account: &str, folder: &str) -> Result<Value, String> 
     Ok(json!({ "ok": true, "stopped": removed.is_some() }))
 }
 
-fn mobile_idle_thread(data_dir: String, account: String, folder: String, stop: Arc<AtomicBool>) {
+fn mobile_idle_thread(
+    data_directory: String,
+    account: String,
+    folder: String,
+    stop: Arc<AtomicBool>,
+) {
     let runtime = match tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -1179,7 +1188,7 @@ fn mobile_idle_thread(data_dir: String, account: String, folder: String, stop: A
     };
     runtime.block_on(async {
         while !stop.load(Ordering::SeqCst) {
-            match mobile_idle_once(&data_dir, &account, &folder, &stop).await {
+            match mobile_idle_once(&data_directory, &account, &folder, &stop).await {
                 Ok(()) => {}
                 Err(err) => {
                     if let Some((name, detail)) =
@@ -1210,13 +1219,13 @@ fn mobile_idle_thread(data_dir: String, account: String, folder: String, stop: A
 }
 
 async fn mobile_idle_once(
-    data_dir: &str,
+    data_directory: &str,
     account: &str,
     folder: &str,
     stop: &AtomicBool,
 ) -> anyhow::Result<()> {
     {
-        let conn = mobile_db(data_dir).map_err(|err| anyhow::anyhow!(err))?;
+        let conn = mobile_db(data_directory).map_err(|error| anyhow::anyhow!(error))?;
         if crate::store::account_paused(&conn, account).unwrap_or(false) {
             return Ok(());
         }
@@ -1227,14 +1236,14 @@ async fn mobile_idle_once(
     // refresh it. Use the same credential path as every other live IMAP op.
     // Platform-managed Android Gmail is refreshed by the host before it invokes
     // engine.foreground/watch.start; ensure_valid_creds then picks up that token.
-    let engine = engine_for(data_dir).map_err(|err| anyhow::anyhow!(err))?;
+    let engine = engine_for(data_directory).map_err(|error| anyhow::anyhow!(error))?;
     let creds = engine.ensure_valid_creds(account).await?;
     if account_needs_reconnect(&creds) {
         anyhow::bail!("account needs reconnect: {account}");
     }
     let mut session = crate::imap::connect(&creds).await?;
     session.select(folder).await?;
-    mobile_sync_and_notify(data_dir, account, folder).await?;
+    mobile_sync_and_notify(data_directory, account, folder).await?;
 
     while !stop.load(Ordering::SeqCst) {
         let mut handle = session.idle();
@@ -1252,7 +1261,7 @@ async fn mobile_idle_once(
         };
         session = handle.done().await?;
         if let async_imap::extensions::idle::IdleResponse::NewData(_) = response? {
-            mobile_sync_and_notify(data_dir, account, folder).await?;
+            mobile_sync_and_notify(data_directory, account, folder).await?;
         }
     }
     Ok(())
@@ -1266,15 +1275,19 @@ async fn wait_for_mobile_watch_stop(stop: &AtomicBool) {
     }
 }
 
-async fn mobile_sync_and_notify(data_dir: &str, account: &str, folder: &str) -> anyhow::Result<()> {
-    let data_dir_owned = data_dir.to_string();
+async fn mobile_sync_and_notify(
+    data_directory: &str,
+    account: &str,
+    folder: &str,
+) -> anyhow::Result<()> {
+    let data_dir_owned = data_directory.to_string();
     let account_owned = account.to_string();
     let folder_owned = folder.to_string();
     let sync = tokio::task::spawn_blocking(move || {
         sync_mobile_folder(&data_dir_owned, &account_owned, &folder_owned)
     })
     .await?
-    .map_err(|err| anyhow::anyhow!(err))?;
+    .map_err(|error| anyhow::anyhow!(error))?;
     emit_mobile_sync_result(account, folder, &sync);
     Ok(())
 }
@@ -1284,27 +1297,27 @@ async fn mobile_sync_and_notify(data_dir: &str, account: &str, folder: &str) -> 
 /// `mail.sync` response so background workers — which have no live event
 /// listener — can notify from the response alone.
 pub(crate) fn mobile_new_messages_detail(
-    data_dir: &str,
+    data_directory: &str,
     account: &str,
     folder: &str,
     headers: &[crate::imap::MessageHeader],
 ) -> Option<Value> {
-    let account_name = mobile_account_label(data_dir, account);
-    let muted = mobile_account_muted(data_dir, account);
-    let conn = mobile_db(data_dir).ok()?;
+    let account_name = mobile_account_label(data_directory, account);
+    let muted = mobile_account_muted(data_directory, account);
+    let conn = mobile_db(data_directory).ok()?;
     crate::mail_model::new_messages_detail(&conn, account, &account_name, folder, muted, headers)
 }
 
 /// `mail.newMessages` detail for new mail AI sorting filed into a Meron folder
 /// with notifications on (see [`crate::mail_model::meron_new_messages_detail`]).
 pub(crate) fn mobile_meron_new_messages_detail(
-    data_dir: &str,
+    data_directory: &str,
     account: &str,
     arrivals: &crate::engine::ai_sort::MeronArrivals,
 ) -> Option<Value> {
-    let account_name = mobile_account_label(data_dir, account);
-    let muted = mobile_account_muted(data_dir, account);
-    let conn = mobile_db(data_dir).ok()?;
+    let account_name = mobile_account_label(data_directory, account);
+    let muted = mobile_account_muted(data_directory, account);
+    let conn = mobile_db(data_directory).ok()?;
     crate::mail_model::meron_new_messages_detail(&conn, account, &account_name, muted, arrivals)
 }
 
@@ -1312,13 +1325,13 @@ pub(crate) fn mobile_meron_new_messages_detail(
 /// still unread, newest first; None when nothing new landed.
 #[cfg(test)]
 pub(crate) fn mobile_new_unread_inbox_messages(
-    data_dir: &str,
+    data_directory: &str,
     account: &str,
     uid_next_before: u32,
     uid_next_after: u32,
     synced_messages: &[crate::imap::MessageHeader],
 ) -> Option<Vec<crate::imap::MessageHeader>> {
-    let conn = mobile_db(data_dir).ok()?;
+    let conn = mobile_db(data_directory).ok()?;
     crate::store::new_unread_inbox_messages(
         &conn,
         account,
@@ -1330,15 +1343,15 @@ pub(crate) fn mobile_new_unread_inbox_messages(
     .flatten()
 }
 
-fn mobile_account_label(data_dir: &str, account: &str) -> String {
-    let Ok(conn) = mobile_db(data_dir) else {
+fn mobile_account_label(data_directory: &str, account: &str) -> String {
+    let Ok(conn) = mobile_db(data_directory) else {
         return account.to_string();
     };
     crate::store::account_label(&conn, account)
 }
 
-fn mobile_account_muted(data_dir: &str, account: &str) -> bool {
-    mobile_db(data_dir)
+fn mobile_account_muted(data_directory: &str, account: &str) -> bool {
+    mobile_db(data_directory)
         .ok()
         .and_then(|conn| crate::store::account_muted(&conn, account).ok())
         .unwrap_or(false)

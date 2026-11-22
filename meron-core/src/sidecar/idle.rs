@@ -1,3 +1,7 @@
+//! Runs desktop mailbox watches and reports new arrivals.
+//! Account and folder keys identify the watches shared by open views.
+//! Incoming message details are converted into the events used by desktop notifications.
+
 use anyhow::Context as _;
 use serde_json::{Value, json};
 use std::sync::Arc;

@@ -5,16 +5,19 @@
 
 use super::*;
 
-pub(crate) fn mark_mobile_thread_read(data_dir: &str, params: &Value) -> Result<Value, String> {
+pub(crate) fn mark_mobile_thread_read(
+    data_directory: &str,
+    params: &Value,
+) -> Result<Value, String> {
     let thread_id = req_str(params, "thread_id")?;
     let seen = req_bool(params, "seen")?;
     if is_rss_thread_id(&thread_id) {
-        return mark_mobile_rss_thread_read(data_dir, params);
+        return mark_mobile_rss_thread_read(data_directory, params);
     }
     let parsed = parse_thread_id_with_request_folder(&thread_id, params)
         .ok_or_else(|| "invalid thread_id".to_string())?;
-    let engine = crate::ffi::engine_for(data_dir)?;
-    with_mobile_db(data_dir, |conn| {
+    let engine = crate::ffi::engine_for(data_directory)?;
+    with_mobile_db(data_directory, |conn| {
         let explicit_ids = has_requested_mobile_message_ids(params);
         // Marking a whole thread read reaches every folder it spans and only the
         // messages still unread; everything else acts on the requested folder.
@@ -28,7 +31,7 @@ pub(crate) fn mark_mobile_thread_read(data_dir: &str, params: &Value) -> Result<
                 parsed.subject_filter.as_deref(),
                 true,
             )
-            .map_err(|err| err.to_string())?
+            .map_err(|error| error.to_string())?
         } else {
             let uids = if !seen && !explicit_ids && parsed.uid.is_none() {
                 // Marking a whole thread unread flags its newest message only.
@@ -39,7 +42,7 @@ pub(crate) fn mark_mobile_thread_read(data_dir: &str, params: &Value) -> Result<
                     &parsed.thread_key,
                     parsed.subject_filter.as_deref(),
                 )
-                .map_err(|err| err.to_string())?
+                .map_err(|error| error.to_string())?
             } else {
                 requested_mobile_uids(&conn, &parsed, params)?
             };
@@ -66,7 +69,7 @@ pub(crate) fn mark_mobile_thread_read(data_dir: &str, params: &Value) -> Result<
         {
             for uid in uids {
                 store::update_message_seen(&conn, &parsed.account, folder, *uid, seen)
-                    .map_err(|err| err.to_string())?;
+                    .map_err(|error| error.to_string())?;
             }
         }
         let own_uids = by_folder
@@ -85,19 +88,22 @@ pub(crate) fn mark_mobile_thread_read(data_dir: &str, params: &Value) -> Result<
             None,
             false,
         )
-        .map_err(|err| err.to_string())?;
+        .map_err(|error| error.to_string())?;
         crate::mail_model::add_folder_unreads(
             &mut result,
             &conn,
             &parsed.account,
             by_folder.keys(),
         )
-        .map_err(|err| err.to_string())?;
+        .map_err(|error| error.to_string())?;
         Ok(result)
     })
 }
 
-pub(crate) fn mark_mobile_folder_all_read(data_dir: &str, params: &Value) -> Result<Value, String> {
+pub(crate) fn mark_mobile_folder_all_read(
+    data_directory: &str,
+    params: &Value,
+) -> Result<Value, String> {
     let account_id = req_account_id(params)?;
     let folder = params
         .get("folder_id")
@@ -108,8 +114,8 @@ pub(crate) fn mark_mobile_folder_all_read(data_dir: &str, params: &Value) -> Res
         .unwrap_or_else(|| "INBOX".to_string());
 
     if account_id == "unified" {
-        let accounts = with_mobile_db(data_dir, |conn| {
-            let accounts = store::list_accounts(&conn).map_err(|err| err.to_string())?;
+        let accounts = with_mobile_db(data_directory, |conn| {
+            let accounts = store::list_accounts(&conn).map_err(|error| error.to_string())?;
             Ok(json!(
                 accounts
                     .into_iter()
@@ -134,11 +140,11 @@ pub(crate) fn mark_mobile_folder_all_read(data_dir: &str, params: &Value) -> Res
             .into_iter()
             .filter_map(|value| value.as_str().map(str::to_string))
             .collect::<Vec<_>>();
-        let account_folders = with_mobile_db(data_dir, |conn| {
+        let account_folders = with_mobile_db(data_directory, |conn| {
             let mut resolved = Vec::new();
             for account in accounts {
                 if let Some(account_folder) = store::folder_for_role(&conn, &account, &folder)
-                    .map_err(|err| err.to_string())?
+                    .map_err(|error| error.to_string())?
                 {
                     resolved.push((account, account_folder));
                 }
@@ -146,14 +152,14 @@ pub(crate) fn mark_mobile_folder_all_read(data_dir: &str, params: &Value) -> Res
             Ok(json!(resolved))
         })?;
         let account_folders = serde_json::from_value::<Vec<(String, String)>>(account_folders)
-            .map_err(|err| format!("{err:#}"))?;
+            .map_err(|error| format!("{error:#}"))?;
         let mut updated = 0_u64;
         let mut failures = Vec::new();
         let mut folder_unreads = serde_json::Map::new();
         let mut folder_counts = Vec::new();
         for (account, account_folder) in account_folders {
             let account_params = json!({ "account_id": account, "folder_id": account_folder });
-            match mark_mobile_folder_all_read(data_dir, &account_params) {
+            match mark_mobile_folder_all_read(data_directory, &account_params) {
                 Ok(result) => {
                     updated += result
                         .get("updated")
@@ -185,14 +191,14 @@ pub(crate) fn mark_mobile_folder_all_read(data_dir: &str, params: &Value) -> Res
         }));
     }
 
-    let engine = crate::ffi::engine_for(data_dir)?;
-    with_mobile_db(data_dir, |conn| {
+    let engine = crate::ffi::engine_for(data_directory)?;
+    with_mobile_db(data_directory, |conn| {
         if is_rss_account(&conn, &account_id)? {
             return Ok(json!({ "ok": true, "updated": 0, "rss": true }));
         }
         // Mail in Meron folders stays unread: each has its own Mark all read.
         let uids = store::get_visible_unseen_uids(&conn, &account_id, &folder)
-            .map_err(|err| err.to_string())?;
+            .map_err(|error| error.to_string())?;
         let updated = uids.len();
         if !uids.is_empty() {
             let creds = load_mobile_account_creds(&conn, &account_id)?;
@@ -216,13 +222,13 @@ pub(crate) fn mark_mobile_folder_all_read(data_dir: &str, params: &Value) -> Res
             ))?;
         }
         store::mark_visible_folder_seen(&conn, &account_id, &folder)
-            .map_err(|err| err.to_string())?;
+            .map_err(|error| error.to_string())?;
         // The Inbox also lists mail the AI left in other folders: mark it read
         // where each message really is.
         let mut updated = updated;
         if folder.eq_ignore_ascii_case("INBOX") {
-            let shown =
-                store::ai_sort_inbox_unseen(&conn, &account_id).map_err(|err| err.to_string())?;
+            let shown = store::ai_sort_inbox_unseen(&conn, &account_id)
+                .map_err(|error| error.to_string())?;
             for (shown_folder, shown_uids) in shown {
                 let select_folder = shown_folder.clone();
                 let seen_uids = shown_uids.clone();
@@ -241,7 +247,7 @@ pub(crate) fn mark_mobile_folder_all_read(data_dir: &str, params: &Value) -> Res
                     },
                 ))?;
                 store::meron_mark_seen(&conn, &account_id, &shown_folder, &shown_uids)
-                    .map_err(|err| err.to_string())?;
+                    .map_err(|error| error.to_string())?;
                 updated += shown_uids.len();
             }
         }
@@ -256,14 +262,14 @@ pub(crate) fn mark_mobile_folder_all_read(data_dir: &str, params: &Value) -> Res
             None,
             false,
         )
-        .map_err(|err| err.to_string())
+        .map_err(|error| error.to_string())
     })
 }
 
 // Permanently delete every message in a folder, server side and in the store.
 // Restricted to Trash and Junk, and re-checked here rather than trusting the
 // caller: the delete is unrecoverable.
-pub(crate) fn empty_mobile_folder(data_dir: &str, params: &Value) -> Result<Value, String> {
+pub(crate) fn empty_mobile_folder(data_directory: &str, params: &Value) -> Result<Value, String> {
     let account_id = req_account_id(params)?;
     let folder = params
         .get("folder_id")
@@ -276,13 +282,13 @@ pub(crate) fn empty_mobile_folder(data_dir: &str, params: &Value) -> Result<Valu
         return Err("Only Trash and Junk folders can be emptied".to_string());
     }
 
-    let engine = crate::ffi::engine_for(data_dir)?;
-    with_mobile_db(data_dir, |conn| {
+    let engine = crate::ffi::engine_for(data_directory)?;
+    with_mobile_db(data_directory, |conn| {
         if is_rss_account(&conn, &account_id)? {
             return Err("Only Trash and Junk folders can be emptied".to_string());
         }
         let role =
-            store::folder_role(&conn, &account_id, &folder).map_err(|err| err.to_string())?;
+            store::folder_role(&conn, &account_id, &folder).map_err(|error| error.to_string())?;
         if role != "trash" && role != "junk" {
             return Err("Only Trash and Junk folders can be emptied".to_string());
         }
@@ -298,7 +304,7 @@ pub(crate) fn empty_mobile_folder(data_dir: &str, params: &Value) -> Result<Valu
             }))?
         };
         let deleted = store::delete_folder_messages(&conn, &account_id, &folder)
-            .map_err(|err| err.to_string())?;
+            .map_err(|error| error.to_string())?;
         crate::mail_model::mutation_result(
             json!({
                 "ok": true,
@@ -316,6 +322,6 @@ pub(crate) fn empty_mobile_folder(data_dir: &str, params: &Value) -> Result<Valu
             None,
             true,
         )
-        .map_err(|err| err.to_string())
+        .map_err(|error| error.to_string())
     })
 }

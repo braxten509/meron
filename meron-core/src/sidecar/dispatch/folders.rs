@@ -1,3 +1,7 @@
+//! Routes desktop folder commands to the engine and store.
+//! RPC arguments identify the account, mailbox and requested folder action.
+//! The sidecar returns updated folder data or the result of the operation.
+
 use serde_json::{Value, json};
 use std::sync::Arc;
 
@@ -16,35 +20,39 @@ use crate::sidecar::spawn::*;
 /// Handle folder listing and management: `folders.*`, `messages.emptyFolder`.
 pub(crate) async fn dispatch(
     engine: &Arc<Engine>,
-    req: &Request,
+    request: &Request,
     out: &Writer,
 ) -> anyhow::Result<Value> {
-    let p = &req.params;
-    match req.method.as_str() {
+    let parameters = &request.params;
+    match request.method.as_str() {
         // Cache-only (instant). When refresh != false, also kicks a background
         // sync that emits mail.synced; event-driven reloads pass refresh:false to
         // avoid a sync→event→reload loop.
         // RSS accounts return final Folder JSON (one synthetic Inbox); mail
         // returns raw rows the bridge formats. Routed by the account's engine.
         "folders.list" => {
-            let account = req_str(p, "account")?;
+            let account = req_str(parameters, "account")?;
             if is_rss(engine, &account)? {
                 let folders = rss::folders(&engine.db.lock().unwrap(), &account)?;
                 return Ok(json!({ "folders": folders }));
             }
             let folders = store::get_folders(&engine.db.lock().unwrap(), &account)?;
-            if p.get("refresh").and_then(Value::as_bool).unwrap_or(true) {
+            if parameters
+                .get("refresh")
+                .and_then(Value::as_bool)
+                .unwrap_or(true)
+            {
                 spawn_folder_sync(engine.clone(), out.clone(), account);
             }
             Ok(json!({ "folders": serde_json::to_value(folders)? }))
         }
 
         "folders.create" => {
-            let account = req_str(p, "account")?;
+            let account = req_str(parameters, "account")?;
             if is_rss(engine, &account)? {
                 return Err(anyhow::anyhow!("RSS accounts do not support folders"));
             }
-            let display_name = req_str(p, "name")?.trim().to_string();
+            let display_name = req_str(parameters, "name")?.trim().to_string();
             if display_name.is_empty() {
                 return Err(anyhow::anyhow!("Folder name is required"));
             }
@@ -78,12 +86,12 @@ pub(crate) async fn dispatch(
         // unless a view (a kanban column showing it) still wants it, and may
         // promote a polled folder into the freed live slot.
         "folders.setNotify" => {
-            let account = req_str(p, "account")?;
+            let account = req_str(parameters, "account")?;
             if is_rss(engine, &account)? {
                 return Err(anyhow::anyhow!("RSS accounts do not support folders"));
             }
-            let folder = canon_folder(&req_str(p, "folder")?);
-            let enabled = req_bool(p, "enabled")?;
+            let folder = canon_folder(&req_str(parameters, "folder")?);
+            let enabled = req_bool(parameters, "enabled")?;
             let folders = {
                 let db = engine.db.lock().unwrap();
                 if !store::set_folder_notify(&db, &account, &folder, enabled)? {
@@ -106,11 +114,13 @@ pub(crate) async fn dispatch(
         // forget the whole subtree's cache. Unrecoverable, so the special-use
         // gate is re-checked here rather than trusted from the caller.
         "folders.delete" => {
-            let account = req_str(p, "account")?;
+            let account = req_str(parameters, "account")?;
             if is_rss(engine, &account)? {
                 return Err(anyhow::anyhow!("RSS accounts do not support folders"));
             }
-            let folder = canon_folder(&req_str(p, "folder").or_else(|_| req_str(p, "name"))?);
+            let folder = canon_folder(
+                &req_str(parameters, "folder").or_else(|_| req_str(parameters, "name"))?,
+            );
             let targets = {
                 let db = engine.db.lock().unwrap();
                 mail_model::check_folder_deletable(&db, &account, &folder)
@@ -175,12 +185,12 @@ pub(crate) async fn dispatch(
         // is the folder's new full path as the user reads it. Special-use
         // folders are refused here rather than trusted from the caller.
         "folders.rename" => {
-            let account = req_str(p, "account")?;
+            let account = req_str(parameters, "account")?;
             if is_rss(engine, &account)? {
                 return Err(anyhow::anyhow!("RSS accounts do not support folders"));
             }
-            let folder = canon_folder(&req_str(p, "folder")?);
-            let display_name = req_str(p, "name")?.trim().to_string();
+            let folder = canon_folder(&req_str(parameters, "folder")?);
+            let display_name = req_str(parameters, "name")?.trim().to_string();
             if display_name.is_empty() {
                 return Err(anyhow::anyhow!("Folder name is required"));
             }
@@ -256,7 +266,7 @@ pub(crate) async fn dispatch(
         }
 
         "folders.archive" => {
-            let account = req_str(p, "account")?;
+            let account = req_str(parameters, "account")?;
             // The saved folder list answers without a server round trip (a
             // whole LIST, once per archived conversation). Only an account it
             // names no archive mailbox for still asks the server.
@@ -278,7 +288,7 @@ pub(crate) async fn dispatch(
             match archive {
                 Some(folder) => Ok(json!({ "folder": folder })),
                 // The caller archives Meron-only then (`allow_missing`).
-                None if p
+                None if parameters
                     .get("allow_missing")
                     .and_then(Value::as_bool)
                     .unwrap_or(false) =>
@@ -293,8 +303,8 @@ pub(crate) async fn dispatch(
         // store. Restricted to Trash and Junk: the operation is unrecoverable,
         // so an arbitrary folder must never reach it even if a caller asks.
         "messages.emptyFolder" => {
-            let account = req_str(p, "account")?;
-            let folder = canon_folder(&req_str(p, "folder")?);
+            let account = req_str(parameters, "account")?;
+            let folder = canon_folder(&req_str(parameters, "folder")?);
             let role = {
                 let db = engine.db.lock().unwrap();
                 store::folder_role(&db, &account, &folder)?

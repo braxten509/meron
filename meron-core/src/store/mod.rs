@@ -118,7 +118,7 @@ fn search_header_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<MessageHe
 
 /// Parse a cached `$.to` JSON array into recipients, tolerating null/garbage.
 fn parse_recipients_json(json: Option<String>) -> Vec<crate::imap::Recipient> {
-    json.and_then(|s| serde_json::from_str::<Vec<crate::imap::Recipient>>(&s).ok())
+    json.and_then(|text| serde_json::from_str::<Vec<crate::imap::Recipient>>(&text).ok())
         .unwrap_or_default()
 }
 

@@ -32,8 +32,8 @@ fn classify(err: &::tinfoil::Error) -> AiError {
 }
 
 /// Whether `err` means the verified client should be checked again.
-pub fn needs_reverify(err: &AiError) -> bool {
-    err.kind == ErrorKind::Verify
+pub fn needs_reverify(error: &AiError) -> bool {
+    error.kind == ErrorKind::Verify
 }
 
 /// A client for `key`, after verifying the enclave.
@@ -45,10 +45,10 @@ pub async fn connect(key: &str) -> Result<::tinfoil::Client, AiError> {
     .await
     {
         Ok(Ok(client)) => Ok(client),
-        Ok(Err(err)) => {
-            let mut out = classify(&err);
+        Ok(Err(error)) => {
+            let mut out = classify(&error);
             // Not reaching the attestation documents is not a failed check.
-            if err.is_fetch() {
+            if error.is_fetch() {
                 out = AiError::network("Couldn't reach Tinfoil to check it.");
             }
             Err(out)
@@ -106,7 +106,7 @@ fn model_of(item: &Value) -> Option<Model> {
 
 /// The chat models, cheapest first, read through the verified client.
 pub async fn models(client: &::tinfoil::Client) -> Result<Vec<Model>, AiError> {
-    let http = client.http_client().map_err(|err| classify(&err))?;
+    let http = client.http_client().map_err(|error| classify(&error))?;
     let url = format!("{}/v1/models", client.secure_client().base_url());
     let response = http
         .get(&url)

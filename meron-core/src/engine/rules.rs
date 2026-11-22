@@ -1,4 +1,6 @@
-//! The server half of rules: reading, starring and moving what a sync matched.
+//! Runs mail rules and delivers the work they queue on the server.
+//! SQLite keeps the pending actions while the engine executes their IMAP batches.
+//! Progress events let the hosts report an existing-mail rule run.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
@@ -440,7 +442,7 @@ async fn copy_batch(
         // Each on its own: a bad destination mustn't cost the good ones the mail.
         match copy_rule_mail(engine, account, folder, copy, &uids).await {
             Ok(missing) => gone.extend(missing),
-            Err(err) => failure = Some(err),
+            Err(error) => failure = Some(error),
         }
     }
     let finished: Vec<u32> = gone.iter().copied().collect();

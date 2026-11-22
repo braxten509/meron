@@ -56,8 +56,8 @@ impl std::error::Error for OAuthGrantRejected {}
 
 /// Whether a failed [`refresh_oauth_token`] means the grant itself is dead
 /// rather than the request having failed in transit or on the server's side.
-pub fn oauth_grant_rejected(err: &anyhow::Error) -> bool {
-    err.chain().any(|cause| cause.is::<OAuthGrantRejected>())
+pub fn oauth_grant_rejected(error: &anyhow::Error) -> bool {
+    error.chain().any(|cause| cause.is::<OAuthGrantRejected>())
 }
 
 /// The error for a non-2xx token response. Only a body whose own `error` field
@@ -98,7 +98,7 @@ pub async fn refresh_oauth_token(
     let client_id = client_id.to_string();
     let client_secret = client_secret.to_string();
     let refresh_token = refresh_token.to_string();
-    let scope = scope.map(|s| s.to_string());
+    let scope = scope.map(|scope_value| scope_value.to_string());
 
     let parsed = tokio::task::spawn_blocking(move || -> Result<TokenResponse> {
         let mut form: Vec<(&str, &str)> = vec![

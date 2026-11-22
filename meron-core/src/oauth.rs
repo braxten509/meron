@@ -96,7 +96,7 @@ pub fn authorize_url(
         "outlook" => (OUTLOOK_AUTHORIZE_URL, outlook_scopes.as_str()),
         _ => return Err("unsupported oauth provider".to_string()),
     };
-    let mut url = url::Url::parse(base).map_err(|err| err.to_string())?;
+    let mut url = url::Url::parse(base).map_err(|error| error.to_string())?;
     {
         let mut query = url.query_pairs_mut();
         query
@@ -172,17 +172,17 @@ pub fn fetch_profile(client: &Client, tokens: &Tokens) -> Result<Profile, String
         .timeout_global(Some(Duration::from_secs(8)))
         .build()
         .call()
-        .map_err(|err| format!("Google userinfo request: {err:#}"))?;
+        .map_err(|error| format!("Google userinfo request: {error:#}"))?;
     let status = resp.status();
     let body = resp
         .body_mut()
         .read_to_string()
-        .map_err(|err| format!("read Google userinfo response: {err:#}"))?;
+        .map_err(|error| format!("read Google userinfo response: {error:#}"))?;
     if !status.is_success() {
         return Err(format!("Google userinfo failed ({status}): {body}"));
     }
     let info: UserInfo = serde_json::from_str(&body)
-        .map_err(|err| format!("parse Google userinfo response: {err}"))?;
+        .map_err(|error| format!("parse Google userinfo response: {error}"))?;
     let trimmed = |value: Option<String>| value.unwrap_or_default().trim().to_string();
     Ok(Profile {
         email: trimmed(info.email),
@@ -271,7 +271,7 @@ pub fn parse_id_token_claims(id_token: &str) -> (String, String) {
 }
 
 fn agent() -> Result<ureq::Agent, String> {
-    crate::proxy::agent().map_err(|err| format!("oauth proxy: {err:#}"))
+    crate::proxy::agent().map_err(|error| format!("oauth proxy: {error:#}"))
 }
 
 fn post_token(url: &str, form: Vec<(&str, &str)>, what: &str) -> Result<Tokens, String> {
@@ -282,16 +282,16 @@ fn post_token(url: &str, form: Vec<(&str, &str)>, what: &str) -> Result<Tokens, 
         .timeout_global(Some(Duration::from_secs(15)))
         .build()
         .send_form(form)
-        .map_err(|err| format!("{what} request: {err:#}"))?;
+        .map_err(|error| format!("{what} request: {error:#}"))?;
     let status = resp.status();
     let body = resp
         .body_mut()
         .read_to_string()
-        .map_err(|err| format!("read {what} response: {err:#}"))?;
+        .map_err(|error| format!("read {what} response: {error:#}"))?;
     if !status.is_success() {
         return Err(format!("{what} failed ({status}): {body}"));
     }
-    serde_json::from_str(&body).map_err(|err| format!("parse {what} response: {err}"))
+    serde_json::from_str(&body).map_err(|error| format!("parse {what} response: {error}"))
 }
 
 fn download_photo(url: &str, bearer: Option<&str>) -> Result<Photo, String> {
@@ -299,29 +299,29 @@ fn download_photo(url: &str, bearer: Option<&str>) -> Result<Photo, String> {
     if let Some(token) = bearer {
         request = request.header("Authorization", &format!("Bearer {token}"));
     }
-    let mut resp = request
+    let mut response = request
         .config()
         .http_status_as_error(false)
         .timeout_global(Some(Duration::from_secs(10)))
         .build()
         .call()
-        .map_err(|err| format!("photo request: {err:#}"))?;
-    if !resp.status().is_success() {
-        return Err(format!("photo request failed ({})", resp.status()));
+        .map_err(|error| format!("photo request: {error:#}"))?;
+    if !response.status().is_success() {
+        return Err(format!("photo request failed ({})", response.status()));
     }
-    let mime = resp
+    let mime = response
         .headers()
         .get("content-type")
         .and_then(|value| value.to_str().ok())
         .unwrap_or("")
         .to_lowercase();
     let ext = crate::protocol::media_extension("", mime.split(';').next().unwrap_or("").trim())?;
-    let bytes = resp
+    let bytes = response
         .body_mut()
         .with_config()
         .limit(PHOTO_MAX_BYTES)
         .read_to_vec()
-        .map_err(|err| format!("read photo: {err:#}"))?;
+        .map_err(|error| format!("read photo: {error:#}"))?;
     if bytes.is_empty() {
         return Err("photo is empty".to_string());
     }

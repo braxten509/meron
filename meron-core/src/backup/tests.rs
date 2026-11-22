@@ -18,7 +18,7 @@ fn no_secrets(_: &str) -> Secrets {
 
 /// `BackupData` is deliberately not `Debug` (it can hold a password), so
 /// `unwrap_err` is unavailable — pull the message out by hand.
-fn parse_err(text: &str, passphrase: Option<&str>) -> String {
+fn parse_error(text: &str, passphrase: Option<&str>) -> String {
     match parse(text, passphrase) {
         Ok(_) => panic!("expected the backup to be rejected"),
         Err(err) => err.to_string(),
@@ -91,18 +91,6 @@ fn sample_config() -> Value {
         "proxy": { "mode": "socks5", "host": "127.0.0.1", "port": 1080, "username": "u", "password": "proxy-pass" },
     })
 }
-
-// ---- Round trip -------------------------------------------------------------
-
-// ---- Secrets and redaction --------------------------------------------------
-
-// ---- Passphrase failures ----------------------------------------------------
-
-// ---- Malformed input --------------------------------------------------------
-
-// ---- Apply semantics --------------------------------------------------------
-
-// ---- Pre-release `platform` map ---------------------------------------------
 
 mod envelope;
 mod export;

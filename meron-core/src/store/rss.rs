@@ -1,4 +1,6 @@
-//! RSS items stored in the shared messages table.
+//! Updates the stored identities, read flags and stars of feed items.
+//! The feed sync and reader paths use the same SQLite representation.
+//! Thread-level updates can target the newest item or the selected conversation.
 
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, params};

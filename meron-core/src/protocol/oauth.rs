@@ -1,8 +1,15 @@
+//! Handles OAuth account setup through the mobile protocol.
+//! Commands construct authorization URLs, exchange codes and update saved tokens.
+//! The resulting account carries the provider identity and its available avatar.
+
 use super::*;
 
 use crate::oauth;
 
-pub(crate) fn add_mobile_oauth_account(data_dir: &str, params: &Value) -> Result<Value, String> {
+pub(crate) fn add_mobile_oauth_account(
+    data_directory: &str,
+    params: &Value,
+) -> Result<Value, String> {
     let email = req_str(params, "email")?;
     if !email.contains('@') {
         return Err("invalid email".to_string());
@@ -93,7 +100,7 @@ pub(crate) fn add_mobile_oauth_account(data_dir: &str, params: &Value) -> Result
         display_name: opt_str(params, "display_name"),
         // An avatar already set, possibly chosen by the user, outlives a
         // reconnect: an empty one here keeps it.
-        avatar_url: if stored_avatar_url(data_dir, &id).is_empty() {
+        avatar_url: if stored_avatar_url(data_directory, &id).is_empty() {
             opt_str(params, "avatar_url")
         } else {
             String::new()
@@ -101,16 +108,16 @@ pub(crate) fn add_mobile_oauth_account(data_dir: &str, params: &Value) -> Result
         sender_name: opt_str(params, "sender_name"),
     };
 
-    let result = with_mobile_db(data_dir, |conn| {
-        store::upsert_account(&conn, &id, &meta, &creds).map_err(|err| err.to_string())?;
+    let result = with_mobile_db(data_directory, |conn| {
+        store::upsert_account(&conn, &id, &meta, &creds).map_err(|error| error.to_string())?;
         store_mobile_secret(&conn, &id, &creds)?;
         let mut account = store::list_accounts(&conn)
-            .map_err(|err| err.to_string())?
+            .map_err(|error| error.to_string())?
             .into_iter()
             .find(|account| account.get("id").and_then(Value::as_str) == Some(id.as_str()))
             .ok_or_else(|| "account not found after save".to_string())?;
-        if let Some(obj) = account.as_object_mut() {
-            obj.insert(
+        if let Some(object) = account.as_object_mut() {
+            object.insert(
                 "needs_reconnect".to_string(),
                 json!(account_needs_reconnect(&creds)),
             );
@@ -126,7 +133,10 @@ pub(crate) fn add_mobile_oauth_account(data_dir: &str, params: &Value) -> Result
 /// Used by Android Gmail (AccountManager), where the OS — not `meron-core` —
 /// holds the long-lived credential and mints short-lived access tokens. The
 /// platform calls this right before a sync to push the freshly minted token.
-pub(crate) fn update_mobile_oauth_token(data_dir: &str, params: &Value) -> Result<Value, String> {
+pub(crate) fn update_mobile_oauth_token(
+    data_directory: &str,
+    params: &Value,
+) -> Result<Value, String> {
     let id = req_account_id(params)?;
     let access_token = req_str(params, "access_token")?;
     if access_token.trim().is_empty() {
@@ -137,7 +147,7 @@ pub(crate) fn update_mobile_oauth_token(data_dir: &str, params: &Value) -> Resul
         .and_then(Value::as_i64)
         .unwrap_or_else(|| now_epoch_seconds() + 3600);
 
-    let result = with_mobile_db(data_dir, |conn| {
+    let result = with_mobile_db(data_directory, |conn| {
         let mut creds = load_mobile_account_creds(&conn, &id)?;
         if !creds.is_oauth() {
             return Err(format!("account is not oauth: {id}"));
@@ -149,15 +159,15 @@ pub(crate) fn update_mobile_oauth_token(data_dir: &str, params: &Value) -> Resul
         creds.refresh_token = None;
         creds.token_expires_at = token_expires_at;
         creds.rejected_grant = None;
-        store::save_account_config(&conn, &id, &creds).map_err(|err| err.to_string())?;
+        store::save_account_config(&conn, &id, &creds).map_err(|error| error.to_string())?;
         store_mobile_secret(&conn, &id, &creds)?;
         let mut account = store::list_accounts(&conn)
-            .map_err(|err| err.to_string())?
+            .map_err(|error| error.to_string())?
             .into_iter()
             .find(|account| account.get("id").and_then(Value::as_str) == Some(id.as_str()))
             .ok_or_else(|| "account not found after update".to_string())?;
-        if let Some(obj) = account.as_object_mut() {
-            obj.insert(
+        if let Some(object) = account.as_object_mut() {
+            object.insert(
                 "needs_reconnect".to_string(),
                 json!(account_needs_reconnect(&creds)),
             );
@@ -186,7 +196,10 @@ pub(crate) fn mobile_oauth_authorize_url(params: &Value) -> Result<Value, String
     Ok(json!({ "url": url }))
 }
 
-pub(crate) fn exchange_mobile_oauth_code(data_dir: &str, params: &Value) -> Result<Value, String> {
+pub(crate) fn exchange_mobile_oauth_code(
+    data_directory: &str,
+    params: &Value,
+) -> Result<Value, String> {
     let requested_email = opt_str(params, "email");
     let provider = req_str(params, "provider")?.to_lowercase();
     if provider != "gmail" && provider != "outlook" {
@@ -260,7 +273,8 @@ pub(crate) fn exchange_mobile_oauth_code(data_dir: &str, params: &Value) -> Resu
         obj.insert("sender_name".to_string(), Value::String(name));
     }
     let id = account_id(&email);
-    if opt_str(params, "avatar_url").is_empty() && stored_avatar_url(data_dir, &id).is_empty() {
+    if opt_str(params, "avatar_url").is_empty() && stored_avatar_url(data_directory, &id).is_empty()
+    {
         // The provider's photo, stored locally. Should the download fail,
         // Google's picture is still usable remotely; no photo leaves the initials.
         let avatar_url = oauth::fetch_photo(
@@ -270,7 +284,7 @@ pub(crate) fn exchange_mobile_oauth_code(data_dir: &str, params: &Value) -> Resu
             &profile.picture,
         )
         .and_then(|photo| {
-            store_mobile_account_media(data_dir, &id, "avatars", photo.ext, &photo.bytes)
+            store_mobile_account_media(data_directory, &id, "avatars", photo.ext, &photo.bytes)
         })
         .unwrap_or(profile.picture);
         if !avatar_url.is_empty() {
@@ -283,12 +297,12 @@ pub(crate) fn exchange_mobile_oauth_code(data_dir: &str, params: &Value) -> Resu
     );
     obj.insert("refresh_token".to_string(), Value::String(refresh_token));
     obj.insert("token_expires_at".to_string(), json!(token_expires_at));
-    add_mobile_oauth_account(data_dir, &add_params)
+    add_mobile_oauth_account(data_directory, &add_params)
 }
 
 /// The avatar an account already has, or "" for none (or no account yet).
-fn stored_avatar_url(data_dir: &str, id: &str) -> String {
-    with_mobile_db(data_dir, |conn| {
+fn stored_avatar_url(data_directory: &str, id: &str) -> String {
+    with_mobile_db(data_directory, |conn| {
         Ok(conn
             .query_row(
                 "SELECT avatar_url FROM accounts WHERE id = ?1",

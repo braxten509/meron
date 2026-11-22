@@ -1,3 +1,7 @@
+//! Reads and writes application settings in SQLite.
+//! Callers can retrieve selected keys or persist one value.
+//! Remote-image sender preferences are decoded from the same store.
+
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::json;

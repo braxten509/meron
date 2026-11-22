@@ -1,4 +1,6 @@
-//! Local flag, draft, move, and delete updates to cached mail.
+//! Applies local message and conversation flag changes.
+//! Updates resolve the selected UIDs and related starred or draft copies.
+//! Readers see the new state through the same cached headers.
 
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, params, params_from_iter};

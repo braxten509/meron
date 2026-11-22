@@ -1,3 +1,7 @@
+//! Routes desktop task requests to local task storage.
+//! The command parameters identify the task list, item and requested operation.
+//! The resulting JSON is shared with the desktop task view.
+
 use serde_json::{Value, json};
 use std::sync::Arc;
 
@@ -14,16 +18,16 @@ use crate::{Writer, emit};
 /// here goes to the blocking pool — there is no socket to wait on.
 pub(crate) async fn dispatch(
     engine: &Arc<Engine>,
-    req: &Request,
+    request: &Request,
     out: &Writer,
 ) -> anyhow::Result<Value> {
-    let p = &req.params;
-    let result = match req.method.as_str() {
+    let parameters = &request.params;
+    let result = match request.method.as_str() {
         "tasks.lists" => return tasks::lists_payload(&engine.db.lock().unwrap()),
 
         "tasks.items" => {
-            let list_id = req_str(p, "list_id")?;
-            let include_completed = p
+            let list_id = req_str(parameters, "list_id")?;
+            let include_completed = parameters
                 .get("include_completed")
                 .and_then(Value::as_bool)
                 .unwrap_or(false);
@@ -33,40 +37,43 @@ pub(crate) async fn dispatch(
         // Which tasks point at a thread, for the "already in Tasks" affordance
         // in the mail surfaces.
         "tasks.forThread" => {
-            let thread_id = req_str(p, "thread_id")?;
+            let thread_id = req_str(parameters, "thread_id")?;
             return tasks::thread_tasks_payload(&engine.db.lock().unwrap(), &thread_id);
         }
 
         "tasks.listCreate" => {
-            let title = req_str(p, "title").unwrap_or_default();
+            let title = req_str(parameters, "title").unwrap_or_default();
             tasks::create_list(&engine.db.lock().unwrap(), &title)?
         }
 
         "tasks.listRename" => {
-            let list_id = req_str(p, "list_id")?;
-            let title = req_str(p, "title")?;
+            let list_id = req_str(parameters, "list_id")?;
+            let title = req_str(parameters, "title")?;
             tasks::rename_list(&engine.db.lock().unwrap(), &list_id, &title)?
         }
 
         "tasks.listDelete" => {
-            let list_id = req_str(p, "list_id")?;
+            let list_id = req_str(parameters, "list_id")?;
             tasks::delete_list(&mut engine.db.lock().unwrap(), &list_id)?
         }
 
         "tasks.listReorder" => {
-            let list_ids = req_str_array(p, "list_ids")?;
+            let list_ids = req_str_array(parameters, "list_ids")?;
             tasks::reorder_lists(&mut engine.db.lock().unwrap(), &list_ids)?
         }
 
         "tasks.create" => {
-            let list_id = req_str(p, "list_id").unwrap_or_default();
-            let title = req_str(p, "title").unwrap_or_default();
-            let notes = req_str(p, "notes").unwrap_or_default();
-            let due_at = p.get("due_at").and_then(Value::as_i64).unwrap_or(0);
-            let account = req_str(p, "account").unwrap_or_default();
-            let thread_id = req_str(p, "thread_id").unwrap_or_default();
-            let message_id = req_str(p, "message_id").unwrap_or_default();
-            tasks::mutate_with_due_time(&engine.db.lock().unwrap(), p, |conn| {
+            let list_id = req_str(parameters, "list_id").unwrap_or_default();
+            let title = req_str(parameters, "title").unwrap_or_default();
+            let notes = req_str(parameters, "notes").unwrap_or_default();
+            let due_at = parameters
+                .get("due_at")
+                .and_then(Value::as_i64)
+                .unwrap_or(0);
+            let account = req_str(parameters, "account").unwrap_or_default();
+            let thread_id = req_str(parameters, "thread_id").unwrap_or_default();
+            let message_id = req_str(parameters, "message_id").unwrap_or_default();
+            tasks::mutate_with_due_time(&engine.db.lock().unwrap(), parameters, |conn| {
                 tasks::create_task(
                     conn,
                     &list_id,
@@ -83,41 +90,41 @@ pub(crate) async fn dispatch(
         // A patch: an absent field means "leave it alone", so the editor can
         // save a title without knowing the notes.
         "tasks.update" => {
-            let task_id = req_str(p, "task_id")?;
-            let title = p.get("title").and_then(Value::as_str);
-            let notes = p.get("notes").and_then(Value::as_str);
-            let due_at = p.get("due_at").and_then(Value::as_i64);
-            let list_id = p.get("list_id").and_then(Value::as_str);
-            tasks::mutate_with_due_time(&engine.db.lock().unwrap(), p, |conn| {
+            let task_id = req_str(parameters, "task_id")?;
+            let title = parameters.get("title").and_then(Value::as_str);
+            let notes = parameters.get("notes").and_then(Value::as_str);
+            let due_at = parameters.get("due_at").and_then(Value::as_i64);
+            let list_id = parameters.get("list_id").and_then(Value::as_str);
+            tasks::mutate_with_due_time(&engine.db.lock().unwrap(), parameters, |conn| {
                 tasks::update_task(conn, &task_id, title, notes, due_at, list_id)
             })?
         }
 
         "tasks.setDone" => {
-            let task_id = req_str(p, "task_id")?;
-            let done = req_bool(p, "done")?;
+            let task_id = req_str(parameters, "task_id")?;
+            let done = req_bool(parameters, "done")?;
             tasks::set_done(&engine.db.lock().unwrap(), &task_id, done)?
         }
 
         "tasks.delete" => {
-            let task_id = req_str(p, "task_id")?;
+            let task_id = req_str(parameters, "task_id")?;
             tasks::delete_task(&engine.db.lock().unwrap(), &task_id)?
         }
 
         "tasks.reorder" => {
-            let list_id = req_str(p, "list_id")?;
-            let task_ids = req_str_array(p, "task_ids")?;
+            let list_id = req_str(parameters, "list_id")?;
+            let task_ids = req_str_array(parameters, "task_ids")?;
             tasks::reorder_tasks(&mut engine.db.lock().unwrap(), &list_id, &task_ids)?
         }
 
         // Undo: hands back the `restore` blob a delete returned.
         "tasks.restore" => {
-            let payload = p.get("restore").cloned().unwrap_or(Value::Null);
+            let payload = parameters.get("restore").cloned().unwrap_or(Value::Null);
             tasks::restore(&engine.db.lock().unwrap(), &payload)?
         }
 
         "tasks.clearCompleted" => {
-            let list_id = req_str(p, "list_id")?;
+            let list_id = req_str(parameters, "list_id")?;
             tasks::clear_completed(&engine.db.lock().unwrap(), &list_id)?
         }
 
@@ -127,6 +134,6 @@ pub(crate) async fn dispatch(
     // Only mutations reach here. One event for all of them: a second surface
     // showing tasks (the thread pane's badge, another window) re-reads rather
     // than trying to replay the specific change.
-    emit(out, "tasks.changed", json!({ "method": req.method })).await;
+    emit(out, "tasks.changed", json!({ "method": request.method })).await;
     Ok(result)
 }

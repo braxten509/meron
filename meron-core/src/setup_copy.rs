@@ -167,8 +167,9 @@ fn fail(code: &'static str) -> anyhow::Error {
     anyhow::Error::new(Failure(code))
 }
 
-fn failure_code(err: &anyhow::Error) -> &'static str {
-    err.downcast_ref::<Failure>()
+fn failure_code(error: &anyhow::Error) -> &'static str {
+    error
+        .downcast_ref::<Failure>()
         .map_or("broken", |failure| failure.0)
 }
 
@@ -590,7 +591,7 @@ fn parse_target(params: &Value) -> Result<(Vec<Ipv4Addr>, u16, String)> {
 async fn join(engine: &Arc<Engine>, params: &Value, device: &str) -> Result<Value> {
     let (hosts, port, code) = match parse_target(params) {
         Ok(target) => target,
-        Err(err) => {
+        Err(error) => {
             let session = new_session(
                 engine,
                 false,
@@ -600,7 +601,7 @@ async fn join(engine: &Arc<Engine>, params: &Value, device: &str) -> Result<Valu
                     ..Default::default()
                 },
             );
-            session.fail(failure_code(&err));
+            session.fail(failure_code(&error));
             retire(&session);
             return Ok(status());
         }
@@ -628,15 +629,15 @@ async fn join(engine: &Arc<Engine>, params: &Value, device: &str) -> Result<Valu
         };
         let stream = match connected {
             Ok(stream) => stream,
-            Err(err) => {
-                session.fail(failure_code(&err));
+            Err(error) => {
+                session.fail(failure_code(&error));
                 retire(&session);
                 return;
             }
         };
         match tokio::time::timeout(HANDSHAKE_WAIT, guest_handshake(stream, &code)).await {
             Ok(Ok(channel)) => run(session.clone(), channel).await,
-            Ok(Err(err)) => session.fail(failure_code(&err)),
+            Ok(Err(error)) => session.fail(failure_code(&error)),
             Err(_) => session.fail("unreachable"),
         }
         retire(&session);
@@ -656,7 +657,9 @@ async fn connect_any(hosts: &[Ipv4Addr], port: u16) -> Result<TcpStream> {
         let addr = SocketAddr::from((*host, port));
         match tokio::time::timeout(CONNECT_WAIT, TcpStream::connect(addr)).await {
             Ok(Ok(stream)) => return Ok(stream),
-            Ok(Err(err)) if err.kind() == std::io::ErrorKind::ConnectionRefused => refused = true,
+            Ok(Err(error)) if error.kind() == std::io::ErrorKind::ConnectionRefused => {
+                refused = true
+            }
             _ => {}
         }
     }
@@ -924,9 +927,9 @@ async fn read_frame<R: AsyncRead + Unpin>(reader: &mut R, max: usize) -> Result<
     if len > max {
         return Err(fail("broken"));
     }
-    let mut buf = vec![0u8; len];
-    reader.read_exact(&mut buf).await?;
-    Ok(buf)
+    let mut buffer = vec![0u8; len];
+    reader.read_exact(&mut buffer).await?;
+    Ok(buffer)
 }
 
 async fn write_json<W: AsyncWrite + Unpin>(writer: &mut W, value: &Value) -> Result<()> {
@@ -968,11 +971,11 @@ impl Sealer {
 
     fn seal(&mut self, plain: &[u8]) -> Vec<u8> {
         let nonce = self.nonce();
-        let mut buf = plain.to_vec();
-        let _ = self
-            .key
-            .seal_in_place_append_tag(nonce, aead::Aad::from(b"meron-setup"), &mut buf);
-        buf
+        let mut buffer = plain.to_vec();
+        let _ =
+            self.key
+                .seal_in_place_append_tag(nonce, aead::Aad::from(b"meron-setup"), &mut buffer);
+        buffer
     }
 
     fn open(&mut self, mut sealed: Vec<u8>) -> Result<Vec<u8>> {

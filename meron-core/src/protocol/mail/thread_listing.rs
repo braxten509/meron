@@ -7,22 +7,26 @@ use super::*;
 
 /// Cached threads involving an exact address, across all accounts and folders.
 /// The store builds ordinary thread-list cards, including actionable identities.
-pub(crate) fn list_mobile_contact_threads(data_dir: &str, params: &Value) -> Result<Value, String> {
+pub(crate) fn list_mobile_contact_threads(
+    data_directory: &str,
+    params: &Value,
+) -> Result<Value, String> {
     let addr = req_str(params, "addr")?;
     if addr.trim().is_empty() {
         return Err("addr is required".to_string());
     }
     let limit = opt_u32(params, "limit").unwrap_or(50).clamp(1, 200) as usize;
     let cursor = params.get("before_cursor").and_then(Value::as_str);
-    with_mobile_db(data_dir, |conn| {
-        store::contact_thread_page(&conn, &addr, cursor, limit).map_err(|err| format!("{err:#}"))
+    with_mobile_db(data_directory, |conn| {
+        store::contact_thread_page(&conn, &addr, cursor, limit)
+            .map_err(|error| format!("{error:#}"))
     })
 }
 
-pub(crate) fn list_mobile_threads(data_dir: &str, params: &Value) -> Result<Value, String> {
+pub(crate) fn list_mobile_threads(data_directory: &str, params: &Value) -> Result<Value, String> {
     let account_id = req_str(params, "account_id")?;
     if account_id == "unified" {
-        return list_mobile_unified_threads(data_dir, params);
+        return list_mobile_unified_threads(data_directory, params);
     }
     // The attachments toggle narrows a page after it is read, so a page can come
     // back empty while older matches remain: read on through a few such pages
@@ -30,7 +34,7 @@ pub(crate) fn list_mobile_threads(data_dir: &str, params: &Value) -> Result<Valu
     let mut params = params.clone();
     let mut hops = 0;
     loop {
-        let page = list_mobile_account_threads(data_dir, &params, &account_id)?;
+        let page = list_mobile_account_threads(data_directory, &params, &account_id)?;
         let request = thread_list::ThreadListQuery::from_params(&params, "folder_id");
         match request.next_attachment_cursor(&page, hops) {
             Some(cursor) => {
@@ -44,7 +48,7 @@ pub(crate) fn list_mobile_threads(data_dir: &str, params: &Value) -> Result<Valu
 
 /// One page of a single account's mailbox view.
 fn list_mobile_account_threads(
-    data_dir: &str,
+    data_directory: &str,
     params: &Value,
     account_id: &str,
 ) -> Result<Value, String> {
@@ -57,19 +61,19 @@ fn list_mobile_account_threads(
         .and_then(Value::as_bool)
         .unwrap_or(false);
 
-    let is_rss = with_mobile_db(data_dir, |conn| {
+    let is_rss = with_mobile_db(data_directory, |conn| {
         Ok(json!(is_rss_account(&conn, &account_id)?))
     })?
     .as_bool()
     .unwrap_or(false);
     if is_rss {
-        return with_mobile_db(data_dir, |conn| {
+        return with_mobile_db(data_directory, |conn| {
             thread_list::rss_page(&conn, &account_id, &request).map_err(|err| format!("{err:#}"))
         });
     }
 
     // Sender mode: one row per correspondent, straight from the cache.
-    let sender_page = with_mobile_db(data_dir, |conn| {
+    let sender_page = with_mobile_db(data_directory, |conn| {
         if request
             .sender_grouping_in(&conn, &account_id)
             .map_err(|err| format!("{err:#}"))?
@@ -89,7 +93,7 @@ fn list_mobile_account_threads(
     let mut search_incomplete = false;
     let (messages, next_cursor) = match request.source() {
         thread_list::MailSource::Starred => get_cached_mobile_starred(
-            data_dir,
+            data_directory,
             &account_id,
             &folder_id,
             limit,
@@ -97,7 +101,7 @@ fn list_mobile_account_threads(
             request.before_folder.as_deref(),
         )?,
         thread_list::MailSource::Recent { filter } => get_cached_mobile_mail_page(
-            data_dir,
+            data_directory,
             &account_id,
             &folder_id,
             limit,
@@ -109,7 +113,8 @@ fn list_mobile_account_threads(
             // One folder list for both halves: the live search and the offline
             // fallback must cover the same mailboxes, or losing the network
             // would silently drop the Sent hits from the results.
-            let folders = mobile_search_folders(data_dir, &account_id, &folder_id, &request.query)?;
+            let folders =
+                mobile_search_folders(data_directory, &account_id, &folder_id, &request.query)?;
             // Mobile renders indexed local hits first, then repeats the first
             // page with refresh=true off the UI thread. Later pages are local
             // reads (the live snapshot, else cached keyset order), served
@@ -117,7 +122,7 @@ fn list_mobile_account_threads(
             // credentials — a paused account keeps paging its snapshot.
             if let Some(cursor) = request.search_before_cursor.as_ref() {
                 let page = match continue_mobile_search(
-                    data_dir,
+                    data_directory,
                     &account_id,
                     &folders,
                     &request.query,
@@ -130,7 +135,7 @@ fn list_mobile_account_threads(
                     // what is here and say the list is incomplete.
                     crate::engine::SearchContinuation::NeedsServer(partial) => {
                         search_live_mobile_mail_messages(
-                            data_dir,
+                            data_directory,
                             &account_id,
                             &folders,
                             &request.query,
@@ -144,7 +149,7 @@ fn list_mobile_account_threads(
                 (page.messages, page.next_cursor)
             } else if refresh {
                 match search_live_mobile_mail_messages(
-                    data_dir,
+                    data_directory,
                     &account_id,
                     &folders,
                     &request.query,
@@ -163,7 +168,7 @@ fn list_mobile_account_threads(
                         );
                         search_incomplete = true;
                         let messages = search_cached_mobile_mail_messages(
-                            data_dir,
+                            data_directory,
                             &account_id,
                             &folders,
                             &request.query,
@@ -175,7 +180,7 @@ fn list_mobile_account_threads(
                 }
             } else {
                 let messages = search_cached_mobile_mail_messages(
-                    data_dir,
+                    data_directory,
                     &account_id,
                     &folders,
                     &request.query,
@@ -186,7 +191,7 @@ fn list_mobile_account_threads(
             }
         }
     };
-    with_mobile_db(data_dir, |conn| {
+    with_mobile_db(data_directory, |conn| {
         let mut page = thread_list::mail_page(
             &conn,
             &account_id,
@@ -207,14 +212,14 @@ fn list_mobile_account_threads(
     })
 }
 
-fn list_mobile_unified_threads(data_dir: &str, params: &Value) -> Result<Value, String> {
+fn list_mobile_unified_threads(data_directory: &str, params: &Value) -> Result<Value, String> {
     let limit = thread_list::ThreadListQuery::from_params(params, "folder_id").limit;
     let account_cursors = params
         .get("before_cursor")
         .and_then(Value::as_str)
         .and_then(crate::unified::decode_cursor)
         .unwrap_or_default();
-    let accounts = with_mobile_db(data_dir, |conn| {
+    let accounts = with_mobile_db(data_directory, |conn| {
         let accounts = store::list_accounts(&conn).map_err(|err| err.to_string())?;
         Ok(json!(
             accounts
@@ -251,7 +256,7 @@ fn list_mobile_unified_threads(data_dir: &str, params: &Value) -> Result<Value, 
         .and_then(Value::as_str)
         .unwrap_or("inbox")
         .to_string();
-    let folders = with_mobile_db(data_dir, |conn| {
+    let folders = with_mobile_db(data_directory, |conn| {
         let mut resolved = Vec::new();
         for account_id in &accounts {
             match store::folder_for_role(&conn, account_id, &role) {
@@ -286,7 +291,7 @@ fn list_mobile_unified_threads(data_dir: &str, params: &Value) -> Result<Value, 
             }
         }
         object.insert("limit".to_string(), json!(from.fetch_limit(limit)));
-        let result = list_mobile_threads(data_dir, &account_params);
+        let result = list_mobile_threads(data_directory, &account_params);
         pages.push(crate::unified::AccountPage {
             account_id,
             from,
@@ -296,21 +301,21 @@ fn list_mobile_unified_threads(data_dir: &str, params: &Value) -> Result<Value, 
     Ok(crate::unified::merge_pages(pages, "threads", limit))
 }
 
-fn open_mobile_db(data_dir: &str) -> Result<rusqlite::Connection, String> {
-    let data_dir = data_dir.trim();
-    if data_dir.is_empty() {
+fn open_mobile_db(data_directory: &str) -> Result<rusqlite::Connection, String> {
+    let data_directory = data_directory.trim();
+    if data_directory.is_empty() {
         return Err("mobile core is not initialized".to_string());
     }
-    let db_path = Path::new(data_dir).join("meron.db");
+    let db_path = Path::new(data_directory).join("meron.db");
     match mobile_db_key() {
         Some(key) => store::open_at_keyed(&db_path, &key),
         None => store::open_at(&db_path),
     }
-    .map_err(|err| err.to_string())
+    .map_err(|error| error.to_string())
 }
 
 fn get_cached_mobile_mail_page(
-    data_dir: &str,
+    data_directory: &str,
     account_id: &str,
     folder_id: &str,
     limit: u32,
@@ -318,7 +323,7 @@ fn get_cached_mobile_mail_page(
     before_folder: Option<&str>,
     filter: store::RecentFilter,
 ) -> Result<(Vec<MessageHeader>, Option<String>), String> {
-    let conn = open_mobile_db(data_dir)?;
+    let conn = open_mobile_db(data_directory)?;
     store::get_recent_page_from(
         &conn,
         account_id,
@@ -328,20 +333,20 @@ fn get_cached_mobile_mail_page(
         before_folder,
         filter,
     )
-    .map_err(|err| err.to_string())
+    .map_err(|error| error.to_string())
 }
 
 /// The folder's starred mail, newest first and cursor paged; conversations in
 /// a Meron folder are left out before the LIMIT.
 fn get_cached_mobile_starred(
-    data_dir: &str,
+    data_directory: &str,
     account_id: &str,
     folder_id: &str,
     limit: u32,
     before_cursor: Option<(i64, u32)>,
     before_folder: Option<&str>,
 ) -> Result<(Vec<MessageHeader>, Option<String>), String> {
-    let conn = open_mobile_db(data_dir)?;
+    let conn = open_mobile_db(data_directory)?;
     store::get_starred_page_from(
         &conn,
         account_id,
@@ -350,57 +355,57 @@ fn get_cached_mobile_starred(
         before_cursor,
         before_folder,
     )
-    .map_err(|err| err.to_string())
+    .map_err(|error| error.to_string())
 }
 
 /// The mailboxes a mobile search covers: the open folder plus Sent, read from
 /// the local store so it works with or without a connection.
 fn mobile_search_folders(
-    data_dir: &str,
+    data_directory: &str,
     account_id: &str,
     folder_id: &str,
     query: &str,
 ) -> Result<Vec<String>, String> {
-    let conn = open_mobile_db(data_dir)?;
+    let conn = open_mobile_db(data_directory)?;
     Ok(crate::engine::query_folders(
         &conn, account_id, folder_id, query,
     ))
 }
 
 fn search_cached_mobile_mail_messages(
-    data_dir: &str,
+    data_directory: &str,
     account_id: &str,
     folders: &[String],
     query: &str,
     limit: u32,
 ) -> Result<Vec<MessageHeader>, String> {
-    let conn = open_mobile_db(data_dir)?;
+    let conn = open_mobile_db(data_directory)?;
     store::search_messages_in_folders(&conn, account_id, folders, query, limit, None)
-        .map_err(|err| err.to_string())
+        .map_err(|error| error.to_string())
 }
 
 fn continue_mobile_search(
-    data_dir: &str,
+    data_directory: &str,
     account_id: &str,
     folders: &[String],
     query: &str,
     limit: u32,
     cursor: &crate::thread_list::SearchCursor,
 ) -> Result<crate::engine::SearchContinuation, String> {
-    let conn = open_mobile_db(data_dir)?;
+    let conn = open_mobile_db(data_directory)?;
     crate::engine::continue_search_page(&conn, account_id, folders, query, limit, cursor)
-        .map_err(|err| format!("{err:#}"))
+        .map_err(|error| format!("{error:#}"))
 }
 
 fn search_live_mobile_mail_messages(
-    data_dir: &str,
+    data_directory: &str,
     account_id: &str,
     folders: &[String],
     query: &str,
     limit: u32,
     before_cursor: Option<&crate::thread_list::SearchCursor>,
 ) -> Result<crate::engine::SearchMailPage, String> {
-    let engine = crate::ffi::engine_for(data_dir)?;
+    let engine = crate::ffi::engine_for(data_directory)?;
     if engine.is_paused(account_id) {
         return Err(format!("account is paused: {account_id}"));
     }

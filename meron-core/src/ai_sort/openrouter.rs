@@ -17,7 +17,7 @@ fn agent() -> Result<ureq::Agent, AiError> {
 fn read(
     response: Result<ureq::http::Response<ureq::Body>, ureq::Error>,
 ) -> Result<(u16, Option<String>, String), AiError> {
-    let mut response = response.map_err(|err| match err {
+    let mut response = response.map_err(|error| match error {
         ureq::Error::Timeout(_) => AiError::network("The AI service didn't answer in time."),
         _ => AiError::network("Couldn't reach the AI service."),
     })?;
@@ -36,13 +36,13 @@ fn read(
 
 /// The body is not read: only the status decides, and the text stays local.
 fn http_error(status: u16, retry_after: Option<String>, _body: &str) -> AiError {
-    let mut err = AiError::from_status(status);
+    let mut error = AiError::from_status(status);
     // 403: moderation or a key that may not do this. Neither gets better by asking again.
     if status == 403 {
-        err.retry = false;
+        error.retry = false;
     }
-    err.retry_after = super::parse_retry_after(retry_after.as_deref());
-    err
+    error.retry_after = super::parse_retry_after(retry_after.as_deref());
+    error
 }
 
 /// A 200 that carries an `error` object instead of an answer.
@@ -113,17 +113,17 @@ pub fn decide(key: &str, body: Value) -> Result<Value, AiError> {
         .send(body.to_string());
     let (status, retry_after, text) = read(response)?;
     if !(200..300).contains(&status) {
-        let mut err = http_error(status, retry_after, &text);
+        let mut error = http_error(status, retry_after, &text);
         if status == 403 {
-            err.kind = ErrorKind::Key;
-            err.message = super::kind_message(ErrorKind::Key).to_string();
+            error.kind = ErrorKind::Key;
+            error.message = super::kind_message(ErrorKind::Key).to_string();
         }
-        return Err(err);
+        return Err(error);
     }
     let value: Value = serde_json::from_str(&text)
         .map_err(|_| AiError::network("The AI service's answer wasn't readable."))?;
-    if let Some(err) = body_error(&value) {
-        return Err(err);
+    if let Some(error) = body_error(&value) {
+        return Err(error);
     }
     Ok(value)
 }

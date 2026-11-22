@@ -5,13 +5,13 @@
 
 use super::*;
 
-pub(crate) fn read_mobile_thread(data_dir: &str, params: &Value) -> Result<Value, String> {
+pub(crate) fn read_mobile_thread(data_directory: &str, params: &Value) -> Result<Value, String> {
     let thread_id = req_str(params, "thread_id")?;
     if is_rss_thread_id(&thread_id) {
-        return read_mobile_rss_thread(data_dir, params);
+        return read_mobile_rss_thread(data_directory, params);
     }
     let parsed = parse_thread_id(&thread_id).ok_or_else(|| "invalid thread_id".to_string())?;
-    let engine = crate::ffi::engine_for(data_dir)?;
+    let engine = crate::ffi::engine_for(data_directory)?;
     // Mobile sync stores headers only, so opening a thread routinely finds
     // uncached bodies; the shared reader pulls the newest one inline and fills
     // the rest in the background. `mail.tailSynced` is the body-only refresh
@@ -50,18 +50,21 @@ pub(crate) fn read_mobile_thread(data_dir: &str, params: &Value) -> Result<Value
                 .and_then(Value::as_bool)
                 .unwrap_or(false),
             before_cursor: before_cursor.as_deref(),
-            media_root: std::path::PathBuf::from(data_dir).join("attachments"),
+            media_root: std::path::PathBuf::from(data_directory).join("attachments"),
         },
         Some(on_bodies_fetched),
     ))
 }
 
-pub(crate) fn list_mobile_starred_items(data_dir: &str, params: &Value) -> Result<Value, String> {
+pub(crate) fn list_mobile_starred_items(
+    data_directory: &str,
+    params: &Value,
+) -> Result<Value, String> {
     let limit = opt_u32(params, "limit").unwrap_or(200);
-    with_mobile_db(data_dir, |conn| {
+    with_mobile_db(data_directory, |conn| {
         let mut items = crate::mail_model::starred_thread_cards(&conn, 2_000)
-            .map_err(|err| format!("{err:#}"))?;
-        items.extend(rss::starred_items(&conn, 2_000).map_err(|err| format!("{err:#}"))?);
+            .map_err(|error| format!("{error:#}"))?;
+        items.extend(rss::starred_items(&conn, 2_000).map_err(|error| format!("{error:#}"))?);
         Ok(crate::mail_model::starred_page(
             items,
             params
@@ -115,8 +118,8 @@ pub fn messages_still_unread(conn: &rusqlite::Connection, params: &Value) -> Res
             .iter()
             .map(|(folder, message)| (canon_folder(folder), message.to_string()))
             .collect();
-        let flags =
-            store::messages_still_unread(conn, account, &lookups).map_err(|err| err.to_string())?;
+        let flags = store::messages_still_unread(conn, account, &lookups)
+            .map_err(|error| error.to_string())?;
         unread.extend(messages.iter().zip(flags).filter(|(_, unread)| *unread).map(
             |((folder, message), _)| {
                 json!({ "account_id": account, "folder_id": folder, "message_id": message })
@@ -127,8 +130,8 @@ pub fn messages_still_unread(conn: &rusqlite::Connection, params: &Value) -> Res
 }
 
 pub(crate) fn mobile_messages_still_unread(
-    data_dir: &str,
+    data_directory: &str,
     params: &Value,
 ) -> Result<Value, String> {
-    with_mobile_db(data_dir, |conn| messages_still_unread(&conn, params))
+    with_mobile_db(data_directory, |conn| messages_still_unread(&conn, params))
 }

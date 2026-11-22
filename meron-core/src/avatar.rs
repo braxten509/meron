@@ -1,5 +1,7 @@
-//! Sender image policy shared by desktop and mobile. Call only when sender images
-//! are enabled. Network work is blocking and must run off the UI/async executor.
+//! Resolves a cached avatar or downloads an image for a sender.
+//! Address and domain candidates determine which image sources are tried.
+//! Successful lookups can be reused when rendering the same correspondent.
+
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -119,9 +121,9 @@ fn resolve_sender_with(
     let gravatar = fetch(&format!(
         "https://www.gravatar.com/avatar/{hash}?s={size}&d=404"
     ));
-    if let Ok(Some(src)) = gravatar {
+    if let Ok(Some(source)) = gravatar {
         return Ok(SenderImage {
-            src,
+            src: source,
             kind: "gravatar",
         });
     }
@@ -165,9 +167,9 @@ fn resolve_favicon_with(
     let mut transient_failure = false;
     for candidate in favicon_domains(domain) {
         match fetch(&format!("https://icons.duckduckgo.com/ip3/{candidate}.ico")) {
-            Ok(Some(src)) => {
+            Ok(Some(source)) => {
                 return Ok(SenderImage {
-                    src,
+                    src: source,
                     kind: "favicon",
                 });
             }
@@ -370,9 +372,9 @@ mod tests {
         let bitmap = image::DynamicImage::new_rgba8(16, 16);
         let mut ico = std::io::Cursor::new(Vec::new());
         bitmap.write_to(&mut ico, image::ImageFormat::Ico).unwrap();
-        let src = image_data_url(200, &ico.into_inner()).unwrap();
-        assert!(src.starts_with("data:image/png;base64,"));
-        let png = STANDARD.decode(src.split_once(',').unwrap().1).unwrap();
+        let source = image_data_url(200, &ico.into_inner()).unwrap();
+        assert!(source.starts_with("data:image/png;base64,"));
+        let png = STANDARD.decode(source.split_once(',').unwrap().1).unwrap();
         assert!(image::load_from_memory(&png).is_ok());
     }
 

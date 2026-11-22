@@ -1,3 +1,7 @@
+//! Handles changes to the desktop's mailbox watch interests.
+//! The caller supplies the account and folder for the requested watch operation.
+//! The sidecar coordinates that interest with the running mail engine.
+
 use serde_json::{Value, json};
 use std::sync::Arc;
 
@@ -13,18 +17,19 @@ use crate::sidecar::params::*;
 /// Handle IMAP IDLE watches and system resume.
 pub(crate) async fn dispatch(
     engine: &Arc<Engine>,
-    req: &Request,
+    request: &Request,
     out: &Writer,
 ) -> anyhow::Result<Value> {
-    let p = &req.params;
-    match req.method.as_str() {
+    let parameters = &request.params;
+    match request.method.as_str() {
         // Start watching one account folder over IMAP IDLE. IMAP IDLE is per
         // selected mailbox, so kanban starts visible non-INBOX folders here while
         // account startup keeps INBOX watched.
         "watch.start" => {
-            let account = req_str(p, "account")?;
-            let folder =
-                canon_folder(&req_str(p, "folder").unwrap_or_else(|_| "INBOX".to_string()));
+            let account = req_str(parameters, "account")?;
+            let folder = canon_folder(
+                &req_str(parameters, "folder").unwrap_or_else(|_| "INBOX".to_string()),
+            );
             if engine.is_paused(&account) {
                 return Ok(json!({ "ok": true, "paused": true }));
             }
@@ -34,9 +39,10 @@ pub(crate) async fn dispatch(
         }
 
         "watch.stop" => {
-            let account = req_str(p, "account")?;
-            let folder =
-                canon_folder(&req_str(p, "folder").unwrap_or_else(|_| "INBOX".to_string()));
+            let account = req_str(parameters, "account")?;
+            let folder = canon_folder(
+                &req_str(parameters, "folder").unwrap_or_else(|_| "INBOX".to_string()),
+            );
             set_view_watch(&account, &folder, false);
             // A view (a kanban column) letting go of an opted-in folder that
             // holds an IDLE slot must not end its watch; `folders.setNotify`

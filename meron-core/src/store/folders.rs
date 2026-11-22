@@ -1,4 +1,6 @@
-//! Mail folders: the folder list, special-use roles, and per-folder sync state.
+//! Maintains the local record of mailboxes and their hierarchy.
+//! Synchronization upserts discovered folders and reconciles renames and deletions.
+//! Related rows move with a mailbox when its stored path changes.
 
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, params};

@@ -1,3 +1,13 @@
+//! Persists account settings and reconstructs the credentials used by the engine.
+//! Account updates and preference reads operate on the shared SQLite database.
+//! Sender identity is resolved separately for message display and composition.
+
+mod senders;
+pub use senders::{
+    account_aliases, account_message_is_outgoing, all_self_addrs, apply_card_identity, is_outgoing,
+    resolve_send_from, self_addrs,
+};
+
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
@@ -464,281 +474,6 @@ pub fn set_account_aliases(conn: &Connection, id: &str, aliases: &[Alias]) -> Re
     Ok(())
 }
 
-/// An account's configured send-as aliases, for validating/labelling an outgoing
-/// From against addresses the user actually owns.
-pub fn account_aliases(conn: &Connection, id: &str) -> Result<Vec<Alias>> {
-    let prefs: Option<String> = conn
-        .query_row(
-            "SELECT prefs FROM accounts WHERE id = ?1",
-            params![id],
-            |r| r.get(0),
-        )
-        .optional()?;
-    Ok(match prefs {
-        Some(prefs) => AccountPrefs::parse(&prefs).aliases(),
-        None => Vec::new(),
-    })
-}
-
-/// Resolve the `From` address and display name for an outgoing message, shared by desktop and mobile so both honor the same send-as rules.
-///
-/// An account may send as its own address, as the mailbox login, or as any configured alias; an
-/// empty request means "the account's own address". The account address and the login are separate
-/// fields (a custom IMAP account carries both, and they differ whenever the server authenticates by
-/// user name), so both count as identities the user owns.
-///
-/// An address that is none of those is an error rather than a silent substitution: quietly
-/// rewriting the sender is how a message goes out as the wrong identity without anyone noticing.
-///
-/// Note that a provider can still override the `From` we transmit — Gmail rewrites it to the
-/// authenticated address unless the alias is verified in its own settings — which is outside what
-/// this can enforce.
-pub fn resolve_send_from(
-    conn: &Connection,
-    id: &str,
-    login_user: &str,
-    requested_from: &str,
-) -> Result<(String, String)> {
-    let (email, sender_name) = conn
-        .query_row(
-            "SELECT email, sender_name FROM accounts WHERE id = ?1",
-            params![id],
-            |row| {
-                Ok((
-                    row.get::<_, Option<String>>(0)?.unwrap_or_default(),
-                    row.get::<_, Option<String>>(1)?.unwrap_or_default(),
-                ))
-            },
-        )
-        .optional()?
-        .unwrap_or_default();
-
-    let login = login_user.trim();
-    // Mirrors `account.list`, which falls back to the login when the account
-    // was stored without an explicit address.
-    let primary = if email.trim().is_empty() {
-        login
-    } else {
-        email.trim()
-    };
-
-    let requested = requested_from.trim().to_lowercase();
-    if requested.is_empty() || requested == primary.to_lowercase() {
-        return Ok((primary.to_string(), sender_name));
-    }
-    if requested == login.to_lowercase() {
-        return Ok((login.to_string(), sender_name));
-    }
-    match account_aliases(conn, id)?
-        .into_iter()
-        .find(|alias| alias.email.trim().to_lowercase() == requested)
-    {
-        Some(alias) => {
-            let name = if alias.name.trim().is_empty() {
-                sender_name
-            } else {
-                alias.name
-            };
-            Ok((alias.email.trim().to_string(), name))
-        }
-        None => Err(anyhow::anyhow!(
-            "{} is not an address this account can send from",
-            requested_from.trim()
-        )),
-    }
-}
-
-/// The account's own email addresses (primary + send-as aliases), lowercased, for
-/// detecting which cached messages were sent *by* this account.
-pub fn self_addrs(conn: &Connection, id: &str) -> std::collections::HashSet<String> {
-    let mut addrs = std::collections::HashSet::new();
-    if let Ok(Some(email)) = conn
-        .query_row(
-            "SELECT email FROM accounts WHERE id = ?1",
-            params![id],
-            |r| r.get::<_, Option<String>>(0),
-        )
-        .optional()
-        .map(Option::flatten)
-    {
-        let email = email.trim().to_lowercase();
-        if !email.is_empty() {
-            addrs.insert(email);
-        }
-    }
-    for alias in account_aliases(conn, id).unwrap_or_default() {
-        let email = alias.email.trim().to_lowercase();
-        if !email.is_empty() {
-            addrs.insert(email);
-        }
-    }
-    addrs
-}
-
-/// Every address the user owns, across all accounts (primary + send-as aliases),
-/// lowercased. A reply excludes all of them rather than only the replying
-/// account's: mail addressed to two of the user's own addresses should not come
-/// back to either of them.
-pub fn all_self_addrs(conn: &Connection) -> std::collections::HashSet<String> {
-    let mut addrs = std::collections::HashSet::new();
-    let Ok(mut stmt) = conn.prepare("SELECT email, prefs FROM accounts") else {
-        return addrs;
-    };
-    let Ok(rows) = stmt.query_map([], |row| {
-        Ok((
-            row.get::<_, Option<String>>(0)?,
-            row.get::<_, Option<String>>(1)?,
-        ))
-    }) else {
-        return addrs;
-    };
-    for row in rows.flatten() {
-        let (email, prefs) = row;
-        let mut candidates = vec![email.unwrap_or_default()];
-        if let Some(prefs) = prefs {
-            candidates.extend(
-                AccountPrefs::parse(&prefs)
-                    .aliases()
-                    .into_iter()
-                    .map(|alias| alias.email),
-            );
-        }
-        for candidate in candidates {
-            let email = candidate.trim().to_lowercase();
-            if !email.is_empty() {
-                addrs.insert(email);
-            }
-        }
-    }
-    addrs
-}
-
-/// Whether a cached message is one this account sent: it lives in a Sent mailbox
-/// — a copy filed there is outbound by definition, even when it was sent from an
-/// alias meron doesn't know about (e.g. a webmail send-as) — or its From is one
-/// of the account's own addresses (primary or configured send-as alias).
-///
-/// The address match alone can't settle direction: a shared address configured
-/// here as an alias is also used by colleagues, whose mail then looks like ours.
-/// `delivered` (see [`crate::parse::Message::delivered`]) is the veto — a copy
-/// carrying delivery headers was received, not written here — and unlike the
-/// mailbox it sits in, it stays true after the message is archived or moved.
-/// Pass false when the body isn't cached and the headers are unknown.
-///
-/// `mine` comes from [`self_addrs`]; `folder` is the message's source mailbox.
-pub fn is_outgoing(
-    mine: &std::collections::HashSet<String>,
-    folder: &str,
-    from_addr: &str,
-    delivered: bool,
-) -> bool {
-    if crate::imap::looks_like_sent(folder) {
-        return true;
-    }
-    is_outgoing_by_sender(mine, from_addr, delivered)
-}
-
-/// [`is_outgoing`] for a message of `account`. A local folder's name is the
-/// user's own choice, not a server's Sent mailbox, so there only the sender
-/// and delivery headers decide.
-pub fn account_message_is_outgoing(
-    account: &str,
-    mine: &std::collections::HashSet<String>,
-    folder: &str,
-    from_addr: &str,
-    delivered: bool,
-) -> bool {
-    if super::is_local_account(account) {
-        return is_outgoing_by_sender(mine, from_addr, delivered);
-    }
-    is_outgoing(mine, folder, from_addr, delivered)
-}
-
-fn is_outgoing_by_sender(
-    mine: &std::collections::HashSet<String>,
-    from_addr: &str,
-    delivered: bool,
-) -> bool {
-    if delivered {
-        return false;
-    }
-    let from = from_addr.trim().to_lowercase();
-    !from.is_empty() && mine.contains(&from)
-}
-
-/// Rewrite the thread-card identity to show *the other party*: for messages this
-/// account sent (see [`is_outgoing`]), replace `from_name`/`from_addr` with the
-/// first recipient and record the count of additional recipients in
-/// `recipient_overflow`. Inbound messages — and outbound ones with no usable
-/// recipient (e.g. Bcc-only) — are left untouched. Display-only; these headers feed
-/// the thread list, not the real message envelope. `folder` is the mailbox the
-/// list was read from, used when a row doesn't carry its own source folder.
-///
-/// Junk display names (empty, or containing the address itself — some bots send
-/// `From: "addr addr" <addr>`, and replies copy that into `To:`) are replaced by
-/// the best name seen for that address anywhere in the cache, so the same thread
-/// shows the same correspondent name in every folder.
-pub fn apply_card_identity(
-    conn: &Connection,
-    account: &str,
-    folder: &str,
-    headers: &mut [MessageHeader],
-) {
-    let mine = self_addrs(conn, account);
-    let mut name_cache: std::collections::HashMap<String, Option<String>> =
-        std::collections::HashMap::new();
-    for header in headers {
-        let source_folder = if header.folder.is_empty() {
-            folder
-        } else {
-            header.folder.as_str()
-        };
-        // Envelope headers carry no delivery headers, so the thread card keeps
-        // the address match; the reader and reply paths read the cached body.
-        if account_message_is_outgoing(account, &mine, source_folder, &header.from_addr, false)
-            && let Some(first) = header.to.first().cloned()
-        {
-            header.recipient_overflow = (header.to.len() - 1) as u32;
-            header.from_name = first.name;
-            header.from_addr = first.addr;
-        }
-        let addr = header.from_addr.trim().to_lowercase();
-        if addr.is_empty() || !is_junk_display_name(&header.from_name, &addr) {
-            continue;
-        }
-        let resolved = name_cache
-            .entry(addr.clone())
-            .or_insert_with(|| known_display_name(conn, account, &addr));
-        // No better name anywhere: clear the junk so the UI falls back to the
-        // address local part rather than showing "addr addr".
-        header.from_name = resolved.clone().unwrap_or_default();
-    }
-}
-
-/// A display name that adds no information over the address: empty, or one that
-/// embeds the address itself (`"addr"`, `"addr addr"`).
-fn is_junk_display_name(name: &str, addr_lower: &str) -> bool {
-    let name = name.trim().to_lowercase();
-    name.is_empty() || name.contains(addr_lower)
-}
-
-/// Best human display name seen for `addr` across the account's cached messages:
-/// the most recent non-empty sender name that isn't itself junk.
-fn known_display_name(conn: &Connection, account: &str, addr_lower: &str) -> Option<String> {
-    conn.query_row(
-        "SELECT from_name FROM messages
-         WHERE account = ?1 AND lower(from_addr) = ?2
-           AND TRIM(COALESCE(from_name, '')) <> ''
-           AND instr(lower(from_name), ?2) = 0
-         ORDER BY id DESC LIMIT 1",
-        params![account, addr_lower],
-        |row| row.get::<_, String>(0),
-    )
-    .optional()
-    .ok()
-    .flatten()
-}
-
 /// Legacy no-op kept for the keychain-migration path: there are no plaintext
 /// secret columns in the unified schema, so there is nothing to scrub.
 pub fn scrub_account_secrets(_conn: &Connection, _id: &str) -> Result<()> {
@@ -918,15 +653,15 @@ pub fn list_accounts(conn: &Connection) -> Result<Vec<serde_json::Value>> {
         ) = row?;
         // Defaults resolved here (by engine) until the user sets an explicit value:
         // RSS images are content (on), email images are a tracking vector (off).
-        let p = AccountPrefs::parse(&prefs);
-        let load_remote_images = p.images_enabled(&engine);
-        let included_in_unified = p.in_unified();
-        let muted = p.is_muted();
-        let paused = p.is_paused();
-        let conversation_html = p.conversation_html();
-        let save_sent_copy = p.save_sent_copy();
-        let rss_sync_interval_minutes = p.rss_sync_interval_minutes();
-        let chat_wallpaper = p.chat_wallpaper_json();
+        let preferences = AccountPrefs::parse(&prefs);
+        let load_remote_images = preferences.images_enabled(&engine);
+        let included_in_unified = preferences.in_unified();
+        let muted = preferences.is_muted();
+        let paused = preferences.is_paused();
+        let conversation_html = preferences.conversation_html();
+        let save_sent_copy = preferences.save_sent_copy();
+        let rss_sync_interval_minutes = preferences.rss_sync_interval_minutes();
+        let chat_wallpaper = preferences.chat_wallpaper_json();
         if engine == "local" {
             out.push(json!({
                 "id": id,
@@ -1005,8 +740,8 @@ pub fn list_accounts(conn: &Connection) -> Result<Vec<serde_json::Value>> {
                 "save_sent_copy": save_sent_copy,
                 "chat_wallpaper": chat_wallpaper,
                 "sort_order": sort_order,
-                "aliases": p.aliases_json(),
-                "signature": p.signature_json(),
+                "aliases": preferences.aliases_json(),
+                "signature": preferences.signature_json(),
                 "proxy": c.proxy.to_json(),
                 "cert_pin": c.cert_pin,
                 "smtp_cert_pin": c.smtp_cert_pin,
@@ -1111,7 +846,7 @@ pub fn account_label(conn: &Connection, id: &str) -> String {
 /// Unknown accounts return false.
 pub fn account_muted(conn: &Connection, id: &str) -> Result<bool> {
     Ok(account_prefs(conn, id)?
-        .map(|p| p.is_muted())
+        .map(|preferences| preferences.is_muted())
         .unwrap_or(false))
 }
 
@@ -1119,13 +854,13 @@ pub fn account_muted(conn: &Connection, id: &str) -> Result<bool> {
 /// Unknown accounts return false.
 pub fn account_paused(conn: &Connection, id: &str) -> Result<bool> {
     Ok(account_prefs(conn, id)?
-        .map(|p| p.is_paused())
+        .map(|preferences| preferences.is_paused())
         .unwrap_or(false))
 }
 
 /// Explicit Sent-copy override for an account. None means use provider default.
 pub fn save_sent_copy_pref(conn: &Connection, id: &str) -> Result<Option<bool>> {
-    Ok(account_prefs(conn, id)?.and_then(|p| p.save_sent_copy()))
+    Ok(account_prefs(conn, id)?.and_then(|preferences| preferences.save_sent_copy()))
 }
 
 /// The parsed `prefs` for an account, or None if the account row is missing.
@@ -1137,7 +872,7 @@ fn account_prefs(conn: &Connection, id: &str) -> Result<Option<AccountPrefs>> {
             |r| r.get(0),
         )
         .optional()?;
-    Ok(prefs.map(|p| AccountPrefs::parse(&p)))
+    Ok(prefs.map(|preferences| AccountPrefs::parse(&preferences)))
 }
 
 /// The engine ('mail' | 'rss') backing an account, if it exists. Lets the

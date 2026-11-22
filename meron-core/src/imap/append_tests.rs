@@ -75,7 +75,7 @@ async fn a_repeated_move_without_imap_move_copies_only_what_is_missing() {
     let mut session = client
         .login("test", "test")
         .await
-        .map_err(|(err, _)| err)
+        .map_err(|(error, _)| error)
         .unwrap();
 
     // 2 is not there yet, 3 only resembles what is, and 4 was resent under
@@ -240,7 +240,7 @@ async fn server(reply: &'static str) -> (Session, tokio::task::JoinHandle<Vec<u8
     let session = client
         .login("u", "p")
         .await
-        .map_err(|(err, _)| err)
+        .map_err(|(error, _)| error)
         .unwrap();
     (session, task)
 }
@@ -282,16 +282,16 @@ async fn append_preserves_rejection_without_sending_literal() {
             "{tag} BAD invalid append\r\n"
         };
         let (mut session, task) = server(reply).await;
-        let err = append_message(&mut session, "a\"b\\c", Some("(\\Seen \\Flagged)"), b"body")
+        let error = append_message(&mut session, "a\"b\\c", Some("(\\Seen \\Flagged)"), b"body")
             .await
             .unwrap_err();
         assert!(
-            err.to_string().contains(if status == "NO" {
+            error.to_string().contains(if status == "NO" {
                 "missing mailbox"
             } else {
                 "invalid append"
             }),
-            "{err}"
+            "{error}"
         );
         session.noop().await.unwrap();
         assert!(task.await.unwrap().is_empty());

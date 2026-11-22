@@ -1,6 +1,7 @@
 //! Shared store test fixtures and feature-specific suites.
 //!
-//! Child modules use these helpers to exercise the same underlying store.
+//! Each suite uses an isolated SQLite database.
+//! Shared fixtures seed headers, accounts and folders before exercising store operations.
 
 use super::*;
 use rusqlite::OptionalExtension;

@@ -1,4 +1,6 @@
-//! Answers to calendar invitations — see [`crate::calendar`].
+//! Persists calendar events and invitation responses in SQLite.
+//! Recurrence exceptions and recorded responses identify individual occurrences.
+//! The core calendar routines use these rows when opening or updating an event.
 
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, params};

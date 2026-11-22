@@ -1,4 +1,6 @@
-//! Recipient autocomplete from correspondents seen in the store.
+//! Builds the contact directory and recipient suggestions from local mail.
+//! The database queries return message history and paged conversations for an address.
+//! Own and automated addresses are recognized when constructing the directory.
 
 use anyhow::Result;
 use rusqlite::{Connection, params};
@@ -199,13 +201,13 @@ pub fn list_contacts(
 ) -> Result<Vec<Contact>> {
     use std::collections::{HashMap, HashSet};
 
-    let q = query.trim().to_lowercase();
+    let search_text = query.trim().to_lowercase();
     let own: HashSet<String> = if directory {
         own_addresses(conn)?
     } else {
         HashSet::new()
     };
-    let hide_automated = directory && q.is_empty();
+    let hide_automated = directory && search_text.is_empty();
     // Resolve metadata once, not once per contact. Folder roles can change
     // after messages were cached, so exclusion belongs on the read side, not
     // in the participant triggers. Missing metadata still uses name heuristics.
@@ -285,7 +287,7 @@ pub fn list_contacts(
     // a word.
     let rank = |text: &str| -> Option<u8> {
         let text = text.to_lowercase();
-        let at = text.find(&q)?;
+        let at = text.find(&search_text)?;
         let word_start = !text[..at]
             .chars()
             .next_back()
@@ -317,7 +319,7 @@ pub fn list_contacts(
                 return None;
             }
             let all: Vec<&(String, u32)> = t.names.iter().collect();
-            if q.is_empty() {
+            if search_text.is_empty() {
                 return Some(Hit {
                     rank: 0,
                     count: t.count,

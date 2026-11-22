@@ -1,3 +1,7 @@
+//! Handles message mutations dispatched by the desktop sidecar.
+//! The requested action determines how the engine changes the selected mail.
+//! The reply carries the mutation result used by the desktop conversation list.
+
 use serde_json::{Value, json};
 use std::sync::Arc;
 
@@ -16,19 +20,26 @@ pub(crate) async fn dispatch(
     req: &Request,
     out: &Writer,
 ) -> anyhow::Result<Value> {
-    let p = &req.params;
+    let parameters = &req.params;
     match req.method.as_str() {
         "messages.markRead" => {
-            let account = req_str(p, "account")?;
-            let folder =
-                canon_folder(&req_str(p, "folder").unwrap_or_else(|_| "INBOX".to_string()));
+            let account = req_str(parameters, "account")?;
+            let folder = canon_folder(
+                &req_str(parameters, "folder").unwrap_or_else(|_| "INBOX".to_string()),
+            );
             let (thread_key, subject_filter) =
-                store::split_thread_key(&req_str(p, "thread_key").unwrap_or_default());
-            let uid = p.get("uid").and_then(Value::as_u64).map(|n| n as u32);
+                store::split_thread_key(&req_str(parameters, "thread_key").unwrap_or_default());
+            let uid = parameters
+                .get("uid")
+                .and_then(Value::as_u64)
+                .map(|n| n as u32);
             // Defaults to true (mark read); pass seen:false to mark unread.
-            let seen = p.get("seen").and_then(Value::as_bool).unwrap_or(true);
+            let seen = parameters
+                .get("seen")
+                .and_then(Value::as_bool)
+                .unwrap_or(true);
 
-            let explicit_uids = p
+            let explicit_uids = parameters
                 .get("uids")
                 .and_then(Value::as_array)
                 .map(|items| {
@@ -125,16 +136,23 @@ pub(crate) async fn dispatch(
         }
 
         "messages.markStarred" => {
-            let account = req_str(p, "account")?;
-            let folder =
-                canon_folder(&req_str(p, "folder").unwrap_or_else(|_| "INBOX".to_string()));
-            let full_key = req_str(p, "thread_key").unwrap_or_default();
+            let account = req_str(parameters, "account")?;
+            let folder = canon_folder(
+                &req_str(parameters, "folder").unwrap_or_else(|_| "INBOX".to_string()),
+            );
+            let full_key = req_str(parameters, "thread_key").unwrap_or_default();
             let (thread_key, subject_filter) = store::split_thread_key(&full_key);
-            let uid = p.get("uid").and_then(Value::as_u64).map(|n| n as u32);
+            let uid = parameters
+                .get("uid")
+                .and_then(Value::as_u64)
+                .map(|n| n as u32);
             // Defaults to true (mark starred); pass starred:false to unstar.
-            let starred = p.get("starred").and_then(Value::as_bool).unwrap_or(true);
+            let starred = parameters
+                .get("starred")
+                .and_then(Value::as_bool)
+                .unwrap_or(true);
 
-            let explicit_uids = p
+            let explicit_uids = parameters
                 .get("uids")
                 .and_then(Value::as_array)
                 .map(|items| {
@@ -148,8 +166,8 @@ pub(crate) async fn dispatch(
 
             let targets = {
                 let db = engine.db.lock().unwrap();
-                let message_scoped = p.get("uids").is_some() || full_key.is_empty();
-                let uids = if p.get("uids").is_some() {
+                let message_scoped = parameters.get("uids").is_some() || full_key.is_empty();
+                let uids = if parameters.get("uids").is_some() {
                     explicit_uids
                 } else {
                     uid.into_iter().collect()
@@ -188,19 +206,20 @@ pub(crate) async fn dispatch(
         }
 
         "messages.setTags" => {
-            let account = req_str(p, "account")?;
-            let folder =
-                canon_folder(&req_str(p, "folder").unwrap_or_else(|_| "INBOX".to_string()));
-            let add = parse_tag_list(p.get("add")).map_err(anyhow::Error::msg)?;
-            let remove = parse_tag_list(p.get("remove")).map_err(anyhow::Error::msg)?;
+            let account = req_str(parameters, "account")?;
+            let folder = canon_folder(
+                &req_str(parameters, "folder").unwrap_or_else(|_| "INBOX".to_string()),
+            );
+            let add = parse_tag_list(parameters.get("add")).map_err(anyhow::Error::msg)?;
+            let remove = parse_tag_list(parameters.get("remove")).map_err(anyhow::Error::msg)?;
             let tags = {
                 let db = engine.db.lock().unwrap();
                 let targets = store::tag_targets(
                     &db,
                     &account,
                     &folder,
-                    &req_str(p, "thread_key").unwrap_or_default(),
-                    &tag_uids(p),
+                    &req_str(parameters, "thread_key").unwrap_or_default(),
+                    &tag_uids(parameters),
                 )?;
                 store::retag(&db, &account, &targets, &add, &remove, true)?
             };
@@ -211,25 +230,29 @@ pub(crate) async fn dispatch(
         // Rename a tag everywhere, or delete it. The archive goes first, as
         // opening it reads the store.
         "tags.replace" => {
-            let (tag, to) = parse_tag_replacement(p).map_err(anyhow::Error::msg)?;
+            let (tag, to) = parse_tag_replacement(parameters).map_err(anyhow::Error::msg)?;
             crate::sidecar::local::replace_tag(engine, &tag, to.as_deref())?;
             let (accounts, rules) =
                 store::replace_tag_and_rules(&engine.db.lock().unwrap(), &tag, to.as_deref())?;
             for account in &accounts {
                 spawn_tag_push(&engine, account);
             }
-            let queries = renamed_queries(p, &tag, to.as_deref());
+            let queries = renamed_queries(parameters, &tag, to.as_deref());
             Ok(json!({ "ok": true, "tag": to, "rules": rules, "queries": queries }))
         }
 
         "messages.delete" => {
-            let account = req_str(p, "account")?;
-            let folder =
-                canon_folder(&req_str(p, "folder").unwrap_or_else(|_| "INBOX".to_string()));
+            let account = req_str(parameters, "account")?;
+            let folder = canon_folder(
+                &req_str(parameters, "folder").unwrap_or_else(|_| "INBOX".to_string()),
+            );
             let (thread_key, subject_filter) =
-                store::split_thread_key(&req_str(p, "thread_key").unwrap_or_default());
-            let uid = p.get("uid").and_then(Value::as_u64).map(|n| n as u32);
-            let explicit_uids = p
+                store::split_thread_key(&req_str(parameters, "thread_key").unwrap_or_default());
+            let uid = parameters
+                .get("uid")
+                .and_then(Value::as_u64)
+                .map(|n| n as u32);
+            let explicit_uids = parameters
                 .get("uids")
                 .and_then(Value::as_array)
                 .map(|items| {
@@ -303,7 +326,7 @@ pub(crate) async fn dispatch(
             let trashed = delete_to_trash(engine, &account, &folder, &uids).await?;
             // One of a bulk run with more to come: Trash is re-read once, by
             // the run's last delete, instead of after every conversation.
-            let more_coming = p
+            let more_coming = parameters
                 .get("more_coming")
                 .and_then(Value::as_bool)
                 .unwrap_or(false);
@@ -387,14 +410,18 @@ pub(crate) async fn dispatch(
         }
 
         "messages.move" => {
-            let account = req_str(p, "account")?;
-            let folder =
-                canon_folder(&req_str(p, "folder").unwrap_or_else(|_| "INBOX".to_string()));
-            let target_folder = canon_folder(&req_str(p, "target_folder")?);
+            let account = req_str(parameters, "account")?;
+            let folder = canon_folder(
+                &req_str(parameters, "folder").unwrap_or_else(|_| "INBOX".to_string()),
+            );
+            let target_folder = canon_folder(&req_str(parameters, "target_folder")?);
             let (thread_key, subject_filter) =
-                store::split_thread_key(&req_str(p, "thread_key").unwrap_or_default());
-            let uid = p.get("uid").and_then(Value::as_u64).map(|n| n as u32);
-            let explicit_uids = p
+                store::split_thread_key(&req_str(parameters, "thread_key").unwrap_or_default());
+            let uid = parameters
+                .get("uid")
+                .and_then(Value::as_u64)
+                .map(|n| n as u32);
+            let explicit_uids = parameters
                 .get("uids")
                 .and_then(Value::as_array)
                 .map(|items| {
@@ -416,7 +443,8 @@ pub(crate) async fn dispatch(
                 mail_model::format_thread_id(&account, &folder, &key)
             };
 
-            let target_account = req_str(p, "target_account").unwrap_or_else(|_| account.clone());
+            let target_account =
+                req_str(parameters, "target_account").unwrap_or_else(|_| account.clone());
             if account == target_account && folder == target_folder {
                 return mail_model::mutation_result(
                     json!({ "ok": true, "moved": 0, "source_folder": folder, "target_folder": target_folder }),
@@ -460,7 +488,7 @@ pub(crate) async fn dispatch(
 
             // An Undo of an archive, delete or move: what it puts back besides
             // the mail (see `UndoRestore`).
-            let undo = meron_core::meron_folders::UndoRestore::from_params(p);
+            let undo = meron_core::meron_folders::UndoRestore::from_params(parameters);
             // Archiving or moving the whole conversation takes it out of its
             // Meron folder once the server move succeeded.
             let whole =
@@ -535,7 +563,7 @@ pub(crate) async fn dispatch(
             // One of a bulk run with more to come: the target is re-read once,
             // by the run's last move. Never put off for an archive or an Undo:
             // both read the moved copies from the cache straight after.
-            let reread_target = !p
+            let reread_target = !parameters
                 .get("more_coming")
                 .and_then(Value::as_bool)
                 .unwrap_or(false)
@@ -639,15 +667,19 @@ pub(crate) async fn dispatch(
         }
 
         "messages.copy" => {
-            let account = req_str(p, "account")?;
-            let folder =
-                canon_folder(&req_str(p, "folder").unwrap_or_else(|_| "INBOX".to_string()));
-            let target_account = req_str(p, "target_account")?;
-            let target_folder = canon_folder(&req_str(p, "target_folder")?);
+            let account = req_str(parameters, "account")?;
+            let folder = canon_folder(
+                &req_str(parameters, "folder").unwrap_or_else(|_| "INBOX".to_string()),
+            );
+            let target_account = req_str(parameters, "target_account")?;
+            let target_folder = canon_folder(&req_str(parameters, "target_folder")?);
             let (thread_key, subject_filter) =
-                store::split_thread_key(&req_str(p, "thread_key").unwrap_or_default());
-            let uid = p.get("uid").and_then(Value::as_u64).map(|n| n as u32);
-            let explicit_uids = p
+                store::split_thread_key(&req_str(parameters, "thread_key").unwrap_or_default());
+            let uid = parameters
+                .get("uid")
+                .and_then(Value::as_u64)
+                .map(|n| n as u32);
+            let explicit_uids = parameters
                 .get("uids")
                 .and_then(Value::as_array)
                 .map(|items| {
@@ -757,9 +789,10 @@ pub(crate) async fn dispatch(
         // Mark every message in a folder as read: set \Seen on the server for the
         // currently-unseen UIDs, then flip the whole folder seen in the store.
         "messages.markAllRead" => {
-            let account = req_str(p, "account")?;
-            let folder =
-                canon_folder(&req_str(p, "folder").unwrap_or_else(|_| "INBOX".to_string()));
+            let account = req_str(parameters, "account")?;
+            let folder = canon_folder(
+                &req_str(parameters, "folder").unwrap_or_else(|_| "INBOX".to_string()),
+            );
 
             // Mail in Meron folders stays unread: each has its own Mark all read.
             let uids = {
@@ -835,7 +868,7 @@ pub(crate) async fn dispatch(
         }
 
         "messages.markAllReadUnified" => {
-            let role = req_str(p, "folder").unwrap_or_else(|_| "inbox".to_string());
+            let role = req_str(parameters, "folder").unwrap_or_else(|_| "inbox".to_string());
             let account_folders = {
                 let db = engine.db.lock().unwrap();
                 store::list_accounts(&db)?

@@ -35,7 +35,7 @@ fn key_state(key: Option<&String>) -> Value {
 fn check_result(result: Result<(), AiError>) -> Value {
     match result {
         Ok(()) => json!({ "ok": true }),
-        Err(err) => json!({ "ok": false, "kind": err.kind, "message": err.message }),
+        Err(error) => json!({ "ok": false, "kind": error.kind, "message": error.message }),
     }
 }
 
@@ -119,7 +119,7 @@ pub async fn dispatch(
             };
             match &result {
                 Ok(()) => engine.ai_sort.clear_error(),
-                Err(err) if err.kind != ErrorKind::Other => engine.ai_sort.set_error(err),
+                Err(error) if error.kind != ErrorKind::Other => engine.ai_sort.set_error(error),
                 Err(_) => {}
             }
             Ok(check_result(result))
@@ -128,7 +128,7 @@ pub async fn dispatch(
             let provider = provider_param(params)?;
             let models = pipeline::models(engine, &provider)
                 .await
-                .map_err(|err| anyhow::anyhow!("{}", err.message))?;
+                .map_err(|error| anyhow::anyhow!("{}", error.message))?;
             // No default: the user picks a model.
             Ok(json!({ "models": models, "default": Value::Null }))
         }

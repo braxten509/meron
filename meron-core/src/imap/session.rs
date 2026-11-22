@@ -128,14 +128,14 @@ impl AsyncRead for Stream {
     fn poll_read(
         self: Pin<&mut Self>,
         cx: &mut TaskContext<'_>,
-        buf: &mut ReadBuf<'_>,
+        buffer: &mut ReadBuf<'_>,
     ) -> Poll<std::io::Result<()>> {
-        let before = buf.filled().len();
+        let before = buffer.filled().len();
         let (result, state) = match self.get_mut() {
-            Stream::Plain(s, state) => (Pin::new(s).poll_read(cx, buf), state),
-            Stream::Tls(s, state) => (Pin::new(s.as_mut()).poll_read(cx, buf), state),
+            Stream::Plain(s, state) => (Pin::new(s).poll_read(cx, buffer), state),
+            Stream::Tls(s, state) => (Pin::new(s.as_mut()).poll_read(cx, buffer), state),
         };
-        if matches!(result, Poll::Ready(Ok(()))) && buf.filled().len() > before {
+        if matches!(result, Poll::Ready(Ok(()))) && buffer.filled().len() > before {
             let mut clock = state.progress.lock().unwrap();
             if clock.is_some() {
                 *clock = Some(tokio::time::Instant::now());
@@ -149,11 +149,11 @@ impl AsyncWrite for Stream {
     fn poll_write(
         self: Pin<&mut Self>,
         cx: &mut TaskContext<'_>,
-        buf: &[u8],
+        buffer: &[u8],
     ) -> Poll<std::io::Result<usize>> {
         match self.get_mut() {
-            Stream::Plain(s, _) => Pin::new(s).poll_write(cx, buf),
-            Stream::Tls(s, _) => Pin::new(s.as_mut()).poll_write(cx, buf),
+            Stream::Plain(s, _) => Pin::new(s).poll_write(cx, buffer),
+            Stream::Tls(s, _) => Pin::new(s.as_mut()).poll_write(cx, buffer),
         }
     }
     fn poll_flush(self: Pin<&mut Self>, cx: &mut TaskContext<'_>) -> Poll<std::io::Result<()>> {

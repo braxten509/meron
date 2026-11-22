@@ -180,11 +180,14 @@ pub fn entry_rows(conn: &Connection, entry_id: &str) -> (String, Vec<(String, u3
     let members = store::meron_entry_members(conn, entry_id).unwrap_or_default();
     let account = members
         .first()
-        .map(|m| m.account.clone())
+        .map(|member| member.account.clone())
         .unwrap_or_default();
     (
         account,
-        members.into_iter().map(|m| (m.folder, m.uid)).collect(),
+        members
+            .into_iter()
+            .map(|member| (member.folder, member.uid))
+            .collect(),
     )
 }
 

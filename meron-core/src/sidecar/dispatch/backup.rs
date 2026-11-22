@@ -1,3 +1,7 @@
+//! Dispatches desktop backup operations to the shared backup implementation.
+//! The host selects export or restore and supplies its file or encryption options.
+//! The sidecar passes the result back over the desktop RPC connection.
+
 use serde_json::{Value, json};
 use std::sync::Arc;
 
@@ -14,17 +18,17 @@ pub(crate) async fn dispatch(
     req: &Request,
     _out: &Writer,
 ) -> anyhow::Result<Value> {
-    let p = &req.params;
+    let parameters = &req.params;
     match req.method.as_str() {
         // Serialize accounts, prefs, feeds and settings to a backup document
         // (see `backup`). The passphrase-based key derivation is deliberately
         // slow, so this runs on the blocking pool rather than the reactor.
         "backup.export" => {
-            let include_secrets = p
+            let include_secrets = parameters
                 .get("include_secrets")
                 .and_then(Value::as_bool)
                 .unwrap_or(false);
-            let passphrase = p
+            let passphrase = parameters
                 .get("passphrase")
                 .and_then(Value::as_str)
                 .unwrap_or_default()
@@ -32,12 +36,12 @@ pub(crate) async fn dispatch(
             // The Go host owns the product version; core only knows its crate's.
             // The platform goes with it because desktop and mobile version
             // independently, so the number alone doesn't identify a build.
-            let app_version = p
+            let app_version = parameters
                 .get("app_version")
                 .and_then(Value::as_str)
                 .unwrap_or_default()
                 .to_string();
-            let platform = p
+            let platform = parameters
                 .get("platform")
                 .and_then(Value::as_str)
                 .unwrap_or_default()
@@ -89,8 +93,8 @@ pub(crate) async fn dispatch(
         // passphrase comes back as `needs_passphrase` (not an error) so the UI
         // can prompt and call again instead of showing a failure.
         "backup.import" => {
-            let text = req_str(p, "backup")?;
-            let passphrase = p
+            let text = req_str(parameters, "backup")?;
+            let passphrase = parameters
                 .get("passphrase")
                 .and_then(Value::as_str)
                 .unwrap_or_default()

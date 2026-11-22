@@ -171,9 +171,9 @@ pub fn backup_archive_to(conn: &Connection, dest: &Path, passphrase: &str) -> Re
             .map_err(anyhow::Error::from)
         });
     let _ = conn.execute_batch("DETACH DATABASE snapshot;");
-    if let Err(err) = exported {
+    if let Err(error) = exported {
         let _ = std::fs::remove_file(&partial);
-        return Err(err).context("export archive snapshot");
+        return Err(error).context("export archive snapshot");
     }
     std::fs::rename(&partial, dest).context("move archive snapshot into place")?;
     Ok(())
@@ -183,11 +183,17 @@ pub fn backup_archive_to(conn: &Connection, dest: &Path, passphrase: &str) -> Re
 /// path spelled through a symlink or `..` still matches.
 fn same_file_path(a: &Path, b: &Path) -> bool {
     let resolve = |path: &Path| {
-        let dir = path.parent().filter(|dir| !dir.as_os_str().is_empty());
-        let dir = dir
-            .map(|dir| dir.canonicalize().unwrap_or_else(|_| dir.to_path_buf()))
+        let directory = path
+            .parent()
+            .filter(|directory| !directory.as_os_str().is_empty());
+        let directory = directory
+            .map(|directory| {
+                directory
+                    .canonicalize()
+                    .unwrap_or_else(|_| directory.to_path_buf())
+            })
             .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
-        path.file_name().map(|name| dir.join(name))
+        path.file_name().map(|name| directory.join(name))
     };
     matches!((resolve(a), resolve(b)), (Some(a), Some(b)) if a == b)
 }
@@ -350,8 +356,8 @@ fn encrypt_plaintext_db(path: &Path, key: &str) -> Result<()> {
         .file_name()
         .and_then(|n| n.to_str())
         .unwrap_or("meron.db");
-    let tmp = path.with_file_name(format!("{file_name}.sqlcipher-migrating"));
-    let _ = std::fs::remove_file(&tmp);
+    let temporary = path.with_file_name(format!("{file_name}.sqlcipher-migrating"));
+    let _ = std::fs::remove_file(&temporary);
     {
         let plain =
             Connection::open(path).with_context(|| format!("open plaintext {}", path.display()))?;
@@ -367,11 +373,11 @@ fn encrypt_plaintext_db(path: &Path, key: &str) -> Result<()> {
                  SELECT sqlcipher_export('encrypted');
                  PRAGMA encrypted.user_version = {user_version};
                  DETACH DATABASE encrypted;",
-                sql_single_quote(&tmp)
+                sql_single_quote(&temporary)
             ))
             .context("sqlcipher_export to encrypted db")?;
     }
-    std::fs::rename(&tmp, path).context("replace plaintext db with encrypted db")?;
+    std::fs::rename(&temporary, path).context("replace plaintext db with encrypted db")?;
     for suffix in ["-wal", "-shm"] {
         let _ = std::fs::remove_file(sibling_with_suffix(path, suffix));
     }
@@ -393,7 +399,7 @@ fn with_busy_retry<T>(mut f: impl FnMut() -> rusqlite::Result<T>) -> rusqlite::R
     let mut delay = Duration::from_millis(10);
     loop {
         match f() {
-            Err(err) if is_database_locked(&err) && Instant::now() < deadline => {
+            Err(error) if is_database_locked(&error) && Instant::now() < deadline => {
                 std::thread::sleep(delay);
                 delay = (delay * 2).min(Duration::from_millis(100));
             }
@@ -407,7 +413,7 @@ fn with_anyhow_busy_retry<T>(mut f: impl FnMut() -> Result<T>) -> Result<T> {
     let mut delay = Duration::from_millis(10);
     loop {
         match f() {
-            Err(err) if anyhow_error_is_database_locked(&err) && Instant::now() < deadline => {
+            Err(error) if anyhow_error_is_database_locked(&error) && Instant::now() < deadline => {
                 std::thread::sleep(delay);
                 delay = (delay * 2).min(Duration::from_millis(100));
             }
@@ -416,17 +422,17 @@ fn with_anyhow_busy_retry<T>(mut f: impl FnMut() -> Result<T>) -> Result<T> {
     }
 }
 
-fn anyhow_error_is_database_locked(err: &anyhow::Error) -> bool {
-    err.chain().any(|cause| {
+fn anyhow_error_is_database_locked(error: &anyhow::Error) -> bool {
+    error.chain().any(|cause| {
         cause
             .downcast_ref::<rusqlite::Error>()
             .is_some_and(is_database_locked)
     })
 }
 
-fn is_database_locked(err: &rusqlite::Error) -> bool {
+fn is_database_locked(error: &rusqlite::Error) -> bool {
     matches!(
-        err,
+        error,
         rusqlite::Error::SqliteFailure(failure, _)
             if matches!(
                 failure.code,
@@ -635,7 +641,7 @@ pub(super) fn meta_set(conn: &Connection, key: &str, value: &str) -> Result<()> 
 pub fn now_unix() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
+        .map(|duration| duration.as_secs() as i64)
         .unwrap_or(0)
 }
 

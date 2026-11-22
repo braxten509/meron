@@ -63,13 +63,13 @@ impl UntrustedCertificate {
 
     /// Wraps `err` when it is a certificate rejection, and returns it unchanged
     /// otherwise.
-    pub fn from_io(err: std::io::Error) -> anyhow::Error {
-        if is_cert_error(&err) {
+    pub fn from_io(error: std::io::Error) -> anyhow::Error {
+        if is_cert_error(&error) {
             anyhow::Error::new(UntrustedCertificate {
-                detail: err.to_string(),
+                detail: error.to_string(),
             })
         } else {
-            anyhow::Error::new(err).context("tls handshake")
+            anyhow::Error::new(error).context("tls handshake")
         }
     }
 }
@@ -254,9 +254,10 @@ pub fn connector(pin: Option<&str>) -> Result<tokio_rustls::TlsConnector> {
 
 /// True when a handshake failure was the peer's certificate (untrusted, expired,
 /// wrong name, malformed) rather than a transport problem.
-pub fn is_cert_error(err: &std::io::Error) -> bool {
+pub fn is_cert_error(error: &std::io::Error) -> bool {
     matches!(
-        err.get_ref()
+        error
+            .get_ref()
             .and_then(|e| e.downcast_ref::<rustls::Error>()),
         Some(rustls::Error::InvalidCertificate(_))
     )
@@ -348,7 +349,7 @@ mod tests {
         });
 
         let started = tokio::time::Instant::now();
-        let err = probe_with_timeout(
+        let error = probe_with_timeout(
             "127.0.0.1",
             port,
             "imap",
@@ -360,7 +361,7 @@ mod tests {
         .unwrap_err();
         server.abort();
 
-        assert!(err.to_string().contains("timed out"));
+        assert!(error.to_string().contains("timed out"));
         assert!(started.elapsed() < std::time::Duration::from_secs(1));
     }
 

@@ -46,8 +46,8 @@ impl EngineHost for DesktopHost {
     fn apply_secret(&self, conn: &rusqlite::Connection, account: &str, creds: &mut imap::Creds) {
         let stored = match secrets::load(account) {
             Ok(stored) => stored,
-            Err(err) => {
-                eprintln!("meron-core: could not load keychain secret for {account}: {err:#}");
+            Err(error) => {
+                eprintln!("meron-core: could not load keychain secret for {account}: {error:#}");
                 secrets::Secrets::default()
             }
         };
@@ -82,7 +82,7 @@ impl EngineHost for DesktopHost {
         _db: &std::sync::Mutex<rusqlite::Connection>,
         name: &str,
     ) -> anyhow::Result<Option<String>> {
-        let stored = secrets::load(name).map_err(|err| anyhow::anyhow!("{err:#}"))?;
+        let stored = secrets::load(name).map_err(|error| anyhow::anyhow!("{error:#}"))?;
         if stored.is_empty() {
             return Ok(None);
         }
@@ -96,7 +96,7 @@ impl EngineHost for DesktopHost {
         _db: &std::sync::Mutex<rusqlite::Connection>,
         account: &str,
     ) -> anyhow::Result<secrets::Secrets> {
-        secrets::load(account).map_err(|err| anyhow::anyhow!("{err:#}"))
+        secrets::load(account).map_err(|error| anyhow::anyhow!("{error:#}"))
     }
 
     fn delete_account_secret(&self, account: &str) {
@@ -117,7 +117,7 @@ impl EngineHost for DesktopHost {
             }
             None => secrets::delete(name)
                 .map(|_| ())
-                .map_err(|err| anyhow::anyhow!("{err:#}")),
+                .map_err(|error| anyhow::anyhow!("{error:#}")),
         }
     }
 }
@@ -283,25 +283,25 @@ async fn run_degraded(out: &Writer, reason: &str) {
         if line.is_empty() {
             continue;
         }
-        let Ok(req) = serde_json::from_str::<Request>(line) else {
+        let Ok(request) = serde_json::from_str::<Request>(line) else {
             continue;
         };
-        if req.method == "ping" {
-            respond(out, req.id, ping_response()).await;
+        if request.method == "ping" {
+            respond(out, request.id, ping_response()).await;
         } else {
-            respond_error(out, req.id, reason).await;
+            respond_error(out, request.id, reason).await;
         }
     }
 }
 
-async fn handle(engine: Arc<Engine>, req: Request, out: &Writer) {
-    match dispatch(&engine, &req, out).await {
-        Ok(value) => respond(out, req.id, value).await,
+async fn handle(engine: Arc<Engine>, request: Request, out: &Writer) {
+    match dispatch(&engine, &request, out).await {
+        Ok(value) => respond(out, request.id, value).await,
         Err(e) => {
             // Surface failures on stderr (inherited by the app) so swallowed
             // RPC errors are diagnosable.
-            eprintln!("meron-core: {} failed: {e:#}", req.method);
-            respond_error(out, req.id, &format!("{e:#}")).await;
+            eprintln!("meron-core: {} failed: {e:#}", request.method);
+            respond_error(out, request.id, &format!("{e:#}")).await;
         }
     }
 }

@@ -1,4 +1,6 @@
-//! Cross-account moves share the same safety rules on desktop and mobile.
+//! Copies or moves messages between accounts.
+//! A complete source fetch supplies the message data for the destination mailbox.
+//! The engine coordinates delivery and source changes across the two sessions.
 
 use std::{collections::BTreeSet, sync::Arc};
 

@@ -1,3 +1,7 @@
+//! Exercises list and task behavior against a temporary database.
+//! Fixtures cover default list creation, ordering and subsequent reads.
+//! The task operations use the same storage functions as the application.
+
 use super::*;
 use rusqlite::Connection;
 

@@ -1,4 +1,6 @@
-//! Request dispatch: routes each method to its domain handler.
+//! Selects a desktop sidecar handler by RPC method.
+//! Feature modules own the account, folder, reader and organizer commands.
+//! The outer dispatch layer returns the result to the desktop host.
 
 mod accounts;
 mod actions;
@@ -24,7 +26,7 @@ use crate::sidecar::prefs;
 
 pub(crate) async fn dispatch(
     engine: &Arc<Engine>,
-    req: &Request,
+    request: &Request,
     out: &Writer,
 ) -> anyhow::Result<Value> {
     // A bulk Delete or Move: `items` holds the params of one `messages.delete`
@@ -32,19 +34,19 @@ pub(crate) async fn dispatch(
     // all together as one bulk run, so their server steps are done once for
     // all of them (see `meron_core::engine::bulk`). `results` answers each
     // item in order: the single action's result, or `{ "error": … }`.
-    let single = match req.method.as_str() {
+    let single = match request.method.as_str() {
         "messages.deleteMany" => "messages.delete",
         "messages.moveMany" => "messages.move",
-        _ => return dispatch_one(engine, req, out).await,
+        _ => return dispatch_one(engine, request, out).await,
     };
-    let items: Vec<Request> = req
+    let items: Vec<Request> = request
         .params
         .get("items")
         .and_then(Value::as_array)
         .ok_or_else(|| anyhow::anyhow!("missing items"))?
         .iter()
         .map(|params| Request {
-            id: req.id,
+            id: request.id,
             method: single.to_string(),
             params: params.clone(),
         })
@@ -72,22 +74,26 @@ pub(crate) async fn dispatch(
 
 /// Route one request to its domain handler.
 async fn dispatch_one(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyhow::Result<Value> {
-    let p = &req.params;
+    let parameters = &req.params;
     if crate::sidecar::local::handles(req) {
         return crate::sidecar::local::dispatch(engine, req, out).await;
     }
     match req.method.as_str() {
-        "mcp.prepareDelete" => meron_core::mcp_mail::prepare_delete(engine, p.clone()).await,
-        "mcp.delete" => meron_core::mcp_mail::delete(engine, p.clone()).await,
-        "mcp.organize" => meron_core::mcp_mail::organize(engine, p.clone()).await,
+        "mcp.prepareDelete" => {
+            meron_core::mcp_mail::prepare_delete(engine, parameters.clone()).await
+        }
+        "mcp.delete" => meron_core::mcp_mail::delete(engine, parameters.clone()).await,
+        "mcp.organize" => meron_core::mcp_mail::organize(engine, parameters.clone()).await,
         "ping" => Ok(ping_response()),
         "reminders.list" | "reminders.claim" | "reminders.skipPast" | "reminders.acknowledge" => {
-            meron_core::reminders::dispatch(&engine.db.lock().unwrap(), &req.method, p)
+            meron_core::reminders::dispatch(&engine.db.lock().unwrap(), &req.method, parameters)
         }
-        "search.parse" | "search.build" => meron_core::search_query::handle_request(&req.method, p)
-            .ok_or_else(|| anyhow::anyhow!("bad {} request", req.method)),
+        "search.parse" | "search.build" => {
+            meron_core::search_query::handle_request(&req.method, parameters)
+                .ok_or_else(|| anyhow::anyhow!("bad {} request", req.method))
+        }
         "avatar.resolve" => {
-            let params = p.clone();
+            let params = parameters.clone();
             let image =
                 tokio::task::spawn_blocking(move || meron_core::avatar::resolve(&params)).await?;
             Ok(serde_json::to_value(image)?)
@@ -97,7 +103,8 @@ async fn dispatch_one(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyh
         // network call runs on the blocking pool.
         "changelog.fetch" => {
             let variant = changelog::Variant::parse(
-                p.get("variant")
+                parameters
+                    .get("variant")
                     .and_then(Value::as_str)
                     .unwrap_or("desktop"),
             );
@@ -208,27 +215,34 @@ async fn dispatch_one(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyh
         // AI sorting: aiSort.get, .set, .setKey, .checkKey, .models, .estimate,
         // .run, .stop, .status, .moveBack.
         method if method.starts_with("aiSort.") => {
-            meron_core::ai_sort::dispatch(engine, &method["aiSort.".len()..], p).await
+            meron_core::ai_sort::dispatch(engine, &method["aiSort.".len()..], parameters).await
         }
 
         // Copy setup to another device: setupCopy.host, .join, .status,
         // .setKeep, .copy, .cancel, .safetyInfo, .restoreSafety.
         method if method.starts_with("setupCopy.") => {
-            meron_core::setup_copy::dispatch(engine, &method["setupCopy.".len()..], p, "computer")
-                .await
+            meron_core::setup_copy::dispatch(
+                engine,
+                &method["setupCopy.".len()..],
+                parameters,
+                "computer",
+            )
+            .await
         }
 
         // Meron folders (this device only): meronFolders.list, .create,
         // .rename, .delete, .moveIn, .moveOut, .threads (store only), and
         // .markAllRead (sets \Seen on the servers).
-        "meronFolders.markAllRead" => meron_core::meron_folders::mark_all_read(engine, p).await,
+        "meronFolders.markAllRead" => {
+            meron_core::meron_folders::mark_all_read(engine, parameters).await
+        }
         // Out of the built-in Archive (and the Undo of that) moves mail on
         // the server; everything else stays store-only.
         "meronFolders.moveIn" | "meronFolders.moveOut" => {
             meron_core::meron_folders::move_with_server(
                 engine,
                 &req.method["meronFolders.".len()..],
-                p,
+                parameters,
             )
             .await
         }
@@ -237,7 +251,7 @@ async fn dispatch_one(engine: &Arc<Engine>, req: &Request, out: &Writer) -> anyh
                 engine,
                 &engine.db.lock().unwrap(),
                 &method["meronFolders.".len()..],
-                p,
+                parameters,
             )
         }
 

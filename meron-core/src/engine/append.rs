@@ -1,4 +1,6 @@
-//! APPENDing sent copies and drafts, and waiting for the sent copy to land.
+//! Reconciles a submitted message with the copy stored in Sent.
+//! The engine uses provider settings and envelope details to decide whether to append.
+//! Refreshing the folder tail makes a newly landed copy available to mail readers.
 
 use rusqlite::Connection;
 use std::sync::Arc;
@@ -121,16 +123,16 @@ pub(super) async fn refresh_sent_copy(
         .any(|candidate| sent_copy_landed(&copy.envelope, candidate)))
 }
 
-/// Persist a partial re-read of a folder — the tail reads that follow a send or
-/// a draft save, rather than a full sync of it.
+/// Persist a partial re-read of a folder — the tail reads that follow a send or a draft save, rather than a full sync of it.
 ///
-/// It has to answer a UIDVALIDITY change itself. Recording the new validity
-/// while leaving the previous generation's rows in place would make the next
-/// ordinary sync see a validity that already matches its own and skip the reset
-/// it would otherwise do: the two UID generations would stay mixed in the cache
-/// for good, and flag reconciliation would keep asking for changes since a
-/// modseq that belongs to a mailbox the server no longer has. Dropping the rows
-/// and the modseq here leaves the folder exactly as a first sync finds it.
+/// It has to answer a UIDVALIDITY change itself.
+///
+/// Recording the new validity while leaving the previous generation's rows in place would make the next
+/// ordinary sync see a validity that already matches its own and skip the reset it would otherwise do:
+/// the two UID generations would stay mixed in the cache for good, and flag reconciliation would keep
+/// asking for changes since a modseq that belongs to a mailbox the server no longer has.
+///
+/// Dropping the rows and the modseq here leaves the folder exactly as a first sync finds it.
 pub(super) fn store_folder_tail(
     db: &Connection,
     account: &str,
@@ -314,8 +316,8 @@ pub async fn append_to_drafts(
         let keep_uid = batch
             .messages
             .iter()
-            .filter(|m| m.message_id.eq_ignore_ascii_case(message_id))
-            .map(|m| m.uid)
+            .filter(|message| message.message_id.eq_ignore_ascii_case(message_id))
+            .map(|message| message.uid)
             .max();
         if keep_uid.is_some() {
             store::delete_draft_copies(&db, account, &drafts, message_id, keep_uid)?;

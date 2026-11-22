@@ -28,33 +28,33 @@ fn renaming_a_tag_changes_only_terms_that_search_it() {
 
 #[test]
 fn plain_query_is_unchanged_free_text() {
-    let q = SearchQuery::parse("  quarterly  report ");
-    assert_eq!(q.text, ["quarterly  report"]);
-    assert!(!q.has_operators());
+    let query = SearchQuery::parse("  quarterly  report ");
+    assert_eq!(query.text, ["quarterly  report"]);
+    assert!(!query.has_operators());
 }
 
 #[test]
 fn operators_are_taken_out_of_the_text() {
-    let q = SearchQuery::parse("from:a@b.c to:d@e.f budget is:unread");
-    assert_eq!(q.from, [["a@b.c"]]);
-    assert_eq!(q.to, [["d@e.f"]]);
-    assert_eq!(q.text, ["budget"]);
-    assert!(q.unread && !q.read);
+    let query = SearchQuery::parse("from:a@b.c to:d@e.f budget is:unread");
+    assert_eq!(query.from, [["a@b.c"]]);
+    assert_eq!(query.to, [["d@e.f"]]);
+    assert_eq!(query.text, ["budget"]);
+    assert!(query.unread && !query.read);
 }
 
 #[test]
 fn quoted_values_keep_spaces() {
-    let q = SearchQuery::parse(r#"From:"Ann Lee" subject:"Q3 plan" notes"#);
-    assert_eq!(q.from, [["Ann Lee"]]);
-    assert_eq!(q.subject, [["Q3 plan"]]);
-    assert_eq!(q.text, ["notes"]);
+    let query = SearchQuery::parse(r#"From:"Ann Lee" subject:"Q3 plan" notes"#);
+    assert_eq!(query.from, [["Ann Lee"]]);
+    assert_eq!(query.subject, [["Q3 plan"]]);
+    assert_eq!(query.text, ["notes"]);
 }
 
 #[test]
 fn unknown_or_empty_operators_stay_text() {
-    let q = SearchQuery::parse("re:foo https://x.y from: is:muted after:soon");
-    assert!(!q.has_operators());
-    assert_eq!(q.text, ["re:foo https://x.y from: is:muted after:soon"]);
+    let query = SearchQuery::parse("re:foo https://x.y from: is:muted after:soon");
+    assert!(!query.has_operators());
+    assert_eq!(query.text, ["re:foo https://x.y from: is:muted after:soon"]);
 }
 
 #[test]
@@ -142,30 +142,30 @@ fn fields_list_alternatives_comma_separated() {
 
 #[test]
 fn flags_and_dates() {
-    let q = SearchQuery::parse("tag:Work tag:\"to do\" tag:a:b");
-    assert_eq!(q.tags, ["work", "to-do"]);
-    assert_eq!(q.text, ["tag:a:b"]);
+    let query = SearchQuery::parse("tag:Work tag:\"to do\" tag:a:b");
+    assert_eq!(query.tags, ["work", "to-do"]);
+    assert_eq!(query.text, ["tag:a:b"]);
 
-    let q = SearchQuery::parse("is:starred is:read after:2026/01/02 before:2026-02-03");
-    assert!(q.starred);
-    assert!(q.read && !q.unread);
-    assert_eq!(q.after, NaiveDate::from_ymd_opt(2026, 1, 2));
-    assert_eq!(q.before, NaiveDate::from_ymd_opt(2026, 2, 3));
-    assert!(q.text.is_empty());
-    assert!(!q.is_empty());
+    let query = SearchQuery::parse("is:starred is:read after:2026/01/02 before:2026-02-03");
+    assert!(query.starred);
+    assert!(query.read && !query.unread);
+    assert_eq!(query.after, NaiveDate::from_ymd_opt(2026, 1, 2));
+    assert_eq!(query.before, NaiveDate::from_ymd_opt(2026, 2, 3));
+    assert!(query.text.is_empty());
+    assert!(!query.is_empty());
 }
 
 #[test]
 fn has_attachment_is_an_operator() {
-    let q = SearchQuery::parse("HAS:Attachment budget");
-    assert!(q.has_attachment);
-    assert_eq!(q.text, ["budget"]);
+    let query = SearchQuery::parse("HAS:Attachment budget");
+    assert!(query.has_attachment);
+    assert_eq!(query.text, ["budget"]);
     assert!(SearchQuery::parse("has:attachment").has_operators());
     assert!(SearchQuery::parse("x AND has:attachment").has_attachment);
     // Gmail's other `has:` values stay text, as any unknown operator.
-    let q = SearchQuery::parse("has:drive");
-    assert!(!q.has_operators());
-    assert_eq!(q.text, ["has:drive"]);
+    let query = SearchQuery::parse("has:drive");
+    assert!(!query.has_operators());
+    assert_eq!(query.text, ["has:drive"]);
 }
 
 #[test]

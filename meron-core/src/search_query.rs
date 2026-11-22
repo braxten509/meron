@@ -620,7 +620,7 @@ fn terms(query: &str) -> impl Iterator<Item = &str> {
 fn scan_term(text: &str) -> (usize, bool, Option<char>) {
     let mut quoted = false;
     let mut close = None;
-    let mut prev = ' ';
+    let mut previous = ' ';
     let end = text
         .char_indices()
         .find(|&(i, c)| {
@@ -632,7 +632,7 @@ fn scan_term(text: &str) -> (usize, bool, Option<char>) {
             {
                 return true;
             }
-            let after = std::mem::replace(&mut prev, c);
+            let after = std::mem::replace(&mut previous, c);
             if c == '"' {
                 quoted = !quoted;
             } else if !quoted {

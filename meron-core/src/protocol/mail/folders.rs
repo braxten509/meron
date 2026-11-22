@@ -5,16 +5,16 @@
 
 use super::*;
 
-pub(crate) fn list_mobile_folders(data_dir: &str, params: &Value) -> Result<Value, String> {
+pub(crate) fn list_mobile_folders(data_directory: &str, params: &Value) -> Result<Value, String> {
     let account_id = req_str(params, "account_id")?;
-    with_mobile_db(data_dir, |conn| {
+    with_mobile_db(data_directory, |conn| {
         if is_rss_account(&conn, &account_id)? {
-            let folders = rss::folders(&conn, &account_id).map_err(|err| format!("{err:#}"))?;
+            let folders = rss::folders(&conn, &account_id).map_err(|error| format!("{error:#}"))?;
             return Ok(json!({ "folders": folders }));
         }
-        let folders = store::get_folders(&conn, &account_id).map_err(|err| err.to_string())?;
+        let folders = store::get_folders(&conn, &account_id).map_err(|error| error.to_string())?;
         let live = store::notify_folder_plan(&conn, &account_id)
-            .map_err(|err| err.to_string())?
+            .map_err(|error| error.to_string())?
             .live;
         let folders = folders
             .into_iter()
@@ -49,29 +49,32 @@ pub(crate) fn list_mobile_folders(data_dir: &str, params: &Value) -> Result<Valu
 
 /// Opt a folder in to (or out of) background sync and new-mail notifications.
 /// Answers with the refreshed folder list, like the other folder mutations.
-pub(crate) fn set_mobile_folder_notify(data_dir: &str, params: &Value) -> Result<Value, String> {
+pub(crate) fn set_mobile_folder_notify(
+    data_directory: &str,
+    params: &Value,
+) -> Result<Value, String> {
     let account_id = req_str(params, "account_id")?;
     let folder = canon_folder(&req_str(params, "folder_id")?);
     let enabled = params
         .get("enabled")
         .and_then(Value::as_bool)
         .ok_or_else(|| "enabled is required".to_string())?;
-    with_mobile_db(data_dir, |conn| {
+    with_mobile_db(data_directory, |conn| {
         if is_rss_account(&conn, &account_id)? {
             return Err("RSS accounts do not support folders".to_string());
         }
         if !store::set_folder_notify(&conn, &account_id, &folder, enabled)
-            .map_err(|err| err.to_string())?
+            .map_err(|error| error.to_string())?
         {
             return Err(format!("Folder not found: {folder}"));
         }
         Ok(json!({ "ok": true }))
     })?;
-    crate::ffi::sync_foreground_notify_watch(data_dir, &account_id, &folder, enabled);
-    list_mobile_folders(data_dir, params)
+    crate::ffi::sync_foreground_notify_watch(data_directory, &account_id, &folder, enabled);
+    list_mobile_folders(data_directory, params)
 }
 
-pub(crate) fn create_mobile_folder(data_dir: &str, params: &Value) -> Result<Value, String> {
+pub(crate) fn create_mobile_folder(data_directory: &str, params: &Value) -> Result<Value, String> {
     let account_id = req_str(params, "account_id")?;
     let display_name = req_str(params, "name")?.trim().to_string();
     if display_name.is_empty() {
@@ -79,8 +82,8 @@ pub(crate) fn create_mobile_folder(data_dir: &str, params: &Value) -> Result<Val
     }
     // Servers without UTF8=ACCEPT address mailboxes in modified UTF-7.
     let name = crate::utf7::encode(&display_name);
-    let engine = crate::ffi::engine_for(data_dir)?;
-    with_mobile_db(data_dir, |conn| {
+    let engine = crate::ffi::engine_for(data_directory)?;
+    with_mobile_db(data_directory, |conn| {
         if is_rss_account(&conn, &account_id)? {
             return Err("RSS accounts do not support folders".to_string());
         }
@@ -98,15 +101,15 @@ pub(crate) fn create_mobile_folder(data_dir: &str, params: &Value) -> Result<Val
                     imap::list_folders(session).await
                 })
             }))?;
-        store::upsert_folders(&conn, &account_id, &folders).map_err(|err| err.to_string())?;
-        list_mobile_folders(data_dir, params)
+        store::upsert_folders(&conn, &account_id, &folders).map_err(|error| error.to_string())?;
+        list_mobile_folders(data_directory, params)
     })
 }
 
 // Delete a folder and everything nested under it on the server, then drop the
 // whole subtree's cache. The special-use gate is re-checked here rather than
 // trusted from the caller: the delete takes the folders' mail with it.
-pub(crate) fn delete_mobile_folder(data_dir: &str, params: &Value) -> Result<Value, String> {
+pub(crate) fn delete_mobile_folder(data_directory: &str, params: &Value) -> Result<Value, String> {
     let account_id = req_account_id(params)?;
     let folder = params
         .get("folder_id")
@@ -120,8 +123,8 @@ pub(crate) fn delete_mobile_folder(data_dir: &str, params: &Value) -> Result<Val
         return Err("Pick a single account to delete a folder".to_string());
     }
 
-    let engine = crate::ffi::engine_for(data_dir)?;
-    with_mobile_db(data_dir, |conn| {
+    let engine = crate::ffi::engine_for(data_directory)?;
+    with_mobile_db(data_directory, |conn| {
         if is_rss_account(&conn, &account_id)? {
             return Err("RSS accounts do not support folders".to_string());
         }
@@ -144,27 +147,27 @@ pub(crate) fn delete_mobile_folder(data_dir: &str, params: &Value) -> Result<Val
         };
         let (removed, warning) = match server_result {
             Ok(removed) => (removed, None),
-            Err(err) => match err.downcast::<imap::PartialFolderDelete>() {
+            Err(error) => match error.downcast::<imap::PartialFolderDelete>() {
                 Ok(partial) => {
                     let (removed, warning) = partial.into_parts();
                     (removed, Some(warning))
                 }
-                Err(err) => return Err(err.to_string()),
+                Err(error) => return Err(error.to_string()),
             },
         };
         let mut deleted = 0;
         for target in &removed {
-            deleted +=
-                store::delete_folder(&conn, &account_id, target).map_err(|err| err.to_string())?;
+            deleted += store::delete_folder(&conn, &account_id, target)
+                .map_err(|error| error.to_string())?;
             // Nothing is left to watch; a watcher would only fail to SELECT
             // the mailbox and reconnect forever.
             crate::ffi::forget_deleted_folder_watch(&account_id, target);
         }
         // A deleted opted-in folder may have freed a live slot.
         if !removed.is_empty() {
-            crate::ffi::start_live_notify_watches(data_dir, &account_id);
+            crate::ffi::start_live_notify_watches(data_directory, &account_id);
         }
-        let mut response = list_mobile_folders(data_dir, params)?;
+        let mut response = list_mobile_folders(data_directory, params)?;
         response["ok"] = json!(warning.is_none());
         response["folder"] = json!(folder);
         // Every folder that went with it, so the caller can clear the views and
@@ -179,7 +182,7 @@ pub(crate) fn delete_mobile_folder(data_dir: &str, params: &Value) -> Result<Val
 // Rename a folder, and everything nested under it, on the server. `name` is the
 // folder's new full path as the user reads it. Special-use folders are refused
 // here rather than trusted from the caller, like a delete.
-pub(crate) fn rename_mobile_folder(data_dir: &str, params: &Value) -> Result<Value, String> {
+pub(crate) fn rename_mobile_folder(data_directory: &str, params: &Value) -> Result<Value, String> {
     let account_id = req_account_id(params)?;
     let folder = params
         .get("folder_id")
@@ -203,21 +206,21 @@ pub(crate) fn rename_mobile_folder(data_dir: &str, params: &Value) -> Result<Val
     // Addressed by its wire form, as `mail.folderCreate` stores it.
     let name = crate::utf7::encode(&display_name);
 
-    let engine = crate::ffi::engine_for(data_dir)?;
-    with_mobile_db(data_dir, |conn| {
+    let engine = crate::ffi::engine_for(data_directory)?;
+    with_mobile_db(data_directory, |conn| {
         if is_rss_account(&conn, &account_id)? {
             return Err("RSS accounts do not support folders".to_string());
         }
         crate::mail_model::check_folder_renamable(&conn, &account_id, &folder)?;
         if name == folder {
-            let mut response = list_mobile_folders(data_dir, params)?;
+            let mut response = list_mobile_folders(data_directory, params)?;
             response["ok"] = json!(true);
             response["folder"] = json!(folder);
             response["renamed"] = json!([]);
             return Ok(response);
         }
         let delimiter = store::get_folders(&conn, &account_id)
-            .map_err(|err| err.to_string())?
+            .map_err(|error| error.to_string())?
             .into_iter()
             .find(|item| item.name == folder)
             .and_then(|item| item.delimiter)
@@ -225,11 +228,11 @@ pub(crate) fn rename_mobile_folder(data_dir: &str, params: &Value) -> Result<Val
         if delimiter.is_some_and(|delimiter| name.starts_with(&format!("{folder}{delimiter}"))) {
             return Err("A folder cannot be moved inside itself".to_string());
         }
-        if store::folder_exists(&conn, &account_id, &name).map_err(|err| err.to_string())? {
+        if store::folder_exists(&conn, &account_id, &name).map_err(|error| error.to_string())? {
             return Err(format!("A folder named {display_name} already exists"));
         }
         let pairs = store::folder_rename_pairs(&conn, &account_id, &folder, &name)
-            .map_err(|err| err.to_string())?;
+            .map_err(|error| error.to_string())?;
         let creds = load_mobile_account_creds(&conn, &account_id)?;
         if account_needs_reconnect(&creds) {
             return Err(format!("account needs reconnect: {account_id}"));
@@ -247,15 +250,15 @@ pub(crate) fn rename_mobile_folder(data_dir: &str, params: &Value) -> Result<Val
                 },
             ))?;
         }
-        store::rename_folder(&conn, &account_id, &pairs).map_err(|err| err.to_string())?;
+        store::rename_folder(&conn, &account_id, &pairs).map_err(|error| error.to_string())?;
         for (from, _) in &pairs {
             // The old name is gone; a watcher would only fail to SELECT it and
             // reconnect forever.
             crate::ffi::forget_deleted_folder_watch(&account_id, from);
         }
         // Opted-in folders keep their opt-in under the new names.
-        crate::ffi::start_live_notify_watches(data_dir, &account_id);
-        let mut response = list_mobile_folders(data_dir, params)?;
+        crate::ffi::start_live_notify_watches(data_directory, &account_id);
+        let mut response = list_mobile_folders(data_directory, params)?;
         response["ok"] = json!(true);
         response["folder"] = json!(folder);
         // Every folder that moved, as [old, new] pairs, so the caller can

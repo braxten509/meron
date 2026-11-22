@@ -397,14 +397,15 @@ pub(super) fn ai_sort_seen_in_inbox(
 }
 
 /// Keep the shown rows of `folder` true to what a sync just stored:
+///
 /// - INBOX: what now shows in the Inbox itself is no longer shown from its
 ///   label folder (Gmail), so it doesn't list twice.
 /// - Another folder: after a UIDVALIDITY reset each row finds its message
 ///   again by identity; a row whose message is gone from the folder (deleted
 ///   or moved, here or elsewhere) goes.
-/// Stop showing in the Inbox the account's mail from other folders that is
-/// past [`super::AI_SORT_MAX_AGE_DAYS`] (shown before that rule existed, or
-/// grown old since). Its cached row's date decides; uncached rows stay.
+/// Stop showing in the Inbox the account's mail from other folders that is past
+/// [`super::AI_SORT_MAX_AGE_DAYS`] (shown before that rule existed, or grown old since). Its cached
+/// row's date decides; uncached rows stay.
 pub fn ai_sort_inbox_drop_old(conn: &Connection, account: &str, now: i64) -> Result<usize> {
     Ok(conn
         .prepare_cached(

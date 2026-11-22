@@ -1,4 +1,6 @@
-//! Local message search and saved search snapshot pages.
+//! Queries the local message index for mailbox and cross-folder searches.
+//! UID filtering and recipient text are evaluated against the stored headers.
+//! Sorted hits feed the engine's search pages.
 
 use anyhow::Result;
 use rusqlite::types::Value;

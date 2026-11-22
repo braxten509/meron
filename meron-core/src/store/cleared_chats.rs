@@ -170,12 +170,10 @@ fn own_replies_of_deleted(
     Ok(copies)
 }
 
-/// A whole conversation was deleted from `folder` (call it after the deleted
-/// rows left the store): tag the reader's own Sent mail in it, so it stays out
-/// of the conversation from now on. Answers with the tag keys newly tagged,
-/// which an Undo hands to [`bring_own_replies_back`]; empty when there was
-/// nothing to tag. With `mirrored`, the tag waits to be pushed to the server
-/// (see [`change_tags`]).
+/// A whole conversation was deleted from `folder` (call it after the deleted rows left the store): tag
+/// the reader's own Sent mail in it, so it stays out of the conversation from now on. Answers with the
+/// tag keys newly tagged, which an Undo hands to [`bring_own_replies_back`]; empty when there was
+/// nothing to tag. With `mirrored`, the tag waits to be pushed to the server (see [`change_tags`]).
 pub fn leave_own_replies_out(
     conn: &Connection,
     account: &str,

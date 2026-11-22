@@ -1,3 +1,7 @@
+//! Handles account setup and preferences requested by the mobile hosts.
+//! Discovery resolves server settings and account commands persist the selected configuration.
+//! Results are encoded for the same protocol used by Android and iOS.
+
 use super::*;
 use hickory_resolver::Resolver;
 use hickory_resolver::proto::rr::RData;
@@ -26,15 +30,15 @@ struct AutoconfigServer {
     username: String,
 }
 
-pub(crate) fn list_mobile_accounts(data_dir: &str) -> Result<Value, String> {
-    with_mobile_db(data_dir, |conn| {
-        let mut accounts = store::list_accounts(&conn).map_err(|err| err.to_string())?;
+pub(crate) fn list_mobile_accounts(data_directory: &str) -> Result<Value, String> {
+    with_mobile_db(data_directory, |conn| {
+        let mut accounts = store::list_accounts(&conn).map_err(|error| error.to_string())?;
         crate::account_photos::hide_missing(
-            &std::path::Path::new(data_dir.trim()).join("media"),
+            &std::path::Path::new(data_directory.trim()).join("media"),
             &mut accounts,
         );
         let creds_by_id = store::load_accounts(&conn)
-            .map_err(|err| err.to_string())?
+            .map_err(|error| error.to_string())?
             .into_iter()
             .collect::<std::collections::HashMap<_, _>>();
         for account in &mut accounts {
@@ -54,8 +58,8 @@ pub(crate) fn list_mobile_accounts(data_dir: &str) -> Result<Value, String> {
                     Some(account_needs_reconnect(&creds))
                 })
                 .unwrap_or(true);
-            if let Some(obj) = account.as_object_mut() {
-                obj.insert("needs_reconnect".to_string(), json!(needs_reconnect));
+            if let Some(object) = account.as_object_mut() {
+                object.insert("needs_reconnect".to_string(), json!(needs_reconnect));
             }
         }
         Ok(json!({ "accounts": accounts }))
@@ -68,13 +72,13 @@ pub(crate) fn req_account_pref_id(params: &Value) -> Result<String, String> {
         .or_else(|_| req_str(params, "id"))
 }
 
-pub(crate) fn remove_mobile_account(data_dir: &str, params: &Value) -> Result<Value, String> {
+pub(crate) fn remove_mobile_account(data_directory: &str, params: &Value) -> Result<Value, String> {
     let id = req_account_pref_id(params)?;
-    let result = with_mobile_db(data_dir, |conn| {
-        store::delete_account(&conn, &id).map_err(|err| err.to_string())?;
+    let result = with_mobile_db(data_directory, |conn| {
+        store::delete_account(&conn, &id).map_err(|error| error.to_string())?;
         Ok(json!({ "ok": true }))
     })?;
-    remove_mobile_account_media(data_dir, &id);
+    remove_mobile_account_media(data_directory, &id);
     crate::ffi::evict_engine_account(&id);
     Ok(result)
 }
@@ -198,7 +202,7 @@ fn discover_mobile_autoconfig(email: &str, domain: &str) -> Option<DiscoveredMai
 }
 
 fn fetch_mobile_autoconfig(url: &str) -> Option<String> {
-    let mut resp = crate::proxy::agent()
+    let mut response = crate::proxy::agent()
         .ok()?
         .get(url)
         .header("User-Agent", "Meron-Mail-Autoconfig")
@@ -208,10 +212,11 @@ fn fetch_mobile_autoconfig(url: &str) -> Option<String> {
         .build()
         .call()
         .ok()?;
-    if !resp.status().is_success() {
+    if !response.status().is_success() {
         return None;
     }
-    resp.body_mut()
+    response
+        .body_mut()
         .with_config()
         .limit(1 << 20)
         .read_to_string()
@@ -221,7 +226,7 @@ fn fetch_mobile_autoconfig(url: &str) -> Option<String> {
 fn parse_mobile_autoconfig(xml: &str, email: &str) -> Option<DiscoveredMailSettings> {
     let mut reader = Reader::from_str(xml);
     let decoder = reader.decoder();
-    let mut buf = Vec::new();
+    let mut buffer = Vec::new();
     let mut path: Vec<String> = Vec::new();
     let mut display_name = String::new();
     let mut incoming: Vec<AutoconfigServer> = Vec::new();
@@ -229,7 +234,7 @@ fn parse_mobile_autoconfig(xml: &str, email: &str) -> Option<DiscoveredMailSetti
     let mut current: Option<AutoconfigServer> = None;
 
     loop {
-        match reader.read_event_into(&mut buf) {
+        match reader.read_event_into(&mut buffer) {
             Ok(Event::Eof) => break,
             Ok(Event::Start(e)) => {
                 let name = String::from_utf8_lossy(e.name().as_ref()).to_string();
@@ -248,7 +253,7 @@ fn parse_mobile_autoconfig(xml: &str, email: &str) -> Option<DiscoveredMailSetti
             Ok(Event::Text(e)) => {
                 let text = e.unescape().ok()?.trim().to_string();
                 if text.is_empty() {
-                    buf.clear();
+                    buffer.clear();
                     continue;
                 }
                 match path.last().map(String::as_str) {
@@ -292,7 +297,7 @@ fn parse_mobile_autoconfig(xml: &str, email: &str) -> Option<DiscoveredMailSetti
             Ok(_) => {}
             Err(_) => return None,
         }
-        buf.clear();
+        buffer.clear();
     }
 
     let imap = incoming.into_iter().find(|server| {
@@ -444,10 +449,13 @@ pub(crate) fn mobile_app_password_hint(
     }
 }
 
-pub(crate) fn reorder_mobile_accounts(data_dir: &str, params: &Value) -> Result<Value, String> {
+pub(crate) fn reorder_mobile_accounts(
+    data_directory: &str,
+    params: &Value,
+) -> Result<Value, String> {
     let ids = req_str_array(params, "accounts")?;
-    with_mobile_db(data_dir, |conn| {
-        store::reorder_accounts(&conn, &ids).map_err(|err| err.to_string())?;
+    with_mobile_db(data_directory, |conn| {
+        store::reorder_accounts(&conn, &ids).map_err(|error| error.to_string())?;
         Ok(json!({ "ok": true }))
     })
 }
@@ -455,7 +463,10 @@ pub(crate) fn reorder_mobile_accounts(data_dir: &str, params: &Value) -> Result<
 #[cfg(test)]
 mod tests;
 
-pub(crate) fn suggest_mobile_contacts(data_dir: &str, params: &Value) -> Result<Value, String> {
+pub(crate) fn suggest_mobile_contacts(
+    data_directory: &str,
+    params: &Value,
+) -> Result<Value, String> {
     let mut account = opt_str(params, "account");
     if account.is_empty() {
         account = opt_str(params, "account_id");
@@ -470,57 +481,63 @@ pub(crate) fn suggest_mobile_contacts(data_dir: &str, params: &Value) -> Result<
         .get("directory")
         .and_then(Value::as_bool)
         .unwrap_or(false);
-    with_mobile_db(data_dir, |conn| {
+    with_mobile_db(data_directory, |conn| {
         let contacts = store::list_contacts(&conn, &account, &query, limit, sort, directory)
-            .map_err(|err| err.to_string())?;
+            .map_err(|error| error.to_string())?;
         Ok(json!({ "contacts": contacts }))
     })
 }
 
-pub(crate) fn set_mobile_account_name(data_dir: &str, params: &Value) -> Result<Value, String> {
+pub(crate) fn set_mobile_account_name(
+    data_directory: &str,
+    params: &Value,
+) -> Result<Value, String> {
     let id = req_account_pref_id(params)?;
     let name = opt_str(params, "name");
-    with_mobile_db(data_dir, |conn| {
+    with_mobile_db(data_directory, |conn| {
         conn.execute(
             "UPDATE accounts SET display_name = ?1, updated_at = strftime('%s', 'now') WHERE id = ?2",
             rusqlite::params![name, id],
         )
-        .map_err(|err| err.to_string())?;
+        .map_err(|error| error.to_string())?;
         Ok(json!({ "ok": true }))
     })
 }
 
 pub(crate) fn set_mobile_account_sender_name(
-    data_dir: &str,
+    data_directory: &str,
     params: &Value,
 ) -> Result<Value, String> {
     let id = req_account_pref_id(params)?;
     let name = opt_str(params, "name");
-    with_mobile_db(data_dir, |conn| {
+    with_mobile_db(data_directory, |conn| {
         conn.execute(
             "UPDATE accounts SET sender_name = ?1, updated_at = strftime('%s', 'now') WHERE id = ?2",
             rusqlite::params![name, id],
         )
-        .map_err(|err| err.to_string())?;
+        .map_err(|error| error.to_string())?;
         Ok(json!({ "ok": true }))
     })
 }
 
-pub(crate) fn set_mobile_account_avatar(data_dir: &str, params: &Value) -> Result<Value, String> {
+pub(crate) fn set_mobile_account_avatar(
+    data_directory: &str,
+    params: &Value,
+) -> Result<Value, String> {
     let id = req_account_pref_id(params)?;
     let avatar_url = opt_str(params, "avatar_url");
-    with_mobile_db(data_dir, |conn| {
+    with_mobile_db(data_directory, |conn| {
         conn.execute(
             "UPDATE accounts SET avatar_url = ?1, updated_at = strftime('%s', 'now') WHERE id = ?2",
             rusqlite::params![avatar_url, id],
         )
-        .map_err(|err| err.to_string())?;
+        .map_err(|error| error.to_string())?;
         Ok(json!({ "ok": true }))
     })
 }
 
 pub(crate) fn set_mobile_account_chat_wallpaper(
-    data_dir: &str,
+    data_directory: &str,
     params: &Value,
 ) -> Result<Value, String> {
     let id = req_account_pref_id(params)?;
@@ -557,9 +574,9 @@ pub(crate) fn set_mobile_account_chat_wallpaper(
             }
         }
     };
-    with_mobile_db(data_dir, |conn| {
+    with_mobile_db(data_directory, |conn| {
         store::set_account_pref_json(&conn, &id, "chat_wallpaper", wallpaper)
-            .map_err(|err| err.to_string())?;
+            .map_err(|error| error.to_string())?;
         Ok(json!({ "ok": true }))
     })
 }
@@ -567,42 +584,45 @@ pub(crate) fn set_mobile_account_chat_wallpaper(
 /// Mobile `account.setSignature`. A null `signature` clears the override so the
 /// account follows the app-wide signature again.
 pub(crate) fn set_mobile_account_signature(
-    data_dir: &str,
+    data_directory: &str,
     params: &Value,
 ) -> Result<Value, String> {
     let id = req_account_pref_id(params)?;
     let signature = store::AccountSignature::from_param(params.get("signature"))?;
-    with_mobile_db(data_dir, |conn| {
+    with_mobile_db(data_directory, |conn| {
         store::set_account_pref_json(&conn, &id, "signature", signature.map(|sig| json!(sig)))
-            .map_err(|err| err.to_string())?;
+            .map_err(|error| error.to_string())?;
         Ok(json!({ "ok": true }))
     })
 }
 
-pub(crate) fn set_mobile_account_images(data_dir: &str, params: &Value) -> Result<Value, String> {
+pub(crate) fn set_mobile_account_images(
+    data_directory: &str,
+    params: &Value,
+) -> Result<Value, String> {
     let id = req_account_pref_id(params)?;
     let enabled = req_bool(params, "enabled")?;
-    with_mobile_db(data_dir, |conn| {
-        store::set_load_remote_images(&conn, &id, enabled).map_err(|err| err.to_string())?;
+    with_mobile_db(data_directory, |conn| {
+        store::set_load_remote_images(&conn, &id, enabled).map_err(|error| error.to_string())?;
         Ok(json!({ "ok": true }))
     })
 }
 
 pub(crate) fn set_mobile_account_bool_pref(
-    data_dir: &str,
+    data_directory: &str,
     params: &Value,
     key: &str,
 ) -> Result<Value, String> {
     let id = req_account_pref_id(params)?;
     let enabled = req_bool(params, "enabled")?;
-    with_mobile_db(data_dir, |conn| {
-        store::set_account_pref(&conn, &id, key, enabled).map_err(|err| err.to_string())?;
+    with_mobile_db(data_directory, |conn| {
+        store::set_account_pref(&conn, &id, key, enabled).map_err(|error| error.to_string())?;
         Ok(json!({ "ok": true }))
     })
 }
 
 pub(crate) fn set_mobile_account_save_sent_copy(
-    data_dir: &str,
+    data_directory: &str,
     params: &Value,
 ) -> Result<Value, String> {
     let id = req_account_pref_id(params)?;
@@ -611,15 +631,15 @@ pub(crate) fn set_mobile_account_save_sent_copy(
         Some(Value::Null) | None => None,
         _ => return Err("value must be true, false, or null".to_string()),
     };
-    with_mobile_db(data_dir, |conn| {
+    with_mobile_db(data_directory, |conn| {
         store::set_account_pref_json(&conn, &id, "save_sent_copy", value)
-            .map_err(|err| err.to_string())?;
+            .map_err(|error| error.to_string())?;
         Ok(json!({ "ok": true }))
     })
 }
 
 pub(crate) fn set_mobile_account_rss_sync_interval(
-    data_dir: &str,
+    data_directory: &str,
     params: &Value,
 ) -> Result<Value, String> {
     let id = req_account_pref_id(params)?;
@@ -628,14 +648,17 @@ pub(crate) fn set_mobile_account_rss_sync_interval(
         .and_then(Value::as_u64)
         .unwrap_or(60)
         .clamp(5, 1440);
-    with_mobile_db(data_dir, |conn| {
+    with_mobile_db(data_directory, |conn| {
         store::set_account_pref_u64(&conn, &id, "rss_sync_interval_minutes", minutes)
-            .map_err(|err| err.to_string())?;
+            .map_err(|error| error.to_string())?;
         Ok(json!({ "ok": true, "minutes": minutes }))
     })
 }
 
-pub(crate) fn set_mobile_account_aliases(data_dir: &str, params: &Value) -> Result<Value, String> {
+pub(crate) fn set_mobile_account_aliases(
+    data_directory: &str,
+    params: &Value,
+) -> Result<Value, String> {
     let id = req_account_pref_id(params)?;
     let mut aliases: Vec<store::Alias> = params
         .get("aliases")
@@ -650,17 +673,20 @@ pub(crate) fn set_mobile_account_aliases(data_dir: &str, params: &Value) -> Resu
         alias.name = alias.name.trim().to_string();
         !alias.email.is_empty() && seen.insert(alias.email.to_lowercase())
     });
-    with_mobile_db(data_dir, |conn| {
-        store::set_account_aliases(&conn, &id, &aliases).map_err(|err| err.to_string())?;
+    with_mobile_db(data_directory, |conn| {
+        store::set_account_aliases(&conn, &id, &aliases).map_err(|error| error.to_string())?;
         Ok(json!({ "ok": true, "aliases": aliases.len() }))
     })
 }
 
-pub(crate) fn set_mobile_account_proxy(data_dir: &str, params: &Value) -> Result<Value, String> {
+pub(crate) fn set_mobile_account_proxy(
+    data_directory: &str,
+    params: &Value,
+) -> Result<Value, String> {
     let id = req_account_pref_id(params)?;
     let choice = crate::proxy::ProxyChoice::from_json(params.get("proxy").unwrap_or(&Value::Null));
-    let result = with_mobile_db(data_dir, |conn| {
-        store::set_account_proxy(&conn, &id, &choice).map_err(|err| err.to_string())?;
+    let result = with_mobile_db(data_directory, |conn| {
+        store::set_account_proxy(&conn, &id, &choice).map_err(|error| error.to_string())?;
         Ok(json!({ "ok": true, "proxy": choice.to_json() }))
     });
     if result.is_ok() {
@@ -673,11 +699,14 @@ pub(crate) fn set_mobile_account_proxy(data_dir: &str, params: &Value) -> Result
 /// The desktop sidecar has the same call; on mobile it is the only way a pin is
 /// ever set, since the failure surfaces on a sync rather than at save time.
 /// Omitting a key leaves that server's pin alone; an explicit null clears it.
-pub(crate) fn set_mobile_account_cert_pin(data_dir: &str, params: &Value) -> Result<Value, String> {
+pub(crate) fn set_mobile_account_cert_pin(
+    data_directory: &str,
+    params: &Value,
+) -> Result<Value, String> {
     let id = req_account_pref_id(params)?;
-    let result = with_mobile_db(data_dir, |conn| {
+    let result = with_mobile_db(data_directory, |conn| {
         let stored = store::load_accounts(&conn)
-            .map_err(|err| err.to_string())?
+            .map_err(|error| error.to_string())?
             .into_iter()
             .find(|(account, _)| account == &id)
             .map(|(_, creds)| creds);
@@ -692,7 +721,7 @@ pub(crate) fn set_mobile_account_cert_pin(data_dir: &str, params: &Value) -> Res
                 .and_then(|creds| creds.smtp_cert_pin.clone()),
         };
         store::set_account_cert_pins(&conn, &id, cert_pin.as_deref(), smtp_cert_pin.as_deref())
-            .map_err(|err| err.to_string())?;
+            .map_err(|error| error.to_string())?;
         Ok(json!({ "ok": true }))
     });
     if result.is_ok() {
@@ -704,19 +733,19 @@ pub(crate) fn set_mobile_account_cert_pin(data_dir: &str, params: &Value) -> Res
 /// The app-wide proxy. Mobile keeps most preferences on the platform side, but
 /// this one has to live in the core store: the socket layer reads it, including
 /// from background syncs that never touch the UI process state.
-pub(crate) fn get_mobile_proxy(data_dir: &str) -> Result<Value, String> {
-    with_mobile_db(data_dir, |conn| {
+pub(crate) fn get_mobile_proxy(data_directory: &str) -> Result<Value, String> {
+    with_mobile_db(data_directory, |conn| {
         let stored = store::settings_get(&conn, &[crate::proxy::SETTING_KEY.to_string()])
-            .map_err(|err| err.to_string())?;
+            .map_err(|error| error.to_string())?;
         Ok(json!({ "proxy": stored[crate::proxy::SETTING_KEY] }))
     })
 }
 
-pub(crate) fn set_mobile_proxy(data_dir: &str, params: &Value) -> Result<Value, String> {
+pub(crate) fn set_mobile_proxy(data_directory: &str, params: &Value) -> Result<Value, String> {
     let value = params.get("proxy").cloned().unwrap_or(Value::Null);
-    with_mobile_db(data_dir, |conn| {
+    with_mobile_db(data_directory, |conn| {
         store::setting_set(&conn, crate::proxy::SETTING_KEY, &value)
-            .map_err(|err| err.to_string())?;
+            .map_err(|error| error.to_string())?;
         // Republish immediately: a live Engine (foreground session) would
         // otherwise keep using the proxy it loaded when it was built.
         crate::proxy::set_global(crate::proxy::parse_global(&value));
@@ -747,7 +776,10 @@ pub(crate) fn probe_mobile_cert(params: &Value) -> Result<Value, String> {
     Ok(json!({ "certificate": info }))
 }
 
-pub(crate) fn add_mobile_password_account(data_dir: &str, params: &Value) -> Result<Value, String> {
+pub(crate) fn add_mobile_password_account(
+    data_directory: &str,
+    params: &Value,
+) -> Result<Value, String> {
     let email = req_str(params, "email")?;
     if !email.contains('@') {
         return Err("invalid email".to_string());
@@ -816,11 +848,11 @@ pub(crate) fn add_mobile_password_account(data_dir: &str, params: &Value) -> Res
         password: params.get("password").is_none(),
     };
 
-    let result = with_mobile_db(data_dir, |conn| {
+    let result = with_mobile_db(data_directory, |conn| {
         let mut creds = creds.clone();
         if omitted.any()
             && let Some(mut stored) =
-                store::load_account(&conn, &id).map_err(|err| err.to_string())?
+                store::load_account(&conn, &id).map_err(|error| error.to_string())?
         {
             // The password is held in the secret store, not the account row.
             if omitted.password {
@@ -828,15 +860,15 @@ pub(crate) fn add_mobile_password_account(data_dir: &str, params: &Value) -> Res
             }
             creds.carry_over(&stored, omitted);
         }
-        store::upsert_account(&conn, &id, &meta, &creds).map_err(|err| err.to_string())?;
+        store::upsert_account(&conn, &id, &meta, &creds).map_err(|error| error.to_string())?;
         store_mobile_secret(&conn, &id, &creds)?;
         let mut account = store::list_accounts(&conn)
-            .map_err(|err| err.to_string())?
+            .map_err(|error| error.to_string())?
             .into_iter()
             .find(|account| account.get("id").and_then(Value::as_str) == Some(id.as_str()))
             .ok_or_else(|| "account not found after save".to_string())?;
-        if let Some(obj) = account.as_object_mut() {
-            obj.insert(
+        if let Some(object) = account.as_object_mut() {
+            object.insert(
                 "needs_reconnect".to_string(),
                 json!(account_needs_reconnect(&creds)),
             );

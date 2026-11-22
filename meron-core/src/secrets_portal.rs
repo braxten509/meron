@@ -1,22 +1,20 @@
 //! Synchronous facade over oo7's async keyrings, with a local fallback.
 //!
-//! The sidecar's storage hooks are synchronous and can run from inside its
-//! Tokio runtime, where calling `block_on` directly would panic. A dedicated
-//! worker owns one keyring and serializes all operations.
+//! The sidecar's storage hooks are synchronous and can run from inside its Tokio runtime, where calling
+//! `block_on` directly would panic. A dedicated worker owns one keyring and serializes all operations.
 //!
 //! Two backends, picked once on first use:
 //!
 //!   * the Secret portal (`oo7::Keyring` under Flatpak), preferred;
 //!   * a local file keyring under the app dir, encrypted with a key file.
 //!
-//! The fallback exists because the Secret portal can be absent — nothing
-//! implements `org.freedesktop.portal.Secret` unless a backend such as
-//! xdg-desktop-portal-gnome is installed — and, worse, can accept the call and
-//! never answer, since the reply arrives as a `Response` signal on a Request
-//! object the frontend may never emit. Every operation is therefore bounded by
-//! [`OP_TIMEOUT`]; a timeout demotes the process to the local backend for the
-//! rest of the run instead of wedging the sidecar before it reads its first
-//! request.
+//! The fallback exists because the Secret portal can be absent — nothing implements
+//! `org.freedesktop.portal.Secret` unless a backend such as xdg-desktop-portal-gnome is installed —
+//! and, worse, can accept the call and never answer, since the reply arrives as a `Response` signal on
+//! a Request object the frontend may never emit.
+//!
+//! Every operation is therefore bounded by [`OP_TIMEOUT`]; a timeout demotes the process to the local
+//! backend for the rest of the run instead of wedging the sidecar before it reads its first request.
 
 use std::collections::HashMap;
 use std::future::Future;
@@ -69,8 +67,8 @@ pub fn local_keyring_exists() -> bool {
     local_keyring_exists_in(&crate::store::app_dir().join("keyring"))
 }
 
-fn local_keyring_exists_in(dir: &Path) -> bool {
-    dir.join("local.key").is_file() && dir.join("meron.keyring").is_file()
+fn local_keyring_exists_in(directory: &Path) -> bool {
+    directory.join("local.key").is_file() && directory.join("meron.keyring").is_file()
 }
 
 fn local_only() -> bool {
@@ -284,9 +282,9 @@ async fn open_backend() -> Result<Backend> {
 /// about as well as the SQLCipher key it also holds — strictly weaker than a
 /// real Secret Service, and only used when there is none.
 async fn open_local() -> Result<oo7::file::UnlockedKeyring> {
-    let dir = local_dir()?;
-    let secret = local_secret(&dir)?;
-    oo7::file::UnlockedKeyring::load(dir.join("meron.keyring"), oo7::Secret::text(&secret))
+    let directory = local_dir()?;
+    let secret = local_secret(&directory)?;
+    oo7::file::UnlockedKeyring::load(directory.join("meron.keyring"), oo7::Secret::text(&secret))
         .await
         .context("open local file keyring")
 }
@@ -294,22 +292,22 @@ async fn open_local() -> Result<oo7::file::UnlockedKeyring> {
 /// `<app dir>/keyring`, created 0700. Deliberately *not* oo7's default path
 /// (`~/.local/share/keyrings`), which belongs to gnome-keyring.
 fn local_dir() -> Result<PathBuf> {
-    let dir = crate::store::app_dir().join("keyring");
-    std::fs::create_dir_all(&dir)
-        .with_context(|| format!("create keyring dir {}", dir.display()))?;
+    let directory = crate::store::app_dir().join("keyring");
+    std::fs::create_dir_all(&directory)
+        .with_context(|| format!("create keyring dir {}", directory.display()))?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        let _ = std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700));
+        let _ = std::fs::set_permissions(&directory, std::fs::Permissions::from_mode(0o700));
     }
-    Ok(dir)
+    Ok(directory)
 }
 
 /// Read (or mint) the local keyring's encryption key: 64 hex chars in a 0600
 /// file. A malformed file is replaced — a fresh key loses stored secrets, which
 /// is the same position as having no keyring file at all.
-fn local_secret(dir: &Path) -> Result<String> {
-    let path = dir.join("local.key");
+fn local_secret(directory: &Path) -> Result<String> {
+    let path = directory.join("local.key");
     if let Ok(existing) = std::fs::read_to_string(&path) {
         let existing = existing.trim().to_owned();
         if is_hex_key(&existing) {
@@ -501,37 +499,39 @@ mod tests {
 
     #[test]
     fn local_secret_is_stable_and_private() {
-        let dir = std::env::temp_dir().join(format!("meron-keyring-{}", uuid::Uuid::new_v4()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let first = local_secret(&dir).unwrap();
-        let second = local_secret(&dir).unwrap();
+        let directory =
+            std::env::temp_dir().join(format!("meron-keyring-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&directory).unwrap();
+        let first = local_secret(&directory).unwrap();
+        let second = local_secret(&directory).unwrap();
         assert_eq!(first, second);
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let mode = std::fs::metadata(dir.join("local.key"))
+            let mode = std::fs::metadata(directory.join("local.key"))
                 .unwrap()
                 .permissions()
                 .mode();
             assert_eq!(mode & 0o777, 0o600);
         }
         // A corrupted key file is replaced rather than propagated.
-        std::fs::write(dir.join("local.key"), "not-a-key").unwrap();
-        let third = local_secret(&dir).unwrap();
+        std::fs::write(directory.join("local.key"), "not-a-key").unwrap();
+        let third = local_secret(&directory).unwrap();
         assert!(is_hex_key(&third));
         assert_ne!(third, first);
-        std::fs::remove_dir_all(&dir).unwrap();
+        std::fs::remove_dir_all(&directory).unwrap();
     }
 
     #[test]
     fn persisted_local_backend_requires_both_keyring_files() {
-        let dir = std::env::temp_dir().join(format!("meron-keyring-{}", uuid::Uuid::new_v4()));
-        std::fs::create_dir_all(&dir).unwrap();
-        assert!(!local_keyring_exists_in(&dir));
-        std::fs::write(dir.join("local.key"), "key").unwrap();
-        assert!(!local_keyring_exists_in(&dir));
-        std::fs::write(dir.join("meron.keyring"), "keyring").unwrap();
-        assert!(local_keyring_exists_in(&dir));
-        std::fs::remove_dir_all(&dir).unwrap();
+        let directory =
+            std::env::temp_dir().join(format!("meron-keyring-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&directory).unwrap();
+        assert!(!local_keyring_exists_in(&directory));
+        std::fs::write(directory.join("local.key"), "key").unwrap();
+        assert!(!local_keyring_exists_in(&directory));
+        std::fs::write(directory.join("meron.keyring"), "keyring").unwrap();
+        assert!(local_keyring_exists_in(&directory));
+        std::fs::remove_dir_all(&directory).unwrap();
     }
 }

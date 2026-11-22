@@ -146,12 +146,12 @@ async fn connect_tcp_inner(host: &str, port: u16) -> Result<TcpStream> {
     // avoid firing both families at once, not to add delay after an attempt has
     // already failed. Re-delaying here would push later addresses past
     // TCP_CONNECT_TIMEOUT and leave a reachable third address never tried.
-    let mut last_err = anyhow!("dns lookup: no addresses for {host}");
+    let mut last_error = anyhow!("dns lookup: no addresses for {host}");
     while let Some(attempt) = attempts.join_next().await {
         let (addr, elapsed, result) = match attempt {
             Ok(attempt) => attempt,
             Err(error) => {
-                last_err = anyhow::Error::new(error).context("tcp connect task");
+                last_error = anyhow::Error::new(error).context("tcp connect task");
                 if let Some(addr) = pending.next() {
                     spawn_attempt(&mut attempts, addr, std::time::Duration::ZERO);
                 }
@@ -176,7 +176,7 @@ async fn connect_tcp_inner(host: &str, port: u16) -> Result<TcpStream> {
                 let _ = tcp.set_nodelay(true);
                 return Ok(tcp);
             }
-            Ok(Err(err)) => last_err = anyhow::Error::new(err).context(format!("connect {addr}")),
+            Ok(Err(err)) => last_error = anyhow::Error::new(err).context(format!("connect {addr}")),
             Err(_) => {
                 crate::mlog!(
                     crate::log::Level::Warn,
@@ -184,14 +184,14 @@ async fn connect_tcp_inner(host: &str, port: u16) -> Result<TcpStream> {
                     "connect to {addr} timed out after {}ms",
                     elapsed.as_millis()
                 );
-                last_err = anyhow!("connect {addr}: timed out");
+                last_error = anyhow!("connect {addr}: timed out");
             }
         }
         if let Some(addr) = pending.next() {
             spawn_attempt(&mut attempts, addr, std::time::Duration::ZERO);
         }
     }
-    Err(last_err.context("tcp connect"))
+    Err(last_error.context("tcp connect"))
 }
 
 /// Open a TCP connection, optionally wrapped in implicit TLS.

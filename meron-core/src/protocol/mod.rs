@@ -1,3 +1,7 @@
+//! Defines the request and event entry points shared by Meron's hosts.
+//! The dispatcher decodes command parameters and selects the responsible feature.
+//! Replies and startup events are serialized for the host transport.
+
 pub(crate) use crate::imap::{self, Creds, MessageHeader};
 pub(crate) use crate::rss;
 pub(crate) use crate::secrets::Secrets;
@@ -60,12 +64,12 @@ pub fn ping_response() -> Value {
     json!({ "pong": true, "version": VERSION, "protocol": PROTOCOL_VERSION })
 }
 
-pub fn dispatch_protocol_request(req: &Request) -> Result<Value, String> {
-    match req.method.as_str() {
+pub fn dispatch_protocol_request(request: &Request) -> Result<Value, String> {
+    match request.method.as_str() {
         "ping" => Ok(ping_response()),
         "account.list" => Ok(json!({ "accounts": [] })),
-        "account.autodiscover" => autodiscover_mobile_account(&req.params),
-        "oauth.authorizeUrl" => mobile_oauth_authorize_url(&req.params),
+        "account.autodiscover" => autodiscover_mobile_account(&request.params),
+        "oauth.authorizeUrl" => mobile_oauth_authorize_url(&request.params),
         "account.addOAuth" => Ok(json!({ "account": Value::Null })),
         "account.exchangeOAuthCode" => Ok(json!({ "account": Value::Null })),
         "account.updateOAuthToken" => Ok(json!({ "ok": true, "account": Value::Null })),
@@ -154,21 +158,23 @@ pub fn dispatch_protocol_request(req: &Request) -> Result<Value, String> {
     }
 }
 
-pub fn dispatch_mobile_protocol_request(req: &Request, data_dir: &str) -> Result<Value, String> {
+pub fn dispatch_mobile_protocol_request(
+    req: &Request,
+    data_directory: &str,
+) -> Result<Value, String> {
     match req.method.as_str() {
         "reminders.list" | "reminders.claim" | "reminders.skipPast" | "reminders.acknowledge" => {
-            with_mobile_db(data_dir, |conn| {
+            with_mobile_db(data_directory, |conn| {
                 crate::reminders::dispatch(&conn, &req.method, &req.params)
-                    .map_err(|err| format!("{err:#}"))
+                    .map_err(|error| format!("{error:#}"))
             })
         }
         "search.parse" | "search.build" => {
             crate::search_query::handle_request(&req.method, &req.params)
                 .ok_or_else(|| format!("bad {} request", req.method))
         }
-        "avatar.resolve" => {
-            serde_json::to_value(crate::avatar::resolve(&req.params)).map_err(|err| err.to_string())
-        }
+        "avatar.resolve" => serde_json::to_value(crate::avatar::resolve(&req.params))
+            .map_err(|error| error.to_string()),
         "changelog.fetch" => {
             let variant = crate::changelog::Variant::parse(
                 req.params
@@ -176,75 +182,79 @@ pub fn dispatch_mobile_protocol_request(req: &Request, data_dir: &str) -> Result
                     .and_then(Value::as_str)
                     .unwrap_or("android"),
             );
-            crate::changelog::fetch(variant).map_err(|err| format!("{err:#}"))
+            crate::changelog::fetch(variant).map_err(|error| format!("{error:#}"))
         }
-        "account.list" => list_mobile_accounts(data_dir),
-        "account.addPassword" => add_mobile_password_account(data_dir, &req.params),
+        "account.list" => list_mobile_accounts(data_directory),
+        "account.addPassword" => add_mobile_password_account(data_directory, &req.params),
         "account.probeCert" => probe_mobile_cert(&req.params),
-        "account.setCertPin" => set_mobile_account_cert_pin(data_dir, &req.params),
+        "account.setCertPin" => set_mobile_account_cert_pin(data_directory, &req.params),
         "account.autodiscover" => autodiscover_mobile_account(&req.params),
         "oauth.authorizeUrl" => mobile_oauth_authorize_url(&req.params),
-        "account.addOAuth" => add_mobile_oauth_account(data_dir, &req.params),
-        "account.exchangeOAuthCode" => exchange_mobile_oauth_code(data_dir, &req.params),
-        "account.updateOAuthToken" => update_mobile_oauth_token(data_dir, &req.params),
-        "account.addRss" | "account.addRSS" => add_mobile_rss_account(data_dir, &req.params),
-        "account.remove" => remove_mobile_account(data_dir, &req.params),
-        "account.setName" => set_mobile_account_name(data_dir, &req.params),
-        "account.setSenderName" => set_mobile_account_sender_name(data_dir, &req.params),
-        "account.setAvatar" => set_mobile_account_avatar(data_dir, &req.params),
+        "account.addOAuth" => add_mobile_oauth_account(data_directory, &req.params),
+        "account.exchangeOAuthCode" => exchange_mobile_oauth_code(data_directory, &req.params),
+        "account.updateOAuthToken" => update_mobile_oauth_token(data_directory, &req.params),
+        "account.addRss" | "account.addRSS" => add_mobile_rss_account(data_directory, &req.params),
+        "account.remove" => remove_mobile_account(data_directory, &req.params),
+        "account.setName" => set_mobile_account_name(data_directory, &req.params),
+        "account.setSenderName" => set_mobile_account_sender_name(data_directory, &req.params),
+        "account.setAvatar" => set_mobile_account_avatar(data_directory, &req.params),
         "account.writeAvatarFile" => {
-            write_mobile_account_media_file(data_dir, &req.params, "avatars")
+            write_mobile_account_media_file(data_directory, &req.params, "avatars")
         }
-        "account.setChatWallpaper" => set_mobile_account_chat_wallpaper(data_dir, &req.params),
+        "account.setChatWallpaper" => {
+            set_mobile_account_chat_wallpaper(data_directory, &req.params)
+        }
         "account.writeChatWallpaperFile" => {
-            write_mobile_account_media_file(data_dir, &req.params, "wallpapers")
+            write_mobile_account_media_file(data_directory, &req.params, "wallpapers")
         }
-        "account.setImages" => set_mobile_account_images(data_dir, &req.params),
-        "account.setSignature" => set_mobile_account_signature(data_dir, &req.params),
+        "account.setImages" => set_mobile_account_images(data_directory, &req.params),
+        "account.setSignature" => set_mobile_account_signature(data_directory, &req.params),
         "account.setConversationHtml" => {
-            set_mobile_account_bool_pref(data_dir, &req.params, "conversation_html")
+            set_mobile_account_bool_pref(data_directory, &req.params, "conversation_html")
         }
         "account.setUnified" => {
-            set_mobile_account_bool_pref(data_dir, &req.params, "included_in_unified")
+            set_mobile_account_bool_pref(data_directory, &req.params, "included_in_unified")
         }
-        "account.setMuted" => set_mobile_account_bool_pref(data_dir, &req.params, "muted"),
-        "account.setPaused" => set_mobile_account_bool_pref(data_dir, &req.params, "paused"),
-        "account.setSaveSentCopy" => set_mobile_account_save_sent_copy(data_dir, &req.params),
-        "account.setRSSSyncInterval" => set_mobile_account_rss_sync_interval(data_dir, &req.params),
-        "account.setAliases" => set_mobile_account_aliases(data_dir, &req.params),
-        "account.setProxy" => set_mobile_account_proxy(data_dir, &req.params),
-        "app.prefsGet" => get_mobile_prefs(data_dir, &req.params),
-        "app.prefsSet" => set_mobile_pref(data_dir, &req.params),
-        "app.proxyGet" => get_mobile_proxy(data_dir),
-        "app.proxySet" => set_mobile_proxy(data_dir, &req.params),
-        "account.reorder" => reorder_mobile_accounts(data_dir, &req.params),
+        "account.setMuted" => set_mobile_account_bool_pref(data_directory, &req.params, "muted"),
+        "account.setPaused" => set_mobile_account_bool_pref(data_directory, &req.params, "paused"),
+        "account.setSaveSentCopy" => set_mobile_account_save_sent_copy(data_directory, &req.params),
+        "account.setRSSSyncInterval" => {
+            set_mobile_account_rss_sync_interval(data_directory, &req.params)
+        }
+        "account.setAliases" => set_mobile_account_aliases(data_directory, &req.params),
+        "account.setProxy" => set_mobile_account_proxy(data_directory, &req.params),
+        "app.prefsGet" => get_mobile_prefs(data_directory, &req.params),
+        "app.prefsSet" => set_mobile_pref(data_directory, &req.params),
+        "app.proxyGet" => get_mobile_proxy(data_directory),
+        "app.proxySet" => set_mobile_proxy(data_directory, &req.params),
+        "account.reorder" => reorder_mobile_accounts(data_directory, &req.params),
         "contacts.suggest" | "mail.suggestContacts" => {
-            suggest_mobile_contacts(data_dir, &req.params)
+            suggest_mobile_contacts(data_directory, &req.params)
         }
         "contacts.threads" | "mail.contactThreads" => {
-            list_mobile_contact_threads(data_dir, &req.params)
+            list_mobile_contact_threads(data_directory, &req.params)
         }
-        "feed.add" | "rss.addFeed" => add_mobile_rss_feed(data_dir, &req.params),
-        "feed.remove" | "rss.removeFeed" => remove_mobile_rss_feed(data_dir, &req.params),
-        "feed.move" | "rss.moveFeed" => move_mobile_rss_feed(data_dir, &req.params),
-        "backup.export" => export_mobile_backup(data_dir, &req.params),
-        "backup.import" => import_mobile_backup(data_dir, &req.params),
-        "rss.exportOpml" => export_mobile_opml(data_dir, &req.params),
-        "rss.importOpml" => import_mobile_opml(data_dir, &req.params),
-        "mail.folderList" => list_mobile_folders(data_dir, &req.params),
-        "mail.folderCreate" => create_mobile_folder(data_dir, &req.params),
-        "mail.folderDelete" => delete_mobile_folder(data_dir, &req.params),
-        "mail.folderRename" => rename_mobile_folder(data_dir, &req.params),
-        "mail.folderSetNotify" => set_mobile_folder_notify(data_dir, &req.params),
-        "mail.threadList" => list_mobile_threads(data_dir, &req.params),
-        "mail.threadRead" => read_mobile_thread(data_dir, &req.params),
+        "feed.add" | "rss.addFeed" => add_mobile_rss_feed(data_directory, &req.params),
+        "feed.remove" | "rss.removeFeed" => remove_mobile_rss_feed(data_directory, &req.params),
+        "feed.move" | "rss.moveFeed" => move_mobile_rss_feed(data_directory, &req.params),
+        "backup.export" => export_mobile_backup(data_directory, &req.params),
+        "backup.import" => import_mobile_backup(data_directory, &req.params),
+        "rss.exportOpml" => export_mobile_opml(data_directory, &req.params),
+        "rss.importOpml" => import_mobile_opml(data_directory, &req.params),
+        "mail.folderList" => list_mobile_folders(data_directory, &req.params),
+        "mail.folderCreate" => create_mobile_folder(data_directory, &req.params),
+        "mail.folderDelete" => delete_mobile_folder(data_directory, &req.params),
+        "mail.folderRename" => rename_mobile_folder(data_directory, &req.params),
+        "mail.folderSetNotify" => set_mobile_folder_notify(data_directory, &req.params),
+        "mail.threadList" => list_mobile_threads(data_directory, &req.params),
+        "mail.threadRead" => read_mobile_thread(data_directory, &req.params),
         "mail.attachmentRead" | "mail.readAttachment" => {
-            read_mobile_attachment_file(data_dir, &req.params)
+            read_mobile_attachment_file(data_directory, &req.params)
         }
-        "storage.usage" => mobile_storage_usage(data_dir),
-        "storage.clearCache" => clear_mobile_storage_cache(data_dir),
-        "mail.starredItems" => list_mobile_starred_items(data_dir, &req.params),
-        "mail.stillUnread" => mobile_messages_still_unread(data_dir, &req.params),
+        "storage.usage" => mobile_storage_usage(data_directory),
+        "storage.clearCache" => clear_mobile_storage_cache(data_directory),
+        "mail.starredItems" => list_mobile_starred_items(data_directory, &req.params),
+        "mail.stillUnread" => mobile_messages_still_unread(data_directory, &req.params),
         "mail.allocateIdentity" => {
             let account_id = req
                 .params
@@ -258,48 +268,48 @@ pub fn dispatch_mobile_protocol_request(req: &Request, data_dir: &str) -> Result
                 .unwrap_or(false);
             Ok(json!({ "message_id": crate::mail_model::allocate_message_id(account_id, draft) }))
         }
-        "mail.sync" | "messages.sync" => sync_mobile_mail(data_dir, &req.params),
-        "mail.send" => send_mobile_message(data_dir, &req.params),
-        "invite.respond" => respond_mobile_invite(data_dir, &req.params),
-        "mail.saveDraft" => save_mobile_draft(data_dir, &req.params),
-        "mail.discardDraft" => discard_mobile_draft(data_dir, &req.params),
-        "mail.archive" => archive_mobile_thread(data_dir, &req.params),
-        "mail.delete" => delete_mobile_thread(data_dir, &req.params),
-        "mail.deleteMany" => delete_mobile_threads(data_dir, &req.params),
-        "mail.move" => move_mobile_thread(data_dir, &req.params),
-        "mail.copy" => copy_mobile_thread(data_dir, &req.params),
-        "mail.markRead" => mark_mobile_thread_read(data_dir, &req.params),
-        "mail.markAllRead" => mark_mobile_folder_all_read(data_dir, &req.params),
-        "mail.emptyFolder" => empty_mobile_folder(data_dir, &req.params),
-        "mail.markStarred" => mark_mobile_thread_starred(data_dir, &req.params),
-        "mail.setTags" => set_mobile_thread_tags(data_dir, &req.params),
-        "mail.tagList" => list_mobile_tags(data_dir),
-        "mail.replaceTag" => replace_mobile_tag(data_dir, &req.params),
-        "mail.rules" => mobile_rules(data_dir),
-        "mail.setRules" => set_mobile_rules(data_dir, &req.params),
-        "mail.ruleMatches" => mobile_rule_matches(data_dir, &req.params),
-        "mail.runRule" => run_mobile_rule(data_dir, &req.params),
-        "mail.ruleStatus" => mobile_rule_status(data_dir),
-        "mail.stopRule" => stop_mobile_rule(data_dir, &req.params),
+        "mail.sync" | "messages.sync" => sync_mobile_mail(data_directory, &req.params),
+        "mail.send" => send_mobile_message(data_directory, &req.params),
+        "invite.respond" => respond_mobile_invite(data_directory, &req.params),
+        "mail.saveDraft" => save_mobile_draft(data_directory, &req.params),
+        "mail.discardDraft" => discard_mobile_draft(data_directory, &req.params),
+        "mail.archive" => archive_mobile_thread(data_directory, &req.params),
+        "mail.delete" => delete_mobile_thread(data_directory, &req.params),
+        "mail.deleteMany" => delete_mobile_threads(data_directory, &req.params),
+        "mail.move" => move_mobile_thread(data_directory, &req.params),
+        "mail.copy" => copy_mobile_thread(data_directory, &req.params),
+        "mail.markRead" => mark_mobile_thread_read(data_directory, &req.params),
+        "mail.markAllRead" => mark_mobile_folder_all_read(data_directory, &req.params),
+        "mail.emptyFolder" => empty_mobile_folder(data_directory, &req.params),
+        "mail.markStarred" => mark_mobile_thread_starred(data_directory, &req.params),
+        "mail.setTags" => set_mobile_thread_tags(data_directory, &req.params),
+        "mail.tagList" => list_mobile_tags(data_directory),
+        "mail.replaceTag" => replace_mobile_tag(data_directory, &req.params),
+        "mail.rules" => mobile_rules(data_directory),
+        "mail.setRules" => set_mobile_rules(data_directory, &req.params),
+        "mail.ruleMatches" => mobile_rule_matches(data_directory, &req.params),
+        "mail.runRule" => run_mobile_rule(data_directory, &req.params),
+        "mail.ruleStatus" => mobile_rule_status(data_directory),
+        "mail.stopRule" => stop_mobile_rule(data_directory, &req.params),
         method if crate::ai_sort::mobile_command(method).is_some() => mobile_ai_sort(
-            data_dir,
+            data_directory,
             crate::ai_sort::mobile_command(method).unwrap_or_default(),
             &req.params,
         ),
         method if method.starts_with("setupCopy.") => {
-            mobile_setup_copy(data_dir, &method["setupCopy.".len()..], &req.params)
+            mobile_setup_copy(data_directory, &method["setupCopy.".len()..], &req.params)
         }
         method if crate::meron_folders::mobile_command(method).is_some() => mobile_meron_folders(
-            data_dir,
+            data_directory,
             crate::meron_folders::mobile_command(method).unwrap_or_default(),
             &req.params,
         ),
-        "rss.sync" => sync_mobile_rss(data_dir, &req.params),
-        "rss.thread" => read_mobile_rss_thread(data_dir, &req.params),
-        "rss.markRead" => mark_mobile_rss_thread_read(data_dir, &req.params),
-        "rss.markStarred" => mark_mobile_rss_thread_starred(data_dir, &req.params),
-        method => match dispatch_mobile_tasks(data_dir, method, &req.params)
-            .or_else(|| dispatch_mobile_calendar(data_dir, method, &req.params))
+        "rss.sync" => sync_mobile_rss(data_directory, &req.params),
+        "rss.thread" => read_mobile_rss_thread(data_directory, &req.params),
+        "rss.markRead" => mark_mobile_rss_thread_read(data_directory, &req.params),
+        "rss.markStarred" => mark_mobile_rss_thread_starred(data_directory, &req.params),
+        method => match dispatch_mobile_tasks(data_directory, method, &req.params)
+            .or_else(|| dispatch_mobile_calendar(data_directory, method, &req.params))
         {
             Some(result) => result,
             None => dispatch_protocol_request(req),
@@ -317,11 +327,11 @@ pub fn invoke_protocol_json(request_json: &str) -> Value {
     }
 }
 
-pub fn invoke_mobile_protocol_json(request_json: &str, data_dir: Option<&str>) -> Value {
+pub fn invoke_mobile_protocol_json(request_json: &str, data_directory: Option<&str>) -> Value {
     match serde_json::from_str::<Request>(request_json) {
         Ok(req) => {
-            let result = match data_dir {
-                Some(data_dir) => dispatch_mobile_protocol_request(&req, data_dir),
+            let result = match data_directory {
+                Some(data_directory) => dispatch_mobile_protocol_request(&req, data_directory),
                 None => dispatch_protocol_request(&req),
             };
             match result {

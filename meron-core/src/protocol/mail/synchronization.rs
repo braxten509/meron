@@ -11,7 +11,7 @@ const MOBILE_BODY_PREFETCH_TIMEOUT_SECS: u64 = 20;
 pub(super) const DRAFT_SYNC_LIMIT: u32 = 20;
 
 fn prefetch_mobile_bodies(
-    data_dir: &str,
+    data_directory: &str,
     engine: &std::sync::Arc<crate::engine::Engine>,
     account_id: &str,
     folder: &str,
@@ -19,7 +19,7 @@ fn prefetch_mobile_bodies(
     let options = crate::engine::BodyPrefetchOptions {
         days: MOBILE_BODY_PREFETCH_DAYS,
         max_count: Some(MOBILE_BODY_PREFETCH_MAX),
-        media_root: std::path::PathBuf::from(data_dir).join("attachments"),
+        media_root: std::path::PathBuf::from(data_directory).join("attachments"),
     };
     let result = crate::ffi::engine_block_on(async {
         tokio::time::timeout(
@@ -51,7 +51,7 @@ const NOTIFY_PREVIEW_TIMEOUT_SECS: u64 = 8;
 /// Cache the bodies of new arrivals so the notification can show a snippet of
 /// each. Best-effort: a failure only costs the snippets.
 fn fetch_notification_bodies(
-    data_dir: &str,
+    data_directory: &str,
     engine: &std::sync::Arc<crate::engine::Engine>,
     account_id: &str,
     folder: &str,
@@ -62,7 +62,7 @@ fn fetch_notification_bodies(
         .take(crate::mail_model::NEW_MESSAGES_DETAIL_MAX)
         .map(|header| header.uid)
         .collect();
-    let media_root = std::path::PathBuf::from(data_dir).join("attachments");
+    let media_root = std::path::PathBuf::from(data_directory).join("attachments");
     let result = crate::ffi::engine_block_on(async {
         tokio::time::timeout(
             std::time::Duration::from_secs(NOTIFY_PREVIEW_TIMEOUT_SECS),
@@ -100,14 +100,14 @@ fn release_sync_tail(key: &str) {
 /// Drafts header syncs (so cross-folder conversation views read from the local
 /// store).
 fn finish_mobile_sync(
-    data_dir: &str,
+    data_directory: &str,
     engine: &std::sync::Arc<crate::engine::Engine>,
     account_id: &str,
     folder: &str,
     limit: u32,
     announce: bool,
 ) -> Vec<Value> {
-    prefetch_mobile_bodies(data_dir, engine, account_id, folder);
+    prefetch_mobile_bodies(data_directory, engine, account_id, folder);
 
     // Also pull Sent and Drafts so messages sent or drafted from another
     // client surface in the cross-folder conversation view (shared with the
@@ -144,7 +144,7 @@ fn finish_mobile_sync(
         })
         .unwrap_or_default();
         if announce {
-            return meron_details(data_dir, engine, account_id, &filed);
+            return meron_details(data_directory, engine, account_id, &filed);
         }
     }
     Vec::new()
@@ -153,7 +153,7 @@ fn finish_mobile_sync(
 /// `mail.newMessages` details for new mail AI sorting filed into Meron
 /// folders with notifications on, one per folder, bodies fetched first.
 fn meron_details(
-    data_dir: &str,
+    data_directory: &str,
     engine: &std::sync::Arc<crate::engine::Engine>,
     account_id: &str,
     groups: &[crate::engine::ai_sort::MeronArrivals],
@@ -161,8 +161,14 @@ fn meron_details(
     groups
         .iter()
         .filter_map(|group| {
-            fetch_notification_bodies(data_dir, engine, account_id, &group.folder, &group.headers);
-            crate::ffi::mobile_meron_new_messages_detail(data_dir, account_id, group)
+            fetch_notification_bodies(
+                data_directory,
+                engine,
+                account_id,
+                &group.folder,
+                &group.headers,
+            );
+            crate::ffi::mobile_meron_new_messages_detail(data_directory, account_id, group)
         })
         .collect()
 }
@@ -177,7 +183,7 @@ fn meron_details(
 /// Everything else (background workers, the IDLE watcher) keeps it inline: an OS-granted execution
 /// window ends when the worker returns, so a detached thread could be frozen mid-fetch.
 fn run_mobile_sync_tail(
-    data_dir: &str,
+    data_directory: &str,
     engine: &std::sync::Arc<crate::engine::Engine>,
     account_id: &str,
     folder: &str,
@@ -185,20 +191,20 @@ fn run_mobile_sync_tail(
     defer_tail: bool,
 ) -> Vec<Value> {
     if !defer_tail {
-        return finish_mobile_sync(data_dir, engine, account_id, folder, limit, true);
+        return finish_mobile_sync(data_directory, engine, account_id, folder, limit, true);
     }
     let key = format!("{account_id}/{folder}");
     if !claim_sync_tail(&key) {
         return Vec::new();
     }
-    let data_dir = data_dir.to_string();
+    let data_directory = data_directory.to_string();
     let engine = engine.clone();
     let account_id = account_id.to_string();
     let folder = folder.to_string();
     std::thread::spawn(move || {
         // The foreground UI's sync: like its own arrivals, which it doesn't
         // notify for, what this files into Meron folders isn't announced.
-        finish_mobile_sync(&data_dir, &engine, &account_id, &folder, limit, false);
+        finish_mobile_sync(&data_directory, &engine, &account_id, &folder, limit, false);
         release_sync_tail(&key);
         // Not `mail.synced`: that handler reloads the thread list (resetting
         // pagination), and the tail never changes the open folder's headers —
@@ -211,7 +217,7 @@ fn run_mobile_sync_tail(
     Vec::new()
 }
 
-pub(crate) fn sync_mobile_mail(data_dir: &str, params: &Value) -> Result<Value, String> {
+pub(crate) fn sync_mobile_mail(data_directory: &str, params: &Value) -> Result<Value, String> {
     let account_id = req_account_id(params)?;
     let folder = params
         .get("folder_id")
@@ -236,18 +242,20 @@ pub(crate) fn sync_mobile_mail(data_dir: &str, params: &Value) -> Result<Value, 
         .unwrap_or(false);
 
     // RSS accounts sync through the feed pipeline, not the IMAP engine.
-    let is_rss = with_mobile_db(data_dir, |conn| {
+    let is_rss = with_mobile_db(data_directory, |conn| {
         Ok(json!(is_rss_account(&conn, &account_id)?))
     })?;
     if is_rss.as_bool() == Some(true) {
-        return with_mobile_db(data_dir, |conn| sync_mobile_rss_with_conn(conn, account_id));
+        return with_mobile_db(data_directory, |conn| {
+            sync_mobile_rss_with_conn(conn, account_id)
+        });
     }
 
     // Route IMAP sync through the shared Engine: reuses the warm session pool
     // while foreground and runs the same ops as desktop (sync_folders +
     // sync_messages do fetch/upsert/prune/flag-reconcile into the store), so the
     // two platforms can't drift.
-    let engine = crate::ffi::engine_for(data_dir)?;
+    let engine = crate::ffi::engine_for(data_directory)?;
     let started = std::time::Instant::now();
     let creds = crate::ffi::engine_block_on(engine.ensure_valid_creds(&account_id))?;
     if account_needs_reconnect(&creds) {
@@ -271,7 +279,7 @@ pub(crate) fn sync_mobile_mail(data_dir: &str, params: &Value) -> Result<Value, 
     let messages_ms = messages_started.elapsed().as_millis();
     // New mail AI sorting filed into Meron folders with notifications on.
     let mut meron_new_messages = meron_details(
-        data_dir,
+        data_directory,
         &engine,
         &account_id,
         &std::mem::take(&mut synced.meron_arrivals),
@@ -283,8 +291,8 @@ pub(crate) fn sync_mobile_mail(data_dir: &str, params: &Value) -> Result<Value, 
             // Fetch the arrivals' own bodies before building the detail: the
             // notification shows a snippet of each, and the general prefetch in
             // the sync tail runs too late (and may be deferred entirely).
-            fetch_notification_bodies(data_dir, &engine, &account_id, &folder, &headers);
-            crate::ffi::mobile_new_messages_detail(data_dir, &account_id, &folder, &headers)
+            fetch_notification_bodies(data_directory, &engine, &account_id, &folder, &headers);
+            crate::ffi::mobile_new_messages_detail(data_directory, &account_id, &folder, &headers)
         });
     crate::mlog!(
         crate::log::Level::Info,
@@ -293,7 +301,7 @@ pub(crate) fn sync_mobile_mail(data_dir: &str, params: &Value) -> Result<Value, 
         synced.count
     );
     meron_new_messages.extend(run_mobile_sync_tail(
-        data_dir,
+        data_directory,
         &engine,
         &account_id,
         &folder,

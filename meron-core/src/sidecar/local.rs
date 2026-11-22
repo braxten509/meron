@@ -91,7 +91,7 @@ fn archive(main: &Arc<Engine>) -> anyhow::Result<Arc<Engine>> {
         match store::repair_local_index(&db, &parse::media_root()) {
             Ok(0) => {}
             Ok(repaired) => eprintln!("meron-core: reindexed {repaired} archived messages"),
-            Err(err) => eprintln!("meron-core: archive index repair failed: {err:#}"),
+            Err(error) => eprintln!("meron-core: archive index repair failed: {error:#}"),
         }
         store::sync_local_identity(&main.db.lock().unwrap(), &db)?;
     }
@@ -100,19 +100,21 @@ fn archive(main: &Arc<Engine>) -> anyhow::Result<Arc<Engine>> {
 }
 
 /// Whether this request is for local folders.
-pub(crate) fn handles(req: &Request) -> bool {
-    let p = &req.params;
-    let account = p.get("account").and_then(Value::as_str);
-    match req.method.as_str() {
+pub(crate) fn handles(request: &Request) -> bool {
+    let parameters = &request.params;
+    let account = parameters.get("account").and_then(Value::as_str);
+    match request.method.as_str() {
         "account.addLocal"
         | "account.localStats"
         | "account.localBackup"
         | "account.localRestore" => true,
         "account.remove" => {
-            account.or_else(|| p.get("id").and_then(Value::as_str)) == Some(LOCAL_ACCOUNT_ID)
+            account.or_else(|| parameters.get("id").and_then(Value::as_str))
+                == Some(LOCAL_ACCOUNT_ID)
         }
         "messages.move" | "messages.copy"
-            if p.get("target_account").and_then(Value::as_str) == Some(LOCAL_ACCOUNT_ID) =>
+            if parameters.get("target_account").and_then(Value::as_str)
+                == Some(LOCAL_ACCOUNT_ID) =>
         {
             true
         }
@@ -125,11 +127,11 @@ pub(crate) async fn dispatch(
     req: &Request,
     out: &Writer,
 ) -> anyhow::Result<Value> {
-    let p = &req.params;
+    let parameters = &req.params;
     match req.method.as_str() {
         // Create the local account (once) and its archive.
         "account.addLocal" => {
-            let name = req_str(p, "name")
+            let name = req_str(parameters, "name")
                 .ok()
                 .map(|name| name.trim().to_string())
                 .filter(|name| !name.is_empty())
@@ -139,7 +141,7 @@ pub(crate) async fn dispatch(
             // Start with one folder, so there is somewhere to move mail and a
             // folder to open. The UI names it in the user's language.
             if created {
-                let folder = req_str(p, "folder")
+                let folder = req_str(parameters, "folder")
                     .ok()
                     .filter(|folder| !folder.trim().is_empty())
                     .unwrap_or_else(|| "Archive".to_string());
@@ -159,8 +161,8 @@ pub(crate) async fn dispatch(
         }
 
         "account.localBackup" => {
-            let path = req_str(p, "path")?;
-            let passphrase = req_str(p, "passphrase")?;
+            let path = req_str(parameters, "path")?;
+            let passphrase = req_str(parameters, "passphrase")?;
             let archive = archive(main)?;
             let db = archive.db.lock().unwrap();
             store::backup_archive_to(&db, std::path::Path::new(&path), &passphrase)?;
@@ -169,8 +171,8 @@ pub(crate) async fn dispatch(
 
         // Merge a backup into the local folders, creating them if needed.
         "account.localRestore" => {
-            let path = req_str(p, "path")?;
-            let passphrase = req_str(p, "passphrase")?;
+            let path = req_str(parameters, "path")?;
+            let passphrase = req_str(parameters, "passphrase")?;
             store::add_local_account(&main.db.lock().unwrap(), "Local Folders")?;
             let archive = archive(main)?;
             let restored = {
@@ -209,10 +211,10 @@ pub(crate) async fn dispatch(
                 file.push(suffix);
                 match std::fs::remove_file(&file) {
                     Ok(()) => {}
-                    Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
-                    Err(err) => {
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(error) => {
                         return Err(anyhow::anyhow!(
-                            "Could not delete {}: {err}",
+                            "Could not delete {}: {error}",
                             std::path::Path::new(&file).display()
                         ));
                     }
@@ -225,7 +227,7 @@ pub(crate) async fn dispatch(
         }
 
         "messages.move" | "messages.copy"
-            if req_str(p, "account").ok().as_deref() != Some(LOCAL_ACCOUNT_ID) =>
+            if req_str(parameters, "account").ok().as_deref() != Some(LOCAL_ACCOUNT_ID) =>
         {
             archive_from_server(main, req).await
         }
@@ -245,11 +247,18 @@ fn archive_file() -> std::path::PathBuf {
 
 /// The UIDs a mail request names: explicit `uids`, one `uid`, or every message
 /// of `thread_key` in `folder`.
-fn request_uids(conn: &rusqlite::Connection, p: &Value, folder: &str) -> anyhow::Result<Vec<u32>> {
+fn request_uids(
+    conn: &rusqlite::Connection,
+    parameters: &Value,
+    folder: &str,
+) -> anyhow::Result<Vec<u32>> {
     let (thread_key, subject_filter) =
-        store::split_thread_key(&req_str(p, "thread_key").unwrap_or_default());
-    let uid = p.get("uid").and_then(Value::as_u64).map(|n| n as u32);
-    let explicit_uids = p
+        store::split_thread_key(&req_str(parameters, "thread_key").unwrap_or_default());
+    let uid = parameters
+        .get("uid")
+        .and_then(Value::as_u64)
+        .map(|n| n as u32);
+    let explicit_uids = parameters
         .get("uids")
         .and_then(Value::as_array)
         .map(|items| {
@@ -262,7 +271,8 @@ fn request_uids(conn: &rusqlite::Connection, p: &Value, folder: &str) -> anyhow:
         .unwrap_or_default();
     store::resolve_message_uids(
         conn,
-        p.get("account")
+        parameters
+            .get("account")
             .and_then(Value::as_str)
             .unwrap_or(LOCAL_ACCOUNT_ID),
         folder,
@@ -274,11 +284,11 @@ fn request_uids(conn: &rusqlite::Connection, p: &Value, folder: &str) -> anyhow:
 }
 
 /// The thread id a mutation reports as changed, built as the server path does.
-fn changed_thread_id(p: &Value, account: &str, folder: &str) -> String {
+fn changed_thread_id(parameters: &Value, account: &str, folder: &str) -> String {
     let (thread_key, subject_filter) =
-        store::split_thread_key(&req_str(p, "thread_key").unwrap_or_default());
+        store::split_thread_key(&req_str(parameters, "thread_key").unwrap_or_default());
     if thread_key.is_empty() {
-        return p
+        return parameters
             .get("uid")
             .and_then(Value::as_u64)
             .map(|uid| format!("{account}#{folder}#{uid}"))
@@ -291,8 +301,8 @@ fn changed_thread_id(p: &Value, account: &str, folder: &str) -> String {
     mail_model::format_thread_id(account, folder, &key)
 }
 
-fn request_folder(p: &Value) -> anyhow::Result<String> {
-    let folder = req_str(p, "folder").or_else(|_| req_str(p, "name"))?;
+fn request_folder(parameters: &Value) -> anyhow::Result<String> {
+    let folder = req_str(parameters, "folder").or_else(|_| req_str(parameters, "name"))?;
     store::normalize_local_folder_name(&folder)
 }
 
@@ -302,7 +312,7 @@ async fn local_mail(
     req: &Request,
     out: &Writer,
 ) -> anyhow::Result<Value> {
-    let p = &req.params;
+    let parameters = &req.params;
     let account = LOCAL_ACCOUNT_ID;
     let media_root = parse::media_root();
     match req.method.as_str() {
@@ -312,13 +322,15 @@ async fn local_mail(
         }
 
         "folders.create" => {
-            let folder =
-                store::create_local_folder(&archive.db.lock().unwrap(), &req_str(p, "name")?)?;
+            let folder = store::create_local_folder(
+                &archive.db.lock().unwrap(),
+                &req_str(parameters, "name")?,
+            )?;
             Ok(json!({ "folders": serde_json::to_value(vec![folder])? }))
         }
 
         "folders.delete" => {
-            let folder = request_folder(p)?;
+            let folder = request_folder(parameters)?;
             let db = archive.db.lock().unwrap();
             let (removed, deleted) = store::delete_local_folder(&db, &folder)?;
             for target in &removed {
@@ -334,10 +346,14 @@ async fn local_mail(
         }
 
         "folders.rename" => {
-            let folder = request_folder(p)?;
+            let folder = request_folder(parameters)?;
             let db = archive.db.lock().unwrap();
-            let renamed =
-                store::rename_local_folder(&db, &folder, &req_str(p, "name")?, &media_root)?;
+            let renamed = store::rename_local_folder(
+                &db,
+                &folder,
+                &req_str(parameters, "name")?,
+                &media_root,
+            )?;
             Ok(json!({
                 "ok": true,
                 "folder": folder,
@@ -355,12 +371,16 @@ async fn local_mail(
         )),
         // .eml export: the kept originals, byte for byte.
         "messages.exportUids" => {
-            let folder = canon_local(p);
+            let folder = canon_local(parameters);
             let db = archive.db.lock().unwrap();
-            let mut uids = if p.get("all").and_then(Value::as_bool).unwrap_or(false) {
+            let mut uids = if parameters
+                .get("all")
+                .and_then(Value::as_bool)
+                .unwrap_or(false)
+            {
                 store::local_folder_uids(&db, &folder)?
             } else {
-                request_uids(&db, p, &folder)?
+                request_uids(&db, parameters, &folder)?
             };
             uids.sort_unstable();
             uids.dedup();
@@ -368,9 +388,9 @@ async fn local_mail(
         }
 
         "messages.saveRaw" => {
-            let folder = canon_local(p);
-            let uid = req_u32(p, "uid")?;
-            let path = req_str(p, "path")?;
+            let folder = canon_local(parameters);
+            let uid = req_u32(parameters, "uid")?;
+            let path = req_str(parameters, "path")?;
             let raw = store::raw_message(&archive.db.lock().unwrap(), &folder, uid)?
                 .ok_or_else(|| anyhow::anyhow!("message {uid} not found in {folder}"))?;
             write_private(std::path::Path::new(&path), &raw)?;
@@ -378,9 +398,9 @@ async fn local_mail(
         }
 
         "messages.saveRawBatch" => {
-            let folder = canon_local(p);
-            let dir = std::path::PathBuf::from(req_str(p, "dir")?);
-            let uids = p
+            let folder = canon_local(parameters);
+            let directory = std::path::PathBuf::from(req_str(parameters, "dir")?);
+            let uids = parameters
                 .get("uids")
                 .and_then(Value::as_array)
                 .map(|items| {
@@ -397,7 +417,7 @@ async fn local_mail(
                 let Some(raw) = store::raw_message(&db, &folder, uid)? else {
                     continue;
                 };
-                write_private(&dir.join(format!("{uid}.eml")), &raw)?;
+                write_private(&directory.join(format!("{uid}.eml")), &raw)?;
                 saved.push(uid);
             }
             Ok(json!({ "saved": saved }))
@@ -407,7 +427,7 @@ async fn local_mail(
         "messages.sync" | "watch.start" | "watch.stop" => Ok(json!({ "ok": true })),
 
         "messages.recent" => {
-            let request = thread_list::ThreadListQuery::from_params(p, "folder");
+            let request = thread_list::ThreadListQuery::from_params(parameters, "folder");
             let folder = request.folder.clone();
             let db = archive.db.lock().unwrap();
             let (messages, next_cursor) = match request.source() {
@@ -443,7 +463,10 @@ async fn local_mail(
                 &folder,
                 messages,
                 next_cursor,
-                p.get("group").and_then(Value::as_bool).unwrap_or(false),
+                parameters
+                    .get("group")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false),
             )?;
             page["folder_synced"] = Value::Bool(true);
             request.retain_attachment_threads(&mut page);
@@ -452,8 +475,8 @@ async fn local_mail(
 
         "messages.read" | "messages.threadHeaders" => {
             if req.method == "messages.read" {
-                let folder = canon_local(p);
-                let uid = req_u32(p, "uid")?;
+                let folder = canon_local(parameters);
+                let uid = req_u32(parameters, "uid")?;
                 store::restore_local_media(
                     &archive.db.lock().unwrap(),
                     &[(folder, uid)],
@@ -468,10 +491,14 @@ async fn local_mail(
         }
 
         "messages.thread" => {
-            let folder = canon_local(p);
-            let (thread_key, subject_filter) = store::split_thread_key(&req_str(p, "thread_key")?);
-            let limit = p.get("limit").and_then(Value::as_u64).map(|n| n as u32);
-            let thread_id = req_str(p, "thread_id")
+            let folder = canon_local(parameters);
+            let (thread_key, subject_filter) =
+                store::split_thread_key(&req_str(parameters, "thread_key")?);
+            let limit = parameters
+                .get("limit")
+                .and_then(Value::as_u64)
+                .map(|n| n as u32);
+            let thread_id = req_str(parameters, "thread_id")
                 .unwrap_or_else(|_| mail_model::format_thread_id(account, &folder, &thread_key));
             // Only the page being read: an old conversation may be long.
             {
@@ -483,7 +510,7 @@ async fn local_mail(
                     &thread_key,
                     subject_filter.as_deref(),
                     limit,
-                    p.get("before_cursor").and_then(Value::as_str),
+                    parameters.get("before_cursor").and_then(Value::as_str),
                 )?;
                 let messages = headers
                     .into_iter()
@@ -508,8 +535,11 @@ async fn local_mail(
                     thread_key: &thread_key,
                     subject_filter: subject_filter.as_deref(),
                     limit,
-                    for_print: p.get("for_print").and_then(Value::as_bool).unwrap_or(false),
-                    before_cursor: p.get("before_cursor").and_then(Value::as_str),
+                    for_print: parameters
+                        .get("for_print")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(false),
+                    before_cursor: parameters.get("before_cursor").and_then(Value::as_str),
                     media_root,
                 },
                 None,
@@ -518,16 +548,16 @@ async fn local_mail(
         }
 
         "messages.markRead" | "messages.markStarred" => {
-            let folder = canon_local(p);
+            let folder = canon_local(parameters);
             let read = req.method == "messages.markRead";
-            let value = p
+            let value = parameters
                 .get(if read { "seen" } else { "starred" })
                 .and_then(Value::as_bool)
                 .unwrap_or(true);
             let db = archive.db.lock().unwrap();
-            let explicit = p.get("uids").is_some() || p.get("uid").is_some();
+            let explicit = parameters.get("uids").is_some() || parameters.get("uid").is_some();
             let (thread_key, subject_filter) =
-                store::split_thread_key(&req_str(p, "thread_key").unwrap_or_default());
+                store::split_thread_key(&req_str(parameters, "thread_key").unwrap_or_default());
             // A whole thread is flagged in every local folder it spans.
             let by_folder = if !explicit && !thread_key.is_empty() {
                 store::thread_uids_by_folder(
@@ -539,7 +569,10 @@ async fn local_mail(
                     false,
                 )?
             } else {
-                std::collections::BTreeMap::from([(folder.clone(), request_uids(&db, p, &folder)?)])
+                std::collections::BTreeMap::from([(
+                    folder.clone(),
+                    request_uids(&db, parameters, &folder)?,
+                )])
             };
             for (marked_folder, uids) in &by_folder {
                 let (seen, starred) = if read {
@@ -553,7 +586,7 @@ async fn local_mail(
                 json!({ "ok": true }),
                 &db,
                 account,
-                &changed_thread_id(p, account, &folder),
+                &changed_thread_id(parameters, account, &folder),
                 &folder,
                 None,
                 read.then_some(!value),
@@ -570,24 +603,25 @@ async fn local_mail(
         }
 
         "messages.setTags" => {
-            let folder = canon_local(p);
-            let add = meron_core::tags::parse_tag_list(p.get("add")).map_err(anyhow::Error::msg)?;
-            let remove =
-                meron_core::tags::parse_tag_list(p.get("remove")).map_err(anyhow::Error::msg)?;
+            let folder = canon_local(parameters);
+            let add = meron_core::tags::parse_tag_list(parameters.get("add"))
+                .map_err(anyhow::Error::msg)?;
+            let remove = meron_core::tags::parse_tag_list(parameters.get("remove"))
+                .map_err(anyhow::Error::msg)?;
             let db = archive.db.lock().unwrap();
             let targets = store::tag_targets(
                 &db,
                 account,
                 &folder,
-                &req_str(p, "thread_key").unwrap_or_default(),
-                &tag_uids(p),
+                &req_str(parameters, "thread_key").unwrap_or_default(),
+                &tag_uids(parameters),
             )?;
             let tags = store::retag(&db, account, &targets, &add, &remove, false)?;
             Ok(json!({ "ok": true, "tags": tags }))
         }
 
         "messages.markAllRead" => {
-            let folder = canon_local(p);
+            let folder = canon_local(parameters);
             let db = archive.db.lock().unwrap();
             let updated = store::set_local_folder_seen(&db, &folder, true)?;
             mail_model::mutation_result(
@@ -605,9 +639,9 @@ async fn local_mail(
 
         // Local folders have no Trash: a delete is permanent, and the UI says so.
         "messages.delete" => {
-            let folder = canon_local(p);
+            let folder = canon_local(parameters);
             let db = archive.db.lock().unwrap();
-            let uids = request_uids(&db, p, &folder)?;
+            let uids = request_uids(&db, parameters, &folder)?;
             let deleted = store::delete_local_messages(&db, &folder, &uids)?;
             for uid in &uids {
                 parse::remove_message_media(&media_root, account, &folder, *uid);
@@ -616,7 +650,7 @@ async fn local_mail(
                 json!({ "ok": true, "deleted": deleted, "permanent": true }),
                 &db,
                 account,
-                &changed_thread_id(p, account, &folder),
+                &changed_thread_id(parameters, account, &folder),
                 &folder,
                 None,
                 None,
@@ -627,15 +661,15 @@ async fn local_mail(
 
         "messages.move" | "messages.copy" => {
             let moving = req.method == "messages.move";
-            let folder = canon_local(p);
+            let folder = canon_local(parameters);
             let target_account =
-                req_str(p, "target_account").unwrap_or_else(|_| account.to_string());
-            let target_folder = req_str(p, "target_folder")?;
-            let thread_id = changed_thread_id(p, account, &folder);
+                req_str(parameters, "target_account").unwrap_or_else(|_| account.to_string());
+            let target_folder = req_str(parameters, "target_folder")?;
+            let thread_id = changed_thread_id(parameters, account, &folder);
             if target_account == account {
                 let target_folder = store::normalize_local_folder_name(&target_folder)?;
                 let db = archive.db.lock().unwrap();
-                let uids = request_uids(&db, p, &folder)?;
+                let uids = request_uids(&db, parameters, &folder)?;
                 if target_folder == folder {
                     return Ok(json!({ "ok": true, "moved": 0 }));
                 }
@@ -676,7 +710,7 @@ async fn local_mail(
             let target_folder = engine::canon_folder(&target_folder);
             let (uids, messages) = {
                 let db = archive.db.lock().unwrap();
-                let uids = request_uids(&db, p, &folder)?;
+                let uids = request_uids(&db, parameters, &folder)?;
                 let messages = store::raw_messages_for_copy(&db, &folder, &uids)?;
                 (uids, messages)
             };
@@ -764,16 +798,16 @@ fn write_private(path: &std::path::Path, bytes: &[u8]) -> anyhow::Result<()> {
     }
     let mut output = options
         .open(path)
-        .map_err(|err| anyhow::anyhow!("open message export {}: {err}", path.display()))?;
+        .map_err(|error| anyhow::anyhow!("open message export {}: {error}", path.display()))?;
     output
         .write_all(bytes)
-        .map_err(|err| anyhow::anyhow!("write message export {}: {err}", path.display()))
+        .map_err(|error| anyhow::anyhow!("write message export {}: {error}", path.display()))
 }
 
 /// The folder a local request names, in the form local folders are stored
 /// under (see `store::normalize_local_folder_name`).
-fn canon_local(p: &Value) -> String {
-    store::canon_local_folder(&req_str(p, "folder").unwrap_or_default())
+fn canon_local(parameters: &Value) -> String {
+    store::canon_local_folder(&req_str(parameters, "folder").unwrap_or_default())
 }
 
 /// Tag counts in local folders, for the tag list.
@@ -804,8 +838,8 @@ pub(crate) fn starred_cards(main: &Arc<Engine>, max_threads: u32) -> Vec<Value> 
     let cards = archive(main).and_then(|archive| {
         mail_model::starred_thread_cards(&archive.db.lock().unwrap(), max_threads)
     });
-    cards.unwrap_or_else(|err| {
-        eprintln!("meron-core: local starred threads: {err:#}");
+    cards.unwrap_or_else(|error| {
+        eprintln!("meron-core: local starred threads: {error:#}");
         Vec::new()
     })
 }
@@ -814,22 +848,23 @@ pub(crate) fn starred_cards(main: &Arc<Engine>, max_threads: u32) -> Vec<Value> 
 /// preferences current before a thread read renders with them.
 fn refresh_identity(main: &Arc<Engine>, archive: &Arc<Engine>) {
     let result = store::sync_local_identity(&main.db.lock().unwrap(), &archive.db.lock().unwrap());
-    if let Err(err) = result {
-        eprintln!("meron-core: local identity sync failed: {err:#}");
+    if let Err(error) = result {
+        eprintln!("meron-core: local identity sync failed: {error:#}");
     }
 }
 
 /// Move (or copy) server mail into a local folder: download each original, keep
 /// it in the archive and read it back, and only then move the server copy to
 /// Trash. Runs in rounds of [`ARCHIVE_BATCH`], each complete before the next.
-async fn archive_from_server(main: &Arc<Engine>, req: &Request) -> anyhow::Result<Value> {
-    let p = &req.params;
-    let moving = req.method == "messages.move";
-    let account = req_str(p, "account")?;
-    let folder =
-        engine::canon_folder(&req_str(p, "folder").unwrap_or_else(|_| "INBOX".to_string()));
-    let target_folder = store::normalize_local_folder_name(&req_str(p, "target_folder")?)?;
-    let thread_id = changed_thread_id(p, &account, &folder);
+async fn archive_from_server(main: &Arc<Engine>, request: &Request) -> anyhow::Result<Value> {
+    let parameters = &request.params;
+    let moving = request.method == "messages.move";
+    let account = req_str(parameters, "account")?;
+    let folder = engine::canon_folder(
+        &req_str(parameters, "folder").unwrap_or_else(|_| "INBOX".to_string()),
+    );
+    let target_folder = store::normalize_local_folder_name(&req_str(parameters, "target_folder")?)?;
+    let thread_id = changed_thread_id(parameters, &account, &folder);
     let archive = archive(main)?;
     if !store::folder_exists(
         &archive.db.lock().unwrap(),
@@ -838,7 +873,7 @@ async fn archive_from_server(main: &Arc<Engine>, req: &Request) -> anyhow::Resul
     )? {
         return Err(anyhow::anyhow!("Folder not found: {target_folder}"));
     }
-    let uids = request_uids(&main.db.lock().unwrap(), p, &folder)?;
+    let uids = request_uids(&main.db.lock().unwrap(), parameters, &folder)?;
     let source = store::archive_source_label(&main.db.lock().unwrap(), &account, &folder);
     let media_root = parse::media_root();
 
@@ -913,8 +948,8 @@ async fn archive_from_server(main: &Arc<Engine>, req: &Request) -> anyhow::Resul
         if moving {
             let removed = engine::delete_to_trash(main, &account, &folder, chunk)
                 .await
-                .map_err(|err| {
-                    err.context("Kept the messages in the local folder but could not remove them from the server")
+                .map_err(|error| {
+                    error.context("Kept the messages in the local folder but could not remove them from the server")
                 })?;
             store::delete_messages_by_uid(&main.db.lock().unwrap(), &account, &folder, chunk)?;
             if let Some(trash) = removed {

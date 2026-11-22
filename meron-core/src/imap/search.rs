@@ -66,8 +66,10 @@ pub(super) fn search_criteria(gmail: bool, query: &str, charset: bool, literal: 
         let query = SearchQuery::parse(query);
         let mut keys = Vec::new();
         for text in &query.text {
-            let q = string(text);
-            keys.push(format!("OR OR SUBJECT {q} FROM {q} TEXT {q}"));
+            let query_text = string(text);
+            keys.push(format!(
+                "OR OR SUBJECT {query_text} FROM {query_text} TEXT {query_text}"
+            ));
         }
         // A term's alternatives, ORed: IMAP's OR takes two keys, so nest it.
         let any = |values: &[String], key: &dyn Fn(String) -> String| {

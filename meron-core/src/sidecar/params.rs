@@ -1,3 +1,7 @@
+//! Decodes common RPC fields used by desktop feature handlers.
+//! Helpers distinguish required values from optional attachment and cursor data.
+//! A malformed input is reported to the calling command.
+
 use serde_json::Value;
 use std::sync::Arc;
 
@@ -25,7 +29,7 @@ pub(crate) fn opt_attachments(params: &Value) -> anyhow::Result<Vec<smtp::Attach
             .iter()
             .map(|val| {
                 serde_json::from_value::<smtp::AttachmentInput>(val.clone())
-                    .map_err(|err| anyhow::anyhow!("invalid attachment: {err}"))
+                    .map_err(|error| anyhow::anyhow!("invalid attachment: {error}"))
             })
             .collect(),
         Some(Value::Null) | None => Ok(Vec::new()),

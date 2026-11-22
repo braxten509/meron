@@ -1,3 +1,7 @@
+//! Merges per-account pages into the unified mail views.
+//! The cursor records how much of each account's page has already been shown.
+//! The merge preserves ordering while allowing each account to retain its own cursor format.
+
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};

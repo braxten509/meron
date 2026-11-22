@@ -25,7 +25,7 @@ pub(crate) fn cached_thread_uids(
         None,
         &[],
     )
-    .map_err(|err| err.to_string())
+    .map_err(|error| error.to_string())
 }
 
 /// `message_ids` sent but empty: "exactly these messages", none of them.
@@ -83,11 +83,11 @@ pub(crate) fn update_mobile_read_state(
         // Marking unread is per-uid too — only the newest message was flagged.
         for uid in uids {
             store::update_message_seen(conn, &parsed.account, &parsed.folder, *uid, seen)
-                .map_err(|err| err.to_string())?;
+                .map_err(|error| error.to_string())?;
         }
     } else if let Some(uid) = parsed.uid {
         store::update_message_seen(conn, &parsed.account, &parsed.folder, uid, seen)
-            .map_err(|err| err.to_string())?;
+            .map_err(|error| error.to_string())?;
     } else {
         store::update_thread_seen(
             conn,
@@ -96,7 +96,7 @@ pub(crate) fn update_mobile_read_state(
             &parsed.thread_key,
             seen,
         )
-        .map_err(|err| err.to_string())?;
+        .map_err(|error| error.to_string())?;
     }
     Ok(())
 }
@@ -113,7 +113,7 @@ pub(crate) fn find_cached_archive_folder(
     conn: &rusqlite::Connection,
     account: &str,
 ) -> Result<String, String> {
-    let folders = store::get_folders(conn, account).map_err(|err| err.to_string())?;
+    let folders = store::get_folders(conn, account).map_err(|error| error.to_string())?;
     crate::engine::cached_archive_folder_from_folders(folders, "")
         .ok_or_else(|| "Archive folder not found for this account".to_string())
 }

@@ -1,3 +1,7 @@
+//! Starts background work on behalf of desktop requests.
+//! The sidecar schedules thread recovery and synchronization for mail and RSS.
+//! Workers use the same engine and store as the foreground request.
+
 use serde_json::json;
 use std::sync::Arc;
 use std::time::Duration;

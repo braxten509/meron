@@ -199,7 +199,7 @@ pub fn get_sender_page(
                         .unwrap_or_else(|| format!("uid:{uid}")),
                     to: parse_recipients_json(row.get::<_, Option<String>>(9)?),
                     folder: Some(row.get::<_, String>(14)?)
-                        .filter(|src| !src.is_empty())
+                        .filter(|source| !source.is_empty())
                         .unwrap_or_else(|| folder.to_string()),
                     ..Default::default()
                 },

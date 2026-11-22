@@ -1,3 +1,7 @@
+//! Routes account RPCs from the desktop host.
+//! The command name selects account configuration, credentials or discovery.
+//! Parameters and results cross the sidecar boundary as JSON.
+
 use serde_json::{Value, json};
 use std::sync::Arc;
 use std::time::Duration;
@@ -14,11 +18,11 @@ use crate::sidecar::params::*;
 /// Handle `account.*`: listing, connecting, and per-account settings.
 pub(crate) async fn dispatch(
     engine: &Arc<Engine>,
-    req: &Request,
+    request: &Request,
     out: &Writer,
 ) -> anyhow::Result<Value> {
-    let p = &req.params;
-    match req.method.as_str() {
+    let parameters = &request.params;
+    match request.method.as_str() {
         // All accounts (mail + rss) as bridge-shaped JSON, from the one DB.
         "account.list" => {
             let mut accounts = store::list_accounts(&engine.db.lock().unwrap())?;
@@ -54,76 +58,87 @@ pub(crate) async fn dispatch(
 
         // Store (and validate) IMAP credentials for an account.
         "account.connect" => {
-            let id = req_str(p, "account").or_else(|_| req_str(p, "id"))?;
-            let host = req_str(p, "host")?;
+            let id = req_str(parameters, "account").or_else(|_| req_str(parameters, "id"))?;
+            let host = req_str(parameters, "host")?;
             let mut creds = imap::Creds {
                 host: host.clone(),
-                port: req_u16(p, "port").unwrap_or(993),
-                user: req_str(p, "user")?,
-                password: p
+                port: req_u16(parameters, "port").unwrap_or(993),
+                user: req_str(parameters, "user")?,
+                password: parameters
                     .get("password")
                     .and_then(Value::as_str)
                     .map(|s| s.to_string())
                     .unwrap_or_default(),
-                tls: p.get("tls").and_then(Value::as_bool).unwrap_or(true),
-                starttls: p.get("starttls").and_then(Value::as_bool).unwrap_or(false),
-                smtp_host: req_str(p, "smtp_host").unwrap_or(host),
-                smtp_port: req_u16(p, "smtp_port").unwrap_or(587),
-                smtp_tls: p.get("smtp_tls").and_then(Value::as_bool).unwrap_or(true),
-                smtp_starttls: p
+                tls: parameters
+                    .get("tls")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(true),
+                starttls: parameters
+                    .get("starttls")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false),
+                smtp_host: req_str(parameters, "smtp_host").unwrap_or(host),
+                smtp_port: req_u16(parameters, "smtp_port").unwrap_or(587),
+                smtp_tls: parameters
+                    .get("smtp_tls")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(true),
+                smtp_starttls: parameters
                     .get("smtp_starttls")
                     .and_then(Value::as_bool)
                     .unwrap_or(false),
-                auth_type: p
+                auth_type: parameters
                     .get("auth_type")
                     .and_then(Value::as_str)
                     .map(|s| s.to_string())
                     .unwrap_or_else(|| "password".to_string()),
-                access_token: p
+                access_token: parameters
                     .get("access_token")
                     .and_then(Value::as_str)
                     .map(|s| s.to_string()),
-                refresh_token: p
+                refresh_token: parameters
                     .get("refresh_token")
                     .and_then(Value::as_str)
                     .map(|s| s.to_string()),
-                token_expires_at: p
+                token_expires_at: parameters
                     .get("token_expires_at")
                     .and_then(Value::as_i64)
                     .unwrap_or(0),
-                oauth_client_id: p
+                oauth_client_id: parameters
                     .get("oauth_client_id")
-                    .or_else(|| p.get("client_id"))
+                    .or_else(|| parameters.get("client_id"))
                     .and_then(Value::as_str)
                     .unwrap_or("")
                     .trim()
                     .to_string(),
-                oauth_client_secret: p
+                oauth_client_secret: parameters
                     .get("oauth_client_secret")
-                    .or_else(|| p.get("client_secret"))
+                    .or_else(|| parameters.get("client_secret"))
                     .and_then(Value::as_str)
                     .unwrap_or("")
                     .trim()
                     .to_string(),
-                oauth_token_url: p
+                oauth_token_url: parameters
                     .get("oauth_token_url")
-                    .or_else(|| p.get("token_url"))
+                    .or_else(|| parameters.get("token_url"))
                     .and_then(Value::as_str)
                     .unwrap_or("")
                     .trim()
                     .to_string(),
-                oauth_scope: p
+                oauth_scope: parameters
                     .get("oauth_scope")
-                    .or_else(|| p.get("scope"))
+                    .or_else(|| parameters.get("scope"))
                     .and_then(Value::as_str)
                     .unwrap_or("")
                     .trim()
                     .to_string(),
-                proxy: proxy::ProxyChoice::from_json(p.get("proxy").unwrap_or(&Value::Null)),
+                proxy: proxy::ProxyChoice::from_json(
+                    parameters.get("proxy").unwrap_or(&Value::Null),
+                ),
                 // Set once the user has inspected and accepted a certificate
                 // that webpki rejects (see `account.probeCert`).
-                cert_pin: cert_pin_param(p, "cert_pin"),
-                smtp_cert_pin: cert_pin_param(p, "smtp_cert_pin"),
+                cert_pin: cert_pin_param(parameters, "cert_pin"),
+                smtp_cert_pin: cert_pin_param(parameters, "smtp_cert_pin"),
                 rejected_grant: None,
             };
             // A reconnect resends the setup form, which has no field for the
@@ -131,10 +146,10 @@ pub(crate) async fn dispatch(
             // from the stored account so saving credentials again does not
             // silently reset them.
             let omitted = imap::OmittedSettings {
-                proxy: p.get("proxy").is_none(),
-                cert_pin: p.get("cert_pin").is_none(),
-                smtp_cert_pin: p.get("smtp_cert_pin").is_none(),
-                password: p.get("password").is_none(),
+                proxy: parameters.get("proxy").is_none(),
+                cert_pin: parameters.get("cert_pin").is_none(),
+                smtp_cert_pin: parameters.get("smtp_cert_pin").is_none(),
+                password: parameters.get("password").is_none(),
             };
             if omitted.any() {
                 let stored = {
@@ -156,7 +171,11 @@ pub(crate) async fn dispatch(
             // created directly after Google's token exchange; IMAP validation
             // can be slow or network-dependent, and later sync/watch calls will
             // surface any mailbox access failure.
-            if p.get("validate").and_then(Value::as_bool).unwrap_or(true) {
+            if parameters
+                .get("validate")
+                .and_then(Value::as_bool)
+                .unwrap_or(true)
+            {
                 let mut session =
                     tokio::time::timeout(Duration::from_secs(20), imap::connect(&creds))
                         .await
@@ -171,27 +190,27 @@ pub(crate) async fn dispatch(
             }
             let meta = store::AccountMeta {
                 engine: "mail".to_string(),
-                provider: p
+                provider: parameters
                     .get("provider")
                     .and_then(Value::as_str)
                     .unwrap_or("custom")
                     .to_string(),
-                email: p
+                email: parameters
                     .get("email")
                     .and_then(Value::as_str)
                     .unwrap_or(&creds.user)
                     .to_string(),
-                display_name: p
+                display_name: parameters
                     .get("display_name")
                     .and_then(Value::as_str)
                     .unwrap_or_default()
                     .to_string(),
-                avatar_url: p
+                avatar_url: parameters
                     .get("avatar_url")
                     .and_then(Value::as_str)
                     .unwrap_or_default()
                     .to_string(),
-                sender_name: p
+                sender_name: parameters
                     .get("sender_name")
                     .and_then(Value::as_str)
                     .unwrap_or_default()
@@ -229,15 +248,19 @@ pub(crate) async fn dispatch(
         // Mail Bridge) whose self-signed leaf webpki refuses outright; nothing
         // is sent over the probe connection.
         "account.probeCert" => {
-            let host = req_str(p, "host")?;
-            let port = req_u16(p, "port").unwrap_or(993);
-            let protocol = p
+            let host = req_str(parameters, "host")?;
+            let port = req_u16(parameters, "port").unwrap_or(993);
+            let protocol = parameters
                 .get("protocol")
                 .and_then(Value::as_str)
                 .unwrap_or("imap")
                 .to_string();
-            let starttls = p.get("starttls").and_then(Value::as_bool).unwrap_or(false);
-            let proxy = proxy::ProxyChoice::from_json(p.get("proxy").unwrap_or(&Value::Null));
+            let starttls = parameters
+                .get("starttls")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            let proxy =
+                proxy::ProxyChoice::from_json(parameters.get("proxy").unwrap_or(&Value::Null));
             let info =
                 meron_core::tls::probe(&host, port, &protocol, starttls, proxy.resolve().as_ref())
                     .await?;
@@ -248,7 +271,7 @@ pub(crate) async fn dispatch(
         // keychain secret. The IDLE watcher notices the account is gone on its
         // next loop and exits.
         "account.remove" => {
-            let id = req_str(p, "account").or_else(|_| req_str(p, "id"))?;
+            let id = req_str(parameters, "account").or_else(|_| req_str(parameters, "id"))?;
             engine.accounts.lock().await.remove(&id);
             // Drop any warm sessions: their creds are gone and must not be reused.
             engine.clear_pool(&id);
@@ -263,16 +286,16 @@ pub(crate) async fn dispatch(
 
         // Set the per-account "load remote images" preference.
         "account.setImages" => {
-            let id = req_str(p, "account").or_else(|_| req_str(p, "id"))?;
-            let enabled = req_bool(p, "enabled")?;
+            let id = req_str(parameters, "account").or_else(|_| req_str(parameters, "id"))?;
+            let enabled = req_bool(parameters, "enabled")?;
             store::set_load_remote_images(&engine.db.lock().unwrap(), &id, enabled)?;
             Ok(json!({ "ok": true }))
         }
 
         // Toggle whether conversation bubbles render original HTML when available.
         "account.setConversationHtml" => {
-            let id = req_str(p, "account").or_else(|_| req_str(p, "id"))?;
-            let enabled = req_bool(p, "enabled")?;
+            let id = req_str(parameters, "account").or_else(|_| req_str(parameters, "id"))?;
+            let enabled = req_bool(parameters, "enabled")?;
             store::set_account_pref(
                 &engine.db.lock().unwrap(),
                 &id,
@@ -286,8 +309,8 @@ pub(crate) async fn dispatch(
         // owns image-file validation and storage; the sidecar validates the
         // persisted JSON shape.
         "account.setChatWallpaper" => {
-            let id = req_str(p, "account").or_else(|_| req_str(p, "id"))?;
-            let wallpaper = match p.get("wallpaper") {
+            let id = req_str(parameters, "account").or_else(|_| req_str(parameters, "id"))?;
+            let wallpaper = match parameters.get("wallpaper") {
                 Some(Value::Null) | None => None,
                 Some(value) => {
                     let obj = value
@@ -335,8 +358,9 @@ pub(crate) async fn dispatch(
         // at none). Live sessions keep their sockets; the choice applies as
         // they reconnect.
         "account.setProxy" => {
-            let id = req_str(p, "account").or_else(|_| req_str(p, "id"))?;
-            let choice = proxy::ProxyChoice::from_json(p.get("proxy").unwrap_or(&Value::Null));
+            let id = req_str(parameters, "account").or_else(|_| req_str(parameters, "id"))?;
+            let choice =
+                proxy::ProxyChoice::from_json(parameters.get("proxy").unwrap_or(&Value::Null));
             store::set_account_proxy(&engine.db.lock().unwrap(), &id, &choice)?;
             if let Some(creds) = engine.accounts.lock().await.get_mut(&id) {
                 creds.proxy = choice;
@@ -349,15 +373,15 @@ pub(crate) async fn dispatch(
         // showed up on a later sync or send. Omitting a key leaves that server's
         // pin alone; an explicit null clears it.
         "account.setCertPin" => {
-            let id = req_str(p, "account").or_else(|_| req_str(p, "id"))?;
+            let id = req_str(parameters, "account").or_else(|_| req_str(parameters, "id"))?;
             let mut accounts = engine.accounts.lock().await;
             let existing = accounts.get(&id);
-            let cert_pin = match p.get("cert_pin") {
-                Some(_) => cert_pin_param(p, "cert_pin"),
+            let cert_pin = match parameters.get("cert_pin") {
+                Some(_) => cert_pin_param(parameters, "cert_pin"),
                 None => existing.and_then(|creds| creds.cert_pin.clone()),
             };
-            let smtp_cert_pin = match p.get("smtp_cert_pin") {
-                Some(_) => cert_pin_param(p, "smtp_cert_pin"),
+            let smtp_cert_pin = match parameters.get("smtp_cert_pin") {
+                Some(_) => cert_pin_param(parameters, "smtp_cert_pin"),
                 None => existing.and_then(|creds| creds.smtp_cert_pin.clone()),
             };
             store::set_account_cert_pins(
@@ -377,8 +401,8 @@ pub(crate) async fn dispatch(
         }
 
         "account.setName" => {
-            let id = req_str(p, "account").or_else(|_| req_str(p, "id"))?;
-            let name = req_str(p, "name")?;
+            let id = req_str(parameters, "account").or_else(|_| req_str(parameters, "id"))?;
+            let name = req_str(parameters, "name")?;
             {
                 let db = engine.db.lock().unwrap();
                 db.execute(
@@ -391,8 +415,8 @@ pub(crate) async fn dispatch(
 
         // Set the account's sender name.
         "account.setSenderName" => {
-            let id = req_str(p, "account").or_else(|_| req_str(p, "id"))?;
-            let name = req_str(p, "name")?;
+            let id = req_str(parameters, "account").or_else(|_| req_str(parameters, "id"))?;
+            let name = req_str(parameters, "name")?;
             {
                 let db = engine.db.lock().unwrap();
                 db.execute(
@@ -405,8 +429,8 @@ pub(crate) async fn dispatch(
 
         // Set or clear the account's UI avatar URL/path.
         "account.setAvatar" => {
-            let id = req_str(p, "account").or_else(|_| req_str(p, "id"))?;
-            let avatar_url = req_str(p, "avatar_url").unwrap_or_default();
+            let id = req_str(parameters, "account").or_else(|_| req_str(parameters, "id"))?;
+            let avatar_url = req_str(parameters, "avatar_url").unwrap_or_default();
             {
                 let db = engine.db.lock().unwrap();
                 db.execute(
@@ -420,8 +444,8 @@ pub(crate) async fn dispatch(
         // Replace an account's send-as aliases (the whole list). Entries are
         // {email, name?}; we trim, drop blank emails, and dedupe by email.
         "account.setAliases" => {
-            let id = req_str(p, "account").or_else(|_| req_str(p, "id"))?;
-            let mut aliases: Vec<store::Alias> = match p.get("aliases") {
+            let id = req_str(parameters, "account").or_else(|_| req_str(parameters, "id"))?;
+            let mut aliases: Vec<store::Alias> = match parameters.get("aliases") {
                 Some(v) => serde_json::from_value(v.clone()).unwrap_or_default(),
                 None => Vec::new(),
             };
@@ -441,9 +465,9 @@ pub(crate) async fn dispatch(
         // Set or clear this account's signature override. A null `signature`
         // drops the pref, so the account follows the app-wide signature again.
         "account.setSignature" => {
-            let id = req_str(p, "account").or_else(|_| req_str(p, "id"))?;
-            let signature = store::AccountSignature::from_param(p.get("signature"))
-                .map_err(|err| anyhow::anyhow!(err))?;
+            let id = req_str(parameters, "account").or_else(|_| req_str(parameters, "id"))?;
+            let signature = store::AccountSignature::from_param(parameters.get("signature"))
+                .map_err(|error| anyhow::anyhow!(error))?;
             store::set_account_pref_json(
                 &engine.db.lock().unwrap(),
                 &id,
@@ -456,8 +480,8 @@ pub(crate) async fn dispatch(
         // Toggle whether the account folds into the unified inbox. Purely a stored
         // pref the UI reads via account.list; no engine side effects.
         "account.setUnified" => {
-            let id = req_str(p, "account").or_else(|_| req_str(p, "id"))?;
-            let enabled = req_bool(p, "enabled")?;
+            let id = req_str(parameters, "account").or_else(|_| req_str(parameters, "id"))?;
+            let enabled = req_bool(parameters, "enabled")?;
             store::set_account_pref(
                 &engine.db.lock().unwrap(),
                 &id,
@@ -471,8 +495,8 @@ pub(crate) async fn dispatch(
         // watcher still runs (mail keeps arriving); the bridge reads the `muted`
         // flag on each mail.newMessages event to decide whether to notify.
         "account.setMuted" => {
-            let id = req_str(p, "account").or_else(|_| req_str(p, "id"))?;
-            let enabled = req_bool(p, "enabled")?;
+            let id = req_str(parameters, "account").or_else(|_| req_str(parameters, "id"))?;
+            let enabled = req_bool(parameters, "enabled")?;
             store::set_account_pref(&engine.db.lock().unwrap(), &id, "muted", enabled)?;
             Ok(json!({ "ok": true }))
         }
@@ -480,8 +504,8 @@ pub(crate) async fn dispatch(
         // Pause/resume automatic checking. Pausing stops the IDLE watcher and
         // gates background syncs; resuming restarts the watcher for mail accounts.
         "account.setPaused" => {
-            let id = req_str(p, "account").or_else(|_| req_str(p, "id"))?;
-            let enabled = req_bool(p, "enabled")?;
+            let id = req_str(parameters, "account").or_else(|_| req_str(parameters, "id"))?;
+            let enabled = req_bool(parameters, "enabled")?;
             store::set_account_pref(&engine.db.lock().unwrap(), &id, "paused", enabled)?;
             if enabled {
                 // Wake live watchers so the just-paused one shuts down promptly,
@@ -501,8 +525,8 @@ pub(crate) async fn dispatch(
         // Override Sent-copy behavior. Null removes the override so provider
         // defaults apply; true/false force or suppress IMAP APPEND after SMTP.
         "account.setSaveSentCopy" => {
-            let id = req_str(p, "account").or_else(|_| req_str(p, "id"))?;
-            let value = match p.get("value") {
+            let id = req_str(parameters, "account").or_else(|_| req_str(parameters, "id"))?;
+            let value = match parameters.get("value") {
                 Some(Value::Bool(enabled)) => Some(json!(enabled)),
                 Some(Value::Null) | None => None,
                 _ => return Err(anyhow::anyhow!("value must be true, false, or null")),
@@ -514,8 +538,8 @@ pub(crate) async fn dispatch(
         // Set the RSS automatic sync interval. Stored in minutes so the UI and
         // scheduler can read it from account.list without sidecar state.
         "account.setRSSSyncInterval" => {
-            let id = req_str(p, "account").or_else(|_| req_str(p, "id"))?;
-            let minutes = req_u32(p, "minutes")?.clamp(5, 1440) as u64;
+            let id = req_str(parameters, "account").or_else(|_| req_str(parameters, "id"))?;
+            let minutes = req_u32(parameters, "minutes")?.clamp(5, 1440) as u64;
             store::set_account_pref_u64(
                 &engine.db.lock().unwrap(),
                 &id,
@@ -527,7 +551,7 @@ pub(crate) async fn dispatch(
 
         // Reorder accounts in the database.
         "account.reorder" => {
-            let ids = req_str_array(p, "accounts")?;
+            let ids = req_str_array(parameters, "accounts")?;
             store::reorder_accounts(&engine.db.lock().unwrap(), &ids)?;
             Ok(json!({ "ok": true }))
         }

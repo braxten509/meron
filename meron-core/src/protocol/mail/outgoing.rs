@@ -31,7 +31,7 @@ fn watch_for_sent_copy(
     });
 }
 
-pub(crate) fn send_mobile_message(data_dir: &str, params: &Value) -> Result<Value, String> {
+pub(crate) fn send_mobile_message(data_directory: &str, params: &Value) -> Result<Value, String> {
     let account_id = req_account_id(params)?;
     let to = req_str(params, "to")?;
     let cc = opt_str(params, "cc");
@@ -50,7 +50,7 @@ pub(crate) fn send_mobile_message(data_dir: &str, params: &Value) -> Result<Valu
     // foreground (no per-send TLS+LOGIN) and runs the same Sent finalization as
     // desktop. Provider defaults decide whether this APPENDs or only refreshes
     // the server-created Sent copy.
-    let engine = crate::ffi::engine_for(data_dir)?;
+    let engine = crate::ffi::engine_for(data_directory)?;
     let creds = crate::ffi::engine_block_on(engine.ensure_valid_creds(&account_id))?;
     if account_needs_reconnect(&creds) {
         return Err(format!("account needs reconnect: {account_id}"));
@@ -114,19 +114,19 @@ fn finish_mobile_sent(
 }
 
 /// Answer a calendar invitation from its card: see [`crate::calendar::respond`].
-pub(crate) fn respond_mobile_invite(data_dir: &str, params: &Value) -> Result<Value, String> {
+pub(crate) fn respond_mobile_invite(data_directory: &str, params: &Value) -> Result<Value, String> {
     let message = req_str(params, "message")?;
     let thread_id = opt_str(params, "thread_id");
     let response = req_str(params, "response")?;
     let response = crate::calendar::Response::parse(&response)
         .ok_or_else(|| format!("unknown invitation response: {response}"))?;
-    let engine = crate::ffi::engine_for(data_dir)?;
+    let engine = crate::ffi::engine_for(data_directory)?;
     let responded = crate::ffi::engine_block_on(crate::calendar::respond(
         &engine,
         &message,
         &thread_id,
         response,
-        &std::path::PathBuf::from(data_dir).join("attachments"),
+        &std::path::PathBuf::from(data_directory).join("attachments"),
     ))?;
     finish_mobile_sent(&engine, &responded.account, &responded.raw);
     crate::ffi::emit_event("calendar.changed", json!({ "method": "invite.respond" }));
@@ -137,7 +137,7 @@ pub(crate) fn respond_mobile_invite(data_dir: &str, params: &Value) -> Result<Va
     }))
 }
 
-pub(crate) fn save_mobile_draft(data_dir: &str, params: &Value) -> Result<Value, String> {
+pub(crate) fn save_mobile_draft(data_directory: &str, params: &Value) -> Result<Value, String> {
     let account_id = req_account_id(params)?;
     let to = opt_str(params, "to");
     let cc = opt_str(params, "cc");
@@ -152,8 +152,8 @@ pub(crate) fn save_mobile_draft(data_dir: &str, params: &Value) -> Result<Value,
     let requested_from = opt_str(params, "from");
     let attachments = parse_mobile_attachments(params)?;
 
-    let engine = crate::ffi::engine_for(data_dir)?;
-    with_mobile_db(data_dir, |conn| {
+    let engine = crate::ffi::engine_for(data_directory)?;
+    with_mobile_db(data_directory, |conn| {
         let creds = load_mobile_account_creds(&conn, &account_id)?;
         if account_needs_reconnect(&creds) {
             return Err(format!("account needs reconnect: {account_id}"));
@@ -176,7 +176,7 @@ pub(crate) fn save_mobile_draft(data_dir: &str, params: &Value) -> Result<Value,
             &reply_to,
             &draft_id,
         )
-        .map_err(|err| format!("{err:#}"))?;
+        .map_err(|error| format!("{error:#}"))?;
         let saved_id = draft_id.clone();
         let local_draft_id = draft_id.clone();
         let saved_bytes = raw.len();
@@ -213,7 +213,7 @@ pub(crate) fn save_mobile_draft(data_dir: &str, params: &Value) -> Result<Value,
         };
         let batch = &refresh.batch;
         store::upsert_messages(&conn, &account_id, &drafts_folder, &batch.messages)
-            .map_err(|err| err.to_string())?;
+            .map_err(|error| error.to_string())?;
         let keep_uid = batch
             .messages
             .iter()
@@ -228,7 +228,7 @@ pub(crate) fn save_mobile_draft(data_dir: &str, params: &Value) -> Result<Value,
                 &local_draft_id,
                 keep_uid,
             )
-            .map_err(|err| err.to_string())?;
+            .map_err(|error| error.to_string())?;
         }
         store::set_folder_state(
             &conn,
@@ -237,19 +237,19 @@ pub(crate) fn save_mobile_draft(data_dir: &str, params: &Value) -> Result<Value,
             batch.uidvalidity,
             batch.uid_next,
         )
-        .map_err(|err| err.to_string())?;
+        .map_err(|error| error.to_string())?;
         Ok(saved)
     })
 }
 
-pub(crate) fn discard_mobile_draft(data_dir: &str, params: &Value) -> Result<Value, String> {
+pub(crate) fn discard_mobile_draft(data_directory: &str, params: &Value) -> Result<Value, String> {
     let account_id = req_account_id(params)?;
     let draft_id = opt_str(params, "draft_id");
     if draft_id.trim().is_empty() {
         return Ok(json!({ "ok": true, "deleted": 0, "permanent": true }));
     }
-    let engine = crate::ffi::engine_for(data_dir)?;
-    with_mobile_db(data_dir, |conn| {
+    let engine = crate::ffi::engine_for(data_directory)?;
+    with_mobile_db(data_directory, |conn| {
         let creds = load_mobile_account_creds(&conn, &account_id)?;
         if account_needs_reconnect(&creds) {
             return Err(format!("account needs reconnect: {account_id}"));
@@ -286,7 +286,7 @@ pub(crate) fn discard_mobile_draft(data_dir: &str, params: &Value) -> Result<Val
                 },
             ))?;
         store::delete_draft_copies(&conn, &account_id, &drafts, &local_draft_id, None)
-            .map_err(|err| err.to_string())?;
+            .map_err(|error| error.to_string())?;
         Ok(json!({ "ok": true, "deleted": deleted, "permanent": true }))
     })
 }

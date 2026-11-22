@@ -1,3 +1,7 @@
+//! Retries transient synchronization failures within a time budget.
+//! The engine classifies I/O and protocol failures before scheduling a retry.
+//! A permanent failure returns to the caller without consuming the remaining budget.
+
 use std::future::Future;
 use std::time::Duration;
 

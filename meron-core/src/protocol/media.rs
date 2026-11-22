@@ -1,8 +1,12 @@
+//! Manages files cached on behalf of the mobile reader and account screens.
+//! The host writes account images, opens attachments and requests storage totals.
+//! Cache clearing and account removal operate on the corresponding media directory.
+
 use super::*;
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 
 pub(crate) fn write_mobile_account_media_file(
-    data_dir: &str,
+    data_directory: &str,
     params: &Value,
     media_kind: &str,
 ) -> Result<Value, String> {
@@ -12,40 +16,43 @@ pub(crate) fn write_mobile_account_media_file(
     let data = req_str(params, "data")?;
     let bytes = STANDARD
         .decode(data.as_bytes())
-        .map_err(|err| format!("invalid media data: {err}"))?;
+        .map_err(|error| format!("invalid media data: {error}"))?;
     if bytes.is_empty() {
         return Err("media file is empty".to_string());
     }
     let ext = media_extension(&filename, &mime)?;
-    let relative_url = store_mobile_account_media(data_dir, &id, media_kind, ext, &bytes)?;
+    let relative_url = store_mobile_account_media(data_directory, &id, media_kind, ext, &bytes)?;
     Ok(json!({ "url": relative_url }))
 }
 
 /// Write media bytes under `media/<kind>/<account>/` and return its `/media/...` URL.
 pub(crate) fn store_mobile_account_media(
-    data_dir: &str,
+    data_directory: &str,
     id: &str,
     media_kind: &str,
     ext: &str,
     bytes: &[u8],
 ) -> Result<String, String> {
-    let account_dir = safe_media_segment(id);
+    let account_directory = safe_media_segment(id);
     let stamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis();
     let stored_name = format!("{stamp}.{ext}");
-    let relative_url = format!("/media/{media_kind}/{account_dir}/{stored_name}");
-    let dir = Path::new(data_dir)
+    let relative_url = format!("/media/{media_kind}/{account_directory}/{stored_name}");
+    let directory = Path::new(data_directory)
         .join("media")
         .join(media_kind)
-        .join(&account_dir);
-    std::fs::create_dir_all(&dir).map_err(|err| err.to_string())?;
-    std::fs::write(dir.join(stored_name), bytes).map_err(|err| err.to_string())?;
+        .join(&account_directory);
+    std::fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
+    std::fs::write(directory.join(stored_name), bytes).map_err(|error| error.to_string())?;
     Ok(relative_url)
 }
 
-pub(crate) fn read_mobile_attachment_file(data_dir: &str, params: &Value) -> Result<Value, String> {
+pub(crate) fn read_mobile_attachment_file(
+    data_directory: &str,
+    params: &Value,
+) -> Result<Value, String> {
     let key = req_str(params, "key")?;
     let relative = Path::new(&key);
     if key.trim().is_empty()
@@ -59,20 +66,20 @@ pub(crate) fn read_mobile_attachment_file(data_dir: &str, params: &Value) -> Res
     {
         return Err("invalid attachment key".to_string());
     }
-    let root = Path::new(data_dir).join("attachments");
+    let root = Path::new(data_directory).join("attachments");
     let path = root.join(relative);
-    let root = root.canonicalize().map_err(|err| err.to_string())?;
-    let path = path.canonicalize().map_err(|err| err.to_string())?;
+    let root = root.canonicalize().map_err(|error| error.to_string())?;
+    let path = path.canonicalize().map_err(|error| error.to_string())?;
     if !path.starts_with(&root) {
         return Err("invalid attachment key".to_string());
     }
-    let data = std::fs::read(path).map_err(|err| err.to_string())?;
+    let data = std::fs::read(path).map_err(|error| error.to_string())?;
     Ok(json!({ "data": STANDARD.encode(data) }))
 }
 
-pub(crate) fn mobile_storage_usage(data_dir: &str) -> Result<Value, String> {
-    let root = Path::new(data_dir);
-    if data_dir.trim().is_empty() {
+pub(crate) fn mobile_storage_usage(data_directory: &str) -> Result<Value, String> {
+    let root = Path::new(data_directory);
+    if data_directory.trim().is_empty() {
         return Err("mobile core is not initialized".to_string());
     }
     Ok(json!({
@@ -81,29 +88,30 @@ pub(crate) fn mobile_storage_usage(data_dir: &str) -> Result<Value, String> {
     }))
 }
 
-pub(crate) fn clear_mobile_storage_cache(data_dir: &str) -> Result<Value, String> {
-    let cache_dir = Path::new(data_dir).join("attachments");
-    if cache_dir.exists() {
-        std::fs::remove_dir_all(&cache_dir).map_err(|err| err.to_string())?;
+pub(crate) fn clear_mobile_storage_cache(data_directory: &str) -> Result<Value, String> {
+    let cache_directory = Path::new(data_directory).join("attachments");
+    if cache_directory.exists() {
+        std::fs::remove_dir_all(&cache_directory).map_err(|error| error.to_string())?;
     }
-    std::fs::create_dir_all(&cache_dir).map_err(|err| err.to_string())?;
-    mobile_storage_usage(data_dir)
+    std::fs::create_dir_all(&cache_directory).map_err(|error| error.to_string())?;
+    mobile_storage_usage(data_directory)
 }
 
-pub(crate) fn remove_mobile_account_media(data_dir: &str, account: &str) {
-    let root = Path::new(data_dir);
+pub(crate) fn remove_mobile_account_media(data_directory: &str, account: &str) {
+    let root = Path::new(data_directory);
     crate::parse::remove_account_media(&root.join("attachments"), account);
-    let account_dir = safe_media_segment(account);
+    let account_directory = safe_media_segment(account);
     for media_kind in ["avatars", "wallpapers"] {
-        let _ = std::fs::remove_dir_all(root.join("media").join(media_kind).join(&account_dir));
+        let _ =
+            std::fs::remove_dir_all(root.join("media").join(media_kind).join(&account_directory));
     }
 }
 
 pub(crate) fn path_size_bytes(path: &Path) -> std::io::Result<u64> {
     let metadata = match std::fs::metadata(path) {
         Ok(metadata) => metadata,
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(0),
-        Err(err) => return Err(err),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(0),
+        Err(error) => return Err(error),
     };
     if metadata.is_file() {
         return Ok(metadata.len());

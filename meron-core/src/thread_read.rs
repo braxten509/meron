@@ -151,9 +151,9 @@ fn thread_page_headers_and_older(
     Ok(if let Some(limit) = limit {
         let mut headers = headers;
         if let Some(cursor) = before_location
-            && let Some(idx) = thread_cursor_position(&headers, &cursor)
+            && let Some(index) = thread_cursor_position(&headers, &cursor)
         {
-            headers.truncate(idx);
+            headers.truncate(index);
         }
         let total = headers.len();
         let start = total.saturating_sub(limit as usize);
@@ -289,7 +289,7 @@ async fn read_thread_page_inner(
         .iter()
         .enumerate()
         .filter(|(_, slot)| !slot.complete)
-        .map(|(idx, _)| idx)
+        .map(|(index, _)| index)
         .collect();
     if !missing.is_empty() {
         if for_print {
@@ -298,13 +298,13 @@ async fn read_thread_page_inner(
             // Leave room under the desktop's 30s bridge deadline.
             // Do not start background work for this independent print snapshot.
             let result = tokio::time::timeout(std::time::Duration::from_secs(20), async {
-                for &idx in &missing {
+                for &index in &missing {
                     fetch_into_slots(
                         engine,
                         account,
                         &headers,
                         &mut slots,
-                        &[idx],
+                        &[index],
                         &media_root,
                         TransferLimits::within(crate::engine::INLINE_BODY_BUDGET),
                     )
@@ -366,14 +366,14 @@ async fn read_thread_page_inner(
             // Taking the failures leaves the read after this one free to retry.
             let failures: Vec<(usize, String)> = missing
                 .iter()
-                .filter_map(|&idx| {
-                    let key = message_key(account, &slots[idx].folder, headers[idx].uid);
-                    Some((idx, engine.take_body_failure(&key)?))
+                .filter_map(|&index| {
+                    let key = message_key(account, &slots[index].folder, headers[index].uid);
+                    Some((index, engine.take_body_failure(&key)?))
                 })
                 .collect();
             let failed = failures
                 .iter()
-                .find(|(idx, _)| *idx == newest)
+                .find(|(index, _)| *index == newest)
                 .map(|(_, error)| error);
             if let Some(error) = failed {
                 if slots.iter().all(|slot| slot.cached.is_none()) {
@@ -431,9 +431,9 @@ async fn read_thread_page_inner(
             );
             // Keep cached messages visible; a later read can retry the rest.
             background.retain(|(folder, uid)| {
-                !failures
-                    .iter()
-                    .any(|(idx, _)| slots[*idx].folder == *folder && headers[*idx].uid == *uid)
+                !failures.iter().any(|(index, _)| {
+                    slots[*index].folder == *folder && headers[*index].uid == *uid
+                })
             });
             // Bodies we can already show, whose attachment bytes are gone.
             for item in messages_missing_media(
@@ -604,18 +604,18 @@ fn pending_body_recovery(
     indices
         .iter()
         .copied()
-        .filter(|&idx| {
-            !slots[idx].complete
-                && (!slots[idx]
+        .filter(|&index| {
+            !slots[index].complete
+                && (!slots[index]
                     .cached
                     .as_ref()
                     .is_some_and(|message| !message.message_id.is_empty())
                     || !media_recovery_held(
                         hold,
-                        &message_key(account, &slots[idx].folder, headers[idx].uid),
+                        &message_key(account, &slots[index].folder, headers[index].uid),
                     ))
         })
-        .map(|idx| (slots[idx].folder.clone(), headers[idx].uid))
+        .map(|index| (slots[index].folder.clone(), headers[index].uid))
         .collect()
 }
 
@@ -633,7 +633,7 @@ fn messages_missing_media(
         .iter()
         .enumerate()
         .filter(|(_, slot)| slot.complete && slot.media_missing > 0)
-        .map(|(idx, slot)| (slot.folder.clone(), headers[idx].uid))
+        .map(|(index, slot)| (slot.folder.clone(), headers[index].uid))
         .filter(|(folder, uid)| !media_recovery_held(hold, &message_key(account, folder, *uid)))
         .collect()
 }
@@ -701,8 +701,7 @@ fn media_recovery_held(hold: &MediaRecoveryHold, key: &str) -> bool {
     }
 }
 
-/// Record what the already-cached bodies from a thread download mean for each
-/// message's attachment recovery (see `Engine::media_recovery_hold`):
+/// Record what the already-cached bodies from a thread download mean for each message's attachment recovery (see `Engine::media_recovery_hold`):
 ///
 /// - arrived with its files: no hold;
 /// - arrived and files are still missing: held until restart, since another
@@ -802,11 +801,11 @@ async fn fetch_into_slots(
 ) -> anyhow::Result<()> {
     let _snapshot_guard = MessageSyncGuard::begin(engine)?;
     let mut by_folder: BTreeMap<String, Vec<u32>> = BTreeMap::new();
-    for &idx in indices {
+    for &index in indices {
         by_folder
-            .entry(slots[idx].folder.clone())
+            .entry(slots[index].folder.clone())
             .or_default()
-            .push(headers[idx].uid);
+            .push(headers[index].uid);
     }
     let fetched = crate::engine::fetch_bodies_keeping_partial(
         engine, account, &by_folder, media_root, limits,
@@ -822,13 +821,13 @@ async fn fetch_into_slots(
         media_root,
     );
     for (folder, uid, message, media_missing) in delivered {
-        if let Some(&idx) = indices
+        if let Some(&index) = indices
             .iter()
-            .find(|&&idx| slots[idx].folder == folder && headers[idx].uid == uid)
+            .find(|&&index| slots[index].folder == folder && headers[index].uid == uid)
         {
-            slots[idx].media_missing = media_missing;
-            slots[idx].cached = Some(message);
-            slots[idx].complete = true;
+            slots[index].media_missing = media_missing;
+            slots[index].cached = Some(message);
+            slots[index].complete = true;
         }
     }
     fetched.result

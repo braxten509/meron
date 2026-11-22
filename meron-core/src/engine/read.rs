@@ -1,4 +1,6 @@
-//! Reading cached messages and filling missing thread ancestors.
+//! Supplies message bodies and fills gaps in a cached thread.
+//! The reader first consults local storage, then fetches the missing content.
+//! The engine bounds foreground work and can continue recovery across related folders.
 
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -86,8 +88,10 @@ pub async fn fill_thread_gaps(
                     .await
                     {
                         Ok(found) => found,
-                        Err(err) => {
-                            eprintln!("meron-core: fetch_by_message_ids folder={folder}: {err:#}");
+                        Err(error) => {
+                            eprintln!(
+                                "meron-core: fetch_by_message_ids folder={folder}: {error:#}"
+                            );
                             continue;
                         }
                     };
@@ -146,16 +150,16 @@ pub fn read_cached(
         let policy = store::remote_image_policy(&db, account).unwrap_or_default();
         (cached, policy)
     };
-    let mut msg = cached.ok().flatten()?;
+    let mut message = cached.ok().flatten()?;
     // Rows cached before the threading-header extraction landed have an
     // empty `message_id`; refetch them so reply_to/cc/references populate.
     // Real-world mail almost always carries a Message-ID, so emptiness is a
     // reliable "pre-extraction cache" signal.
-    if msg.message_id.is_empty() || !parse::cached_media_available(&media_root, &msg) {
+    if message.message_id.is_empty() || !parse::cached_media_available(&media_root, &message) {
         return None;
     }
-    attach_html(&mut msg, &remote_policy);
-    Some(msg)
+    attach_html(&mut message, &remote_policy);
+    Some(message)
 }
 
 pub async fn read_cached_or_fetch(
@@ -279,7 +283,7 @@ mod body_read_tests {
             false,
         )
         .await;
-        let err = read_cached_or_fetch_with_budget(
+        let error = read_cached_or_fetch_with_budget(
             &engine,
             "acc",
             "INBOX",
@@ -288,7 +292,7 @@ mod body_read_tests {
         )
         .await
         .unwrap_err();
-        assert!(err.is::<TransferTimedOut>());
+        assert!(error.is::<TransferTimedOut>());
         assert!(
             engine
                 .body_fetches
@@ -297,7 +301,7 @@ mod body_read_tests {
                 .contains(&message_key("acc", "INBOX", 1))
         );
         // Too short to see the fill through: reported, not fetched again.
-        let err = read_cached_or_fetch_with_budget(
+        let error = read_cached_or_fetch_with_budget(
             &engine,
             "acc",
             "INBOX",
@@ -306,7 +310,7 @@ mod body_read_tests {
         )
         .await
         .unwrap_err();
-        assert!(err.to_string().contains("still in progress"));
+        assert!(error.to_string().contains("still in progress"));
         // The next read waits for the fill and returns what it cached.
         let message = read_cached_or_fetch_with_budget(
             &engine,

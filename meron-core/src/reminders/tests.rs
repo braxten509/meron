@@ -1,3 +1,7 @@
+//! Checks the scheduling and claiming of local reminders.
+//! Fixtures distinguish timed tasks, date-only tasks and repeated calendar occurrences.
+//! Database assertions cover rescheduling, deletion and delivery across restarts.
+
 use super::*;
 use crate::calendar::events::{EventInput, create_event};
 
@@ -13,16 +17,16 @@ impl Drop for TestDir {
     }
 }
 fn db() -> (TestDir, Connection) {
-    let dir =
+    let directory =
         TestDir(std::env::temp_dir().join(format!("meron-reminders-{}", uuid::Uuid::new_v4())));
-    std::fs::create_dir_all(dir.path()).unwrap();
-    let conn = store::open_at(dir.path().join("test.db")).unwrap();
-    (dir, conn)
+    std::fs::create_dir_all(directory.path()).unwrap();
+    let conn = store::open_at(directory.path().join("test.db")).unwrap();
+    (directory, conn)
 }
 
 #[test]
 fn timed_task_midnight_is_distinct_from_date_only_and_survives_undo() {
-    let (_dir, conn) = db();
+    let (_directory, conn) = db();
     let midnight = calendar::local_tz()
         .with_ymd_and_hms(2026, 10, 25, 0, 0, 0)
         .single()
@@ -53,7 +57,7 @@ fn timed_task_midnight_is_distinct_from_date_only_and_survives_undo() {
 
 #[test]
 fn completed_deleted_and_rescheduled_tasks_do_not_fire_and_claim_is_durable() {
-    let (dir, conn) = db();
+    let (directory, conn) = db();
     let at = store::now_unix() + DAY;
     let value = crate::tasks::create_task(&conn, "", "Due", "", at, "", "", "").unwrap();
     let id = value["task"]["id"].as_str().unwrap();
@@ -66,7 +70,7 @@ fn completed_deleted_and_rescheduled_tasks_do_not_fire_and_claim_is_durable() {
     assert!(claim(&conn, &reminder.key, at).unwrap().is_some());
     assert!(claim(&conn, &reminder.key, at).unwrap().is_none());
     drop(conn);
-    let conn = store::open_at(dir.path().join("test.db")).unwrap();
+    let conn = store::open_at(directory.path().join("test.db")).unwrap();
     assert!(list(&conn, at - 1, at + 1).unwrap().is_empty());
     store::update_task(&conn, id, None, None, Some(at + 60), None).unwrap();
     let next = list(&conn, at, at + 61).unwrap().remove(0);
@@ -77,7 +81,7 @@ fn completed_deleted_and_rescheduled_tasks_do_not_fire_and_claim_is_durable() {
 
 #[test]
 fn calendar_occurrences_remind_separately_and_removed_events_stop() {
-    let (_dir, conn) = db();
+    let (_directory, conn) = db();
     let start = store::now_unix() + DAY;
     let value = create_event(
         &conn,
@@ -107,7 +111,7 @@ fn calendar_occurrences_remind_separately_and_removed_events_stop() {
 
 #[test]
 fn all_day_event_uses_local_morning_of_utc_calendar_date() {
-    let (_dir, conn) = db();
+    let (_directory, conn) = db();
     let start = 1_792_900_000_i64.div_euclid(DAY) * DAY;
     create_event(
         &conn,
@@ -140,7 +144,7 @@ fn age_items(conn: &Connection, at: i64) {
 
 #[test]
 fn first_use_skips_history_but_keeps_upcoming_items() {
-    let (_dir, conn) = db();
+    let (_directory, conn) = db();
     let now = store::now_unix();
     for at in [now - 60, now + 60] {
         let value = crate::tasks::create_task(&conn, "", "Due", "", at, "", "", "").unwrap();
@@ -157,7 +161,7 @@ fn first_use_skips_history_but_keeps_upcoming_items() {
 
 #[test]
 fn finished_events_are_not_replayed_but_ongoing_events_can_catch_up() {
-    let (_dir, conn) = db();
+    let (_directory, conn) = db();
     let now = store::now_unix();
     started_at(&conn, now - DAY).unwrap();
     for (title, start, end) in [
@@ -189,7 +193,7 @@ fn finished_events_are_not_replayed_but_ongoing_events_can_catch_up() {
 
 #[test]
 fn past_schedules_are_skipped_without_silencing_reminders_on_notes_edits() {
-    let (_dir, conn) = db();
+    let (_directory, conn) = db();
     let now = store::now_unix();
     started_at(&conn, now - DAY).unwrap();
     let value = crate::tasks::create_task(&conn, "", "Due", "", now - 60, "", "", "").unwrap();
@@ -213,7 +217,7 @@ fn past_schedules_are_skipped_without_silencing_reminders_on_notes_edits() {
 
 #[test]
 fn new_events_inside_the_lead_time_notify_at_their_start() {
-    let (_dir, conn) = db();
+    let (_directory, conn) = db();
     let now = store::now_unix();
     create_event(
         &conn,
@@ -232,7 +236,7 @@ fn new_events_inside_the_lead_time_notify_at_their_start() {
 
 #[test]
 fn permission_enable_skips_past_and_native_receipts_suppress_replay() {
-    let (_dir, conn) = db();
+    let (_directory, conn) = db();
     let now = store::now_unix();
     started_at(&conn, now - DAY).unwrap();
     let value = crate::tasks::create_task(&conn, "", "Due", "", now - 60, "", "", "").unwrap();
@@ -258,7 +262,7 @@ fn permission_enable_skips_past_and_native_receipts_suppress_replay() {
 
 #[test]
 fn events_rescheduled_inside_the_lead_time_notify_at_their_new_start() {
-    let (_dir, conn) = db();
+    let (_directory, conn) = db();
     let now = store::now_unix();
     started_at(&conn, now - DAY).unwrap();
     let value = create_event(
@@ -290,7 +294,7 @@ fn events_rescheduled_inside_the_lead_time_notify_at_their_new_start() {
 
 #[test]
 fn invitation_text_updates_do_not_rearm_a_delivered_reminder() {
-    let (_dir, conn) = db();
+    let (_directory, conn) = db();
     let now = store::now_unix();
     started_at(&conn, now - DAY).unwrap();
     let start = now + 60;
@@ -340,7 +344,7 @@ fn invitation_text_updates_do_not_rearm_a_delivered_reminder() {
 
 #[test]
 fn a_repeat_rule_update_does_not_replay_an_already_delivered_occurrence() {
-    let (_dir, conn) = db();
+    let (_directory, conn) = db();
     let now = store::now_unix();
     started_at(&conn, now - DAY).unwrap();
     let start = now + 60;
@@ -376,7 +380,7 @@ fn a_repeat_rule_update_does_not_replay_an_already_delivered_occurrence() {
 
 #[test]
 fn event_lead_time_follows_the_setting() {
-    let (_dir, conn) = db();
+    let (_directory, conn) = db();
     let start = store::now_unix() + DAY;
     create_event(
         &conn,
@@ -400,7 +404,7 @@ fn event_lead_time_follows_the_setting() {
 
 #[test]
 fn default_alert_can_be_turned_off() {
-    let (_dir, conn) = db();
+    let (_directory, conn) = db();
     let start = store::now_unix() + DAY;
     create_event(
         &conn,
@@ -418,7 +422,7 @@ fn default_alert_can_be_turned_off() {
 
 #[test]
 fn an_event_with_two_alerts_reminds_at_each_and_receipts_stay_per_alert() {
-    let (_dir, conn) = db();
+    let (_directory, conn) = db();
     let start = store::now_unix() + DAY;
     let value = create_event(
         &conn,
@@ -443,7 +447,7 @@ fn an_event_with_two_alerts_reminds_at_each_and_receipts_stay_per_alert() {
 
 #[test]
 fn event_alerts_override_the_default_and_survive_edits_that_omit_them() {
-    let (_dir, conn) = db();
+    let (_directory, conn) = db();
     let start = store::now_unix() + DAY;
     let value = create_event(
         &conn,
@@ -480,7 +484,7 @@ fn event_alerts_override_the_default_and_survive_edits_that_omit_them() {
 
 #[test]
 fn an_all_day_event_with_alerts_off_stays_quiet() {
-    let (_dir, conn) = db();
+    let (_directory, conn) = db();
     let day = (store::now_unix() / DAY + 2) * DAY;
     create_event(
         &conn,
@@ -499,7 +503,7 @@ fn an_all_day_event_with_alerts_off_stays_quiet() {
 
 #[test]
 fn alerts_round_trip_through_undo() {
-    let (_dir, conn) = db();
+    let (_directory, conn) = db();
     let start = store::now_unix() + DAY;
     let value = create_event(
         &conn,
@@ -523,7 +527,7 @@ fn alerts_round_trip_through_undo() {
 
 #[test]
 fn all_day_alerts_fire_at_nine_on_the_day_or_days_before() {
-    let (_dir, conn) = db();
+    let (_directory, conn) = db();
     let day = (store::now_unix() / DAY + 10) * DAY;
     let value = create_event(
         &conn,

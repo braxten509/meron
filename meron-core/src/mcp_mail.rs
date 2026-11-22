@@ -1,5 +1,7 @@
-//! Constrained mail mutations used by the desktop MCP adapter. Approval lives
-//! in the desktop host; this layer preserves the exact approved IMAP UID set.
+//! Applies mail operations requested through the desktop tool interface.
+//! The core validates account, folder and UID selections before acting on a message.
+//! Preparation and execution share the same mailbox identity checks.
+
 use crate::{engine::Engine, imap, mail_model, store};
 use anyhow::{Context, Result, bail, ensure};
 use serde::{Deserialize, Serialize};
@@ -67,7 +69,7 @@ pub async fn prepare_delete(engine: &Arc<Engine>, value: Value) -> Result<Value>
             let after = session.select(&folder).await?.uid_validity;
             ensure!(after == Some(validity), "Mailbox changed; request a new preview");
             ensure!(headers.len() == uids.len(), "Some messages no longer exist; request a new preview");
-            let messages = headers.into_iter().map(|m| json!({"uid":m.uid,"subject":m.subject,"from":m.from_addr,"date":m.date})).collect();
+            let messages = headers.into_iter().map(|message| json!({"uid":message.uid,"subject":message.subject,"from":message.from_addr,"date":message.date})).collect();
             Ok(DeleteSnapshot {account,folder,uidvalidity:validity,uids,messages})
         })
     }).await?;

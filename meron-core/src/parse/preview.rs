@@ -144,20 +144,20 @@ fn closing_run(inner: &str, marker: u8, run: usize) -> Option<usize> {
     if bytes.first().is_none_or(|byte| byte.is_ascii_whitespace()) {
         return None;
     }
-    let mut idx = 1;
-    while idx < bytes.len() {
-        if bytes[idx] != marker {
-            idx += 1;
+    let mut index = 1;
+    while index < bytes.len() {
+        if bytes[index] != marker {
+            index += 1;
             continue;
         }
-        let len = bytes[idx..]
+        let len = bytes[index..]
             .iter()
             .take_while(|byte| **byte == marker)
             .count();
-        if len == run && !bytes[idx - 1].is_ascii_whitespace() && !is_escaped(&inner[..idx]) {
-            return Some(idx);
+        if len == run && !bytes[index - 1].is_ascii_whitespace() && !is_escaped(&inner[..index]) {
+            return Some(index);
         }
-        idx += len;
+        index += len;
     }
     None
 }
@@ -170,20 +170,20 @@ fn strip_link_target(after: &str) -> Option<&str> {
         // the closer by depth rather than taking the first `)`.
         let bytes = paren.as_bytes();
         let mut depth = 1usize;
-        let mut idx = 0;
-        while idx < bytes.len() {
-            match bytes[idx] {
-                b'\\' => idx += 1,
+        let mut index = 0;
+        while index < bytes.len() {
+            match bytes[index] {
+                b'\\' => index += 1,
                 b'(' => depth += 1,
                 b')' => {
                     depth -= 1;
                     if depth == 0 {
-                        return Some(&paren[idx + 1..]);
+                        return Some(&paren[index + 1..]);
                     }
                 }
                 _ => {}
             }
-            idx += 1;
+            index += 1;
         }
         return None;
     }

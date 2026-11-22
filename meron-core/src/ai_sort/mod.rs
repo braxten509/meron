@@ -400,12 +400,10 @@ pub struct PromptFolder {
     pub target: SortTarget,
 }
 
-/// The folders the AI may choose from for mail of `account`, in the owner's
-/// order: the account's chosen server folders and the chosen Meron folders
-/// that still exist (`meron`: every Meron folder's id and current name). Names
-/// the AI can tell apart and that never read as "Inbox": a Meron folder named
-/// like a server folder (or "Inbox") is shown as "<name> (Meron folder)", and
-/// skipped if that still clashes.
+/// The folders the AI may choose from for mail of `account`, in the owner's order: the account's chosen
+/// server folders and the chosen Meron folders that still exist (`meron`: every Meron folder's id and
+/// current name). Names the AI can tell apart and that never read as "Inbox": a Meron folder named like
+/// a server folder (or "Inbox") is shown as "<name> (Meron folder)", and skipped if that still clashes.
 pub fn prompt_folders(
     config: &crate::store::AiSortConfig,
     account: &str,
@@ -1036,11 +1034,11 @@ pub struct State {
 }
 
 impl State {
-    pub(crate) fn set_error(&self, err: &AiError) {
+    pub(crate) fn set_error(&self, error: &AiError) {
         *self.last_error.lock().unwrap() = Some(LastError {
             at: crate::store::now_unix(),
-            message: err.message.clone(),
-            kind: err.kind,
+            message: error.message.clone(),
+            kind: error.kind,
         });
     }
 

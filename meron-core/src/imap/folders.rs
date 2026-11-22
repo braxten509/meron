@@ -67,8 +67,8 @@ fn server_refusal(err: &anyhow::Error) -> Option<&str> {
 /// opened at all: it doesn't exist (`[NONEXISTENT]`) or is a `\Noselect`
 /// container. Asking again won't help, unlike a dropped connection or a
 /// temporary refusal (`[UNAVAILABLE]`, `[INUSE]`).
-pub fn is_unselectable_mailbox(err: &anyhow::Error) -> bool {
-    let Some(text) = server_refusal(err) else {
+pub fn is_unselectable_mailbox(error: &anyhow::Error) -> bool {
+    let Some(text) = server_refusal(error) else {
         return false;
     };
     let text = text.to_ascii_uppercase();
@@ -97,8 +97,8 @@ pub fn is_unselectable_mailbox(err: &anyhow::Error) -> bool {
 
 /// Whether the server answered NO or BAD (any reason), rather than the
 /// connection failing.
-pub fn is_server_refusal(err: &anyhow::Error) -> bool {
-    server_refusal(err).is_some()
+pub fn is_server_refusal(error: &anyhow::Error) -> bool {
+    server_refusal(error).is_some()
 }
 
 pub async fn create_folder(session: &mut Session, name: &str) -> Result<()> {
@@ -168,8 +168,8 @@ pub async fn prepare_folder_delete(session: &mut Session) -> Result<()> {
 pub async fn delete_folders(session: &mut Session, names: &[String]) -> Result<Vec<String>> {
     let mut removed = Vec::new();
     for name in names {
-        if let Err(err) = session.delete(name).await {
-            let failure = format!("DELETE {name}: {err:#}");
+        if let Err(error) = session.delete(name).await {
+            let failure = format!("DELETE {name}: {error:#}");
             if removed.is_empty() {
                 return Err(anyhow::anyhow!(failure));
             }
@@ -191,8 +191,8 @@ pub async fn delete_folders(session: &mut Session, names: &[String]) -> Result<V
 /// `io::Error::other`, with no variant to match on. The substring is the literal from its
 /// `ImapStream::decode`; if the pinned fork moves, this needs rechecking
 /// (`unparseable_response_marker_matches_async_imap` covers it).
-pub fn is_unparseable_response(err: &anyhow::Error) -> bool {
-    err.chain().any(|cause| {
+pub fn is_unparseable_response(error: &anyhow::Error) -> bool {
+    error.chain().any(|cause| {
         cause
             .downcast_ref::<std::io::Error>()
             .is_some_and(|io| io.to_string().contains(UNPARSEABLE_RESPONSE_MARKER))

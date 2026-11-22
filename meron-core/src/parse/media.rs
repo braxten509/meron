@@ -114,17 +114,17 @@ pub(super) fn collect_attachments(
 /// rather than failing the whole message). The extension comes from the original filename when
 /// present (so downloads keep a sensible type), falling back to the MIME subtype.
 fn write_media(
-    ctx: &MediaCtx,
+    context: &MediaCtx,
     index: usize,
     filename: &str,
     mime: &str,
     bytes: &[u8],
 ) -> Option<String> {
-    write_media_with_cap(ctx, index, filename, mime, bytes, media_cache_cap())
+    write_media_with_cap(context, index, filename, mime, bytes, media_cache_cap())
 }
 
 pub(super) fn write_media_with_cap(
-    ctx: &MediaCtx,
+    context: &MediaCtx,
     index: usize,
     filename: &str,
     mime: &str,
@@ -145,13 +145,13 @@ pub(super) fn write_media_with_cap(
     );
     let key = format!(
         "{}/{}/{}/{}.{}",
-        sanitize_segment(&ctx.account),
-        sanitize_segment(&ctx.folder),
-        ctx.uid,
+        sanitize_segment(&context.account),
+        sanitize_segment(&context.folder),
+        context.uid,
         index,
         ext
     );
-    let path = ctx.root.join(&key);
+    let path = context.root.join(&key);
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).ok()?;
     }
@@ -222,11 +222,11 @@ pub fn prune_media_cache(root: &Path) {
 }
 
 fn collect_media_files(
-    dir: &Path,
+    directory: &Path,
     out: &mut Vec<(PathBuf, u64, std::time::SystemTime)>,
     total: &mut u64,
 ) {
-    let Ok(entries) = std::fs::read_dir(dir) else {
+    let Ok(entries) = std::fs::read_dir(directory) else {
         return;
     };
     for entry in entries.flatten() {

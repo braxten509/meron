@@ -5,7 +5,7 @@
 
 use super::*;
 
-pub(crate) fn move_mobile_thread(data_dir: &str, params: &Value) -> Result<Value, String> {
+pub(crate) fn move_mobile_thread(data_directory: &str, params: &Value) -> Result<Value, String> {
     let thread_id = req_str(params, "thread_id")?;
     let target_folder = canon_folder(&req_str(params, "target_folder_id")?);
     let parsed = parse_thread_id(&thread_id).ok_or_else(|| "invalid thread_id".to_string())?;
@@ -24,8 +24,8 @@ pub(crate) fn move_mobile_thread(data_dir: &str, params: &Value) -> Result<Value
         .and_then(Value::as_str)
         .unwrap_or(&parsed.account);
     if target_account != parsed.account {
-        let engine = crate::ffi::engine_for(data_dir)?;
-        return with_mobile_db(data_dir, |conn| {
+        let engine = crate::ffi::engine_for(data_directory)?;
+        return with_mobile_db(data_directory, |conn| {
             let uids = requested_mobile_uids(&conn, &parsed, params)?;
             if !uids.is_empty() {
                 for account in [parsed.account.as_str(), target_account] {
@@ -67,8 +67,8 @@ pub(crate) fn move_mobile_thread(data_dir: &str, params: &Value) -> Result<Value
             json!({ "ok": true, "moved": 0, "folder": target_folder, "thread_id": thread_id }),
         );
     }
-    let engine = crate::ffi::engine_for(data_dir)?;
-    with_mobile_db(data_dir, |conn| {
+    let engine = crate::ffi::engine_for(data_directory)?;
+    with_mobile_db(data_directory, |conn| {
         let uids = requested_mobile_uids(&conn, &parsed, params)?;
         if uids.is_empty() {
             return Ok(
@@ -80,7 +80,7 @@ pub(crate) fn move_mobile_thread(data_dir: &str, params: &Value) -> Result<Value
             return Err(format!("account needs reconnect: {}", parsed.account));
         }
         let cached_ids = store::cached_message_ids(&conn, &parsed.account, &parsed.folder, &uids)
-            .map_err(|err| err.to_string())?;
+            .map_err(|error| error.to_string())?;
         let moved_ids = crate::ffi::engine_block_on(async {
             anyhow::Ok(
                 crate::engine::moved_message_ids(
@@ -169,7 +169,7 @@ pub(crate) fn move_mobile_thread(data_dir: &str, params: &Value) -> Result<Value
         ));
         let uid_next_before = match moved_on_server {
             Ok(uid_next_before) => uid_next_before,
-            Err(err) => {
+            Err(error) => {
                 if archive_keys.is_some() {
                     crate::meron_folders::restore_marks_after_failed_archive(
                         &engine,
@@ -184,7 +184,7 @@ pub(crate) fn move_mobile_thread(data_dir: &str, params: &Value) -> Result<Value
                     // place, so its marks come back.
                     crate::meron_folders::restore_archive_card_marks(&engine, &conn, &meron_entry);
                 }
-                return Err(err);
+                return Err(error);
             }
         };
         let meron_released = crate::meron_folders::release_after_action(&conn, meron_entry);
@@ -202,7 +202,7 @@ pub(crate) fn move_mobile_thread(data_dir: &str, params: &Value) -> Result<Value
             )
         })?;
         let cache_ok = cache_server_move(
-            data_dir,
+            data_directory,
             &conn,
             "move",
             &parsed.account,
@@ -235,7 +235,7 @@ pub(crate) fn move_mobile_thread(data_dir: &str, params: &Value) -> Result<Value
             crate::meron_marks::spawn_writes(&engine, jobs);
             // An Undo of a delete: the replies it left out come back.
             if store::bring_replies_back_after_undo(&conn, &parsed.account, &parsed.folder, &uids) {
-                crate::ffi::spawn_tag_push(data_dir, &parsed.account);
+                crate::ffi::spawn_tag_push(data_directory, &parsed.account);
             }
         }
         // Report the successful server operation, not the racy local row count.
@@ -264,17 +264,17 @@ pub(crate) fn move_mobile_thread(data_dir: &str, params: &Value) -> Result<Value
             None,
             true,
         )
-        .map_err(|err| err.to_string())
+        .map_err(|error| error.to_string())
     })
 }
 
-pub(crate) fn copy_mobile_thread(data_dir: &str, params: &Value) -> Result<Value, String> {
+pub(crate) fn copy_mobile_thread(data_directory: &str, params: &Value) -> Result<Value, String> {
     let thread_id = req_str(params, "thread_id")?;
     let target_account = req_str(params, "target_account_id")?;
     let target_folder = canon_folder(&req_str(params, "target_folder_id")?);
     let parsed = parse_thread_id(&thread_id).ok_or_else(|| "invalid thread_id".to_string())?;
-    let engine = crate::ffi::engine_for(data_dir)?;
-    with_mobile_db(data_dir, |conn| {
+    let engine = crate::ffi::engine_for(data_directory)?;
+    with_mobile_db(data_directory, |conn| {
         let uids = cached_thread_uids(&conn, &parsed)?;
         if uids.is_empty() {
             return Ok(json!({
@@ -317,7 +317,7 @@ pub(crate) fn copy_mobile_thread(data_dir: &str, params: &Value) -> Result<Value
         let copies = std::collections::BTreeMap::from([(parsed.folder.clone(), uids.clone())]);
         store::carried_tags(&conn, &parsed.account, &copies)
             .and_then(|tags| store::apply_carried_tags(&conn, &target_account, tags, true))
-            .map_err(|err| err.to_string())?;
+            .map_err(|error| error.to_string())?;
         // Read-only refresh, on its own session; see the move handlers above.
         let copied_result = json!({
             "ok": true,
@@ -342,9 +342,9 @@ pub(crate) fn copy_mobile_thread(data_dir: &str, params: &Value) -> Result<Value
         };
         let batch = &refresh.batch;
         store::ensure_folder(&conn, &target_account, &target_folder)
-            .map_err(|err| err.to_string())?;
+            .map_err(|error| error.to_string())?;
         store::upsert_window_messages(&conn, &target_account, &target_folder, batch)
-            .map_err(|err| err.to_string())?;
+            .map_err(|error| error.to_string())?;
         store::set_folder_state(
             &conn,
             &target_account,
@@ -352,7 +352,7 @@ pub(crate) fn copy_mobile_thread(data_dir: &str, params: &Value) -> Result<Value
             batch.uidvalidity,
             batch.uid_next,
         )
-        .map_err(|err| err.to_string())?;
+        .map_err(|error| error.to_string())?;
         Ok(copied_result)
     })
 }

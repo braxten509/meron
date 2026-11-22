@@ -1,3 +1,7 @@
+//! Orders desktop preference writes across frontend sessions.
+//! The sidecar tracks the active session and rejects outdated changes.
+//! The dispatch path reads or updates the settings used by the desktop UI.
+
 use serde_json::{Value, json};
 use std::sync::Arc;
 
@@ -89,10 +93,10 @@ pub(crate) async fn dispatch(
     req: &Request,
     _out: &Writer,
 ) -> anyhow::Result<Value> {
-    let p = &req.params;
+    let parameters = &req.params;
     match req.method.as_str() {
         "app.prefsGet" => {
-            let keys = p
+            let keys = parameters
                 .get("keys")
                 .and_then(Value::as_array)
                 .map(|items| {
@@ -108,15 +112,18 @@ pub(crate) async fn dispatch(
         }
 
         "app.prefsSet" => {
-            let key = req_str(p, "key")?;
-            let value = p.get("value").cloned().unwrap_or(Value::Null);
+            let key = req_str(parameters, "key")?;
+            let value = parameters.get("value").cloned().unwrap_or(Value::Null);
             // Each request runs on its own task, so two writes to one key can
             // reach here out of order. A client that stamps its writes with a
             // rising `seq` per key gets last-writer-wins instead: a straggler
             // carrying an older stamp is dropped rather than resurrecting the
             // value the user just replaced.
-            let seq = p.get("seq").and_then(Value::as_u64);
-            let session = p.get("session").and_then(Value::as_str).unwrap_or_default();
+            let seq = parameters.get("seq").and_then(Value::as_u64);
+            let session = parameters
+                .get("session")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
             {
                 // Both locks span the write, so a straggler that passed the
                 // stamp check cannot slip its value in after the newer one's,

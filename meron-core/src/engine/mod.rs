@@ -282,8 +282,8 @@ pub fn pool_debug(account: &str, what: &str) {
 /// Whether `err` is core's "this account must sign in again" failure, from any
 /// of the paths that refuse to use missing or rejected credentials. Hosts get
 /// it as an `account.needsReconnect` event; see [`needs_reconnect_event`].
-pub fn is_needs_reconnect_error(err: &anyhow::Error) -> bool {
-    format!("{err:#}").contains("account needs reconnect")
+pub fn is_needs_reconnect_error(error: &anyhow::Error) -> bool {
+    format!("{error:#}").contains("account needs reconnect")
 }
 
 /// The event that tells a host `account` has to be reconnected, when `err` is
@@ -291,9 +291,9 @@ pub fn is_needs_reconnect_error(err: &anyhow::Error) -> bool {
 /// it from the message text.
 pub fn needs_reconnect_event(
     account: &str,
-    err: &anyhow::Error,
+    error: &anyhow::Error,
 ) -> Option<(&'static str, serde_json::Value)> {
-    is_needs_reconnect_error(err).then(|| {
+    is_needs_reconnect_error(error).then(|| {
         (
             "account.needsReconnect",
             serde_json::json!({ "account": account }),
@@ -455,8 +455,8 @@ impl Engine {
     pub fn new(host: Box<dyn EngineHost>) -> anyhow::Result<Self> {
         let conn = host.open_db()?;
         // Publish the app-wide proxy before anything can open a socket.
-        if let Err(err) = crate::proxy::load_global(&conn) {
-            eprintln!("meron-core: could not load the proxy setting: {err:#}");
+        if let Err(error) = crate::proxy::load_global(&conn) {
+            eprintln!("meron-core: could not load the proxy setting: {error:#}");
         }
         store::tidy_at_start(&conn);
         let mut accounts: HashMap<String, imap::Creds> = HashMap::new();
@@ -631,7 +631,7 @@ impl Engine {
                     //
                     // The verdict is filed under the token that earned it, so
                     // an account reconnected while we were asking is unaffected.
-                    Err(err) if imap::oauth_grant_rejected(&err) => {
+                    Err(error) if imap::oauth_grant_rejected(&error) => {
                         let fingerprint = imap::grant_fingerprint(refresh_token);
                         if let Err(save_err) = store::set_account_rejected_grant(
                             &db.lock().unwrap(),
@@ -643,9 +643,9 @@ impl Engine {
                             );
                         }
                         creds.rejected_grant = Some(fingerprint);
-                        return Err(err.context(format!("account needs reconnect: {account}")));
+                        return Err(error.context(format!("account needs reconnect: {account}")));
                     }
-                    Err(err) => return Err(err),
+                    Err(error) => return Err(error),
                 };
                 creds.access_token = Some(refreshed.access_token);
                 creds.token_expires_at = now + refreshed.expires_in;
@@ -934,12 +934,12 @@ impl Engine {
                 Some(Ok(val))
             }
             // Discard the suspect session (do not pool it).
-            Err(err) => match usage {
-                SessionUse::Write => Some(Err(err)),
+            Err(error) => match usage {
+                SessionUse::Write => Some(Err(error)),
                 SessionUse::Read | SessionUse::Transfer { .. } if may_retry => None,
                 // A session returned during coordination can serve the retry,
                 // but its command failure must not trigger a third execution.
-                SessionUse::Read | SessionUse::Transfer { .. } => Some(Err(err)),
+                SessionUse::Read | SessionUse::Transfer { .. } => Some(Err(error)),
             },
         }
     }

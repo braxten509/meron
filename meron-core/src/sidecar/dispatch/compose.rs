@@ -1,3 +1,7 @@
+//! Handles draft and send requests from the desktop composer.
+//! The dispatcher resolves the target account and optional message UIDs.
+//! Send completion and its response are coordinated with the mail engine.
+
 use anyhow::Context as _;
 use serde_json::{Value, json};
 use std::io::Write as _;
@@ -64,27 +68,27 @@ fn finish_sent(engine: &Arc<Engine>, out: &Writer, account: String, raw: Vec<u8>
 /// Handle outgoing mail: send, drafts, and saving raw messages.
 pub(crate) async fn dispatch(
     engine: &Arc<Engine>,
-    req: &Request,
+    request: &Request,
     out: &Writer,
 ) -> anyhow::Result<Value> {
-    let p = &req.params;
-    match req.method.as_str() {
+    let parameters = &request.params;
+    match request.method.as_str() {
         "send" => {
-            let account = req_str(p, "account")?;
-            let to = req_str(p, "to")?;
-            let cc = req_str(p, "cc").unwrap_or_default();
-            let bcc = req_str(p, "bcc").unwrap_or_default();
-            let subject = req_str(p, "subject").unwrap_or_default();
-            let body = req_str(p, "body").unwrap_or_default();
-            let html = req_str(p, "html").unwrap_or_default();
-            let in_reply_to = req_str(p, "in_reply_to").unwrap_or_default();
-            let references = req_str(p, "references").unwrap_or_default();
-            let reply_to = req_str(p, "reply_to").unwrap_or_default();
+            let account = req_str(parameters, "account")?;
+            let to = req_str(parameters, "to")?;
+            let cc = req_str(parameters, "cc").unwrap_or_default();
+            let bcc = req_str(parameters, "bcc").unwrap_or_default();
+            let subject = req_str(parameters, "subject").unwrap_or_default();
+            let body = req_str(parameters, "body").unwrap_or_default();
+            let html = req_str(parameters, "html").unwrap_or_default();
+            let in_reply_to = req_str(parameters, "in_reply_to").unwrap_or_default();
+            let references = req_str(parameters, "references").unwrap_or_default();
+            let reply_to = req_str(parameters, "reply_to").unwrap_or_default();
             // Client-generated Message-ID so the optimistic bubble and a quick
             // follow-up reply share the id the Sent copy will carry.
-            let message_id = req_str(p, "message_id").unwrap_or_default();
-            let attachments = opt_attachments(p)?;
-            let requested_from = req_str(p, "from").unwrap_or_default();
+            let message_id = req_str(parameters, "message_id").unwrap_or_default();
+            let attachments = opt_attachments(parameters)?;
+            let requested_from = req_str(parameters, "from").unwrap_or_default();
             let creds = engine.ensure_valid_creds(&account).await?;
             let (from_addr, sender_name) =
                 resolve_send_from(engine, &account, &creds, &requested_from)?;
@@ -110,9 +114,9 @@ pub(crate) async fn dispatch(
         }
 
         "invite.respond" => {
-            let message = req_str(p, "message")?;
-            let thread_id = req_str(p, "thread_id").unwrap_or_default();
-            let response = req_str(p, "response")?;
+            let message = req_str(parameters, "message")?;
+            let thread_id = req_str(parameters, "thread_id").unwrap_or_default();
+            let response = req_str(parameters, "response")?;
             let response = meron_core::calendar::Response::parse(&response)
                 .ok_or_else(|| anyhow::anyhow!("unknown invitation response: {response}"))?;
             let responded = meron_core::calendar::respond(
@@ -124,7 +128,7 @@ pub(crate) async fn dispatch(
             )
             .await?;
             finish_sent(engine, out, responded.account, responded.raw);
-            emit(out, "calendar.changed", json!({ "method": req.method })).await;
+            emit(out, "calendar.changed", json!({ "method": request.method })).await;
             Ok(json!({
                 "ok": true,
                 "response": response.as_str(),
@@ -133,24 +137,24 @@ pub(crate) async fn dispatch(
         }
 
         "save_draft" => {
-            let account = req_str(p, "account")?;
-            let to = req_str(p, "to").unwrap_or_default();
-            let cc = req_str(p, "cc").unwrap_or_default();
-            let bcc = req_str(p, "bcc").unwrap_or_default();
-            let subject = req_str(p, "subject").unwrap_or_default();
-            let body = req_str(p, "body").unwrap_or_default();
-            let html = req_str(p, "html").unwrap_or_default();
-            let in_reply_to = req_str(p, "in_reply_to").unwrap_or_default();
-            let references = req_str(p, "references").unwrap_or_default();
-            let reply_to = req_str(p, "reply_to").unwrap_or_default();
-            let attachments = opt_attachments(p)?;
-            let requested_from = req_str(p, "from").unwrap_or_default();
+            let account = req_str(parameters, "account")?;
+            let to = req_str(parameters, "to").unwrap_or_default();
+            let cc = req_str(parameters, "cc").unwrap_or_default();
+            let bcc = req_str(parameters, "bcc").unwrap_or_default();
+            let subject = req_str(parameters, "subject").unwrap_or_default();
+            let body = req_str(parameters, "body").unwrap_or_default();
+            let html = req_str(parameters, "html").unwrap_or_default();
+            let in_reply_to = req_str(parameters, "in_reply_to").unwrap_or_default();
+            let references = req_str(parameters, "references").unwrap_or_default();
+            let reply_to = req_str(parameters, "reply_to").unwrap_or_default();
+            let attachments = opt_attachments(parameters)?;
+            let requested_from = req_str(parameters, "from").unwrap_or_default();
             let creds = engine.ensure_valid_creds(&account).await?;
             let (from_addr, sender_name) =
                 resolve_send_from(engine, &account, &creds, &requested_from)?;
             // Stable per-draft Message-ID: each autosave reuses it so the IMAP
             // layer can find and prune the prior copy instead of piling up dups.
-            let draft_id = req_str(p, "draft_id").unwrap_or_default();
+            let draft_id = req_str(parameters, "draft_id").unwrap_or_default();
             let raw = smtp::build_message(
                 &sender_name,
                 &from_addr,
@@ -172,8 +176,8 @@ pub(crate) async fn dispatch(
         }
 
         "discard_draft" => {
-            let account = req_str(p, "account")?;
-            let draft_id = req_str(p, "draft_id").unwrap_or_default();
+            let account = req_str(parameters, "account")?;
+            let draft_id = req_str(parameters, "draft_id").unwrap_or_default();
             if draft_id.trim().is_empty() {
                 return Ok(json!({ "ok": true, "deleted": 0 }));
             }
@@ -215,7 +219,7 @@ pub(crate) async fn dispatch(
                 &draft_id,
                 None,
             )?;
-            if let Ok(thread_key) = req_str(p, "thread_key") {
+            if let Ok(thread_key) = req_str(parameters, "thread_key") {
                 store::delete_quick_reply_drafts_in_thread(
                     &engine.db.lock().unwrap(),
                     &account,
@@ -231,11 +235,12 @@ pub(crate) async fn dispatch(
         // of the JSON response avoids its bounded line size; BODY.PEEK[] keeps
         // an unread message unread.
         "messages.saveRaw" => {
-            let account = req_str(p, "account")?;
-            let folder =
-                canon_folder(&req_str(p, "folder").unwrap_or_else(|_| "INBOX".to_string()));
-            let uid = req_u32(p, "uid")?;
-            let path = req_str(p, "path")?;
+            let account = req_str(parameters, "account")?;
+            let folder = canon_folder(
+                &req_str(parameters, "folder").unwrap_or_else(|_| "INBOX".to_string()),
+            );
+            let uid = req_u32(parameters, "uid")?;
+            let path = req_str(parameters, "path")?;
 
             let raw_messages = engine
                 .with_read_session(&account, |session| {
@@ -269,10 +274,15 @@ pub(crate) async fn dispatch(
         // (from the local cache, like copy/move) or, with `all`, every message
         // the server holds in the folder — not just the cached window.
         "messages.exportUids" => {
-            let account = req_str(p, "account")?;
-            let folder =
-                canon_folder(&req_str(p, "folder").unwrap_or_else(|_| "INBOX".to_string()));
-            let mut uids = if p.get("all").and_then(Value::as_bool).unwrap_or(false) {
+            let account = req_str(parameters, "account")?;
+            let folder = canon_folder(
+                &req_str(parameters, "folder").unwrap_or_else(|_| "INBOX".to_string()),
+            );
+            let mut uids = if parameters
+                .get("all")
+                .and_then(Value::as_bool)
+                .unwrap_or(false)
+            {
                 engine
                     .with_read_session(&account, |session| {
                         let folder = folder.clone();
@@ -283,8 +293,11 @@ pub(crate) async fn dispatch(
                     .collect::<Vec<_>>()
             } else {
                 let (thread_key, subject_filter) =
-                    store::split_thread_key(&req_str(p, "thread_key").unwrap_or_default());
-                let uid = p.get("uid").and_then(Value::as_u64).map(|n| n as u32);
+                    store::split_thread_key(&req_str(parameters, "thread_key").unwrap_or_default());
+                let uid = parameters
+                    .get("uid")
+                    .and_then(Value::as_u64)
+                    .map(|n| n as u32);
                 store::resolve_message_uids(
                     &engine.db.lock().unwrap(),
                     &account,
@@ -292,7 +305,7 @@ pub(crate) async fn dispatch(
                     &thread_key,
                     subject_filter.as_deref(),
                     uid,
-                    &opt_uids(p),
+                    &opt_uids(parameters),
                 )?
             };
             uids.sort_unstable();
@@ -306,11 +319,12 @@ pub(crate) async fn dispatch(
         // a whole batch never has to fit in a JSON response. UIDs the server no
         // longer has are simply absent from `saved`.
         "messages.saveRawBatch" => {
-            let account = req_str(p, "account")?;
-            let folder =
-                canon_folder(&req_str(p, "folder").unwrap_or_else(|_| "INBOX".to_string()));
-            let uids = opt_uids(p);
-            let dir = std::path::PathBuf::from(req_str(p, "dir")?);
+            let account = req_str(parameters, "account")?;
+            let folder = canon_folder(
+                &req_str(parameters, "folder").unwrap_or_else(|_| "INBOX".to_string()),
+            );
+            let uids = opt_uids(parameters);
+            let directory = std::path::PathBuf::from(req_str(parameters, "dir")?);
 
             let raw_messages = engine
                 .with_read_session(&account, |session| {
@@ -327,7 +341,7 @@ pub(crate) async fn dispatch(
                 if !uids.contains(&message.uid) {
                     continue;
                 }
-                let path = dir.join(format!("{}.eml", message.uid));
+                let path = directory.join(format!("{}.eml", message.uid));
                 std::fs::write(&path, &message.raw)
                     .with_context(|| format!("write message export {}", path.display()))?;
                 saved.push(message.uid);

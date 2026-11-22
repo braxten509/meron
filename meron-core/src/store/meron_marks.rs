@@ -1,16 +1,12 @@
-//! Meron-folder marks: what this device knows of the `$MeronF_<id>` keywords
-//! on the server's Inbox and archive-mailbox copies (see
-//! [`crate::meron_marks`]).
+//! Meron-folder marks: what this device knows of the `$MeronF_<id>` keywords on the server's Inbox and archive-mailbox copies (see [`crate::meron_marks`]).
 //!
-//! `meron_marks` holds, per copy, the mark last read from the server or
-//! written by this device (`folder_id` empty: none). A sync compares what it
-//! read against it: only a mark that changed since then is acted on, so mail
-//! that always carried its mark isn't filed again after the user took it out
-//! here, and a read that started before this device's own write (which may
-//! not show it yet) is ignored.
+//! `meron_marks` holds, per copy, the mark last read from the server or written by this device
+//! (`folder_id` empty: none). A sync compares what it read against it: only a mark that changed since
+//! then is acted on, so mail that always carried its mark isn't filed again after the user took it out
+//! here, and a read that started before this device's own write (which may not show it yet) is ignored.
 //!
-//! `written_at` is a [`meron_mark_tick`], not a wall-clock second: a sync's
-//! read and this device's writes must be told apart even within one second.
+//! `written_at` is a [`meron_mark_tick`], not a wall-clock second: a sync's read and this device's
+//! writes must be told apart even within one second.
 
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::sync::atomic::{AtomicI64, Ordering};

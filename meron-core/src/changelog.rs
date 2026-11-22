@@ -90,8 +90,8 @@ pub fn fetch(variant: Variant) -> Result<Value> {
 fn entry_tag(entry: &feed_rs::model::Entry) -> Option<String> {
     const MARKER: &str = "/releases/tag/";
     for link in &entry.links {
-        if let Some(idx) = link.href.find(MARKER) {
-            let raw = &link.href[idx + MARKER.len()..];
+        if let Some(index) = link.href.find(MARKER) {
+            let raw = &link.href[index + MARKER.len()..];
             let tag = raw.trim_end_matches('/').replace("%2F", "/");
             if !tag.is_empty() {
                 return Some(tag);
@@ -100,8 +100,8 @@ fn entry_tag(entry: &feed_rs::model::Entry) -> Option<String> {
     }
     // Fall back to the entry id: `tag:github.com,2008:Repository/<id>/<tag>`.
     let id = &entry.id;
-    id.rfind("Repository/").map(|idx| {
-        let rest = &id[idx + "Repository/".len()..];
+    id.rfind("Repository/").map(|index| {
+        let rest = &id[index + "Repository/".len()..];
         // Drop the numeric repo id, keep the (possibly slash-bearing) tag.
         rest.splitn(2, '/').nth(1).unwrap_or(rest).to_string()
     })
@@ -115,14 +115,14 @@ fn extract_notes(html: &str) -> Vec<String> {
     let li = Selector::parse("li").unwrap();
     let mut notes: Vec<String> = fragment
         .select(&li)
-        .map(|el| normalize_ws(&el.text().collect::<String>()))
+        .map(|element| normalize_ws(&element.text().collect::<String>()))
         .filter(|line| !line.is_empty() && !is_full_changelog(line))
         .collect();
     if notes.is_empty() {
-        let p = Selector::parse("p").unwrap();
+        let paragraph = Selector::parse("p").unwrap();
         notes = fragment
-            .select(&p)
-            .map(|el| normalize_ws(&el.text().collect::<String>()))
+            .select(&paragraph)
+            .map(|element| normalize_ws(&element.text().collect::<String>()))
             .filter(|line| !line.is_empty() && !is_full_changelog(line))
             .collect();
     }
@@ -140,14 +140,15 @@ fn normalize_ws(text: &str) -> String {
 }
 
 fn http_get(url: &str) -> Result<Vec<u8>> {
-    let mut resp = crate::proxy::agent()?
+    let mut response = crate::proxy::agent()?
         .get(url)
         .config()
         .timeout_global(Some(HTTP_TIMEOUT))
         .build()
         .call()
         .with_context(|| format!("HTTP GET {url}"))?;
-    resp.body_mut()
+    response
+        .body_mut()
         .read_to_vec()
         .with_context(|| format!("read body {url}"))
 }

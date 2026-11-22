@@ -1,3 +1,7 @@
+//! Handles RSS commands received through the desktop sidecar.
+//! The selected operation reads or changes feed accounts and subscriptions.
+//! The core returns the data needed to refresh the desktop feed views.
+
 use serde_json::{Value, json};
 use std::sync::Arc;
 
@@ -11,16 +15,16 @@ use crate::sidecar::params::*;
 /// Handle RSS accounts and feeds: `account.addRss`, `feed.*`, `rss.*`.
 pub(crate) async fn dispatch(
     engine: &Arc<Engine>,
-    req: &Request,
+    request: &Request,
     _out: &Writer,
 ) -> anyhow::Result<Value> {
-    let p = &req.params;
-    match req.method.as_str() {
+    let parameters = &request.params;
+    match request.method.as_str() {
         // Add an RSS feed: fetch + parse + persist on the blocking pool (network
         // I/O), returning the bridge Account JSON.
         "account.addRss" => {
-            let feed_url = req_str(p, "feed_url")?;
-            let display_name = req_str(p, "display_name").unwrap_or_default();
+            let feed_url = req_str(parameters, "feed_url")?;
+            let display_name = req_str(parameters, "display_name").unwrap_or_default();
             let engine = engine.clone();
             let account =
                 tokio::task::spawn_blocking(move || rss::add(&engine.db, &feed_url, &display_name))
@@ -30,8 +34,8 @@ pub(crate) async fn dispatch(
 
         // Add a feed to an existing RSS account (network on the blocking pool).
         "feed.add" => {
-            let account = req_str(p, "account")?;
-            let feed_url = req_str(p, "feed_url")?;
+            let account = req_str(parameters, "account")?;
+            let feed_url = req_str(parameters, "feed_url")?;
             let engine = engine.clone();
             let res =
                 tokio::task::spawn_blocking(move || rss::add_feed(&engine.db, &account, &feed_url))
@@ -41,7 +45,7 @@ pub(crate) async fn dispatch(
 
         // Remove a single feed (subscription) and its items from an RSS account.
         "feed.remove" => {
-            let thread_id = req_str(p, "thread_id")?;
+            let thread_id = req_str(parameters, "thread_id")?;
             let res = rss::remove_feed(&engine.db.lock().unwrap(), &thread_id)?;
             Ok(res)
         }
@@ -49,15 +53,15 @@ pub(crate) async fn dispatch(
         // Move a feed subscription between RSS accounts without losing cached
         // items or per-item read/starred state.
         "feed.move" => {
-            let thread_id = req_str(p, "thread_id")?;
-            let target_account = req_str(p, "target_account")?;
+            let thread_id = req_str(parameters, "thread_id")?;
+            let target_account = req_str(parameters, "target_account")?;
             let res = rss::move_feed(&engine.db.lock().unwrap(), &thread_id, &target_account)?;
             Ok(res)
         }
 
         // Serialize one RSS account's feeds to an OPML 2.0 document.
         "rss.exportOpml" => {
-            let account = req_str(p, "account")?;
+            let account = req_str(parameters, "account")?;
             let opml = rss::export_opml(&engine.db.lock().unwrap(), &account)?;
             Ok(json!({ "opml": opml }))
         }
@@ -65,8 +69,8 @@ pub(crate) async fn dispatch(
         // Import feeds from an OPML document into one RSS account. Returns the
         // number of feeds added; the caller reloads accounts and syncs.
         "rss.importOpml" => {
-            let opml = req_str(p, "opml")?;
-            let account = req_str(p, "account")?;
+            let opml = req_str(parameters, "opml")?;
+            let account = req_str(parameters, "account")?;
             let engine = engine.clone();
             let imported =
                 tokio::task::spawn_blocking(move || rss::import_opml(&engine.db, &opml, &account))
@@ -77,9 +81,12 @@ pub(crate) async fn dispatch(
         // RSS thread read: paginated newest-first slice (or full thread when
         // `limit` is omitted), as final Message JSON.
         "rss.thread" => {
-            let thread_id = req_str(p, "thread_id")?;
-            let limit = p.get("limit").and_then(Value::as_u64).map(|n| n as u32);
-            let before_cursor = p
+            let thread_id = req_str(parameters, "thread_id")?;
+            let limit = parameters
+                .get("limit")
+                .and_then(Value::as_u64)
+                .map(|n| n as u32);
+            let before_cursor = parameters
                 .get("before_cursor")
                 .and_then(Value::as_str)
                 .and_then(parse_rss_cursor);
@@ -99,10 +106,13 @@ pub(crate) async fn dispatch(
         }
 
         "rss.markRead" => {
-            let thread_id = req_str(p, "thread_id")?;
+            let thread_id = req_str(parameters, "thread_id")?;
             // Defaults to read; pass seen:false to mark unread.
-            let seen = p.get("seen").and_then(Value::as_bool).unwrap_or(true);
-            let item_keys = p
+            let seen = parameters
+                .get("seen")
+                .and_then(Value::as_bool)
+                .unwrap_or(true);
+            let item_keys = parameters
                 .get("item_keys")
                 .and_then(Value::as_array)
                 .map(|items| {
@@ -122,7 +132,7 @@ pub(crate) async fn dispatch(
         }
 
         "rss.markAllRead" => {
-            let account = req_str(p, "account")?;
+            let account = req_str(parameters, "account")?;
             let updated = rss::mark_account_read(&engine.db.lock().unwrap(), &account)?;
             Ok(json!({
                 "ok": true,
@@ -132,9 +142,12 @@ pub(crate) async fn dispatch(
         }
 
         "rss.markStarred" => {
-            let thread_id = req_str(p, "thread_id")?;
-            let starred = p.get("starred").and_then(Value::as_bool).unwrap_or(true);
-            let item_keys = p
+            let thread_id = req_str(parameters, "thread_id")?;
+            let starred = parameters
+                .get("starred")
+                .and_then(Value::as_bool)
+                .unwrap_or(true);
+            let item_keys = parameters
                 .get("item_keys")
                 .and_then(Value::as_array)
                 .map(|items| {

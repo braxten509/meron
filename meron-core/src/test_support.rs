@@ -1,3 +1,7 @@
+//! Reads HTTP requests sent to local fixtures by the Rust tests.
+//! The helper waits for headers and the declared body even across separate reads.
+//! Its own cases cover fragmented input and requests with no body.
+
 use std::io::{BufRead, BufReader, Read};
 use std::net::TcpStream;
 use std::time::Duration;

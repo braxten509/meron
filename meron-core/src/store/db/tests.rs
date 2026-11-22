@@ -8,9 +8,9 @@ use super::*;
 const TEST_KEY: &str = "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff";
 
 fn tmp_db_path() -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("meron-db-test-{}", uuid::Uuid::new_v4()));
-    std::fs::create_dir_all(&dir).unwrap();
-    dir.join("meron.db")
+    let directory = std::env::temp_dir().join(format!("meron-db-test-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&directory).unwrap();
+    directory.join("meron.db")
 }
 
 #[test]

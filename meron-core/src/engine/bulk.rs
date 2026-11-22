@@ -351,12 +351,12 @@ async fn answer_moves(engine: &Arc<Engine>, waiting: Vec<Waiting<MoveAsk, anyhow
                     let _ = member.answer.send(Ok(moved.clone()));
                 }
             }
-            Err(err) => {
-                let err = Arc::new(err);
+            Err(error) => {
+                let error = Arc::new(error);
                 for member in group {
                     let _ = member
                         .answer
-                        .send(Err(anyhow::Error::new(SharedError(err.clone()))));
+                        .send(Err(anyhow::Error::new(SharedError(error.clone()))));
                 }
             }
         }

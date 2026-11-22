@@ -13,11 +13,11 @@ fn encrypted_backup_without_a_passphrase_asks_for_one() {
     })
     .unwrap();
 
-    let error = parse_err(&text, None);
+    let error = parse_error(&text, None);
     assert!(needs_passphrase(&error), "{error}");
 
     // A blank passphrase is the same as none, so the UI re-prompts.
-    let error = parse_err(&text, Some(""));
+    let error = parse_error(&text, Some(""));
     assert!(needs_passphrase(&error), "{error}");
 }
 
@@ -30,7 +30,7 @@ fn wrong_passphrase_is_reported_as_such() {
     })
     .unwrap();
 
-    let error = parse_err(&text, Some("not-pw"));
+    let error = parse_error(&text, Some("not-pw"));
     assert!(error.contains("wrong passphrase"), "{error}");
     // "Wrong passphrase" must not send the UI back to the prompt-for-one path.
     assert!(!needs_passphrase(&error));
@@ -51,7 +51,7 @@ fn tampering_with_the_ciphertext_fails_authentication() {
     raw[0] ^= 0x01;
     envelope["ciphertext"] = json!(STANDARD.encode(&raw));
 
-    let error = parse_err(&envelope.to_string(), Some("pw"));
+    let error = parse_error(&envelope.to_string(), Some("pw"));
     assert!(error.contains("wrong passphrase"), "{error}");
 }
 
@@ -68,7 +68,7 @@ fn a_passphrase_on_a_plaintext_backup_is_ignored() {
 #[test]
 fn non_backup_files_are_rejected() {
     for text in ["", "not json", "{}", r#"{"hello":"world"}"#, "[]"] {
-        let error = parse_err(text, None);
+        let error = parse_error(text, None);
         assert!(
             error.contains("not a Meron backup file") || error.contains("no data"),
             "{text:?} gave {error}"
@@ -79,7 +79,7 @@ fn non_backup_files_are_rejected() {
 #[test]
 fn a_newer_format_version_is_refused() {
     let text = json!({ "meron_backup": FORMAT_VERSION + 1, "encrypted": false, "data": {} });
-    let error = parse_err(&text.to_string(), None);
+    let error = parse_error(&text.to_string(), None);
     assert!(error.contains("newer version of Meron"), "{error}");
 }
 
@@ -103,7 +103,7 @@ fn an_absurd_iteration_count_is_refused_instead_of_performed() {
             "nonce": STANDARD.encode([0u8; NONCE_LEN]),
             "ciphertext": STANDARD.encode([0u8; 32]),
         });
-        let error = parse_err(&text.to_string(), Some("pw"));
+        let error = parse_error(&text.to_string(), Some("pw"));
         assert!(
             error.contains("unreasonable amount of work"),
             "{iterations}: {error}"
@@ -122,7 +122,7 @@ fn a_malformed_salt_is_refused() {
             "nonce": STANDARD.encode([0u8; NONCE_LEN]),
             "ciphertext": STANDARD.encode([0u8; 32]),
         });
-        let error = parse_err(&text.to_string(), Some("pw"));
+        let error = parse_error(&text.to_string(), Some("pw"));
         assert!(
             error.contains("malformed `kdf.salt`"),
             "{} bytes: {error}",
@@ -159,6 +159,6 @@ fn an_encrypted_backup_with_an_unknown_cipher_is_refused() {
         "nonce": STANDARD.encode([0u8; NONCE_LEN]),
         "ciphertext": STANDARD.encode([0u8; 32]),
     });
-    let error = parse_err(&text.to_string(), Some("pw"));
+    let error = parse_error(&text.to_string(), Some("pw"));
     assert!(error.contains("unsupported backup cipher"), "{error}");
 }

@@ -20,12 +20,12 @@ unsafe extern "C" fn capture_event(event_json: *const c_char, _user_data: *mut c
     CAPTURED_EVENTS.lock().unwrap().push(value);
 }
 
-unsafe fn take_owned_string(ptr: *mut c_char) -> String {
-    assert!(!ptr.is_null());
-    let value = unsafe { CStr::from_ptr(ptr) }
+unsafe fn take_owned_string(pointer: *mut c_char) -> String {
+    assert!(!pointer.is_null());
+    let value = unsafe { CStr::from_ptr(pointer) }
         .to_string_lossy()
         .into_owned();
-    unsafe { meron_core_string_free(ptr) };
+    unsafe { meron_core_string_free(pointer) };
     value
 }
 
@@ -94,28 +94,28 @@ fn configuring_leaves_the_store_for_the_first_command() {
     let _guard = MOBILE_CONFIG_TEST_LOCK
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
-    let dir = std::env::temp_dir().join(format!("meron-configure-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
-    let data_dir = dir.to_str().unwrap();
-    let configured = configure_mobile_core(data_dir, None);
+    let directory = std::env::temp_dir().join(format!("meron-configure-{}", std::process::id()));
+    std::fs::create_dir_all(&directory).unwrap();
+    let data_directory = directory.to_str().unwrap();
+    let configured = configure_mobile_core(data_directory, None);
     assert_eq!(configured["ok"], true);
-    assert!(!dir.join("meron.db").exists());
+    assert!(!directory.join("meron.db").exists());
 
     let ping = invoke_mobile_request_json(r#"{"id":1,"method":"ping","params":{}}"#);
     assert_eq!(ping["result"]["pong"], true);
     let status = invoke_mobile_request_json(r#"{"id":2,"method":"core.status","params":{}}"#);
     assert_eq!(status["result"]["migrating"], false);
-    assert!(!dir.join("meron.db").exists());
+    assert!(!directory.join("meron.db").exists());
 
     invoke_mobile_request_json(r#"{"id":3,"method":"account.list","params":{}}"#);
-    assert!(dir.join("meron.db").exists());
-    std::fs::remove_dir_all(&dir).unwrap();
+    assert!(directory.join("meron.db").exists());
+    std::fs::remove_dir_all(&directory).unwrap();
 }
 
 #[test]
 fn ffi_init_json_rejects_missing_data_dir() {
-    let data_dir = CString::new("  ").unwrap();
-    let raw = unsafe { take_owned_string(meron_core_init_json(data_dir.as_ptr())) };
+    let data_directory = CString::new("  ").unwrap();
+    let raw = unsafe { take_owned_string(meron_core_init_json(data_directory.as_ptr())) };
     let value: serde_json::Value = serde_json::from_str(&raw).unwrap();
     assert!(
         value["error"]["message"]

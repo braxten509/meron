@@ -64,7 +64,7 @@ fn half_filled_config_is_not_a_proxy() {
 fn custom_proxy_wins_over_global_and_direct_disables_it() {
     let _guard = TEST_GLOBAL_LOCK
         .write()
-        .unwrap_or_else(|err| err.into_inner());
+        .unwrap_or_else(|error| error.into_inner());
     set_global(Some(socks5("global.example", 1080)));
     let custom = ProxyConfig {
         kind: ProxyKind::Http,
@@ -97,13 +97,13 @@ where
     let task = tokio::spawn(async move {
         let (mut sock, _) = listener.accept().await.unwrap();
         // Read the first request, reply, then echo back everything read.
-        let mut buf = vec![0u8; 512];
-        let n = sock.read(&mut buf).await.unwrap();
-        buf.truncate(n);
-        let reply = handler(buf.clone());
+        let mut buffer = vec![0u8; 512];
+        let n = sock.read(&mut buffer).await.unwrap();
+        buffer.truncate(n);
+        let reply = handler(buffer.clone());
         sock.write_all(&reply).await.unwrap();
         sock.flush().await.unwrap();
-        buf
+        buffer
     });
     (port, task)
 }
@@ -167,8 +167,8 @@ async fn socks5_surfaces_a_refusal() {
         sock.write_all(&[SOCKS5_VERSION, SOCKS5_AUTH_NONE])
             .await
             .unwrap();
-        let mut buf = [0u8; 256];
-        let _ = sock.read(&mut buf).await.unwrap();
+        let mut buffer = [0u8; 256];
+        let _ = sock.read(&mut buffer).await.unwrap();
         sock.write_all(&[
             SOCKS5_VERSION,
             0x05,
@@ -222,15 +222,15 @@ async fn http_connect_tunnels_and_authenticates() {
         .await
         .unwrap();
 
-    let req = String::from_utf8(server.await.unwrap()).unwrap();
+    let request = String::from_utf8(server.await.unwrap()).unwrap();
     assert!(
-        req.starts_with("CONNECT smtp.example.com:587 HTTP/1.1\r\n"),
-        "{req:?}"
+        request.starts_with("CONNECT smtp.example.com:587 HTTP/1.1\r\n"),
+        "{request:?}"
     );
     // base64("user:pass")
     assert!(
-        req.contains("Proxy-Authorization: Basic dXNlcjpwYXNz\r\n"),
-        "{req:?}"
+        request.contains("Proxy-Authorization: Basic dXNlcjpwYXNz\r\n"),
+        "{request:?}"
     );
 }
 

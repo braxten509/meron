@@ -54,8 +54,8 @@ pub fn encode(name: &str) -> String {
             flush(&mut pending, &mut out);
             out.push(ch);
         } else {
-            let mut buf = [0u16; 2];
-            pending.extend_from_slice(ch.encode_utf16(&mut buf));
+            let mut buffer = [0u16; 2];
+            pending.extend_from_slice(ch.encode_utf16(&mut buffer));
         }
     }
     flush(&mut pending, &mut out);
