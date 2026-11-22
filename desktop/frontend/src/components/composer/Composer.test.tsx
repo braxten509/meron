@@ -404,9 +404,7 @@ describe('Composer', () => {
     const discarded = new Set(
       calls.filter((call) => call.command === 'mail.discardDraft').map((call) => call.payload.draft_id),
     )
-    const stray = [...new Set(savedDraftIds())].filter(
-      (id) => id !== reopened?.draftMessageId && !discarded.has(id),
-    )
+    const stray = [...new Set(savedDraftIds())].filter((id) => id !== reopened?.draftMessageId && !discarded.has(id))
     expect(stray).toEqual([])
   })
 

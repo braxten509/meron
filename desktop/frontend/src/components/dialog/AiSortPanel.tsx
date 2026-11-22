@@ -347,7 +347,6 @@ export function AiSortPanel() {
     }
   }
 
-
   const tagLabel = (entry: AiSortLogEntry) => {
     switch (entry.state) {
       case 'moving':
@@ -393,7 +392,13 @@ export function AiSortPanel() {
     return (
       <div className="flex flex-col gap-3">
         <div className="flex items-center gap-2">
-          <IconButton icon={ChevronLeft} iconSize={14} label={t('buttons.back')} size="sm" onClick={() => setLessonsOpen(false)} />
+          <IconButton
+            icon={ChevronLeft}
+            iconSize={14}
+            label={t('buttons.back')}
+            size="sm"
+            onClick={() => setLessonsOpen(false)}
+          />
           <h3 className="text-sm font-semibold text-primary">{t('aiSort.lessons')}</h3>
         </div>
         <p className="px-1 text-xs text-secondary">{t('aiSort.lessonsHint')}</p>
@@ -412,7 +417,12 @@ export function AiSortPanel() {
               <div
                 key={lesson.id}
                 className="flex min-h-10 items-center gap-2 py-1 pr-1.5 pl-3.5 text-xs"
-                title={[lessonUnused(lesson), lesson.sender, lesson.subject, new Date(lesson.at * 1000).toLocaleString()]
+                title={[
+                  lessonUnused(lesson),
+                  lesson.sender,
+                  lesson.subject,
+                  new Date(lesson.at * 1000).toLocaleString(),
+                ]
                   .filter(Boolean)
                   .join(' · ')}
               >
@@ -421,7 +431,9 @@ export function AiSortPanel() {
                   {name && lesson.subject && <span className="text-secondary">{' · '}</span>}
                   <span className="text-secondary">{lesson.subject}</span>
                 </span>
-                <span className={`max-w-40 shrink-0 truncate rounded-full px-2 text-[0.625rem] font-medium leading-5 ${tagClass}`}>
+                <span
+                  className={`max-w-40 shrink-0 truncate rounded-full px-2 text-[0.625rem] font-medium leading-5 ${tagClass}`}
+                >
                   {lessonPlace(lesson)}
                 </span>
                 {/* The same room on every line, so the tags line up. */}
@@ -452,7 +464,13 @@ export function AiSortPanel() {
     return (
       <div className="flex flex-col gap-3">
         <div className="flex items-center gap-2">
-          <IconButton icon={ChevronLeft} iconSize={14} label={t('buttons.back')} size="sm" onClick={() => setLogOpen(false)} />
+          <IconButton
+            icon={ChevronLeft}
+            iconSize={14}
+            label={t('buttons.back')}
+            size="sm"
+            onClick={() => setLogOpen(false)}
+          />
           <h3 className="text-sm font-semibold text-primary">{t('aiSort.log')}</h3>
         </div>
         <div className="divide-y divide-border/40 overflow-hidden rounded-2xl border border-border/60 bg-raised/80 shadow-sm shadow-black/[0.03] dark:shadow-black/10">
@@ -476,7 +494,9 @@ export function AiSortPanel() {
                 <span className={`min-w-0 flex-1 truncate ${moved ? 'text-primary' : 'text-secondary'}`}>
                   {entry.subject || entry.sender}
                 </span>
-                <span className={`max-w-40 shrink-0 truncate rounded-full px-2 text-[0.625rem] font-medium leading-5 ${tagClass}`}>
+                <span
+                  className={`max-w-40 shrink-0 truncate rounded-full px-2 text-[0.625rem] font-medium leading-5 ${tagClass}`}
+                >
                   {tagLabel(entry)}
                 </span>
                 {/* The same room on every line, so the tags line up. */}
@@ -507,7 +527,6 @@ export function AiSortPanel() {
 
   return (
     <div className="flex flex-col gap-4">
-
       {lastError && (
         <p
           className="rounded-xl border border-rose-500/25 bg-rose-500/[0.06] px-3.5 py-2.5 text-[0.75rem] font-medium text-rose-500"
@@ -604,7 +623,11 @@ export function AiSortPanel() {
                       {showKey ? <EyeOff size={13} /> : <Eye size={13} />}
                     </button>
                   </span>
-                  <Button size="sm" disabled={!keyInput.trim() || keyBusy} onClick={() => void saveKey(option, keyInput.trim())}>
+                  <Button
+                    size="sm"
+                    disabled={!keyInput.trim() || keyBusy}
+                    onClick={() => void saveKey(option, keyInput.trim())}
+                  >
                     {t('buttons.save')}
                   </Button>
                   {state?.has_key && (
@@ -922,7 +945,9 @@ function ModelPicker({
           )}
           {recentShown.length > 0 && (
             <>
-              <p className="px-3 pt-1.5 pb-0.5 text-[0.65625rem] font-semibold text-secondary">{t('aiSort.recentModels')}</p>
+              <p className="px-3 pt-1.5 pb-0.5 text-[0.65625rem] font-semibold text-secondary">
+                {t('aiSort.recentModels')}
+              </p>
               {recentShown.map((model) => item(model, `recent:${model.id}`))}
               <p className="px-3 pt-2 pb-0.5 text-[0.65625rem] font-semibold text-secondary">{t('aiSort.allModels')}</p>
             </>

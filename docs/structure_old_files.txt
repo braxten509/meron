@@ -401,7 +401,6 @@ desktop/internal/obf/obf.go
 desktop/internal/obf/obf_roundtrip_test.go
 desktop/local_folders.go
 desktop/local_folders_integration_test.go
-desktop/mail.go
 desktop/mailjson.go
 desktop/mailjson_tags_test.go
 desktop/mailserver_harness_test.go

@@ -361,7 +361,10 @@ ui$.attachmentsOnly.onChange(() => clearBulkSelection())
 ui$.groupBySender.onChange(() => clearBulkSelection())
 
 /** Prefs keys this module owns; boot requests them in its single prefsGet. */
-export const UI_SESSION_KEYS = ['session_account', 'session_folder', filterSession.key,
+export const UI_SESSION_KEYS = [
+  'session_account',
+  'session_folder',
+  filterSession.key,
   attachmentsSession.key,
   groupBySenderSession.key,
 ]

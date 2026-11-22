@@ -285,28 +285,30 @@ export function SideNav() {
         {/* Meron folders: they exist only in Meron, on this device, and take
           conversations from every account, so they head the list. */}
         <NavSectionHeading first>{t('meronFolders.title')}</NavSectionHeading>
-        {meronFolders.filter((folder) => !isMeronArchive(folder)).map((folder) => {
-          const active = isMeronActive(folder.id)
-          return (
-            <div key={folder.id} className="relative w-full px-2 group">
-              {railIndicator(active)}
-              <button
-                type="button"
-                data-meron-folder-row={folder.id}
-                className={meronRowButton}
-                onClick={() => openMeronFolder(folder.id)}
-                onContextMenu={meronRowContextMenu(folder)}
-                onKeyDown={meronRowKeyDown(folder)}
-                title={`${folder.name} · ${t('meronFolders.thisDeviceOnly')}`}
-                aria-current={active ? 'page' : undefined}
-                // Rename and Delete open from the keyboard too.
-                aria-keyshortcuts="Shift+F10 ContextMenu"
-              >
-                <NavRow active={active} icon={<Folder size={16} />} label={folder.name} count={folder.unread} />
-              </button>
-            </div>
-          )
-        })}
+        {meronFolders
+          .filter((folder) => !isMeronArchive(folder))
+          .map((folder) => {
+            const active = isMeronActive(folder.id)
+            return (
+              <div key={folder.id} className="relative w-full px-2 group">
+                {railIndicator(active)}
+                <button
+                  type="button"
+                  data-meron-folder-row={folder.id}
+                  className={meronRowButton}
+                  onClick={() => openMeronFolder(folder.id)}
+                  onContextMenu={meronRowContextMenu(folder)}
+                  onKeyDown={meronRowKeyDown(folder)}
+                  title={`${folder.name} · ${t('meronFolders.thisDeviceOnly')}`}
+                  aria-current={active ? 'page' : undefined}
+                  // Rename and Delete open from the keyboard too.
+                  aria-keyshortcuts="Shift+F10 ContextMenu"
+                >
+                  <NavRow active={active} icon={<Folder size={16} />} label={folder.name} count={folder.unread} />
+                </button>
+              </div>
+            )
+          })}
         <div className="relative w-full px-2 group">
           <button
             type="button"

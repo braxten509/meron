@@ -320,9 +320,12 @@ async function undoMeronMove(changes: NonNullable<MoveInAnswer['changes']>) {
   for (const change of changes) releaseRemovedThread(change.thread_id)
   try {
     // `undo`: the core forgets what the undone move taught AI sorting.
-    if (out.length) applyAnswer(await invoke<FoldersAnswer>('mail.moveOutOfMeronFolder', { thread_ids: out, undo: true }))
+    if (out.length)
+      applyAnswer(await invoke<FoldersAnswer>('mail.moveOutOfMeronFolder', { thread_ids: out, undo: true }))
     for (const [folderId, ids] of back) {
-      applyAnswer(await invoke<FoldersAnswer>('mail.moveToMeronFolder', { folder_id: folderId, thread_ids: ids, undo: true }))
+      applyAnswer(
+        await invoke<FoldersAnswer>('mail.moveToMeronFolder', { folder_id: folderId, thread_ids: ids, undo: true }),
+      )
     }
   } catch (error) {
     showToast(error instanceof Error ? error.message : t('notification.undoFailed'), 'error')
@@ -403,7 +406,9 @@ async function undoMoveOut(former: Map<string, string[]>) {
   for (const ids of former.values()) for (const id of ids) releaseRemovedThread(id)
   try {
     for (const [folderId, ids] of former) {
-      applyAnswer(await invoke<FoldersAnswer>('mail.moveToMeronFolder', { folder_id: folderId, thread_ids: ids, undo: true }))
+      applyAnswer(
+        await invoke<FoldersAnswer>('mail.moveToMeronFolder', { folder_id: folderId, thread_ids: ids, undo: true }),
+      )
     }
   } catch (error) {
     showToast(error instanceof Error ? error.message : t('notification.undoFailed'), 'error')

@@ -51,7 +51,13 @@ export function AccountDialog({ variant = 'dialog' }: AccountDialogProps) {
       <div className={classes.panelClass}>
         <div>
           <div className="w-16 h-16 mb-4">
-            <SharpImg src={logo} box={64} fit="contain" alt={t('app.logoAlt')} className="w-full h-full object-contain" />
+            <SharpImg
+              src={logo}
+              box={64}
+              fit="contain"
+              alt={t('app.logoAlt')}
+              className="w-full h-full object-contain"
+            />
           </div>
           <h2 className="text-[1.625rem] max-[640px]:text-2xl font-bold tracking-tight leading-tight">
             {t('accounts.setup.connectMailAccount')}
