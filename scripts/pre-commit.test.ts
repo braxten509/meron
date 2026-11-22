@@ -63,6 +63,7 @@ beforeEach(() => {
   git('config', 'user.email', 'hook@example.invalid')
   git('config', 'core.hooksPath', '.githooks')
   write('.githooks/pre-commit', hook)
+  write('scripts/structure/check_structure.py', '# Structure checks have their own coverage.\n')
   // Keep fixture setup commits from invoking the hook.
   git('add', '.')
   git('commit', '-qm', 'fixture')

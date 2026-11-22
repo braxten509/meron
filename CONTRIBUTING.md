@@ -1,5 +1,8 @@
 # Contributing to Meron
 
+Read [Meron’s structure guide](STRUCTURE.md) for module boundaries, naming conventions and the structure check.
+
+
 ## Prerequisites
 
 - [Go](https://go.dev) 1.25+

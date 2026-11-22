@@ -6,6 +6,16 @@ on:
   pull_request:
 
 jobs:
+  structure:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: python3 scripts/structure/check_structure.py
+        env:
+          MERON_STRUCTURE_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+
   go:
     runs-on: ubuntu-latest
     steps:

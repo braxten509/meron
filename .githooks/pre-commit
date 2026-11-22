@@ -66,3 +66,6 @@ if ! git diff --cached --quiet --no-renames -- locales scripts/i18n/catalog.ts s
         git checkout-index -z --stdin --prefix="$catalog_dir/"
     bun "$catalog_dir/scripts/i18n/catalog.ts" validate
 fi
+
+# Check the proposed structure against the files staged for this commit.
+python3 scripts/structure/check_structure.py --hook
