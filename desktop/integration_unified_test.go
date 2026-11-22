@@ -193,7 +193,8 @@ func checkUnifiedCursorsAdvanceEachAccountIndependently(t *testing.T) {
 	bobSubject := "Meron integration unified cursor bob " + nonce
 	// Alice must be newer than Bob's rows so she is exhausted on the first
 	// page. Wall-clock send dates can put her last when sends cross a second.
-	newest := time.Date(2025, time.January, 1, 12, 0, 0, 0, time.UTC)
+	// Keep both accounts inside the recent-mail window on every run.
+	newest := time.Now().UTC().Truncate(time.Second)
 	fixtures := []struct {
 		account, subject, id string
 		date                 time.Time
