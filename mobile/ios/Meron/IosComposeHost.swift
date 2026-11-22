@@ -1,3 +1,8 @@
+// Provides the iOS host for the shared Compose
+// interface. It connects native lifecycle and
+// platform services to the Kotlin view
+// controller.
+
 import MeronUI
 import SwiftUI
 

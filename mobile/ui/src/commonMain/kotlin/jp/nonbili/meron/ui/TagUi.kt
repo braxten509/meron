@@ -1,3 +1,8 @@
+// Displays message tags and lets the reader edit
+// a thread's tag membership. The same labels
+// appear in mailbox rows and the selection
+// dialog.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.foundation.background

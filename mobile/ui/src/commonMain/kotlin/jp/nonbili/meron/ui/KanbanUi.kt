@@ -1,3 +1,8 @@
+// Renders the mobile board, column headers, cards
+// and search controls. Each column keeps its own
+// mailbox or search scope while the board is
+// displayed.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.foundation.ExperimentalFoundationApi

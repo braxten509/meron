@@ -1,3 +1,8 @@
+// Displays message participants and their addresses
+// inside the mobile reader. Interaction with a displayed
+// address can open the associated compose or contact
+// action.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.foundation.ExperimentalFoundationApi

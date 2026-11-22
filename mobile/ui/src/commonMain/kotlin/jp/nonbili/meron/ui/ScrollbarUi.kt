@@ -1,3 +1,8 @@
+// Computes scrollbar metrics and draws scrolling
+// feedback for Compose lists. Thumb size and
+// position follow the visible viewport and total
+// content.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.animation.core.animateFloatAsState

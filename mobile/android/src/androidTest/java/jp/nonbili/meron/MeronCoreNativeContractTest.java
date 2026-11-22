@@ -1,3 +1,8 @@
+// Checks the Java entry points used to reach the
+// native mail core on Android. The Android contract
+// fixtures detect drift between the host and native
+// bridge.
+
 package jp.nonbili.meron;
 
 import static org.junit.Assert.assertEquals;

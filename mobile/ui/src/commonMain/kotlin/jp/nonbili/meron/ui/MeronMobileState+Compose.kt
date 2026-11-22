@@ -1,3 +1,8 @@
+// Coordinates the mobile compose draft, its server
+// identity and submission. The editor can change
+// or close while a save or send is still in
+// flight.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.foundation.layout.size

@@ -1,3 +1,8 @@
+// iOS supplies device-specific defaults and services
+// requested by the common UI, including clock and input
+// behavior. The common source set declares the
+// interface.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.foundation.ComposeFoundationFlags

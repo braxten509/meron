@@ -1,3 +1,7 @@
+// Interprets certificate failures and identifies the
+// refusing mail server. Mobile setup and send retries
+// use the identity when presenting a trust decision.
+
 package jp.nonbili.meron.shared
 
 /**

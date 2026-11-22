@@ -1,3 +1,8 @@
+// Loads release information for the mobile
+// changelog screen. The request result and its
+// current loading state belong to the shared app
+// state.
+
 package jp.nonbili.meron.ui
 
 import jp.nonbili.meron.shared.MobileMailCommandClient

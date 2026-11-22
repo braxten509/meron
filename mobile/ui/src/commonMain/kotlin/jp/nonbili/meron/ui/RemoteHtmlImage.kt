@@ -1,3 +1,8 @@
+// Converts a remote image in an HTML message into an
+// attachment-like media reference. The shared reader
+// can then offer the actions appropriate for that
+// image.
+
 package jp.nonbili.meron.ui
 
 import jp.nonbili.meron.shared.MessageAttachment

@@ -1,3 +1,8 @@
+// Resolves and acts on attachment data from the
+// open mobile message or draft. Native services
+// handle the platform operations requested by the
+// reader.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.foundation.Image

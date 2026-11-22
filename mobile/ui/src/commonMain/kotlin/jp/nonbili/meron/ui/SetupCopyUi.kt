@@ -1,3 +1,8 @@
+// Presents the configuration-transfer workflow on
+// mobile. The screen reads progress and counts from
+// the shared setup state while the transfer is
+// pending.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.foundation.BorderStroke

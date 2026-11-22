@@ -1,3 +1,8 @@
+// Keeps Android's mail push service connected to
+// the shared core. The service lifecycle
+// determines when background delivery can publish
+// an arrival.
+
 package jp.nonbili.meron
 
 import android.app.Notification

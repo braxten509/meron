@@ -1,3 +1,8 @@
+// Connects the mobile calendar state to its month
+// grid and event rows. Navigation and edits apply
+// to the date or calendar item selected in the
+// route.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.foundation.background

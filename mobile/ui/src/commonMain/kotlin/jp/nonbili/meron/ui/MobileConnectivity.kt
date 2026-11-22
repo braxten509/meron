@@ -1,3 +1,8 @@
+// Represents mobile account connectivity and builds
+// the labels shown for failures. Accounts with
+// similar display names can require extra identifying
+// detail.
+
 package jp.nonbili.meron.ui
 
 import jp.nonbili.meron.shared.AccountSummary

@@ -1,3 +1,8 @@
+// iOS decodes downloaded or cached image bytes into a
+// bitmap for Compose, using the size requested by the
+// shared reader. The common source set declares the
+// interface.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.ui.graphics.ImageBitmap

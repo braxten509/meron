@@ -1,3 +1,8 @@
+// Android hosts HTML email in a native web view and
+// connects navigation, sizing and media events to the
+// shared reader. The common source set declares the
+// interface.
+
 package jp.nonbili.meron.ui
 
 import android.annotation.SuppressLint

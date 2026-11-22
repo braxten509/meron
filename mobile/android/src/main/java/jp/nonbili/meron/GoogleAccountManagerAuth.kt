@@ -1,3 +1,8 @@
+// Connects the Android device-account flow to Google
+// authorization. The host returns the selected
+// account and authentication result to the shared
+// setup UI.
+
 package jp.nonbili.meron
 
 import android.accounts.Account

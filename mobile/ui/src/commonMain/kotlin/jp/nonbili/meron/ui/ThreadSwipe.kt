@@ -1,3 +1,8 @@
+// Tracks gestures for moving between neighboring mobile
+// conversations. Release behavior determines whether
+// navigation proceeds or the thread returns to its
+// position.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.animation.core.Spring

@@ -1,3 +1,7 @@
+// Manages virtual mail folders and membership
+// from mobile state. Operations use the Meron
+// folder identity supplied by the shared core.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.material3.SnackbarDuration

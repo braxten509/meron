@@ -1,3 +1,8 @@
+// Defines the unread snapshot shared between the iOS
+// app and the widget extension. Its stored
+// representation must be readable across those process
+// boundaries.
+
 import Foundation
 
 struct UnreadWidgetThread: Codable, Equatable, Identifiable {

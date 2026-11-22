@@ -1,3 +1,8 @@
+// Declares platform-specific values and operations
+// consumed by the shared mobile UI. Android and iOS
+// provide implementations in their respective source
+// sets.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.foundation.text.KeyboardOptions

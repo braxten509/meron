@@ -1,3 +1,8 @@
+// Handles configuration when a reader adds an Android
+// unread widget. The selected widget instance needs its
+// settings before the launcher displays its first
+// update.
+
 package jp.nonbili.meron
 
 import android.app.Activity

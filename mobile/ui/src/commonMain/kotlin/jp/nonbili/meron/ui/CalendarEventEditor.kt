@@ -1,3 +1,8 @@
+// Edits a new or existing calendar event from
+// the mobile calendar. The editor distinguishes
+// its target before producing the requested
+// changes.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.foundation.clickable

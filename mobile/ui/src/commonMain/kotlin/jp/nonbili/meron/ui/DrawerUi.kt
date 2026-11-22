@@ -1,3 +1,8 @@
+// Renders the mobile navigation drawer and its
+// account, folder and application actions. The
+// active mailbox determines the current navigation
+// selection.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.foundation.ExperimentalFoundationApi

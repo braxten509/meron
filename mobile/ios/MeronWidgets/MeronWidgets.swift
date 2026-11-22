@@ -1,3 +1,8 @@
+// Defines the iOS widget extension and its displayed
+// mailbox entries. WidgetKit requests a timeline
+// built from the snapshot shared by the main
+// application.
+
 import AppIntents
 import SwiftUI
 import WidgetKit

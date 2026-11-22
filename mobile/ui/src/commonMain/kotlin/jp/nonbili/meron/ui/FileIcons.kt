@@ -1,3 +1,8 @@
+// Chooses the icon used to represent a file in
+// mobile attachment lists. The selection reflects
+// the type information available for that
+// attachment.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.material.icons.Icons

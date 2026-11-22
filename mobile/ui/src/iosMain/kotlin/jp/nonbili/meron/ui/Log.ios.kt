@@ -1,3 +1,8 @@
+// iOS routes diagnostics from shared mobile code into
+// the platform log so the host can inspect application
+// behavior. The common source set declares the
+// interface.
+
 package jp.nonbili.meron.ui
 
 import platform.Foundation.NSLog

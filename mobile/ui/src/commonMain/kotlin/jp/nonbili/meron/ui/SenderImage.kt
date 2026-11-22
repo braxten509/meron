@@ -1,3 +1,8 @@
+// Resolves the image associated with a message sender
+// for the mobile UI. The reader supplies the sender
+// identity and observes the result as it becomes
+// available.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.runtime.staticCompositionLocalOf

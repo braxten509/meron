@@ -1,3 +1,8 @@
+// Builds a hierarchical mobile folder list from
+// server mailbox paths. Structural parents and
+// selectable mailbox rows can have different
+// identities.
+
 package jp.nonbili.meron.ui
 
 import jp.nonbili.meron.shared.FolderSummary

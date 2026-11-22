@@ -1,3 +1,8 @@
+// Guides the reader through adding a mobile mail
+// account. Server discovery and security selections
+// are collected here before the shared core
+// connects.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.foundation.Image

@@ -1,3 +1,8 @@
+// iOS connects the shared language preference to the
+// operating system and supplies the currently selected
+// locale to Compose. The common source set declares the
+// interface.
+
 package jp.nonbili.meron.ui
 
 import platform.Foundation.NSLocale

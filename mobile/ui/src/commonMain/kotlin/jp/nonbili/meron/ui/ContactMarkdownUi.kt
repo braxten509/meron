@@ -1,3 +1,8 @@
+// Formats contact notes for display in Compose. It
+// identifies markdown blocks, inline spans and link
+// ranges while preserving the text shown to the
+// reader.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.foundation.background

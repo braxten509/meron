@@ -1,3 +1,8 @@
+// Checks how the iOS host recognizes an authorization
+// callback. The callback must return to the expected
+// login flow with the information needed to complete
+// it.
+
 import Foundation
 @testable import Meron
 import MeronUI

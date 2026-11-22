@@ -1,3 +1,8 @@
+// Android formats dates and times for shared
+// mailbox rows using the device locale and clock
+// conventions. The common source set declares the
+// interface.
+
 package jp.nonbili.meron.ui
 
 import java.text.SimpleDateFormat

@@ -1,3 +1,8 @@
+// Exercises the iOS background-refresh contract using the
+// same account and response shapes as the host. These cases
+// keep scheduling decisions compatible with the core
+// protocol.
+
 @testable import Meron
 import XCTest
 

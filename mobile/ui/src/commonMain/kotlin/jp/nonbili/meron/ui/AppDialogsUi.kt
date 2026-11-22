@@ -1,3 +1,8 @@
+// Provides mailbox dialogs opened by the shared mobile
+// app, including feed and folder actions. The caller
+// supplies the selected account and handles the confirmed
+// operation.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.foundation.layout.Arrangement

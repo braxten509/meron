@@ -1,3 +1,8 @@
+// Determines which external media a mobile message
+// may display. Account policy, trusted senders and
+// individually revealed content feed the reader's
+// decision.
+
 package jp.nonbili.meron.shared
 
 // Remote content (images, video, web fonts a mail pulls from the network) is

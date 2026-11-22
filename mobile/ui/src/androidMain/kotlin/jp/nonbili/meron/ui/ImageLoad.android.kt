@@ -1,3 +1,8 @@
+// Android loads image content from the platform cache
+// or supported source and returns it to the shared
+// mobile UI. The common source set declares the
+// interface.
+
 package jp.nonbili.meron.ui
 
 import android.content.Context

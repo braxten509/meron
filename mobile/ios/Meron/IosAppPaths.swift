@@ -1,3 +1,8 @@
+// Resolves the iOS directories used by Meron's host and
+// shared services. Central path selection keeps the core
+// database and platform storage in their intended
+// locations.
+
 import Foundation
 
 enum IosAppPaths {

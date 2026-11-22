@@ -1,3 +1,8 @@
+// Resolves mobile unified folder roles to actual
+// folders for each account. The mailbox can then
+// load only the accounts that provide the requested
+// role.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.runtime.Composable

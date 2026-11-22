@@ -1,3 +1,8 @@
+// Edits one mobile board's configuration in
+// settings. Preferences and media changes belong
+// to the board identified by the current detail
+// page.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.foundation.layout.Arrangement

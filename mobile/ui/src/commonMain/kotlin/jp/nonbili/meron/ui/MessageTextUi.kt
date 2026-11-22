@@ -1,3 +1,8 @@
+// Renders interactive text inside a mobile message
+// body. Tap and long-press gestures must
+// distinguish a link action from scrolling the
+// conversation.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.foundation.gestures.awaitEachGesture

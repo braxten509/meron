@@ -1,3 +1,7 @@
+// Loads the mobile conversation and coordinates
+// paging through its messages. Late results must
+// still belong to the thread the reader opened.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.ui.input.key.key

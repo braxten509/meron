@@ -1,3 +1,8 @@
+// Renders contact directory, search, notes and mail
+// history on mobile. A remembered screen state keeps the
+// selected correspondent associated with the displayed
+// entries.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.animation.core.animate

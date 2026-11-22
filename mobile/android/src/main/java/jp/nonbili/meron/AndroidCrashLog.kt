@@ -1,3 +1,8 @@
+// Records crash details for the Android diagnostic
+// view. Exception types and available messages are
+// condensed into entries that can be read after
+// restart.
+
 package jp.nonbili.meron
 
 import android.content.Context

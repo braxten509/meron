@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Builds the Rust core for the Android ABIs requested by Gradle or the caller.
+# The configured Android SDK supplies the NDK compiler, archiver and linker.
+# Libraries are copied into the matching jniLibs directories for APK packaging.
 set -euo pipefail
 
 # Space-separated Rust target triples to build. Override TARGETS (or TARGET,
@@ -31,38 +34,47 @@ clang_prefix_for_target() {
 # fast; release builds optimize and get stripped (the debug .so ships ~186MB of
 # unstripped debug_info, which is why release APKs must use PROFILE=release).
 PROFILE="${PROFILE:-debug}"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MOBILE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-REPO_DIR="$(cd "$MOBILE_DIR/.." && pwd)"
-CORE_DIR="$REPO_DIR/meron-core"
-TARGET_DIR="${CARGO_TARGET_DIR:-$CORE_DIR/target}"
+SCRIPT_DIRECTORY="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+MOBILE_DIRECTORY="$(cd "$SCRIPT_DIRECTORY/.." && pwd)"
+REPOSITORY_DIRECTORY="$(cd "$MOBILE_DIRECTORY/.." && pwd)"
+CORE_DIRECTORY="$REPOSITORY_DIRECTORY/meron-core"
+TARGET_DIRECTORY="${CARGO_TARGET_DIR:-$CORE_DIRECTORY/target}"
 
 if ! command -v rustup >/dev/null 2>&1 && [[ -z "${IN_NIX_SHELL:-}" ]] && command -v nix-shell >/dev/null 2>&1; then
-  exec nix-shell "$REPO_DIR/shell.nix" --run "$SCRIPT_DIR/$(basename "$0")"
+  exec nix-shell "$REPOSITORY_DIRECTORY/shell.nix" --run "$SCRIPT_DIRECTORY/$(basename "$0")"
 fi
 
+case "$(uname -s)" in
+  Linux) HOST_TAG="linux-x86_64"; default_sdk="$HOME/Android/Sdk" ;;
+  Darwin) HOST_TAG="darwin-x86_64"; default_sdk="$HOME/Library/Android/sdk" ;;
+  *) echo "Unsupported Android NDK build host: $(uname -s)" >&2; exit 1 ;;
+esac
+
+sdk_directory="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$default_sdk}}"
 if [[ -z "${ANDROID_NDK_HOME:-}" ]]; then
-  for candidate in \
-    "$HOME/Library/Android/sdk/ndk/29.0.14206865" \
-    "$HOME/Library/Android/sdk/ndk/28.1.13356709" \
-    "$HOME/Library/Android/sdk/ndk/27.1.12297006" \
-    "$HOME/Library/Android/sdk/ndk/27.0.12077973" \
-    "$HOME/Library/Android/sdk/ndk/26.3.11579264"; do
-    if [[ -d "$candidate" ]]; then
+  # Prefer the revisions used by release builds when several NDKs are installed.
+  for version in 29.0.14206865 28.1.13356709 27.1.12297006 27.0.12077973 26.3.11579264; do
+    candidate="$sdk_directory/ndk/$version"
+    if [[ -x "$candidate/toolchains/llvm/prebuilt/$HOST_TAG/bin/llvm-ar" ]]; then
       export ANDROID_NDK_HOME="$candidate"
       break
     fi
   done
 fi
-
-if [[ -z "${ANDROID_NDK_HOME:-}" || ! -d "$ANDROID_NDK_HOME" ]]; then
-  echo "ANDROID_NDK_HOME is not set and no Android NDK was found under ~/Library/Android/sdk/ndk." >&2
-  exit 1
-fi
-
-HOST_TAG="darwin-x86_64"
-if [[ "$(uname -s)" == "Linux" ]]; then
-  HOST_TAG="linux-x86_64"
+if [[ -z "${ANDROID_NDK_HOME:-}" ]]; then
+  # SDK Manager can install newer patch revisions than the releases above.
+  version=$(
+    for candidate in "$sdk_directory"/ndk/*; do
+      if [[ -x "$candidate/toolchains/llvm/prebuilt/$HOST_TAG/bin/llvm-ar" ]]; then
+        printf '%s\n' "${candidate##*/}"
+      fi
+    done | sort -t . -k1,1nr -k2,2nr -k3,3nr | sed -n '1p'
+  )
+  if [[ -z "$version" ]]; then
+    echo "No Android NDK for $HOST_TAG found in $sdk_directory/ndk. Set ANDROID_NDK_HOME or install one in the Android SDK." >&2
+    exit 1
+  fi
+  export ANDROID_NDK_HOME="$sdk_directory/ndk/$version"
 fi
 
 TOOLCHAIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/$HOST_TAG"
@@ -76,8 +88,8 @@ fi
 RANLIB="$TOOLCHAIN/bin/llvm-ranlib"
 STRIP="$TOOLCHAIN/bin/llvm-strip"
 
-if [[ -z "${SOURCE_DATE_EPOCH:-}" ]] && git -C "$REPO_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-  export SOURCE_DATE_EPOCH="$(git -C "$REPO_DIR" log -1 --format=%ct)"
+if [[ -z "${SOURCE_DATE_EPOCH:-}" ]] && git -C "$REPOSITORY_DIRECTORY" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  export SOURCE_DATE_EPOCH="$(git -C "$REPOSITORY_DIRECTORY" log -1 --format=%ct)"
 fi
 
 append_rustflag() {
@@ -93,7 +105,7 @@ if [[ -n "$CARGO_HOME_PATH" ]]; then
   CARGO_HOME_PATH="$(cd "$CARGO_HOME_PATH" && pwd)"
   append_rustflag "--remap-path-prefix=$CARGO_HOME_PATH=/cargo"
 fi
-append_rustflag "--remap-path-prefix=$REPO_DIR=/build/meron"
+append_rustflag "--remap-path-prefix=$REPOSITORY_DIRECTORY=/build/meron"
 
 # The vendored OpenSSL build (openssl-src) drives OpenSSL's own Makefile, which
 # otherwise picks up the host macOS `ar` and emits BSD-format archives. rustc,
@@ -117,10 +129,10 @@ fi
 
 build_target() {
   local target="$1"
-  local abi clang jni_lib_dir target_uc
+  local abi clang jni_library_directory target_uc
   abi="$(abi_for_target "$target")"
   clang="$TOOLCHAIN/bin/$(clang_prefix_for_target "$target")${API_LEVEL}-clang"
-  jni_lib_dir="$MOBILE_DIR/android/src/main/jniLibs/$abi"
+  jni_library_directory="$MOBILE_DIRECTORY/android/src/main/jniLibs/$abi"
   target_uc="$(echo "${target//-/_}" | tr '[:lower:]' '[:upper:]')"
 
   if [[ ! -x "$clang" ]]; then
@@ -139,7 +151,7 @@ build_target() {
   fi
 
   echo "Building meron-core ($PROFILE) for $target using $ANDROID_NDK_HOME"
-  if ! cargo build --manifest-path "$CORE_DIR/Cargo.toml" --lib --target "$target" "${CARGO_PROFILE_ARGS[@]}"; then
+  if ! cargo build --manifest-path "$CORE_DIRECTORY/Cargo.toml" --lib --target "$target" "${CARGO_PROFILE_ARGS[@]}"; then
     cat >&2 <<EOF
 
 Failed to build meron-core for $target.
@@ -156,21 +168,21 @@ EOF
     exit 1
   fi
 
-  local so_path="$TARGET_DIR/$target/$PROFILE/libmeron_core.so"
+  local so_path="$TARGET_DIRECTORY/$target/$PROFILE/libmeron_core.so"
   if [[ ! -f "$so_path" ]]; then
     echo "Build completed, but $so_path was not produced." >&2
     exit 1
   fi
 
-  mkdir -p "$jni_lib_dir"
-  cp "$so_path" "$jni_lib_dir/libmeron_core.so"
+  mkdir -p "$jni_library_directory"
+  cp "$so_path" "$jni_library_directory/libmeron_core.so"
 
   # Release builds carry full debug_info (~186MB). Strip it so the packaged
   # .so — and the APK that bundles it — stays small.
   if [[ "$PROFILE" == "release" ]]; then
-    "$STRIP" --strip-unneeded "$jni_lib_dir/libmeron_core.so"
+    "$STRIP" --strip-unneeded "$jni_library_directory/libmeron_core.so"
   fi
-  echo "Packaged $jni_lib_dir/libmeron_core.so"
+  echo "Packaged $jni_library_directory/libmeron_core.so"
 }
 
 for target in $TARGETS; do

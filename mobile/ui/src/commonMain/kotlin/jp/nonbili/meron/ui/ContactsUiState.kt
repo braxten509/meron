@@ -1,3 +1,8 @@
+// Keeps contact identity, notes and history
+// consistent while the mobile contacts screen
+// changes selection. Normalized addresses key the
+// stored state.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.runtime.getValue

@@ -1,13 +1,17 @@
+// Checks the catalog contracts that the platform generators rely on.
+// Normalization cases cover flattened messages and plural variants.
+// Validation and escaping cases protect translators’ arguments in generated files.
 import { describe, expect, test } from 'bun:test'
 
 import {
   androidEscape,
-  androidLocaleDir,
+  androidLocaleDirectory,
   androidName,
   flattenObject,
   foldPlurals,
   iosLocale,
   placeholders,
+  kotlinString,
   validateCatalogs,
 } from './catalog'
 
@@ -79,17 +83,28 @@ describe('catalog validation helpers', () => {
     ).toThrow(/placeholder mismatch/)
   })
 
-  test('extracts named placeholders but ignores plural count', () => {
+  test('rejects a translation that loses the item count', () => {
+    expect(() => validateCatalogs({ en: { more: '+{count} more' }, ru: { more: 'Ещё' } })).toThrow(
+      /ru.more placeholder mismatch/,
+    )
+  })
+
+  test('extracts the plural selector and de-duplicates repeated arguments', () => {
     expect(
       placeholders('{count, plural, one {{count} file from {sender}} other {{count} files from {sender}}}'),
-    ).toEqual(['sender'])
+    ).toEqual(['count', 'sender'])
   })
 })
 
 describe('platform mapping helpers', () => {
   test('maps special locale identifiers explicitly', () => {
-    expect(androidLocaleDir('pt_BR')).toBe('values-pt-rBR')
+    expect(androidLocaleDirectory('pt_BR')).toBe('values-pt-rBR')
     expect(iosLocale('pt_BR')).toBe('pt-BR')
+  })
+
+  test('preserves literal dollar expressions and controls in generated Kotlin', () => {
+    expect(kotlinString('Cost: $amount or ${total}')).toBe('"Cost: \\$amount or \\${total}"')
+    expect(kotlinString('"line"\n\\\t\f')).toBe('"\\"line\\"\\n\\\\\\t\\u000c"')
   })
 
   test('escapes Android XML string values', () => {
@@ -112,7 +127,7 @@ describe('Russian catalog', () => {
         }
       }
     }
-    expect(androidLocaleDir('ru')).toBe('values-ru')
+    expect(androidLocaleDirectory('ru')).toBe('values-ru')
     expect(iosLocale('ru')).toBe('ru')
   })
 })

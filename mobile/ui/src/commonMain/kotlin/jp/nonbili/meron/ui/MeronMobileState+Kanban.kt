@@ -1,3 +1,8 @@
+// Maintains mobile boards, active columns and
+// their mailbox data. A column refresh or mutation
+// must remain scoped to the relevant board
+// selection.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.foundation.layout.size

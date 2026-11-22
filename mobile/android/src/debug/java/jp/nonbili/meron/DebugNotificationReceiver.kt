@@ -1,3 +1,8 @@
+// Receives debug-only broadcast actions used to exercise
+// Android notifications. The debug application can inspect
+// notification behavior separately from a normal mailbox
+// refresh.
+
 package jp.nonbili.meron
 
 import android.content.BroadcastReceiver

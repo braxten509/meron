@@ -1,3 +1,8 @@
+// Signals changes in foreground or permission state to
+// shared mobile observers. Platform callbacks can notify
+// the UI without retaining a reference to an individual
+// screen.
+
 package jp.nonbili.meron.ui
 
 import kotlinx.coroutines.channels.BufferOverflow

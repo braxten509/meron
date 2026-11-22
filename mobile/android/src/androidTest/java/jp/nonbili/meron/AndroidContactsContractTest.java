@@ -1,3 +1,8 @@
+// Exercises the Android contacts integration through the
+// contract exposed to the mobile host. The test checks
+// the platform-specific side of the shared contacts
+// feature.
+
 package jp.nonbili.meron;
 
 import static org.junit.Assert.assertTrue;

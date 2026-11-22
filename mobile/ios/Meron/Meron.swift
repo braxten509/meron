@@ -1,3 +1,8 @@
+// Defines the iOS application entry point and its host
+// lifecycle. The app embeds the shared interface and
+// coordinates services that must be registered with the
+// operating system.
+
 import MeronUI
 import SwiftUI
 import UIKit

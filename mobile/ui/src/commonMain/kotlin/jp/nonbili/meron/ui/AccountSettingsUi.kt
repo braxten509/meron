@@ -1,3 +1,8 @@
+// Renders the mobile settings page for an
+// individual account. Profile, alias and mailbox
+// changes apply to the account identified by the
+// open page.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.foundation.Image

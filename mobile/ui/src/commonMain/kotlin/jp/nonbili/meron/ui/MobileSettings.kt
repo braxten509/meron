@@ -1,3 +1,8 @@
+// Reads and serializes mobile settings while
+// distinguishing an explicitly stored value from an
+// absent preference. Both cases matter during restore
+// or device setup.
+
 package jp.nonbili.meron.ui
 
 // Where mobile settings actually live.

@@ -1,3 +1,8 @@
+// Composes the root mobile interface and
+// coordinates navigation between its screens. Host
+// services and shared state are provided at this
+// boundary.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.animation.AnimatedVisibility

@@ -1,3 +1,8 @@
+// Connects shared Compose actions to Android activity
+// services. Platform operations include picking files,
+// opening attachments and returning results to the
+// caller.
+
 package jp.nonbili.meron
 
 import android.Manifest

@@ -1,3 +1,7 @@
+// Publishes mailbox unread state to the Android home-screen
+// widget. Widget rows and navigation targets are built from
+// the account and message information available on the host.
+
 package jp.nonbili.meron
 
 import android.app.PendingIntent

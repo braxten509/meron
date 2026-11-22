@@ -1,3 +1,7 @@
+// Computes conversation scroll targets, message anchors
+// and header offsets. The mobile list uses these values
+// as older pages arrive or the reader opens a thread.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.ui.graphics.Color

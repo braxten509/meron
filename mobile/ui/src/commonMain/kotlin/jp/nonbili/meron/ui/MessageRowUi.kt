@@ -1,3 +1,7 @@
+// Presents an email as a row in the mobile
+// conversation. The thread retains selection
+// and handles the actions reported by the row.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.foundation.background

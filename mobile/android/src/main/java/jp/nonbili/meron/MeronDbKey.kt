@@ -1,3 +1,7 @@
+// Resolves the database encryption key for the Android
+// installation. Native storage initialization depends
+// on the host returning the same key across launches.
+
 package jp.nonbili.meron
 
 import android.content.Context

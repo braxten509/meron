@@ -1,3 +1,7 @@
+// Declares image and thumbnail decoding used by the
+// mobile reader. Platform implementations produce
+// the bitmap requested by the shared Compose layer.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.ui.graphics.ImageBitmap

@@ -1,3 +1,8 @@
+// Owns the observable state shared across mobile
+// screens. Feature-specific actions are implemented
+// in the companion source files named for the same
+// receiver.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.material3.SnackbarHostState

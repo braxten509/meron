@@ -1,3 +1,8 @@
+// Coordinates account selection, thread navigation and
+// editable drafts for the shared mail interface. Actions
+// produce the typed command parameters needed by the
+// core.
+
 package jp.nonbili.meron.shared
 
 class MailViewModel(

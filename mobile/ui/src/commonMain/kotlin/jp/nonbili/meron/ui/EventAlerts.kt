@@ -1,3 +1,7 @@
+// Supplies reminder options and labels for the
+// mobile calendar editor. All-day and timed
+// events expose different units to the reader.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.runtime.Composable

@@ -1,3 +1,8 @@
+// Defines mobile log levels and the shared
+// logging entry points. Platform code supplies
+// the storage or output used to record a
+// diagnostic.
+
 package jp.nonbili.meron.ui
 
 enum class LogLevel { DEBUG, INFO, WARN, ERROR }

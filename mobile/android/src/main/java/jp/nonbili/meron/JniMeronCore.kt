@@ -1,3 +1,8 @@
+// Implements the shared mobile core interface over
+// Android JNI. It carries serialized command requests
+// and native events between Kotlin and the Rust
+// engine.
+
 package jp.nonbili.meron
 
 import jp.nonbili.meron.shared.CloseableHandle

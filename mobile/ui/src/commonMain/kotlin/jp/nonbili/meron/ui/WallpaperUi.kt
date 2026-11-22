@@ -1,3 +1,8 @@
+// Resolves mobile wallpaper preferences to supported
+// presets or custom media. Conversation and board
+// surfaces use the result when drawing their
+// background.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.foundation.Image

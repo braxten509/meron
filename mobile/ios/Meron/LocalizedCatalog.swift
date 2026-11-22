@@ -1,3 +1,8 @@
+// Resolves translated strings for the iOS host from
+// Meron's catalog. Native controls and background
+// features need the same language choices as the shared
+// interface.
+
 import Foundation
 
 func localizedCatalogString(

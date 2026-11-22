@@ -1,3 +1,8 @@
+// Connects the mobile app to the core and its native
+// platform services. The shared UI uses these
+// interfaces to perform work outside the Compose
+// process model.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.runtime.getValue

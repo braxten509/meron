@@ -1,3 +1,8 @@
+// Constructs the identity used when a notification
+// opens a mobile conversation. Header-derived keys
+// and folder-local UIDs keep their distinct
+// encodings.
+
 package jp.nonbili.meron.shared
 
 import kotlin.io.encoding.Base64

@@ -1,3 +1,8 @@
+// Tracks drag distance and release behavior for a
+// mobile dismissal gesture. The surface hosting the
+// gesture decides when a completed dismissal removes
+// the view.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.animation.core.Spring

@@ -1,3 +1,8 @@
+// Presents the list of trusted remote senders in
+// mobile settings. Edits change the sender policy
+// used when the reader considers loading external
+// media.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.foundation.layout.Column

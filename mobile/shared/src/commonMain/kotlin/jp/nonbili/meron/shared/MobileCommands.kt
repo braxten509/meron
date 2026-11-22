@@ -1,3 +1,8 @@
+// Defines the method names used by mobile command
+// requests. The client and feature-specific parameter
+// builders use these names to reach the Rust command
+// dispatcher.
+
 package jp.nonbili.meron.shared
 
 const val CONVERSATION_PAGE_SIZE = 10

@@ -1,3 +1,8 @@
+// Reads and writes mobile preferences through the
+// host's preference interface. Typed accessors and
+// language resolution keep screens consistent across
+// app restarts.
+
 package jp.nonbili.meron.ui
 
 internal fun loadAppBoolean(

@@ -1,3 +1,8 @@
+// Builds a printable mobile message and exposes the
+// platform printing entry point. Message content must
+// be escaped or interpreted according to its
+// representation.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.runtime.Composable

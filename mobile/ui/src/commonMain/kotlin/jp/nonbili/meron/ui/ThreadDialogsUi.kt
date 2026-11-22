@@ -1,3 +1,8 @@
+// Provides mobile destination dialogs for moving or
+// copying selected messages. A destination is
+// identified by both the account and the server
+// folder.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.runtime.LaunchedEffect

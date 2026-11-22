@@ -1,3 +1,8 @@
+// Updates the unread information shared with the iOS
+// widget extension. The app supplies mailbox data in a
+// form the extension can read outside the main
+// process.
+
 import Foundation
 import MeronUI
 import UIKit

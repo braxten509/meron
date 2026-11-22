@@ -1,3 +1,8 @@
+// Serializes mobile boards and restores their columns
+// and appearance. A never-configured installation and
+// an explicitly empty board list have different
+// meanings.
+
 package jp.nonbili.meron.ui
 
 import kotlinx.serialization.json.Json

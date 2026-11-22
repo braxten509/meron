@@ -1,3 +1,8 @@
+// Defines the transport contract implemented by the
+// native mobile hosts. It accepts command payloads and
+// parses core event envelopes delivered to shared
+// listeners.
+
 package jp.nonbili.meron.shared
 
 interface MeronCore {

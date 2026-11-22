@@ -1,3 +1,8 @@
+// Connects stored reminder information to Android
+// scheduling and notifications. The host translates
+// scheduled work into the reminder presented by the
+// operating system.
+
 package jp.nonbili.meron
 
 import android.app.AlarmManager

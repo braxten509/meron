@@ -1,3 +1,8 @@
+// Displays folders that can be selected from the
+// mobile mailbox. The picker retains account identity
+// and the notification settings associated with each
+// row.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.foundation.clickable

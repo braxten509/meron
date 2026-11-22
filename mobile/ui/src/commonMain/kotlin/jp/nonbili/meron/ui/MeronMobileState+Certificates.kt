@@ -1,3 +1,7 @@
+// Coordinates certificate prompts for mobile account
+// operations. A successful trust decision can resume
+// the operation that encountered the server error.
+
 package jp.nonbili.meron.ui
 
 import jp.nonbili.meron.shared.AccountCertPinParams

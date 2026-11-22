@@ -1,3 +1,7 @@
+// Runs a bounded refresh of eligible accounts while the iOS
+// app is in the background. The native host owns scheduling
+// and passes actual mailbox operations to the shared core.
+
 import BackgroundTasks
 import Foundation
 import MeronUI

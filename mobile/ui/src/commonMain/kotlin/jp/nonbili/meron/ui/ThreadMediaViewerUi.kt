@@ -1,3 +1,8 @@
+// Presents images and other media from a
+// conversation in the mobile viewer. Media
+// references retain the source attachment for
+// opening, saving or sharing.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.animation.core.Spring

@@ -1,3 +1,8 @@
+// Renders the detailed mobile reader for one
+// message. Its content, available actions and
+// attachments come from the selected message in the
+// shared state.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.foundation.background

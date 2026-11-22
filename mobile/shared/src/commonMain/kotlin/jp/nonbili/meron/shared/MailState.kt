@@ -1,3 +1,8 @@
+// Defines the shared mobile representations of mailbox
+// and draft state. The view model builds on these
+// values when accounts, folders or message selections
+// change.
+
 package jp.nonbili.meron.shared
 
 import kotlin.random.Random

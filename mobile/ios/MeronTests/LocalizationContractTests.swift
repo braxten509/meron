@@ -1,3 +1,8 @@
+// Exercises the iOS host's resource and language
+// resolution. The generated catalog must deliver the
+// supported English, Brazilian Portuguese and Russian
+// strings.
+
 @testable import Meron
 import XCTest
 

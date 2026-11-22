@@ -1,3 +1,8 @@
+// Owns the inline reply draft for a mobile
+// conversation. Navigation and pending saves must
+// preserve the text and identity belonging to that
+// thread.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.foundation.layout.size

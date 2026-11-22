@@ -1,3 +1,8 @@
+// Presents proxy configuration and its current scope
+// in mobile settings. The form converts a reader's
+// selections to the proxy values consumed by the
+// core.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.foundation.clickable

@@ -1,3 +1,8 @@
+// Checks mailbox information prepared for iOS
+// widgets. The widget and main app must agree
+// on the snapshot associated with an unread
+// entry.
+
 @testable import Meron
 import XCTest
 

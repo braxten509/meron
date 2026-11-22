@@ -1,3 +1,8 @@
+// Android implements the shared preference interface
+// against the platform store so UI choices can survive
+// application restarts. The common source set declares the
+// interface.
+
 package jp.nonbili.meron.ui
 
 import android.content.Context

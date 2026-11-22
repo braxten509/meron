@@ -1,3 +1,8 @@
+// Resolves light and dark appearance choices into
+// the mobile app theme. Shared screens read the
+// resulting colors and typography through
+// Compose.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.material3.ColorScheme

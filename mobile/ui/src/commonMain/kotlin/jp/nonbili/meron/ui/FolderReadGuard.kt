@@ -1,3 +1,8 @@
+// Tracks local mark-read operations while folder
+// counts are refreshing. A late read must respect the
+// pending mutation associated with its account and
+// mailbox.
+
 package jp.nonbili.meron.ui
 
 import jp.nonbili.meron.shared.FolderSummary

@@ -1,3 +1,7 @@
+// Displays the invitation embedded in a mobile mail
+// message. The available response actions depend on
+// the event details and state supplied by the core.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.foundation.layout.Arrangement

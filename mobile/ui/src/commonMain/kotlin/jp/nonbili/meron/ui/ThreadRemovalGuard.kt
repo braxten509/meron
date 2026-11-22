@@ -1,3 +1,8 @@
+// Coordinates optimistic removals with older mobile
+// mailbox reads. Completion keeps stale rows out
+// while rollback releases only the affected
+// operation.
+
 package jp.nonbili.meron.ui
 
 import jp.nonbili.meron.shared.ThreadSummary

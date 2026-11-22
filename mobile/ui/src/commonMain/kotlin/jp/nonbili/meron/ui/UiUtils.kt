@@ -1,3 +1,8 @@
+// Shared presentation helpers for the mobile mailbox,
+// including avatar initials and status formatting.
+// Screens use these conversions when displaying shared
+// model data.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.foundation.background

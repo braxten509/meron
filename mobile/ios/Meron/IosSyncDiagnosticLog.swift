@@ -1,3 +1,8 @@
+// Records iOS background refresh diagnostics for later
+// inspection. The app can report what a platform refresh
+// attempted after the system returns it to the
+// foreground.
+
 import Foundation
 
 /// Rolling on-disk log of background sync events, mirroring the Android

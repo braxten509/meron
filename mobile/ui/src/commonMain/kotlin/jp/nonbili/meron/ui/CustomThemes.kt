@@ -1,3 +1,8 @@
+// Defines and transfers custom mobile themes.
+// The serialized theme source is compatible
+// with the desktop representation used for
+// sharing.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.ui.graphics.Color

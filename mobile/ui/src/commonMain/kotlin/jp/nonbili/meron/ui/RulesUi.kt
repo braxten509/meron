@@ -1,3 +1,8 @@
+// Renders the mobile rule editor and the summary of
+// selected actions. Account and folder identities must
+// survive conversion between the form and the stored
+// rule.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.foundation.layout.Arrangement

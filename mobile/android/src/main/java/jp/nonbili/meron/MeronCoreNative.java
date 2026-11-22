@@ -1,3 +1,8 @@
+// Declares the native methods available to the
+// Android host. The Kotlin bridge uses these
+// signatures when crossing into the packaged Rust
+// library.
+
 package jp.nonbili.meron;
 
 import android.content.Context;

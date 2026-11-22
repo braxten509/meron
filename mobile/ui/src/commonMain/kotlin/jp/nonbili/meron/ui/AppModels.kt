@@ -1,3 +1,8 @@
+// Defines the screen identifiers and route
+// representations used by the mobile app. Navigation
+// and restoration both need stable names for the same
+// destinations.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.ui.graphics.ImageBitmap

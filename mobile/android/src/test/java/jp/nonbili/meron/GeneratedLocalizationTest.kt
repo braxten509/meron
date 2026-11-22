@@ -38,6 +38,14 @@ class GeneratedLocalizationTest {
     }
 
     @Test
+    fun inlinePluralRetainsTheDestinationAndSurroundingText() {
+        val args = mapOf("count" to 2, "name" to "Work")
+        assertEquals("Moved 2 conversations to Work", generatedIcuString("en", "meronFolders.moved", args))
+        assertEquals("2 conversas movidas para Work", generatedIcuString("pt-BR", "meronFolders.moved", args))
+        assertEquals("Перемещено в Work: 2 переписки", generatedIcuString("ru", "meronFolders.moved", args))
+    }
+
+    @Test
     fun russianDeviceLocalesResolveToTheRussianCatalog() {
         assertEquals("ru", catalogLanguageTag(Locale.forLanguageTag("ru")))
         assertEquals("ru", catalogLanguageTag(Locale.forLanguageTag("ru-RU")))

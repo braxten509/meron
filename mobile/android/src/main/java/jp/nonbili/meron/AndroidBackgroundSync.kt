@@ -1,3 +1,8 @@
+// Schedules and runs a mailbox refresh when the Android
+// UI is in the background. Account eligibility and the
+// core response determine which arrivals should be
+// announced.
+
 package jp.nonbili.meron
 
 import android.content.Context

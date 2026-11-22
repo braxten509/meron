@@ -1,3 +1,8 @@
+// Displays a preview of a mobile theme in the
+// appearance chooser. The mock interface uses the
+// selected theme tokens to show how the colors work
+// together.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.foundation.background

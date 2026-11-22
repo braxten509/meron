@@ -1,3 +1,8 @@
+// Refreshes calendar state and applies event
+// changes for the mobile calendar. Updates must
+// reach the date range currently shown by the
+// route.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.material3.SnackbarDuration

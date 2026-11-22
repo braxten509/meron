@@ -1,3 +1,8 @@
+// Builds mobile error messages for failed moves
+// and copies. Confirmed progress matters because
+// part of a batch can already be at its
+// destination.
+
 package jp.nonbili.meron.ui
 
 /** Explain known server rejections while retaining progress and uncertain-write warnings. */

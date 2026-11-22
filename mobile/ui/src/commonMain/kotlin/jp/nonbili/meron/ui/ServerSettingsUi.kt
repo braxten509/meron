@@ -1,3 +1,8 @@
+// Edits mail server details inside mobile account
+// settings. Stored flags and user selections
+// determine the transport security shown in the
+// form.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.foundation.layout.Column

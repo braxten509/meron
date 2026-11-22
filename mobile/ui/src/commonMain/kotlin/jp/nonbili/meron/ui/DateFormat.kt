@@ -1,3 +1,8 @@
+// Defines the date styles and calendar values
+// displayed by shared mobile views. Native
+// implementations supply locale-sensitive formatting
+// for their platform.
+
 package jp.nonbili.meron.ui
 
 /** [IsoDate] is the machine-readable `YYYY-MM-DD` a typed due date uses; every

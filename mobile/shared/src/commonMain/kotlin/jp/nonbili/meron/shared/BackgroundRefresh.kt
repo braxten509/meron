@@ -1,3 +1,8 @@
+// Determines which mobile accounts can refresh and
+// which core command applies to them. The native
+// background workers consume these shared
+// decisions.
+
 package jp.nonbili.meron.shared
 
 fun shouldBackgroundRefreshAccount(

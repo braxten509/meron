@@ -1,3 +1,8 @@
+// Composes the main mobile settings pages and their
+// navigation. Feature-specific editors are delegated to
+// their corresponding account, appearance and mailbox
+// panels.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.foundation.background

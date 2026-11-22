@@ -1,3 +1,8 @@
+// Renders mobile task lists, rows and editing
+// controls. Completion and submission are
+// passed to the shared task state for
+// persistence.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.foundation.clickable

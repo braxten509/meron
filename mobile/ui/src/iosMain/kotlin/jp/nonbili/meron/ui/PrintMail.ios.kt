@@ -1,3 +1,8 @@
+// iOS connects the shared conversation print action to the
+// platform print interface using the message content supplied
+// by the caller. The common source set declares the
+// interface.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.runtime.Composable

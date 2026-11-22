@@ -1,3 +1,8 @@
+// Defines how the shared reader displays HTML content
+// in a native web view. Platform implementations report
+// document events and media interactions back to
+// Compose.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.runtime.Composable

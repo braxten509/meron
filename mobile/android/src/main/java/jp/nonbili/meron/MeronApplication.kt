@@ -1,3 +1,8 @@
+// Initializes process-wide Android services before an
+// activity or background worker uses them. It is the
+// application entry point declared by the Android
+// host.
+
 package jp.nonbili.meron
 
 import android.app.Application

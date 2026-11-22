@@ -1,3 +1,8 @@
+// Loads full-size images and thumbnails from their
+// mobile media references. The shared UI delegates
+// access to native files or cached bytes to its
+// platform host.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.ui.graphics.ImageBitmap

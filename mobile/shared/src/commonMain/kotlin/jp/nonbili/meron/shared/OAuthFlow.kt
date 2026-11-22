@@ -1,3 +1,8 @@
+// Builds and validates the mobile authorization flow
+// around the core's provider commands. The callback must
+// carry a code and the state associated with the original
+// request.
+
 package jp.nonbili.meron.shared
 
 const val MERON_OAUTH_REDIRECT_URI = "jp.nonbili.meron.oauth://oauth"

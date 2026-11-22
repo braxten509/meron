@@ -1,3 +1,8 @@
+// Builds and manages Android notifications for
+// mail arrivals. Core event data supplies the
+// target, preview text and account for each
+// displayed item.
+
 package jp.nonbili.meron
 
 import android.Manifest

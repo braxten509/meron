@@ -1,3 +1,8 @@
+// Coordinates mobile changes to configured accounts
+// and their connection state. Account setup and
+// settings views use these operations to reach the
+// shared core.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.material.icons.filled.Add

@@ -1,3 +1,8 @@
+// Resolves actions invoked from an Android mail
+// notification. Account, thread and message
+// identities connect the platform action to its
+// core operation.
+
 package jp.nonbili.meron
 
 import android.app.PendingIntent

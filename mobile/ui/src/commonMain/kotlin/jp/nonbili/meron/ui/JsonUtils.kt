@@ -1,3 +1,8 @@
+// Reads small string and numeric fields needed by
+// the shared mobile UI. Callers use the decoded
+// values when translating a core response into
+// screen state.
+
 package jp.nonbili.meron.ui
 
 internal fun String.jsonStringValue(key: String): String {

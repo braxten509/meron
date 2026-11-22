@@ -1,3 +1,8 @@
+// Keeps the Android host's refresh diagnostics and
+// reads a bounded tail for display. Background
+// workers and troubleshooting screens use the same
+// log.
+
 package jp.nonbili.meron
 
 import android.content.Context

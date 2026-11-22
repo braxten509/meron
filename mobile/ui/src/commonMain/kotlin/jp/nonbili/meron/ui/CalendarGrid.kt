@@ -1,3 +1,8 @@
+// Implements civil-date arithmetic and calendar grid
+// placement for mobile. Month views need date
+// positions that remain meaningful across local
+// timezone changes.
+
 package jp.nonbili.meron.ui
 
 import jp.nonbili.meron.shared.CalendarItem

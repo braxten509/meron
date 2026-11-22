@@ -1,3 +1,8 @@
+// Mirrors mobile preference writes to the native
+// cache and the Rust core. Hydration must
+// reconcile stored values with edits made during
+// startup.
+
 package jp.nonbili.meron.ui
 
 import jp.nonbili.meron.shared.AppPrefsGetParams

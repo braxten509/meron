@@ -1,3 +1,8 @@
+// Edits the structured options for a mobile mail
+// search. The selected scope, dates and other
+// fields are converted into the query used by the
+// mailbox.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.foundation.clickable

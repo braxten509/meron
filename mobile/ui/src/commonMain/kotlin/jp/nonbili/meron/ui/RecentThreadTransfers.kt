@@ -1,3 +1,8 @@
+// Persists recently used mobile move and copy
+// destinations. Account identity and transfer
+// type distinguish otherwise similar folder
+// selections.
+
 package jp.nonbili.meron.ui
 
 import jp.nonbili.meron.shared.FolderSummary

@@ -9,7 +9,6 @@ import android.content.Context
 import android.content.res.Configuration
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.Locale
 
@@ -36,7 +35,8 @@ class AndroidLocalizationContractTest {
     fun generatedIcuHelperContainsPluralMessagesForSupportedLocales() {
         assertEquals("1 file", generatedIcuString("en", "chat.fileItems", mapOf("count" to 1)))
         assertEquals("2 files", generatedIcuString("en", "chat.fileItems", mapOf("count" to 2)))
-        assertTrue(generatedIcuString("ar", "chat.fileItems", mapOf("count" to 2)).contains("2"))
+        assertEquals("2 arquivos", generatedIcuString("pt-BR", "chat.fileItems", mapOf("count" to 2)))
+        assertEquals("2 файла", generatedIcuString("ru", "chat.fileItems", mapOf("count" to 2)))
     }
 
     private fun Context.withLocale(locale: Locale): Context {

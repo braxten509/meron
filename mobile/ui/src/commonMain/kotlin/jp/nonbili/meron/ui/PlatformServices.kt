@@ -1,3 +1,8 @@
+// Defines the native capabilities available to mobile
+// screens, including document selection and attachment
+// handling. Shared UI code consumes the returned
+// results.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.runtime.staticCompositionLocalOf

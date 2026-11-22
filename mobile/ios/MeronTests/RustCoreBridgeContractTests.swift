@@ -1,3 +1,8 @@
+// Verifies the iOS bridge contract for requests
+// and results exchanged with the Rust core. These
+// checks protect callers of the native host
+// interface.
+
 @testable import Meron
 import XCTest
 

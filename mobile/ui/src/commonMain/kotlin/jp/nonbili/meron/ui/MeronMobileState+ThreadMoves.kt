@@ -1,3 +1,8 @@
+// Applies move and copy actions from a mobile
+// conversation. The destination account and
+// folder travel with the selected message
+// identities.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.foundation.layout.size

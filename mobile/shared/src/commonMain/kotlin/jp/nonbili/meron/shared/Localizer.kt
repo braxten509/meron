@@ -1,3 +1,8 @@
+// Defines lookup and formatting for shared mobile
+// strings. Callers can substitute named arguments or
+// recover the stable key when a translation is
+// unavailable.
+
 package jp.nonbili.meron.shared
 
 interface Localizer {

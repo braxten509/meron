@@ -1,3 +1,8 @@
+// Coordinates mobile OAuth setup and reconnect with the
+// platform login services. Callback and provider state
+// must stay associated with the original account
+// action.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.material.icons.filled.Add

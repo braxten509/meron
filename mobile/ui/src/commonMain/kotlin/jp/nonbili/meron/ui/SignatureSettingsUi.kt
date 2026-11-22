@@ -1,3 +1,8 @@
+// Presents signature mode and a preview for the
+// selected mobile account. The settings state
+// applies the stored global or account-specific
+// choice.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.foundation.clickable

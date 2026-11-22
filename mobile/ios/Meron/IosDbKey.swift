@@ -1,3 +1,8 @@
+// Resolves the database key used by the Rust core on
+// iOS. The host supplies persistent key material on
+// launch so the same installation can reopen its
+// store.
+
 import Foundation
 import Security
 

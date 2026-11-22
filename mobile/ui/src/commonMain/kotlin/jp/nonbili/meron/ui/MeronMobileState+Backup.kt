@@ -1,3 +1,8 @@
+// Coordinates export and restore from mobile
+// state. The host handles file selection while
+// the core owns the backup payload and account
+// data.
+
 package jp.nonbili.meron.ui
 
 import jp.nonbili.meron.shared.ExportBackupParams

@@ -1,3 +1,8 @@
+// Defines the font scales used by shared mobile text
+// and message bodies. The helpers constrain saved
+// values and convert them to the units used by Compose
+// and HTML.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.runtime.Composable

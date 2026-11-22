@@ -1,3 +1,8 @@
+// Starts the shared Compose interface inside the Android
+// activity. Activity lifecycle and incoming intents
+// supply the host events that open or resume a mobile
+// workflow.
+
 package jp.nonbili.meron
 
 import android.Manifest

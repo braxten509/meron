@@ -1,3 +1,8 @@
+// Computes SHA-256 digests in common Kotlin code
+// for stable mobile identifiers. Callers can
+// consume raw digest bytes or the hexadecimal
+// representation.
+
 package jp.nonbili.meron.ui
 
 import kotlin.io.encoding.Base64

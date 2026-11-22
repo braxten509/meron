@@ -1,3 +1,8 @@
+// Displays release notes in the mobile changelog
+// dialog. Release metadata and individual notes
+// are rendered together for the selected app
+// version.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.foundation.layout.Arrangement

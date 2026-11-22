@@ -1,3 +1,8 @@
+// Separates quoted history from a message at the
+// boundary chosen by the core. The mobile reader
+// retains the expansion state for the displayed
+// quote.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.foundation.ExperimentalFoundationApi

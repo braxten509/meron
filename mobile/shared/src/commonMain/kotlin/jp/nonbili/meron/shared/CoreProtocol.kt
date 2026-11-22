@@ -1,3 +1,8 @@
+// Defines the request envelope and protocol version
+// for mobile calls into Rust. Hosts serialize methods
+// and parameters here before handing them to a
+// transport.
+
 package jp.nonbili.meron.shared
 
 const val EXPECTED_PROTOCOL_VERSION: Int = 1

@@ -1,3 +1,8 @@
+// Converts a mailto link into the addresses and
+// fields needed to open a mobile draft. Both native
+// hosts can use the same decoding rules for incoming
+// links.
+
 package jp.nonbili.meron.shared
 
 fun parseMailtoUrl(rawUrl: String): ComposeDraft? {

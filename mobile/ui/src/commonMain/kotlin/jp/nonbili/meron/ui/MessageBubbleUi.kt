@@ -1,3 +1,8 @@
+// Renders a mobile conversation bubble with message
+// content, remote media controls and delivery status.
+// The parent thread supplies the selected message and
+// callbacks.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.foundation.background

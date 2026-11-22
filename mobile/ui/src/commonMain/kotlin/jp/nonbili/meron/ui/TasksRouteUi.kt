@@ -1,3 +1,8 @@
+// Connects the mobile task route to its lists,
+// editor and navigation actions. The state keeps
+// the current task and list selected as screens
+// change.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.foundation.clickable

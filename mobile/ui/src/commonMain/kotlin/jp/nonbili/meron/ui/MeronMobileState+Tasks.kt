@@ -1,3 +1,8 @@
+// Loads task lists and applies changes requested
+// by the mobile task views. Actions from a
+// conversation retain their originating mail
+// identity.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.material3.SnackbarDuration

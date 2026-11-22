@@ -1,3 +1,8 @@
+// Helpers used by the Android host to resolve app
+// preferences and display values. Background
+// notifications and the foreground app must agree on the
+// selected language.
+
 package jp.nonbili.meron
 
 import android.content.Context

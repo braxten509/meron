@@ -1,3 +1,8 @@
+// Renders the mobile message editor and captures the
+// inputs used for draft autosave. The open draft must
+// retain its identity as recipients, content and
+// attachments change.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.foundation.ExperimentalFoundationApi

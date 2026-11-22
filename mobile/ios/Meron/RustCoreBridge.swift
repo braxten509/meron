@@ -1,3 +1,8 @@
+// Carries iOS command requests and responses across
+// the Rust C interface. The native host is
+// responsible for the lifetime of data crossing that
+// boundary.
+
 import Foundation
 
 enum RustCoreBridge {

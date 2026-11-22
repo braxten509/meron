@@ -1,3 +1,8 @@
+// Builds a mark-read request across mobile board
+// columns. Overlapping threads share one write and
+// the caller receives the resulting successes and
+// failures.
+
 package jp.nonbili.meron.ui
 
 import jp.nonbili.meron.shared.AccountSummary

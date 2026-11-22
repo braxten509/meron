@@ -1,3 +1,8 @@
+// Checks the messages used to build iOS notifications and
+// open the targeted mail. The fixtures distinguish
+// platform presentation from the identities supplied by
+// the core.
+
 @testable import Meron
 import UserNotifications
 import XCTest

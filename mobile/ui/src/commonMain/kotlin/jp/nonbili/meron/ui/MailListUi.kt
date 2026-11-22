@@ -1,3 +1,8 @@
+// Renders the mobile mailbox list and handles row
+// selection and pagination. Visible thread summaries
+// correspond to the current account, folder and search
+// scope.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.foundation.ExperimentalFoundationApi

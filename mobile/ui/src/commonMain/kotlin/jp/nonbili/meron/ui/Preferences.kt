@@ -1,3 +1,8 @@
+// Defines the mobile preference store used by common
+// code. Native hosts provide the persistence that
+// lets account and interface choices survive
+// relaunch.
+
 package jp.nonbili.meron.ui
 
 /** Key-value persistence, one instance per namespace (app vs kanban). Backed by

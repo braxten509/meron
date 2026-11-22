@@ -1,3 +1,8 @@
+// Provides dialogs and secondary pages opened from
+// mobile settings, including theme selection and
+// import. The settings screen owns navigation to these
+// surfaces.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.foundation.clickable

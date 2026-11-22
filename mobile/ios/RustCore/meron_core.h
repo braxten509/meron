@@ -1,3 +1,8 @@
+// Declares the C ABI exported by Meron's Rust library
+// for mobile hosts. The native bridge uses these
+// declarations to invoke commands and handle the
+// returned data.
+
 #pragma once
 
 #include <stdint.h>

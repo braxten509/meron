@@ -1,3 +1,7 @@
+// Selects a task list when an email is turned
+// into a task. The originating message identity
+// follows the selection into the task command.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.foundation.clickable

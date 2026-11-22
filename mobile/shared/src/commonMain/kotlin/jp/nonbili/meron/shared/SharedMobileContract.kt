@@ -1,3 +1,8 @@
+// Provides the mobile host with a protocol ping and
+// a description of its active transport. Startup
+// checks can verify what the shared bridge is
+// using.
+
 package jp.nonbili.meron.shared
 
 object SharedMobileContract {

@@ -1,3 +1,8 @@
+// Resolves the signature used by a mobile sending
+// account. Draft creation considers the global setting,
+// account override and whether stored markup has visible
+// content.
+
 package jp.nonbili.meron.shared
 
 // Signatures are stored as HTML — one app-wide signature in the core `settings`

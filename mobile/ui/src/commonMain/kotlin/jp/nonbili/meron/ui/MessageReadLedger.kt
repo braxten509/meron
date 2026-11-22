@@ -1,3 +1,8 @@
+// Tracks optimistic read changes for individual
+// mobile messages. Completion and failure settle the
+// same pending operation against the visible read
+// state.
+
 package jp.nonbili.meron.ui
 
 // Read-state bookkeeping for overlapping read/unread writes on the open

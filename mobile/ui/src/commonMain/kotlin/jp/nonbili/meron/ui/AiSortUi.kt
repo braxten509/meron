@@ -1,3 +1,8 @@
+// Presents inbox sorting controls and status on
+// mobile. The screen formats provider settings,
+// estimated costs and account names returned by the
+// core.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.foundation.clickable

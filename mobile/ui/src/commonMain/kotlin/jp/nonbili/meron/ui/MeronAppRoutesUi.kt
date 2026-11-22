@@ -1,3 +1,8 @@
+// Connects mobile navigation destinations to their
+// screens and actions. Each route receives the state and
+// callbacks needed for the currently selected mailbox or
+// feature.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.animation.animateColorAsState

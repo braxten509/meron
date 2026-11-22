@@ -1,3 +1,8 @@
+// Loads mailbox pages and reconciles in-flight
+// refreshes with mobile navigation. The account, folder
+// and search selection determine which result is still
+// current.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.foundation.layout.size
