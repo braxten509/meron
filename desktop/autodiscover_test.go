@@ -1,3 +1,7 @@
+// Checks provider discovery for the account setup form.
+// Fixtures cover password hints, username templates and socket defaults.
+// A local HTTP response supplies the autoconfiguration XML used by the parser.
+
 package main
 
 import (

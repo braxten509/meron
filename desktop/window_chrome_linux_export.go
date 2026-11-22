@@ -1,5 +1,9 @@
 //go:build linux && !bindings
 
+// Receives GTK window-state callbacks through cgo.
+// The native adapter reports state changes and titlebar availability.
+// The host forwards those changes to the desktop window controls.
+
 package main
 
 // A file of its own: a cgo file with //export may only declare in its preamble,

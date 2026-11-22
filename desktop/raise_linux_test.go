@@ -1,5 +1,9 @@
 //go:build linux
 
+// Checks how Linux brings an existing Meron window to the foreground.
+// Recorded window calls model its visible and minimized state.
+// The sequence ensures the window is remapped when it needs raising.
+
 package main
 
 import (

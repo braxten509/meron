@@ -1,3 +1,7 @@
+// Checks the Windows update helper using a controlled relaunch probe.
+// Fixtures cover exit timing, installer errors and restart reporting.
+// The assertions keep user-visible failure state available after relaunch.
+
 package main
 
 import (
@@ -11,8 +15,8 @@ import (
 )
 
 func TestWindowsUpdateWaitsForExitWithoutConsole(t *testing.T) {
-	dir := t.TempDir()
-	exe := writeUpdateRelaunchProbe(t, dir)
+	directory := t.TempDir()
+	exe := writeUpdateRelaunchProbe(t, directory)
 	parent := exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-Command", "Start-Sleep -Seconds 2")
 	if err := parent.Start(); err != nil {
 		t.Fatal(err)
@@ -20,24 +24,24 @@ func TestWindowsUpdateWaitsForExitWithoutConsole(t *testing.T) {
 	t.Cleanup(func() { _ = parent.Wait() })
 
 	started := time.Now()
-	runUpdateScript(t, windowsUpdateScript("", exe, filepath.Join(dir, "error.txt"), parent.Process.Pid, 2*time.Minute))
+	runUpdateScript(t, windowsUpdateScript("", exe, filepath.Join(directory, "error.txt"), parent.Process.Pid, 2*time.Minute))
 	if time.Since(started) < 2*time.Second {
 		t.Fatal("helper relaunched before the original process exited")
 	}
-	assertUpdateRelaunched(t, dir)
+	assertUpdateRelaunched(t, directory)
 }
 
 func TestWindowsUpdateInstallerFailureReopensApp(t *testing.T) {
 	for _, mode := range []string{"FullLanguage", "ConstrainedLanguage"} {
 		t.Run(mode, func(t *testing.T) {
 			// Include brackets as well as Unicode and shell metacharacters.
-			dir := filepath.Join(t.TempDir(), "Meron's メロン [beta] & $app")
-			if err := os.Mkdir(dir, 0o755); err != nil {
+			directory := filepath.Join(t.TempDir(), "Meron's メロン [beta] & $app")
+			if err := os.Mkdir(directory, 0o755); err != nil {
 				t.Fatal(err)
 			}
-			exe := writeUpdateRelaunchProbe(t, dir)
-			errorPath := filepath.Join(dir, "error.txt")
-			script := "$ExecutionContext.SessionState.LanguageMode = '" + mode + "'\n" + windowsUpdateScript(filepath.Join(dir, "missing.exe"), exe, errorPath, -1, 2*time.Minute)
+			exe := writeUpdateRelaunchProbe(t, directory)
+			errorPath := filepath.Join(directory, "error.txt")
+			script := "$ExecutionContext.SessionState.LanguageMode = '" + mode + "'\n" + windowsUpdateScript(filepath.Join(directory, "missing.exe"), exe, errorPath, -1, 2*time.Minute)
 			runUpdateScript(t, script)
 			data, err := os.ReadFile(errorPath)
 			if err != nil {
@@ -46,7 +50,7 @@ func TestWindowsUpdateInstallerFailureReopensApp(t *testing.T) {
 			if !strings.HasPrefix(strings.TrimPrefix(string(data), "\ufeff"), "Windows update failed:") {
 				t.Fatalf("unexpected error: %q", data)
 			}
-			assertUpdateRelaunched(t, dir)
+			assertUpdateRelaunched(t, directory)
 		})
 	}
 }
@@ -70,11 +74,11 @@ func TestWindowsUpdateFailureReportedAfterRestart(t *testing.T) {
 }
 
 func TestWindowsUpdateTimeoutRecordsFailure(t *testing.T) {
-	dir := t.TempDir()
-	errorPath := filepath.Join(dir, "error.txt")
+	directory := t.TempDir()
+	errorPath := filepath.Join(directory, "error.txt")
 	// The test process stays alive, so the helper must time out without
 	// launching an installer or another app against the single-instance lock.
-	script := windowsUpdateScript("", writeUpdateRelaunchProbe(t, dir), errorPath, os.Getpid(), 100*time.Millisecond)
+	script := windowsUpdateScript("", writeUpdateRelaunchProbe(t, directory), errorPath, os.Getpid(), 100*time.Millisecond)
 	script = "$ExecutionContext.SessionState.LanguageMode = 'ConstrainedLanguage'\n" + script
 	cmd := exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-EncodedCommand", encodePowerShellCommand(script))
 	if output, err := cmd.CombinedOutput(); err == nil {
@@ -87,14 +91,14 @@ func TestWindowsUpdateTimeoutRecordsFailure(t *testing.T) {
 	if !strings.Contains(string(data), "Timed out waiting for Meron to exit") {
 		t.Fatalf("unexpected error: %q", data)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "restarted.txt")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(directory, "restarted.txt")); !os.IsNotExist(err) {
 		t.Fatal("helper relaunched while the old process was still running")
 	}
 }
 
-func writeUpdateRelaunchProbe(t *testing.T, dir string) string {
+func writeUpdateRelaunchProbe(t *testing.T, directory string) string {
 	t.Helper()
-	path := filepath.Join(dir, "app.cmd")
+	path := filepath.Join(directory, "app.cmd")
 	if err := os.WriteFile(path, []byte("@echo restarted>\"%~dp0restarted.txt\"\r\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -110,11 +114,11 @@ func runUpdateScript(t *testing.T, script string) {
 	}
 }
 
-func assertUpdateRelaunched(t *testing.T, dir string) {
+func assertUpdateRelaunched(t *testing.T, directory string) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
-		if _, err := os.Stat(filepath.Join(dir, "restarted.txt")); err == nil {
+		if _, err := os.Stat(filepath.Join(directory, "restarted.txt")); err == nil {
 			return
 		}
 		time.Sleep(50 * time.Millisecond)
@@ -125,8 +129,8 @@ func assertUpdateRelaunched(t *testing.T, dir string) {
 func TestExtractExeFromZip(t *testing.T) {
 	for _, name := range []string{"release/MERON.EXE", "README.txt"} {
 		t.Run(name, func(t *testing.T) {
-			dir := t.TempDir()
-			archive := filepath.Join(dir, "update.zip")
+			directory := t.TempDir()
+			archive := filepath.Join(directory, "update.zip")
 			file, err := os.Create(archive)
 			if err != nil {
 				t.Fatal(err)
@@ -145,7 +149,7 @@ func TestExtractExeFromZip(t *testing.T) {
 			if err := file.Close(); err != nil {
 				t.Fatal(err)
 			}
-			dest := filepath.Join(dir, "staged.exe")
+			dest := filepath.Join(directory, "staged.exe")
 			err = extractExeFromZip(archive, "meron.exe", dest)
 			if name == "README.txt" {
 				if err == nil {

@@ -1,5 +1,9 @@
 //go:build linux && webkit2_41 && !bindings
 
+// Prints a message through the Linux native web view.
+// The reader passes the message HTML to the desktop print command.
+// WebKit and GTK own the print dialog and report its outcome.
+
 package main
 
 /*

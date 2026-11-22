@@ -12,8 +12,8 @@ import (
 )
 
 func TestRecoverInvokeTurnsPanicIntoError(t *testing.T) {
-	var buf bytes.Buffer
-	app := &App{logger: log.New(&buf, "", 0)}
+	var buffer bytes.Buffer
+	app := &App{logger: log.New(&buffer, "", 0)}
 
 	call := func() (err error) {
 		defer app.recoverInvoke("mail.send", &err)
@@ -27,7 +27,7 @@ func TestRecoverInvokeTurnsPanicIntoError(t *testing.T) {
 	if !strings.Contains(err.Error(), "mail.send") || !strings.Contains(err.Error(), "nil map write") {
 		t.Fatalf("error = %q, want it to name the command and the panic", err)
 	}
-	logged := buf.String()
+	logged := buffer.String()
 	if !strings.Contains(logged, "invoke mail.send panicked") {
 		t.Fatalf("log = %q, want the panic recorded", logged)
 	}
@@ -37,8 +37,8 @@ func TestRecoverInvokeTurnsPanicIntoError(t *testing.T) {
 }
 
 func TestRecoverInvokeLeavesSuccessfulCallsAlone(t *testing.T) {
-	var buf bytes.Buffer
-	app := &App{logger: log.New(&buf, "", 0)}
+	var buffer bytes.Buffer
+	app := &App{logger: log.New(&buffer, "", 0)}
 
 	call := func() (err error) {
 		defer app.recoverInvoke("mail.list", &err)
@@ -48,7 +48,7 @@ func TestRecoverInvokeLeavesSuccessfulCallsAlone(t *testing.T) {
 	if err := call(); err != nil {
 		t.Fatalf("err = %v, want nil", err)
 	}
-	if buf.Len() != 0 {
-		t.Fatalf("log = %q, want nothing logged for a clean call", buf.String())
+	if buffer.Len() != 0 {
+		t.Fatalf("log = %q, want nothing logged for a clean call", buffer.String())
 	}
 }

@@ -1,3 +1,7 @@
+// Publishes a complete file in one rename.
+// Desktop persistence callers provide the destination and its permission modes.
+// A temporary file in the destination directory keeps the replacement local.
+
 package main
 
 import (
@@ -7,8 +11,8 @@ import (
 
 // Replace a file only after its complete contents and permissions are ready.
 // CreateTemp keeps concurrent writers from sharing a temporary filename.
-func writeFileAtomic(path string, data []byte, fileMode, dirMode os.FileMode) error {
-	if err := os.MkdirAll(filepath.Dir(path), dirMode); err != nil {
+func writeFileAtomic(path string, data []byte, fileMode, directoryMode os.FileMode) error {
+	if err := os.MkdirAll(filepath.Dir(path), directoryMode); err != nil {
 		return err
 	}
 	file, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+"-*")

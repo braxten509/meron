@@ -1,3 +1,7 @@
+// Checks the reversible encoding used by the desktop build.
+// The fixture runs a value through the encoder and decoder.
+// The comparison protects the bytes consumed by the host at startup.
+
 package obf
 
 import "testing"

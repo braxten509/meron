@@ -1,3 +1,7 @@
+// Connects native file drops to composer attachments.
+// Wails reports dropped paths, which the host holds until the composer reads them.
+// The read command returns file contents and reports skipped entries.
+
 package main
 
 import (
@@ -47,11 +51,11 @@ var (
 	fileDropLog = func(a *App, format string, args ...any) { a.logf(format, args...) }
 )
 
-func (a *App) setupFileDrop(ctx context.Context) {
+func (a *App) setupFileDrop(requestContext context.Context) {
 	if !nativeFileDrop {
 		return
 	}
-	onFileDrop(ctx, func(_, _ int, paths []string) {
+	onFileDrop(requestContext, func(_, _ int, paths []string) {
 		a.noteDroppedPaths(paths)
 	})
 }

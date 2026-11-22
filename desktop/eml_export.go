@@ -1,3 +1,7 @@
+// Exports messages selected in the desktop reader.
+// The host resolves message sources, retrieves their contents and writes the selection.
+// Cancellation and completion are tracked for the duration of each export.
+
 package main
 
 import (
@@ -48,9 +52,9 @@ func (a *App) beginEmlExport() (context.Context, error) {
 	if a.emlExportCancel != nil {
 		return nil, errors.New("an export is already running")
 	}
-	ctx, cancel := context.WithCancel(context.Background())
+	requestContext, cancel := context.WithCancel(context.Background())
 	a.emlExportCancel = cancel
-	return ctx, nil
+	return requestContext, nil
 }
 
 func (a *App) endEmlExport() {
@@ -80,7 +84,7 @@ func (a *App) exportEml(payload map[string]any) (any, error) {
 	if a.sidecar == nil || !a.sidecar.Started() {
 		return nil, a.engineUnavailable()
 	}
-	ctx, err := a.beginEmlExport()
+	requestContext, err := a.beginEmlExport()
 	if err != nil {
 		return nil, err
 	}
@@ -123,7 +127,7 @@ func (a *App) exportEml(payload map[string]any) (any, error) {
 		})
 	}
 	emit(0, 0)
-	result, err := runEmlExport(ctx, sources, dest, a.fetchEmlBatch, emit)
+	result, err := runEmlExport(requestContext, sources, dest, a.fetchEmlBatch, emit)
 	if err != nil {
 		return nil, err
 	}
@@ -146,13 +150,13 @@ func (a *App) emlExportSources(payload map[string]any) ([]emlExportSource, int, 
 		if accountID == "" || accountID == "unified" || isRSSAccountID(accountID) {
 			return nil, 0, errors.New("this folder cannot be exported")
 		}
-		res, err := a.sidecar.Call("messages.exportUids", map[string]any{
+		result, err := a.sidecar.Call("messages.exportUids", map[string]any{
 			"account": accountID, "folder": folderID, "all": true,
 		})
 		if err != nil {
 			return nil, 0, err
 		}
-		return []emlExportSource{{Account: accountID, Folder: folderID, UIDs: uidsFromResult(res, "uids")}}, 0, nil
+		return []emlExportSource{{Account: accountID, Folder: folderID, UIDs: uidsFromResult(result, "uids")}}, 0, nil
 	}
 
 	threads, _ := payload["threads"].([]any)
@@ -175,8 +179,8 @@ func (a *App) emlExportSources(payload map[string]any) ([]emlExportSource, int, 
 		if ids.ThreadKey == "" {
 			params = map[string]any{"account": ids.Account, "folder": folder, "uid": ids.UID}
 		}
-		res, err := a.sidecar.Call("messages.exportUids", params)
-		uids := uidsFromResult(res, "uids")
+		result, err := a.sidecar.Call("messages.exportUids", params)
+		uids := uidsFromResult(result, "uids")
 		if err != nil || len(uids) == 0 {
 			unresolved++
 			continue
@@ -198,8 +202,8 @@ func (a *App) emlExportSources(payload map[string]any) ([]emlExportSource, int, 
 	return sources, unresolved, nil
 }
 
-func uidsFromResult(res any, key string) []uint32 {
-	object, _ := res.(map[string]any)
+func uidsFromResult(result any, key string) []uint32 {
+	object, _ := result.(map[string]any)
 	list, _ := object[key].([]any)
 	uids := make([]uint32, 0, len(list))
 	for _, item := range list {
@@ -210,14 +214,14 @@ func uidsFromResult(res any, key string) []uint32 {
 	return uids
 }
 
-func (a *App) fetchEmlBatch(source emlExportSource, uids []uint32, dir string) ([]uint32, error) {
-	res, err := a.sidecar.Call("messages.saveRawBatch", map[string]any{
-		"account": source.Account, "folder": source.Folder, "uids": uids, "dir": dir,
+func (a *App) fetchEmlBatch(source emlExportSource, uids []uint32, directory string) ([]uint32, error) {
+	result, err := a.sidecar.Call("messages.saveRawBatch", map[string]any{
+		"account": source.Account, "folder": source.Folder, "uids": uids, "dir": directory,
 	})
 	if err != nil {
 		return nil, err
 	}
-	return uidsFromResult(res, "saved"), nil
+	return uidsFromResult(result, "saved"), nil
 }
 
 // runEmlExport fetches every source message through fetch and writes it to
@@ -225,7 +229,7 @@ func (a *App) fetchEmlBatch(source emlExportSource, uids []uint32, dir string) (
 // progress is called after each batch with the running exported and skipped
 // counts. The export is built in a staging file and only replaces dest once it
 // has succeeded, so a cancelled or empty export leaves dest as it was.
-func runEmlExport(ctx context.Context, sources []emlExportSource, dest string, fetch emlBatchFetcher, progress func(done, failed int)) (result emlExportResult, err error) {
+func runEmlExport(requestContext context.Context, sources []emlExportSource, dest string, fetch emlBatchFetcher, progress func(done, failed int)) (result emlExportResult, err error) {
 	total := 0
 	for _, source := range sources {
 		total += len(source.UIDs)
@@ -256,10 +260,10 @@ func runEmlExport(ctx context.Context, sources []emlExportSource, dest string, f
 	names := map[string]bool{}
 	// Counted per account: one unreachable server must not stop the others.
 	consecutiveErrors := map[string]int{}
-	var fetchErr error
+	var fetchError error
 	for _, source := range sources {
 		for start := 0; start < len(source.UIDs); start += emlExportBatchSize {
-			if ctx.Err() != nil {
+			if requestContext.Err() != nil {
 				result.Cancelled = true
 				return result, nil
 			}
@@ -270,13 +274,13 @@ func runEmlExport(ctx context.Context, sources []emlExportSource, dest string, f
 			}
 			saved, batchErr := fetch(source, batch, tmp)
 			// Cancel can land while the fetch is in flight, the last one included.
-			if ctx.Err() != nil {
+			if requestContext.Err() != nil {
 				result.Cancelled = true
 				return result, nil
 			}
 			if batchErr != nil {
 				consecutiveErrors[source.Account]++
-				fetchErr = batchErr
+				fetchError = batchErr
 				result.Failed += len(batch)
 				progress(result.Exported, result.Failed)
 				continue
@@ -289,7 +293,7 @@ func runEmlExport(ctx context.Context, sources []emlExportSource, dest string, f
 			written := 0
 			for _, uid := range saved {
 				// Packing a batch of large messages takes a while too.
-				if ctx.Err() != nil {
+				if requestContext.Err() != nil {
 					result.Cancelled = true
 					return result, nil
 				}
@@ -315,13 +319,13 @@ func runEmlExport(ctx context.Context, sources []emlExportSource, dest string, f
 		}
 	}
 	// Last chance to back out: past this point dest is replaced.
-	if ctx.Err() != nil {
+	if requestContext.Err() != nil {
 		result.Cancelled = true
 		return result, nil
 	}
 	if result.Exported == 0 {
-		if fetchErr != nil {
-			return result, fetchErr
+		if fetchError != nil {
+			return result, fetchError
 		}
 		return result, errors.New("no messages could be exported")
 	}

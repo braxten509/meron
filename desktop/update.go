@@ -1,3 +1,7 @@
+// Checks for desktop releases and tracks download state.
+// The updater fetches the manifest and selects the appropriate asset.
+// Status changes are sent to the frontend while the update proceeds.
+
 package main
 
 import (
@@ -120,42 +124,42 @@ type updateStatusPayload struct {
 }
 
 // status builds the payload. Callers must hold u.mu.
-func (u *updater) statusLocked() updateStatusPayload {
-	channel := u.app.updateChannel()
+func (updaterState *updater) statusLocked() updateStatusPayload {
+	channel := updaterState.app.updateChannel()
 	return updateStatusPayload{
-		State:          u.state,
+		State:          updaterState.state,
 		Channel:        channel.Kind,
 		Managed:        channel.Managed,
-		Supported:      channel.SelfUpdatable() && !u.app.updatesDisabled(),
+		Supported:      channel.SelfUpdatable() && !updaterState.app.updatesDisabled(),
 		CurrentVersion: appVersion(),
-		LatestVersion:  u.latest,
-		PubDate:        u.pubDate,
-		Downloaded:     u.downloaded,
-		Total:          u.total,
-		Error:          u.errMessage,
-		InstallError:   u.installError,
-		ReleasesURL:    releasesURLFor(u.latest),
+		LatestVersion:  updaterState.latest,
+		PubDate:        updaterState.pubDate,
+		Downloaded:     updaterState.downloaded,
+		Total:          updaterState.total,
+		Error:          updaterState.errMessage,
+		InstallError:   updaterState.installError,
+		ReleasesURL:    releasesURLFor(updaterState.latest),
 	}
 }
 
 // emitLocked pushes the current status to the webview. Download progress calls
 // this on every chunk, so non-terminal states are throttled; state changes
 // always go through (force).
-func (u *updater) emitLocked(force bool) {
-	if !force && time.Since(u.lastEmit) < 100*time.Millisecond {
+func (updaterState *updater) emitLocked(force bool) {
+	if !force && time.Since(updaterState.lastEmit) < 100*time.Millisecond {
 		return
 	}
-	u.lastEmit = time.Now()
-	if u.app.ctx != nil {
-		wailsRuntime.EventsEmit(u.app.ctx, "update.status", u.statusLocked())
+	updaterState.lastEmit = time.Now()
+	if updaterState.app.ctx != nil {
+		wailsRuntime.EventsEmit(updaterState.app.ctx, "update.status", updaterState.statusLocked())
 	}
 }
 
-func (u *updater) setErrorLocked(err error) {
-	u.state = updateStateError
-	u.errMessage = err.Error()
-	u.busy = false
-	u.emitLocked(true)
+func (updaterState *updater) setErrorLocked(operationError error) {
+	updaterState.state = updateStateError
+	updaterState.errMessage = operationError.Error()
+	updaterState.busy = false
+	updaterState.emitLocked(true)
 }
 
 // ---------------------------------------------------------------- App wiring
@@ -197,76 +201,76 @@ func (a *App) updateInstall() (any, error) {
 
 // --------------------------------------------------------------------- Check
 
-func (u *updater) check() (any, error) {
-	channel := u.app.updateChannel()
-	u.mu.Lock()
-	if u.app.updatesDisabled() || !channel.SelfUpdatable() {
-		status := u.statusLocked()
-		u.mu.Unlock()
+func (updaterState *updater) check() (any, error) {
+	channel := updaterState.app.updateChannel()
+	updaterState.mu.Lock()
+	if updaterState.app.updatesDisabled() || !channel.SelfUpdatable() {
+		status := updaterState.statusLocked()
+		updaterState.mu.Unlock()
 		return status, nil
 	}
-	if u.busy || u.state == updateStateDownloading || u.state == updateStateInstalling {
-		status := u.statusLocked()
-		u.mu.Unlock()
+	if updaterState.busy || updaterState.state == updateStateDownloading || updaterState.state == updateStateInstalling {
+		status := updaterState.statusLocked()
+		updaterState.mu.Unlock()
 		return status, nil
 	}
 	// A staged payload for a still-current version survives a re-check.
-	if u.state != updateStateReady {
-		u.state = updateStateChecking
-		u.errMessage = ""
+	if updaterState.state != updateStateReady {
+		updaterState.state = updateStateChecking
+		updaterState.errMessage = ""
 	}
-	u.busy = true
-	u.emitLocked(true)
-	u.mu.Unlock()
+	updaterState.busy = true
+	updaterState.emitLocked(true)
+	updaterState.mu.Unlock()
 
-	manifest, err := fetchUpdateManifest(updateManifestSource())
+	manifest, operationError := fetchUpdateManifest(updateManifestSource())
 
-	u.mu.Lock()
-	defer u.mu.Unlock()
-	u.busy = false
-	if err != nil {
-		u.app.logf("update: check failed: %v", err)
-		if u.state == updateStateReady {
+	updaterState.mu.Lock()
+	defer updaterState.mu.Unlock()
+	updaterState.busy = false
+	if operationError != nil {
+		updaterState.app.logf("update: check failed: %v", operationError)
+		if updaterState.state == updateStateReady {
 			// A background re-check failing (offline, GitHub hiccup) must not
 			// throw away a payload the user already downloaded.
-			u.emitLocked(true)
-			return u.statusLocked(), nil
+			updaterState.emitLocked(true)
+			return updaterState.statusLocked(), nil
 		}
-		u.setErrorLocked(err)
-		return u.statusLocked(), nil
+		updaterState.setErrorLocked(operationError)
+		return updaterState.statusLocked(), nil
 	}
 
 	asset, ok := manifest.assetFor(runtime.GOOS, runtime.GOARCH, channel.Kind)
 	if !ok {
-		u.state = updateStateIdle
-		u.latest = manifest.Version
-		u.pubDate = manifest.PubDate
-		u.errMessage = ""
-		u.app.logf("update: manifest %s has no %s asset for %s-%s", manifest.Version, channel.Kind, runtime.GOOS, runtime.GOARCH)
-		u.emitLocked(true)
-		return u.statusLocked(), nil
+		updaterState.state = updateStateIdle
+		updaterState.latest = manifest.Version
+		updaterState.pubDate = manifest.PubDate
+		updaterState.errMessage = ""
+		updaterState.app.logf("update: manifest %s has no %s asset for %s-%s", manifest.Version, channel.Kind, runtime.GOOS, runtime.GOARCH)
+		updaterState.emitLocked(true)
+		return updaterState.statusLocked(), nil
 	}
 
-	u.latest = manifest.Version
-	u.pubDate = manifest.PubDate
-	u.errMessage = ""
+	updaterState.latest = manifest.Version
+	updaterState.pubDate = manifest.PubDate
+	updaterState.errMessage = ""
 	if compareVersions(manifest.Version, appVersion()) <= 0 {
-		u.state = updateStateIdle
-		u.installError = ""
-		u.asset = updateAsset{}
-		u.discardStagedLocked()
-	} else if u.state != updateStateReady || u.asset.SHA256 != asset.SHA256 {
+		updaterState.state = updateStateIdle
+		updaterState.installError = ""
+		updaterState.asset = updateAsset{}
+		updaterState.discardStagedLocked()
+	} else if updaterState.state != updateStateReady || updaterState.asset.SHA256 != asset.SHA256 {
 		// A newer release landed while an older one was staged: throw the
 		// stale payload away and offer the new one.
-		u.discardStagedLocked()
-		u.asset = asset
-		u.total = asset.Size
-		u.downloaded = 0
-		u.state = updateStateAvailable
+		updaterState.discardStagedLocked()
+		updaterState.asset = asset
+		updaterState.total = asset.Size
+		updaterState.downloaded = 0
+		updaterState.state = updateStateAvailable
 	}
-	u.app.logf("update: current=%s latest=%s state=%s channel=%s", appVersion(), u.latest, u.state, channel.Kind)
-	u.emitLocked(true)
-	return u.statusLocked(), nil
+	updaterState.app.logf("update: current=%s latest=%s state=%s channel=%s", appVersion(), updaterState.latest, updaterState.state, channel.Kind)
+	updaterState.emitLocked(true)
+	return updaterState.statusLocked(), nil
 }
 
 // updateManifestSource allows pointing a local build at a test manifest.
@@ -278,28 +282,28 @@ func updateManifestSource() string {
 }
 
 func fetchUpdateManifest(url string) (*updateManifest, error) {
-	req, err := http.NewRequest(http.MethodGet, url, nil)
-	if err != nil {
-		return nil, err
+	req, operationError := http.NewRequest(http.MethodGet, url, nil)
+	if operationError != nil {
+		return nil, operationError
 	}
 	req.Header.Set("User-Agent", updateUserAgent())
 	req.Header.Set("Accept", "application/json")
 	client := &http.Client{Timeout: 20 * time.Second}
-	res, err := client.Do(req)
-	if err != nil {
-		return nil, err
+	res, operationError := client.Do(req)
+	if operationError != nil {
+		return nil, operationError
 	}
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("update manifest: unexpected status %d", res.StatusCode)
 	}
-	body, err := io.ReadAll(io.LimitReader(res.Body, 1<<20))
-	if err != nil {
-		return nil, err
+	body, operationError := io.ReadAll(io.LimitReader(res.Body, 1<<20))
+	if operationError != nil {
+		return nil, operationError
 	}
 	var manifest updateManifest
-	if err := json.Unmarshal(body, &manifest); err != nil {
-		return nil, fmt.Errorf("update manifest: %w", err)
+	if operationError := json.Unmarshal(body, &manifest); operationError != nil {
+		return nil, fmt.Errorf("update manifest: %w", operationError)
 	}
 	if strings.TrimSpace(manifest.Version) == "" {
 		return nil, errors.New("update manifest: missing version")
@@ -307,8 +311,8 @@ func fetchUpdateManifest(url string) (*updateManifest, error) {
 	return &manifest, nil
 }
 
-func (m *updateManifest) assetFor(goos, goarch, kind string) (updateAsset, bool) {
-	assets, ok := m.Platforms[goos+"-"+goarch]
+func (manifest *updateManifest) assetFor(goos, goarch, kind string) (updateAsset, bool) {
+	assets, ok := manifest.Platforms[goos+"-"+goarch]
 	if !ok {
 		return updateAsset{}, false
 	}
@@ -325,63 +329,63 @@ func updateUserAgent() string {
 
 // ------------------------------------------------------------------ Download
 
-func (u *updater) startDownload() (any, error) {
-	u.mu.Lock()
-	defer u.mu.Unlock()
-	if u.state == updateStateReady || u.state == updateStateDownloading {
-		return u.statusLocked(), nil
+func (updaterState *updater) startDownload() (any, error) {
+	updaterState.mu.Lock()
+	defer updaterState.mu.Unlock()
+	if updaterState.state == updateStateReady || updaterState.state == updateStateDownloading {
+		return updaterState.statusLocked(), nil
 	}
-	if u.state != updateStateAvailable || u.asset.URL == "" {
-		return u.statusLocked(), errors.New("no update available to download")
+	if updaterState.state != updateStateAvailable || updaterState.asset.URL == "" {
+		return updaterState.statusLocked(), errors.New("no update available to download")
 	}
-	asset := u.asset
-	u.installError = ""
-	u.state = updateStateDownloading
-	u.errMessage = ""
-	u.downloaded = 0
-	u.total = asset.Size
-	u.busy = true
-	u.emitLocked(true)
-	go u.download(asset)
-	return u.statusLocked(), nil
+	asset := updaterState.asset
+	updaterState.installError = ""
+	updaterState.state = updateStateDownloading
+	updaterState.errMessage = ""
+	updaterState.downloaded = 0
+	updaterState.total = asset.Size
+	updaterState.busy = true
+	updaterState.emitLocked(true)
+	go updaterState.download(asset)
+	return updaterState.statusLocked(), nil
 }
 
-func (u *updater) download(asset updateAsset) {
-	path, err := u.downloadTo(asset)
+func (updaterState *updater) download(asset updateAsset) {
+	path, operationError := updaterState.downloadTo(asset)
 
-	u.mu.Lock()
-	defer u.mu.Unlock()
-	u.busy = false
-	if err != nil {
-		u.app.logf("update: download failed: %v", err)
-		u.setErrorLocked(err)
+	updaterState.mu.Lock()
+	defer updaterState.mu.Unlock()
+	updaterState.busy = false
+	if operationError != nil {
+		updaterState.app.logf("update: download failed: %v", operationError)
+		updaterState.setErrorLocked(operationError)
 		return
 	}
-	u.stagedPath = path
-	u.state = updateStateReady
-	u.downloaded = asset.Size
-	u.app.logf("update: staged %s", path)
-	u.emitLocked(true)
+	updaterState.stagedPath = path
+	updaterState.state = updateStateReady
+	updaterState.downloaded = asset.Size
+	updaterState.app.logf("update: staged %s", path)
+	updaterState.emitLocked(true)
 }
 
 // downloadTo streams the asset to the update cache dir, hashing as it goes, and
 // only returns a path once size and digest both match the manifest.
-func (u *updater) downloadTo(asset updateAsset) (string, error) {
-	dir := updateCacheDir()
+func (updaterState *updater) downloadTo(asset updateAsset) (string, error) {
+	directory := updateCacheDir()
 	// One payload at a time: wipe anything left over from a previous attempt.
-	if err := os.RemoveAll(dir); err != nil {
-		return "", err
+	if operationError := os.RemoveAll(directory); operationError != nil {
+		return "", operationError
 	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return "", err
+	if operationError := os.MkdirAll(directory, 0o755); operationError != nil {
+		return "", operationError
 	}
 	if asset.Size > maxUpdatePayloadBytes {
 		return "", fmt.Errorf("update payload too large: %d bytes", asset.Size)
 	}
 
-	req, err := http.NewRequest(http.MethodGet, asset.URL, nil)
-	if err != nil {
-		return "", err
+	req, operationError := http.NewRequest(http.MethodGet, asset.URL, nil)
+	if operationError != nil {
+		return "", operationError
 	}
 	req.Header.Set("User-Agent", updateUserAgent())
 	// No overall timeout: a 120 MB DMG on a slow line legitimately takes a
@@ -392,40 +396,40 @@ func (u *updater) downloadTo(asset updateAsset) (string, error) {
 			ResponseHeaderTimeout: 60 * time.Second,
 		},
 	}
-	res, err := client.Do(req)
-	if err != nil {
-		return "", err
+	res, operationError := client.Do(req)
+	if operationError != nil {
+		return "", operationError
 	}
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("update download: unexpected status %d", res.StatusCode)
 	}
 
-	path := filepath.Join(dir, updateFileName(asset.URL))
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o755)
-	if err != nil {
-		return "", err
+	path := filepath.Join(directory, updateFileName(asset.URL))
+	file, operationError := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o755)
+	if operationError != nil {
+		return "", operationError
 	}
 	hasher := sha256.New()
 	written, copyErr := io.Copy(io.MultiWriter(file, hasher), &progressReader{
 		reader:  io.LimitReader(res.Body, asset.Size+1),
-		updater: u,
+		updater: updaterState,
 	})
 	closeErr := file.Close()
 	if copyErr != nil {
-		os.RemoveAll(dir)
+		os.RemoveAll(directory)
 		return "", copyErr
 	}
 	if closeErr != nil {
-		os.RemoveAll(dir)
+		os.RemoveAll(directory)
 		return "", closeErr
 	}
 	if written != asset.Size {
-		os.RemoveAll(dir)
+		os.RemoveAll(directory)
 		return "", fmt.Errorf("update download: expected %d bytes, got %d", asset.Size, written)
 	}
 	if digest := hex.EncodeToString(hasher.Sum(nil)); !strings.EqualFold(digest, asset.SHA256) {
-		os.RemoveAll(dir)
+		os.RemoveAll(directory)
 		return "", fmt.Errorf("update download: checksum mismatch (expected %s, got %s)", asset.SHA256, digest)
 	}
 	return path, nil
@@ -438,15 +442,15 @@ type progressReader struct {
 	updater *updater
 }
 
-func (p *progressReader) Read(buf []byte) (int, error) {
-	n, err := p.reader.Read(buf)
+func (progress *progressReader) Read(buffer []byte) (int, error) {
+	n, operationError := progress.reader.Read(buffer)
 	if n > 0 {
-		p.updater.mu.Lock()
-		p.updater.downloaded += int64(n)
-		p.updater.emitLocked(false)
-		p.updater.mu.Unlock()
+		progress.updater.mu.Lock()
+		progress.updater.downloaded += int64(n)
+		progress.updater.emitLocked(false)
+		progress.updater.mu.Unlock()
 	}
-	return n, err
+	return n, operationError
 }
 
 func updateCacheDir() string {
@@ -456,8 +460,8 @@ func updateCacheDir() string {
 // updateFileName keeps the asset's own extension — the install step dispatches
 // on it (.dmg mounts, .tar.gz extracts, .exe runs).
 func updateFileName(rawURL string) string {
-	parsed, err := url.Parse(rawURL)
-	if err != nil {
+	parsed, operationError := url.Parse(rawURL)
+	if operationError != nil {
 		return "meron-update"
 	}
 	// path.Base, not filepath.Base: URL paths use "/" on every OS. Taking the
@@ -470,11 +474,11 @@ func updateFileName(rawURL string) string {
 }
 
 // discardStagedLocked drops a staged payload and its cache dir.
-func (u *updater) discardStagedLocked() {
-	if u.stagedPath == "" {
+func (updaterState *updater) discardStagedLocked() {
+	if updaterState.stagedPath == "" {
 		return
 	}
-	u.stagedPath = ""
+	updaterState.stagedPath = ""
 	_ = os.RemoveAll(updateCacheDir())
 }
 
@@ -491,10 +495,10 @@ func cleanupUpdateCache() {
 // install strategy needs before it starts moving things around. A root-owned
 // /opt or /Applications gives a clear error up front instead of a half-applied
 // update.
-func ensureWritableDir(dir string) error {
-	probe, err := os.CreateTemp(dir, ".meron-write-probe-")
-	if err != nil {
-		return err
+func ensureWritableDir(directory string) error {
+	probe, operationError := os.CreateTemp(directory, ".meron-write-probe-")
+	if operationError != nil {
+		return operationError
 	}
 	name := probe.Name()
 	_ = probe.Close()
@@ -502,56 +506,56 @@ func ensureWritableDir(dir string) error {
 }
 
 func copyFile(source, dest string, mode os.FileMode) error {
-	in, err := os.Open(source)
-	if err != nil {
-		return err
+	in, operationError := os.Open(source)
+	if operationError != nil {
+		return operationError
 	}
 	defer in.Close()
-	out, err := os.OpenFile(dest, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, mode)
-	if err != nil {
-		return err
+	out, operationError := os.OpenFile(dest, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, mode)
+	if operationError != nil {
+		return operationError
 	}
-	if _, err := io.Copy(out, in); err != nil {
+	if _, operationError := io.Copy(out, in); operationError != nil {
 		out.Close()
-		return err
+		return operationError
 	}
 	return out.Close()
 }
 
 // ------------------------------------------------------------------- Install
 
-func (u *updater) install() (any, error) {
-	u.mu.Lock()
-	if u.state != updateStateReady || u.stagedPath == "" {
-		status := u.statusLocked()
-		u.mu.Unlock()
+func (updaterState *updater) install() (any, error) {
+	updaterState.mu.Lock()
+	if updaterState.state != updateStateReady || updaterState.stagedPath == "" {
+		status := updaterState.statusLocked()
+		updaterState.mu.Unlock()
 		return status, errors.New("no downloaded update to install")
 	}
-	channel := u.app.updateChannel()
-	staged := u.stagedPath
-	u.installError = ""
-	u.state = updateStateInstalling
-	u.errMessage = ""
-	u.emitLocked(true)
-	u.mu.Unlock()
+	channel := updaterState.app.updateChannel()
+	staged := updaterState.stagedPath
+	updaterState.installError = ""
+	updaterState.state = updateStateInstalling
+	updaterState.errMessage = ""
+	updaterState.emitLocked(true)
+	updaterState.mu.Unlock()
 
-	u.app.logf("update: installing %s via %s", staged, channel.Kind)
-	if err := applyUpdate(channel, staged); err != nil {
-		u.app.logf("update: install failed: %v", err)
-		u.mu.Lock()
-		defer u.mu.Unlock()
+	updaterState.app.logf("update: installing %s via %s", staged, channel.Kind)
+	if operationError := applyUpdate(channel, staged); operationError != nil {
+		updaterState.app.logf("update: install failed: %v", operationError)
+		updaterState.mu.Lock()
+		defer updaterState.mu.Unlock()
 		// Keep the payload: the user can retry, or open it by hand.
-		u.state = updateStateReady
-		u.errMessage = err.Error()
-		u.emitLocked(true)
-		return u.statusLocked(), nil
+		updaterState.state = updateStateReady
+		updaterState.errMessage = operationError.Error()
+		updaterState.emitLocked(true)
+		return updaterState.statusLocked(), nil
 	}
 
-	u.mu.Lock()
-	status := u.statusLocked()
-	u.mu.Unlock()
+	updaterState.mu.Lock()
+	status := updaterState.statusLocked()
+	updaterState.mu.Unlock()
 	// applyUpdate has queued the relaunch; quitting releases the single-instance
 	// lock so the new copy can start.
-	u.app.quit()
+	updaterState.app.quit()
 	return status, nil
 }

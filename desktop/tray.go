@@ -1,3 +1,7 @@
+// Manages the desktop tray lifecycle and menu interactions.
+// The host starts the physical tray and routes clicks to the active window.
+// Tray state connects native actions to the desktop app.
+
 package main
 
 import (

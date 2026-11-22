@@ -1,3 +1,7 @@
+// Exercises Linux update replacement using temporary binaries and archives.
+// Cases cover AppImages, tarballs, missing executables and managed channels.
+// The assertions inspect the target written by the installer.
+
 package main
 
 import (
@@ -12,8 +16,8 @@ import (
 
 func writeTarGz(t *testing.T, path string, entries map[string]string) {
 	t.Helper()
-	var buf bytes.Buffer
-	gz := gzip.NewWriter(&buf)
+	var buffer bytes.Buffer
+	gz := gzip.NewWriter(&buffer)
 	tw := tar.NewWriter(gz)
 	for name, content := range entries {
 		header := &tar.Header{Name: name, Mode: 0o755, Size: int64(len(content)), Typeflag: tar.TypeReg}
@@ -30,14 +34,14 @@ func writeTarGz(t *testing.T, path string, entries map[string]string) {
 	if err := gz.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(path, buf.Bytes(), 0o644); err != nil {
+	if err := os.WriteFile(path, buffer.Bytes(), 0o644); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func TestReplaceTargetAppImage(t *testing.T) {
-	dir := t.TempDir()
-	target := filepath.Join(dir, "Meron.AppImage")
+	directory := t.TempDir()
+	target := filepath.Join(directory, "Meron.AppImage")
 	if err := os.WriteFile(target, []byte("old image"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -65,12 +69,12 @@ func TestReplaceTargetAppImage(t *testing.T) {
 	if info.Mode().Perm()&0o111 == 0 {
 		t.Fatalf("target mode = %v, want the executable bit set", info.Mode().Perm())
 	}
-	assertNoLeftovers(t, dir, "Meron.AppImage")
+	assertNoLeftovers(t, directory, "Meron.AppImage")
 }
 
 func TestReplaceTargetTarball(t *testing.T) {
-	dir := t.TempDir()
-	target := filepath.Join(dir, "meron")
+	directory := t.TempDir()
+	target := filepath.Join(directory, "meron")
 	if err := os.WriteFile(target, []byte("old binary"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -87,14 +91,14 @@ func TestReplaceTargetTarball(t *testing.T) {
 	if string(got) != "new binary" {
 		t.Fatalf("target contents = %q, want %q", got, "new binary")
 	}
-	assertNoLeftovers(t, dir, "meron")
+	assertNoLeftovers(t, directory, "meron")
 }
 
 // A tarball without the binary must leave the installed copy untouched rather
 // than replacing it with nothing.
 func TestReplaceTargetTarballMissingBinary(t *testing.T) {
-	dir := t.TempDir()
-	target := filepath.Join(dir, "meron")
+	directory := t.TempDir()
+	target := filepath.Join(directory, "meron")
 	if err := os.WriteFile(target, []byte("old binary"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -112,7 +116,7 @@ func TestReplaceTargetTarballMissingBinary(t *testing.T) {
 	if string(got) != "old binary" {
 		t.Fatalf("target was modified: %q", got)
 	}
-	assertNoLeftovers(t, dir, "meron")
+	assertNoLeftovers(t, directory, "meron")
 }
 
 func TestReplaceTargetRejectsManagedChannel(t *testing.T) {
@@ -126,15 +130,15 @@ func TestReplaceTargetUnwritableDir(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("root can write to a read-only directory")
 	}
-	dir := t.TempDir()
-	target := filepath.Join(dir, "meron")
+	directory := t.TempDir()
+	target := filepath.Join(directory, "meron")
 	if err := os.WriteFile(target, []byte("old binary"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Chmod(dir, 0o555); err != nil {
+	if err := os.Chmod(directory, 0o555); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = os.Chmod(dir, 0o755) })
+	t.Cleanup(func() { _ = os.Chmod(directory, 0o755) })
 
 	payload := filepath.Join(t.TempDir(), "meron-linux-amd64.AppImage")
 	if err := os.WriteFile(payload, []byte("new image"), 0o644); err != nil {
@@ -151,9 +155,9 @@ func TestReplaceTargetUnwritableDir(t *testing.T) {
 
 // Every failure path has to clean up its staging file, or the install dir fills
 // with .meron-update-* debris.
-func assertNoLeftovers(t *testing.T, dir string, expected ...string) {
+func assertNoLeftovers(t *testing.T, directory string, expected ...string) {
 	t.Helper()
-	entries, err := os.ReadDir(dir)
+	entries, err := os.ReadDir(directory)
 	if err != nil {
 		t.Fatal(err)
 	}

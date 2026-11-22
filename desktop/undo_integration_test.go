@@ -1,5 +1,9 @@
 //go:build integration
 
+// Exercises undo through the desktop app and its test mail server.
+// The fixture identifies moved messages by their UIDs and Message-IDs.
+// Server searches verify the result of reversing the operation.
+
 package main
 
 import (
@@ -55,26 +59,26 @@ func TestIntegrationUndo(t *testing.T) {
 	}
 	call := func(t *testing.T, name string, handler func(map[string]any) (any, error), payload map[string]any) map[string]any {
 		t.Helper()
-		res, err := handler(payload)
+		result, err := handler(payload)
 		if err != nil {
 			t.Fatalf("%s: %v", name, err)
 		}
-		out, ok := res.(map[string]any)
+		out, ok := result.(map[string]any)
 		if !ok {
-			t.Fatalf("%s: expected object result, got %T", name, res)
+			t.Fatalf("%s: expected object result, got %T", name, result)
 		}
 		return out
 	}
 	// undo mirrors the frontend's undo toast: move the reported copies back.
-	undo := func(t *testing.T, res map[string]any, from, to string) map[string]any {
+	undo := func(t *testing.T, result map[string]any, from, to string) map[string]any {
 		t.Helper()
 		ids := make([]any, 0)
-		for _, uid := range targetUIDs(t, res) {
+		for _, uid := range targetUIDs(t, result) {
 			ids = append(ids, strconv.FormatUint(uint64(uid), 10))
 		}
-		movedThreadID := str(res, "thread_id")
+		movedThreadID := str(result, "thread_id")
 		if movedThreadID == "" || !strings.Contains(movedThreadID, "#"+from+"#") {
-			t.Fatalf("result thread_id %q does not point into %s: %v", movedThreadID, from, res)
+			t.Fatalf("result thread_id %q does not point into %s: %v", movedThreadID, from, result)
 		}
 		return call(t, "undo", app.mailMove, map[string]any{
 			"thread_id":        movedThreadID,
@@ -91,13 +95,13 @@ func TestIntegrationUndo(t *testing.T) {
 		messageID := "undo-trash-" + nonce + "@mail.test"
 		row := deliver(t, "Undo trash "+nonce, messageID)
 
-		res := call(t, "mail.delete", app.mailDelete, map[string]any{"thread_id": threadID(t, row)})
-		trashed := targetUIDs(t, res)
+		result := call(t, "mail.delete", app.mailDelete, map[string]any{"thread_id": threadID(t, row)})
+		trashed := targetUIDs(t, result)
 		if got := onServer(t, "Trash", messageID); len(trashed) != 1 || !slices.Equal(got, trashed) {
 			t.Fatalf("target_uids = %v, server Trash copies = %v", trashed, got)
 		}
 
-		if moved := num(undo(t, res, "Trash", "INBOX"), "moved"); moved != 1 {
+		if moved := num(undo(t, result, "Trash", "INBOX"), "moved"); moved != 1 {
 			t.Fatalf("undo moved %d, want 1", moved)
 		}
 		if got := onServer(t, "INBOX", messageID); len(got) != 1 {
@@ -115,9 +119,9 @@ func TestIntegrationUndo(t *testing.T) {
 		messageID := "undo-trash-key-" + nonce + "@mail.test"
 		row := deliver(t, "Undo trash by key "+nonce, messageID)
 
-		res := call(t, "mail.delete", app.mailDelete, map[string]any{"thread_id": threadID(t, row)})
+		result := call(t, "mail.delete", app.mailDelete, map[string]any{"thread_id": threadID(t, row)})
 		back := call(t, "mail.move", app.mailMove, map[string]any{
-			"thread_id":        str(res, "thread_id"),
+			"thread_id":        str(result, "thread_id"),
 			"target_folder_id": "INBOX",
 		})
 		if moved := num(back, "moved"); moved != 1 {
@@ -146,15 +150,15 @@ func TestIntegrationUndo(t *testing.T) {
 			"thread_id":   thread,
 			"message_ids": []any{strconv.FormatUint(uint64(num(root, "uid")), 10)},
 		})
-		res := call(t, "mail.delete", app.mailDelete, map[string]any{
+		result := call(t, "mail.delete", app.mailDelete, map[string]any{
 			"thread_id":   thread,
 			"message_ids": []any{strconv.FormatUint(uint64(num(reply, "uid")), 10)},
 		})
-		if got := onServer(t, "Trash", replyID); !slices.Equal(targetUIDs(t, res), got) {
-			t.Fatalf("target_uids = %v, server Trash reply copies = %v", targetUIDs(t, res), got)
+		if got := onServer(t, "Trash", replyID); !slices.Equal(targetUIDs(t, result), got) {
+			t.Fatalf("target_uids = %v, server Trash reply copies = %v", targetUIDs(t, result), got)
 		}
 
-		if moved := num(undo(t, res, "Trash", "INBOX"), "moved"); moved != 1 {
+		if moved := num(undo(t, result, "Trash", "INBOX"), "moved"); moved != 1 {
 			t.Fatalf("undo moved %d, want 1", moved)
 		}
 		if got := onServer(t, "INBOX", replyID); len(got) != 1 {
@@ -177,11 +181,11 @@ func TestIntegrationUndo(t *testing.T) {
 			t.Fatalf("expected a uid-derived thread key, got %q", str(row, "thread_key"))
 		}
 
-		res := call(t, "mail.delete", app.mailDelete, map[string]any{"thread_id": threadID(t, row)})
-		if got := imapSearchSubject(t, server.imapPort, user, testPassword, "Trash", subject); !slices.Equal(targetUIDs(t, res), got) {
-			t.Fatalf("target_uids = %v, server Trash copies = %v", targetUIDs(t, res), got)
+		result := call(t, "mail.delete", app.mailDelete, map[string]any{"thread_id": threadID(t, row)})
+		if got := imapSearchSubject(t, server.imapPort, user, testPassword, "Trash", subject); !slices.Equal(targetUIDs(t, result), got) {
+			t.Fatalf("target_uids = %v, server Trash copies = %v", targetUIDs(t, result), got)
 		}
-		if moved := num(undo(t, res, "Trash", "INBOX"), "moved"); moved != 1 {
+		if moved := num(undo(t, result, "Trash", "INBOX"), "moved"); moved != 1 {
 			t.Fatalf("undo moved %d, want 1", moved)
 		}
 		if got := imapSearchSubject(t, server.imapPort, user, testPassword, "INBOX", subject); len(got) != 1 {
@@ -194,16 +198,16 @@ func TestIntegrationUndo(t *testing.T) {
 		messageID := "undo-move-" + nonce + "@mail.test"
 		row := deliver(t, "Undo move "+nonce, messageID)
 
-		res := call(t, "mail.move", app.mailMove, map[string]any{
+		result := call(t, "mail.move", app.mailMove, map[string]any{
 			"thread_id":        threadID(t, row),
 			"target_folder_id": "ITestUndo",
 		})
-		if got := onServer(t, "ITestUndo", messageID); len(got) != 1 || !slices.Equal(targetUIDs(t, res), got) {
-			t.Fatalf("target_uids = %v, server copies = %v", targetUIDs(t, res), got)
+		if got := onServer(t, "ITestUndo", messageID); len(got) != 1 || !slices.Equal(targetUIDs(t, result), got) {
+			t.Fatalf("target_uids = %v, server copies = %v", targetUIDs(t, result), got)
 		}
 		// mail.move reports no thread_id of its own; the frontend derives it.
-		res["thread_id"] = strings.Replace(threadID(t, row), "#INBOX#", "#ITestUndo#", 1)
-		if moved := num(undo(t, res, "ITestUndo", "INBOX"), "moved"); moved != 1 {
+		result["thread_id"] = strings.Replace(threadID(t, row), "#INBOX#", "#ITestUndo#", 1)
+		if moved := num(undo(t, result, "ITestUndo", "INBOX"), "moved"); moved != 1 {
 			t.Fatalf("undo moved %d, want 1", moved)
 		}
 		if got := onServer(t, "INBOX", messageID); len(got) != 1 {
@@ -235,18 +239,18 @@ func TestIntegrationUndo(t *testing.T) {
 		}
 		callMap(t, sidecar, "folders.create", map[string]any{"account": "bob", "name": "ITestUndoBulk"})
 
-		res := call(t, "mail.move", app.mailMove, map[string]any{
+		result := call(t, "mail.move", app.mailMove, map[string]any{
 			"thread_id":        fmt.Sprintf("bob#INBOX#%d", inbox[0]),
 			"target_folder_id": "ITestUndoBulk",
 			"message_ids":      ids,
 		})
 		moved := imapSearchSubject(t, server.imapPort, user, testPassword, "ITestUndoBulk", subject)
 		slices.Sort(moved)
-		if got := targetUIDs(t, res); len(got) != total || !slices.Equal(got, moved) {
+		if got := targetUIDs(t, result); len(got) != total || !slices.Equal(got, moved) {
 			t.Fatalf("target_uids has %d of %d copies: %v, server %v", len(got), total, got, moved)
 		}
-		res["thread_id"] = fmt.Sprintf("bob#ITestUndoBulk#%d", moved[0])
-		if n := num(undo(t, res, "ITestUndoBulk", "INBOX"), "moved"); n != total {
+		result["thread_id"] = fmt.Sprintf("bob#ITestUndoBulk#%d", moved[0])
+		if n := num(undo(t, result, "ITestUndoBulk", "INBOX"), "moved"); n != total {
 			t.Fatalf("undo moved %d, want %d", n, total)
 		}
 		if got := imapSearchSubject(t, server.imapPort, user, testPassword, "ITestUndoBulk", subject); len(got) != 0 {
@@ -258,15 +262,15 @@ func TestIntegrationUndo(t *testing.T) {
 		messageID := "undo-archive-" + nonce + "@mail.test"
 		row := deliver(t, "Undo archive "+nonce, messageID)
 
-		res := call(t, "mail.archive", app.mailArchive, map[string]any{"thread_id": threadID(t, row)})
-		archive := str(res, "folder")
+		result := call(t, "mail.archive", app.mailArchive, map[string]any{"thread_id": threadID(t, row)})
+		archive := str(result, "folder")
 		if archive == "" {
-			t.Fatalf("mail.archive reported no folder: %v", res)
+			t.Fatalf("mail.archive reported no folder: %v", result)
 		}
-		if got := onServer(t, archive, messageID); len(got) != 1 || !slices.Equal(targetUIDs(t, res), got) {
-			t.Fatalf("target_uids = %v, server %s copies = %v", targetUIDs(t, res), archive, got)
+		if got := onServer(t, archive, messageID); len(got) != 1 || !slices.Equal(targetUIDs(t, result), got) {
+			t.Fatalf("target_uids = %v, server %s copies = %v", targetUIDs(t, result), archive, got)
 		}
-		if moved := num(undo(t, res, archive, "INBOX"), "moved"); moved != 1 {
+		if moved := num(undo(t, result, archive, "INBOX"), "moved"); moved != 1 {
 			t.Fatalf("undo moved %d, want 1", moved)
 		}
 		if got := onServer(t, "INBOX", messageID); len(got) != 1 {
@@ -277,17 +281,17 @@ func TestIntegrationUndo(t *testing.T) {
 
 // targetUIDs reads the `target_uids` a move, archive, or delete reported,
 // sorted to compare with a server SEARCH.
-func targetUIDs(t *testing.T, res map[string]any) []uint32 {
+func targetUIDs(t *testing.T, result map[string]any) []uint32 {
 	t.Helper()
-	raw, ok := res["target_uids"].([]any)
+	raw, ok := result["target_uids"].([]any)
 	if !ok {
-		t.Fatalf("result has no target_uids: %v", res)
+		t.Fatalf("result has no target_uids: %v", result)
 	}
 	uids := make([]uint32, 0, len(raw))
 	for _, item := range raw {
 		value, ok := item.(float64)
 		if !ok || value <= 0 {
-			t.Fatalf("bad target_uids entry %v in %v", item, res)
+			t.Fatalf("bad target_uids entry %v in %v", item, result)
 		}
 		uids = append(uids, uint32(value))
 	}

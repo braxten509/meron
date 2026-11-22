@@ -1,3 +1,7 @@
+// Checks desktop release manifests, asset selection and downloads.
+// HTTP fixtures supply valid and invalid responses to the updater.
+// File assertions verify the payload and cache behavior after failure.
+
 package main
 
 import (
@@ -371,12 +375,12 @@ func TestUpdaterCheckSkipsEnvironmentDisabledUpdates(t *testing.T) {
 	}
 }
 
-func waitForUpdateState(t *testing.T, u *updater, want string) {
+func waitForUpdateState(t *testing.T, updaterState *updater, want string) {
 	t.Helper()
 	for i := 0; i < 200; i++ {
-		u.mu.Lock()
-		state, message := u.state, u.errMessage
-		u.mu.Unlock()
+		updaterState.mu.Lock()
+		state, message := updaterState.state, updaterState.errMessage
+		updaterState.mu.Unlock()
 		if state == want {
 			return
 		}

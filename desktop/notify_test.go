@@ -1,3 +1,7 @@
+// Checks conversation identities used by desktop notifications.
+// Fixtures cover card keys, ordinary IMAP UIDs and Gmail thread identifiers.
+// The expected targets agree with the reader's folder normalization.
+
 package main
 
 import (
@@ -146,23 +150,23 @@ func TestFormatNativePluralRussian(t *testing.T) {
 }
 
 func TestCheckProtocolVersionLogsMissingAndMismatch(t *testing.T) {
-	var buf bytes.Buffer
-	app := &App{logger: log.New(&buf, "", 0)}
+	var buffer bytes.Buffer
+	app := &App{logger: log.New(&buffer, "", 0)}
 
 	app.checkProtocolVersion(nil)
-	if got := buf.String(); !strings.Contains(got, "missing protocol version") {
+	if got := buffer.String(); !strings.Contains(got, "missing protocol version") {
 		t.Fatalf("missing protocol log = %q", got)
 	}
 
-	buf.Reset()
+	buffer.Reset()
 	app.checkProtocolVersion(map[string]any{"protocol": float64(expectedProtocolVersion + 1)})
-	if got := buf.String(); !strings.Contains(got, "protocol mismatch") {
+	if got := buffer.String(); !strings.Contains(got, "protocol mismatch") {
 		t.Fatalf("mismatch protocol log = %q", got)
 	}
 
-	buf.Reset()
+	buffer.Reset()
 	app.checkProtocolVersion(map[string]any{"protocol": float64(expectedProtocolVersion)})
-	if got := buf.String(); got != "" {
+	if got := buffer.String(); got != "" {
 		t.Fatalf("matching protocol logged %q, want empty", got)
 	}
 }

@@ -1,3 +1,7 @@
+// Determines how the current desktop installation receives updates.
+// Environment flags and bundle paths identify the distribution channel.
+// The updater consults that channel before offering self-update.
+
 package main
 
 import (

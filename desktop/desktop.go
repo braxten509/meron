@@ -1,3 +1,7 @@
+// Integrates the Linux desktop entry and startup mail links.
+// The launcher is written only when its generated content changes.
+// Incoming mailto links wait until the frontend can consume them.
+
 package main
 
 import (

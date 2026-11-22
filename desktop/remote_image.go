@@ -1,3 +1,7 @@
+// Caches remote images requested by the desktop reader.
+// The command fetches the selected resource and validates the result.
+// The reader receives the reference used for later rendering.
+
 package main
 
 import (

@@ -1,5 +1,9 @@
 //go:build linux
 
+// Exercises Linux portal file chooser requests and replies.
+// Fixtures cover local file URIs, cancellation and dialog options.
+// Only usable paths from a successful response reach the desktop picker.
+
 package main
 
 import (

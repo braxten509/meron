@@ -20,8 +20,8 @@ import "context"
 // honour is a freshly mapped window, so unmapping and mapping again is the only
 // route back to the front. GTK reapplies the maximised state across the remap,
 // so a maximised window returns maximised.
-func showAndRaiseMainWindow(ctx context.Context) {
-	windowHide(ctx)
-	windowShow(ctx)
-	windowUnminimise(ctx)
+func showAndRaiseMainWindow(requestContext context.Context) {
+	windowHide(requestContext)
+	windowShow(requestContext)
+	windowUnminimise(requestContext)
 }

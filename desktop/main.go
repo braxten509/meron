@@ -1,3 +1,7 @@
+// Starts the Wails desktop application.
+// The entry point connects the frontend assets, application callbacks and window options.
+// Asset middleware applies the content policy used by the embedded browser.
+
 package main
 
 import (

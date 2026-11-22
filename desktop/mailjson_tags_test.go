@@ -1,3 +1,7 @@
+// Checks that thread cards retain their tags through the desktop mapping.
+// A core response supplies the tagged conversation fixture.
+// The assertion reads the same JSON field consumed by the thread list.
+
 package main
 
 import (

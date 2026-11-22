@@ -1,5 +1,9 @@
 //go:build linux && !bindings
 
+// Manages the integrated Linux titlebar and startup window state.
+// The GTK adapter coordinates showing, framing and maximizing the window.
+// Its callbacks keep frontend controls aligned with the native window state.
+
 package main
 
 /*

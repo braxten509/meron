@@ -40,8 +40,8 @@ func (c mcpConfig) port() int {
 }
 
 // Caller holds s.mu (or s.mu.RLock).
-func (s *mcpService) address() string {
-	return mcpAddressFor(s.config.port())
+func (service *mcpService) address() string {
+	return mcpAddressFor(service.config.port())
 }
 
 type mcpClient struct {
@@ -90,14 +90,14 @@ type mcpClientContextKey struct{}
 func (a *App) startMCP() {
 	s := &mcpService{app: a, path: filepath.Join(appConfigDir(), "mcp.json")}
 	a.mcp = s
-	data, err := os.ReadFile(s.path)
-	if err == nil {
-		if err = json.Unmarshal(data, &s.config); err != nil {
+	data, operationError := os.ReadFile(s.path)
+	if operationError == nil {
+		if operationError = json.Unmarshal(data, &s.config); operationError != nil {
 			s.config = mcpConfig{}
 			s.startError = "Cannot read MCP settings; access is disabled."
 			return
 		}
-	} else if !os.IsNotExist(err) {
+	} else if !os.IsNotExist(operationError) {
 		s.startError = "Cannot read MCP settings; access is disabled."
 		return
 	}
@@ -105,81 +105,81 @@ func (a *App) startMCP() {
 		s.startError = errorText(s.listen())
 	}
 }
-func errorText(err error) string {
-	if err != nil {
-		return err.Error()
+func errorText(operationError error) string {
+	if operationError != nil {
+		return operationError.Error()
 	}
 	return ""
 }
 
 // Only hashes are persisted. The credential is returned once to the settings UI.
-func (s *mcpService) save(config mcpConfig) error {
-	data, err := json.MarshalIndent(config, "", "  ")
-	if err != nil {
-		return err
+func (service *mcpService) save(config mcpConfig) error {
+	data, operationError := json.MarshalIndent(config, "", "  ")
+	if operationError != nil {
+		return operationError
 	}
-	if err := writeFileAtomic(s.path, data, 0o600, 0o700); err != nil {
-		return err
+	if operationError := writeFileAtomic(service.path, data, 0o600, 0o700); operationError != nil {
+		return operationError
 	}
-	s.config = config
-	s.cancelPending()
+	service.config = config
+	service.cancelPending()
 	return nil
 }
-func (s *mcpService) listen() error {
-	if s.server != nil {
+func (service *mcpService) listen() error {
+	if service.server != nil {
 		return nil
 	}
-	listener, err := net.Listen("tcp", s.address())
-	if err != nil {
-		return fmt.Errorf("Cannot start local MCP server: %w", err)
+	listener, operationError := net.Listen("tcp", service.address())
+	if operationError != nil {
+		return fmt.Errorf("Cannot start local MCP server: %w", operationError)
 	}
-	server := &http.Server{Handler: s.handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 2 * time.Minute, IdleTimeout: 30 * time.Second, MaxHeaderBytes: 8192}
-	s.server = server
-	s.listener = listener
+	server := &http.Server{Handler: service.handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 2 * time.Minute, IdleTimeout: 30 * time.Second, MaxHeaderBytes: 8192}
+	service.server = server
+	service.listener = listener
 	go func() {
-		if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			s.mu.Lock()
-			if s.server == server {
-				s.server = nil
-				s.listener = nil
-				s.startError = "Local MCP server stopped unexpectedly."
+		if operationError := server.Serve(listener); operationError != nil && !errors.Is(operationError, http.ErrServerClosed) {
+			service.mu.Lock()
+			if service.server == server {
+				service.server = nil
+				service.listener = nil
+				service.startError = "Local MCP server stopped unexpectedly."
 			}
-			s.mu.Unlock()
+			service.mu.Unlock()
 		}
 	}()
 	return nil
 }
-func (s *mcpService) close() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.cancelPending()
-	s.stop()
+func (service *mcpService) close() {
+	service.mu.Lock()
+	defer service.mu.Unlock()
+	service.cancelPending()
+	service.stop()
 }
 
 // stop shuts the listener down. Caller holds s.mu. http.Server.Close only
 // closes listeners its Serve goroutine has already registered, so the socket is
 // closed here too: otherwise a stop immediately followed by a start can fail to
 // rebind the port it just gave up.
-func (s *mcpService) stop() {
-	if s.server != nil {
-		_ = s.server.Close()
-		s.server = nil
+func (service *mcpService) stop() {
+	if service.server != nil {
+		_ = service.server.Close()
+		service.server = nil
 	}
-	if s.listener != nil {
-		_ = s.listener.Close()
-		s.listener = nil
+	if service.listener != nil {
+		_ = service.listener.Close()
+		service.listener = nil
 	}
 }
-func (s *mcpService) status() any {
-	clients := make([]mcpClient, 0, len(s.config.Clients))
-	for _, c := range s.config.Clients {
+func (service *mcpService) status() any {
+	clients := make([]mcpClient, 0, len(service.config.Clients))
+	for _, c := range service.config.Clients {
 		c.TokenHash = ""
 		clients = append(clients, c)
 	}
-	s.activityMu.Lock()
-	activity := append([]mcpActivity{}, s.activity...)
-	s.activityMu.Unlock()
-	return map[string]any{"enabled": s.config.Enabled, "running": s.server != nil, "port": s.config.port(), "url": "http://" + s.address() + "/mcp", "clients": clients, "error": s.startError, "activity": activity}
+	service.activityMu.Lock()
+	activity := append([]mcpActivity{}, service.activity...)
+	service.activityMu.Unlock()
+	return map[string]any{"enabled": service.config.Enabled, "running": service.server != nil, "port": service.config.port(), "url": "http://" + service.address() + "/mcp", "clients": clients, "error": service.startError, "activity": activity}
 }
 func (a *App) mcpSettings(command string, payload map[string]any) (any, error) {
 	s := a.mcp
@@ -207,17 +207,17 @@ func (a *App) mcpSettings(command string, payload map[string]any) (any, error) {
 			return nil, errors.New("enabled is required")
 		}
 		if enabled {
-			if err := s.listen(); err != nil {
-				s.startError = err.Error()
-				return nil, err
+			if operationError := s.listen(); operationError != nil {
+				s.startError = operationError.Error()
+				return nil, operationError
 			}
 		}
 		cfg.Enabled = enabled
-		if err := s.save(cfg); err != nil {
+		if operationError := s.save(cfg); operationError != nil {
 			if !s.config.Enabled {
 				s.stop()
 			}
-			return nil, err
+			return nil, operationError
 		}
 		if !enabled {
 			s.stop()
@@ -245,21 +245,21 @@ func (a *App) mcpSettings(command string, payload map[string]any) (any, error) {
 		if s.server != nil {
 			s.stop()
 			s.config = cfg
-			if err := s.listen(); err != nil {
+			if operationError := s.listen(); operationError != nil {
 				restore()
-				return nil, err
+				return nil, operationError
 			}
 		}
-		if err := s.save(cfg); err != nil {
+		if operationError := s.save(cfg); operationError != nil {
 			s.stop()
 			restore()
-			return nil, err
+			return nil, operationError
 		}
 		s.startError = ""
 	case "mcp.clientSave":
 		var c mcpClient
-		if err := decode(payload, &c); err != nil {
-			return nil, err
+		if operationError := decode(payload, &c); operationError != nil {
+			return nil, operationError
 		}
 		c.SendWithoutConfirmation = c.Send && c.SendWithoutConfirmation
 		c.DeleteWithoutConfirmation = c.Delete && c.DeleteWithoutConfirmation
@@ -267,9 +267,9 @@ func (a *App) mcpSettings(command string, payload map[string]any) (any, error) {
 		if c.Name == "" || len(c.Name) > 80 {
 			return nil, errors.New("Client name must contain 1–80 characters")
 		}
-		result, err := a.accountList()
-		if err != nil {
-			return nil, err
+		result, operationError := a.accountList()
+		if operationError != nil {
+			return nil, operationError
 		}
 		accounts := result.(map[string]any)["accounts"].([]Account)
 		allowed := map[string]bool{}
@@ -295,9 +295,9 @@ func (a *App) mcpSettings(command string, payload map[string]any) (any, error) {
 				return nil, errors.New("Revoke an unused client before adding another")
 			}
 			var hash string
-			var err error
-			if token, hash, err = mcpNewCredential(); err != nil {
-				return nil, err
+			var operationError error
+			if token, hash, operationError = mcpNewCredential(); operationError != nil {
+				return nil, operationError
 			}
 			c.ID = uuid.NewString()
 			c.TokenHash = hash
@@ -316,8 +316,8 @@ func (a *App) mcpSettings(command string, payload map[string]any) (any, error) {
 				return nil, errors.New("Client no longer exists")
 			}
 		}
-		if err := s.save(cfg); err != nil {
-			return nil, err
+		if operationError := s.save(cfg); operationError != nil {
+			return nil, operationError
 		}
 		return map[string]any{"status": s.status(), "token": token}, nil
 	// The plaintext credential exists only in the one response that issues it, so
@@ -334,13 +334,13 @@ func (a *App) mcpSettings(command string, payload map[string]any) (any, error) {
 		if found < 0 {
 			return nil, errors.New("Client no longer exists")
 		}
-		token, hash, err := mcpNewCredential()
-		if err != nil {
-			return nil, err
+		token, hash, operationError := mcpNewCredential()
+		if operationError != nil {
+			return nil, operationError
 		}
 		cfg.Clients[found].TokenHash = hash
-		if err := s.save(cfg); err != nil {
-			return nil, err
+		if operationError := s.save(cfg); operationError != nil {
+			return nil, operationError
 		}
 		return map[string]any{"status": s.status(), "token": token}, nil
 	case "mcp.clientRevoke":
@@ -352,8 +352,8 @@ func (a *App) mcpSettings(command string, payload map[string]any) (any, error) {
 			}
 		}
 		cfg.Clients = clients
-		if err := s.save(cfg); err != nil {
-			return nil, err
+		if operationError := s.save(cfg); operationError != nil {
+			return nil, operationError
 		}
 	default:
 		return nil, errors.New("Unknown MCP setting")
@@ -365,24 +365,24 @@ func (a *App) mcpSettings(command string, payload map[string]any) (any, error) {
 // token is returned to the settings UI once and never persisted.
 func mcpNewCredential() (string, string, error) {
 	secret := make([]byte, 32)
-	if _, err := rand.Read(secret); err != nil {
-		return "", "", err
+	if _, operationError := rand.Read(secret); operationError != nil {
+		return "", "", operationError
 	}
 	token := hex.EncodeToString(secret)
 	hash := sha256.Sum256([]byte(token))
 	return token, hex.EncodeToString(hash[:]), nil
 }
 
-func (s *mcpService) handler() http.Handler {
+func (service *mcpService) handler() http.Handler {
 	protocol := mcp.NewStreamableHTTPHandler(func(r *http.Request) *mcp.Server {
 		c := r.Context().Value(mcpClientContextKey{}).(mcpClient)
-		return s.tools(c)
+		return service.tools(c)
 	}, &mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true})
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
-		s.mu.RLock()
-		address := s.address()
-		s.mu.RUnlock()
+		service.mu.RLock()
+		address := service.address()
+		service.mu.RUnlock()
 		// Native clients do not need browser origins. Reject them rather than expose
 		// mail to a website, even one served from another loopback port.
 		if r.Host != address || len(r.Header.Values("Origin")) != 0 {
@@ -396,16 +396,16 @@ func (s *mcpService) handler() http.Handler {
 		token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 		hash := sha256.Sum256([]byte(token))
 		// Authenticate from current settings; tools recheck the grant at execution.
-		s.mu.RLock()
-		if !s.config.Enabled {
-			s.mu.RUnlock()
+		service.mu.RLock()
+		if !service.config.Enabled {
+			service.mu.RUnlock()
 			http.Error(w, "MCP disabled", http.StatusForbidden)
 			return
 		}
-		for _, c := range s.config.Clients {
-			expected, err := hex.DecodeString(c.TokenHash)
-			if err == nil && strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") && subtle.ConstantTimeCompare(expected, hash[:]) == 1 {
-				s.mu.RUnlock()
+		for _, c := range service.config.Clients {
+			expected, operationError := hex.DecodeString(c.TokenHash)
+			if operationError == nil && strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") && subtle.ConstantTimeCompare(expected, hash[:]) == 1 {
+				service.mu.RUnlock()
 				r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 				// Replies are always JSON here, so accept clients that omit the
 				// event-stream type the streamable transport otherwise demands.
@@ -414,19 +414,19 @@ func (s *mcpService) handler() http.Handler {
 				return
 			}
 		}
-		s.mu.RUnlock()
+		service.mu.RUnlock()
 		w.Header().Set("WWW-Authenticate", `Bearer realm="Meron"`)
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 	})
 }
-func (s *mcpService) record(c mcpClient, tool, account string, err error) {
-	s.activityMu.Lock()
-	defer s.activityMu.Unlock()
-	s.activity = append(s.activity, mcpActivity{Time: time.Now().UTC().Format(time.RFC3339), Client: c.Name, Tool: tool, Account: account, OK: err == nil})
-	if len(s.activity) > 100 {
-		s.activity = s.activity[len(s.activity)-100:]
+func (service *mcpService) record(c mcpClient, tool, account string, operationError error) {
+	service.activityMu.Lock()
+	defer service.activityMu.Unlock()
+	service.activity = append(service.activity, mcpActivity{Time: time.Now().UTC().Format(time.RFC3339), Client: c.Name, Tool: tool, Account: account, OK: operationError == nil})
+	if len(service.activity) > 100 {
+		service.activity = service.activity[len(service.activity)-100:]
 	}
-	s.notifyActivity()
+	service.notifyActivity()
 }
 func mcpAllows(c mcpClient, account string) bool {
 	if account == "" || account == "unified" {
@@ -445,10 +445,10 @@ func mcpAllows(c mcpClient, account string) bool {
 
 // Account IDs can be reused when an address is added again. Remove explicit
 // selections before deleting; dynamic all-account grants intentionally survive.
-func (s *mcpService) removeAccount(id string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	cfg := s.config
+func (service *mcpService) removeAccount(id string) error {
+	service.mu.Lock()
+	defer service.mu.Unlock()
+	cfg := service.config
 	cfg.Clients = append([]mcpClient{}, cfg.Clients...)
 	changed := false
 	for i, c := range cfg.Clients {
@@ -465,5 +465,5 @@ func (s *mcpService) removeAccount(id string) error {
 	if !changed {
 		return nil
 	}
-	return s.save(cfg)
+	return service.save(cfg)
 }

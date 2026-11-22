@@ -1,5 +1,9 @@
 //go:build darwin
 
+// Bridges desktop notifications to the macOS notification delegate.
+// Go starts and stops the listener and supplies the title and message target.
+// The native callback returns a clicked notification to the desktop app.
+
 package main
 
 /*

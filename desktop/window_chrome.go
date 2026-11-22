@@ -1,3 +1,7 @@
+// Connects frontend titlebar controls to the native window.
+// The host tracks whether an integrated titlebar is active.
+// Window commands route control requests through the platform implementation.
+
 package main
 
 import (

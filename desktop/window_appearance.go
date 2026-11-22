@@ -1,3 +1,7 @@
+// Applies the frontend's theme choice to the native window.
+// The host selects the window background and titlebar appearance.
+// Platform-specific adapters translate those colors into native calls.
+
 package main
 
 import (

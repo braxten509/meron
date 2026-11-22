@@ -1,3 +1,7 @@
+// Resolves the OAuth client settings used by desktop sign-in.
+// Google and Outlook each have their own configuration lookup.
+// The account setup UI can check whether the chosen provider is configured.
+
 package main
 
 import "meron/internal/obf"

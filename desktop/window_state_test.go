@@ -1,3 +1,7 @@
+// Checks restoration and persistence of desktop window state.
+// Fixtures cover new profiles, round trips and unusably small dimensions.
+// A stub window records the geometry applied by the host.
+
 package main
 
 import (

@@ -1,3 +1,7 @@
+// Installs a desktop update into a macOS application bundle.
+// The updater locates the candidate bundle and checks its signature and team.
+// Those checks protect the replacement step requested by the update UI.
+
 package main
 
 import (

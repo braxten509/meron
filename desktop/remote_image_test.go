@@ -1,3 +1,7 @@
+// Exercises remote image caching for the desktop reader.
+// The test server supplies both valid image data and invalid resources.
+// The assertions check the cache result returned by the host.
+
 package main
 
 import (

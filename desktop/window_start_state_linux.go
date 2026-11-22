@@ -19,11 +19,11 @@ import (
 // record its restore geometry. The realize hook conceals it with zero opacity.
 const startWindowHidden = false
 
-func revealStartupWindow(ctx context.Context) {
+func revealStartupWindow(requestContext context.Context) {
 	nativeRevealStartupWindow(false)
 }
 
-func forceRevealStartupWindow(ctx context.Context) {
+func forceRevealStartupWindow(requestContext context.Context) {
 	nativeRevealStartupWindow(true)
 }
 
@@ -49,11 +49,11 @@ var maximiseOnce sync.Once
 // DomReady fires on every completed navigation, not only the first one - an
 // error boundary reload, the OAuth flow, a dev server reload - so the maximise
 // is guarded: a window the user has since unmaximised has to stay that way.
-func maximiseOnDomReady(ctx context.Context, maximised bool) {
+func maximiseOnDomReady(requestContext context.Context, maximised bool) {
 	if !maximised {
 		return
 	}
 	maximiseOnce.Do(func() {
-		wailsRuntime.WindowMaximise(ctx)
+		wailsRuntime.WindowMaximise(requestContext)
 	})
 }

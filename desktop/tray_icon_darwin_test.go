@@ -1,5 +1,9 @@
 //go:build darwin
 
+// Checks macOS tray rendering for an unread mailbox.
+// The system template image and the unread badge take separate paths.
+// The fixture verifies the badge stays distinct from the recolorable image.
+
 package main
 
 import (

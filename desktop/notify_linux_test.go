@@ -1,5 +1,9 @@
 //go:build linux
 
+// Checks the options and activation targets of Linux notifications.
+// Test signals cover clicks, identifier reuse and deliveries without targets.
+// The assertions keep a click associated with the intended conversation.
+
 package main
 
 import (

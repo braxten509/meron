@@ -1,5 +1,9 @@
 //go:build linux
 
+// Connects the Linux file picker to desktop portals and native dialogs.
+// The selection request carries the starting directory and file options.
+// The portal response is decoded into local paths for the composer.
+
 package main
 
 import (
@@ -38,19 +42,19 @@ type portalFilter struct {
 }
 
 func openFilePicker(
-	ctx context.Context,
+	requestContext context.Context,
 	title string,
-	defaultDir string,
+	defaultDirectory string,
 	imagesOnly bool,
 	multiple bool,
 ) ([]string, bool, error) {
 	if !useFileChooserPortal() {
-		paths, err := openWailsFilePicker(ctx, title, defaultDir, imagesOnly, multiple)
-		return paths, false, err
+		paths, operationError := openWailsFilePicker(requestContext, title, defaultDirectory, imagesOnly, multiple)
+		return paths, false, operationError
 	}
 
-	paths, err := portalFileChooser(ctx, portalFileChooserOpen, title, portalOpenFileOptions(imagesOnly, multiple))
-	return paths, true, err
+	paths, operationError := portalFileChooser(requestContext, portalFileChooserOpen, title, portalOpenFileOptions(imagesOnly, multiple))
+	return paths, true, operationError
 }
 
 // useFileChooserPortal reports whether file dialogs must go through the
@@ -63,50 +67,50 @@ func useFileChooserPortal() bool {
 
 // saveFileDialog is wailsRuntime.SaveFileDialog, routed through the portal
 // when sandboxed. It returns "" when the user cancels.
-func saveFileDialog(ctx context.Context, options wailsRuntime.SaveDialogOptions) (string, error) {
+func saveFileDialog(requestContext context.Context, options wailsRuntime.SaveDialogOptions) (string, error) {
 	if !useFileChooserPortal() {
-		return wailsRuntime.SaveFileDialog(ctx, options)
+		return wailsRuntime.SaveFileDialog(requestContext, options)
 	}
 	portalOptions := portalBaseOptions()
 	if options.DefaultFilename != "" {
 		portalOptions["current_name"] = dbus.MakeVariant(options.DefaultFilename)
 	}
 	addPortalFilters(portalOptions, options.Filters)
-	return firstPortalPath(portalFileChooser(ctx, portalFileChooserSave, options.Title, portalOptions))
+	return firstPortalPath(portalFileChooser(requestContext, portalFileChooserSave, options.Title, portalOptions))
 }
 
 // openFileDialog is wailsRuntime.OpenFileDialog, routed through the portal
 // when sandboxed. It returns "" when the user cancels.
-func openFileDialog(ctx context.Context, options wailsRuntime.OpenDialogOptions) (string, error) {
+func openFileDialog(requestContext context.Context, options wailsRuntime.OpenDialogOptions) (string, error) {
 	if !useFileChooserPortal() {
-		return wailsRuntime.OpenFileDialog(ctx, options)
+		return wailsRuntime.OpenFileDialog(requestContext, options)
 	}
 	portalOptions := portalBaseOptions()
 	addPortalFilters(portalOptions, options.Filters)
-	return firstPortalPath(portalFileChooser(ctx, portalFileChooserOpen, options.Title, portalOptions))
+	return firstPortalPath(portalFileChooser(requestContext, portalFileChooserOpen, options.Title, portalOptions))
 }
 
-func firstPortalPath(paths []string, err error) (string, error) {
-	if err != nil || len(paths) == 0 {
-		return "", err
+func firstPortalPath(paths []string, operationError error) (string, error) {
+	if operationError != nil || len(paths) == 0 {
+		return "", operationError
 	}
 	return paths[0], nil
 }
 
 // portalFileChooser runs one FileChooser portal request and returns the
 // chosen local paths, or none when the user cancels.
-func portalFileChooser(ctx context.Context, method, title string, options map[string]dbus.Variant) ([]string, error) {
-	uris, err := portalFileChooserURIs(ctx, method, title, options)
-	if err != nil {
-		return nil, err
+func portalFileChooser(requestContext context.Context, method, title string, options map[string]dbus.Variant) ([]string, error) {
+	uris, operationError := portalFileChooserURIs(requestContext, method, title, options)
+	if operationError != nil {
+		return nil, operationError
 	}
 	return portalFilePaths(uris)
 }
 
-func portalFileChooserURIs(ctx context.Context, method, title string, options map[string]dbus.Variant) ([]string, error) {
-	conn, err := dbus.ConnectSessionBus()
-	if err != nil {
-		return nil, fmt.Errorf("connect to file chooser portal: %w", err)
+func portalFileChooserURIs(requestContext context.Context, method, title string, options map[string]dbus.Variant) ([]string, error) {
+	conn, operationError := dbus.ConnectSessionBus()
+	if operationError != nil {
+		return nil, fmt.Errorf("connect to file chooser portal: %w", operationError)
 	}
 	defer conn.Close()
 
@@ -119,14 +123,14 @@ func portalFileChooserURIs(ctx context.Context, method, title string, options ma
 		dbus.WithMatchMember("Response"),
 		dbus.WithMatchPathNamespace(portalRequestNamespace),
 	}
-	if err := conn.AddMatchSignal(matchOptions...); err != nil {
-		return nil, fmt.Errorf("listen for file chooser response: %w", err)
+	if operationError := conn.AddMatchSignal(matchOptions...); operationError != nil {
+		return nil, fmt.Errorf("listen for file chooser response: %w", operationError)
 	}
 	defer conn.RemoveMatchSignal(matchOptions...)
 
 	var handle dbus.ObjectPath
 	call := conn.Object(portalDesktopName, portalDesktopPath).CallWithContext(
-		ctx,
+		requestContext,
 		method,
 		0,
 		"",
@@ -136,15 +140,15 @@ func portalFileChooserURIs(ctx context.Context, method, title string, options ma
 	if call.Err != nil {
 		return nil, fmt.Errorf("open file chooser portal: %w", call.Err)
 	}
-	if err := call.Store(&handle); err != nil {
-		return nil, fmt.Errorf("read file chooser handle: %w", err)
+	if operationError := call.Store(&handle); operationError != nil {
+		return nil, fmt.Errorf("read file chooser handle: %w", operationError)
 	}
 
 	for {
 		select {
-		case <-ctx.Done():
+		case <-requestContext.Done():
 			conn.Object(portalDesktopName, handle).Go(portalRequestCloseMethod, 0, nil)
-			return nil, ctx.Err()
+			return nil, requestContext.Err()
 		case signal, ok := <-signals:
 			if !ok {
 				return nil, errors.New("file chooser portal closed unexpectedly")
@@ -243,9 +247,9 @@ func portalResponseURIs(body []any) ([]string, error) {
 func portalFilePaths(uris []string) ([]string, error) {
 	paths := make([]string, 0, len(uris))
 	for _, raw := range uris {
-		uri, err := url.Parse(raw)
-		if err != nil {
-			return nil, fmt.Errorf("parse selected file URI: %w", err)
+		uri, operationError := url.Parse(raw)
+		if operationError != nil {
+			return nil, fmt.Errorf("parse selected file URI: %w", operationError)
 		}
 		if uri.Scheme != "file" || (uri.Host != "" && uri.Host != "localhost") {
 			return nil, fmt.Errorf("unsupported selected file URI: %q", raw)

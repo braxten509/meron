@@ -1,3 +1,7 @@
+// Translates core mail events into desktop notifications.
+// The frontend supplies native labels and the core supplies conversation identities.
+// Platform adapters display or withdraw the resulting notification.
+
 package main
 
 import (

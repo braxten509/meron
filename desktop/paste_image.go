@@ -1,3 +1,7 @@
+// Reads and writes desktop clipboard images for the composer and reader.
+// Clipboard type detection selects a native image representation.
+// Media path helpers resolve stored attachments for copy and open actions.
+
 package main
 
 import (

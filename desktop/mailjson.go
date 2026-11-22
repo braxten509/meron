@@ -1,3 +1,7 @@
+// Maps core mailbox responses into the desktop UI's JSON shape.
+// Folder helpers identify archive roles and decode returned lists.
+// Thread helpers preserve conversation identities and sender details.
+
 package main
 
 import (
@@ -240,8 +244,8 @@ func formatParsedImapThreadIDInFolder(ids ImapThreadIDs, folder string) string {
 	return formatImapThreadID(ids.Account, folder, ids.ThreadKey)
 }
 
-func withMovedThreadLocation(res any, ids ImapThreadIDs, folderField string) map[string]any {
-	out, _ := res.(map[string]any)
+func withMovedThreadLocation(result any, ids ImapThreadIDs, folderField string) map[string]any {
+	out, _ := result.(map[string]any)
 	if out == nil {
 		out = map[string]any{"ok": true}
 	}

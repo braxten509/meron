@@ -1,5 +1,9 @@
 //go:build !linux
 
+// Adapts the desktop file picker to platforms outside Linux.
+// The shared picker calls these open and save entry points.
+// Wails displays the platform dialog and returns the selected paths.
+
 package main
 
 import (
@@ -9,20 +13,20 @@ import (
 )
 
 func openFilePicker(
-	ctx context.Context,
+	requestContext context.Context,
 	title string,
-	defaultDir string,
+	defaultDirectory string,
 	imagesOnly bool,
 	multiple bool,
 ) ([]string, bool, error) {
-	paths, err := openWailsFilePicker(ctx, title, defaultDir, imagesOnly, multiple)
+	paths, err := openWailsFilePicker(requestContext, title, defaultDirectory, imagesOnly, multiple)
 	return paths, false, err
 }
 
-func saveFileDialog(ctx context.Context, options wailsRuntime.SaveDialogOptions) (string, error) {
-	return wailsRuntime.SaveFileDialog(ctx, options)
+func saveFileDialog(requestContext context.Context, options wailsRuntime.SaveDialogOptions) (string, error) {
+	return wailsRuntime.SaveFileDialog(requestContext, options)
 }
 
-func openFileDialog(ctx context.Context, options wailsRuntime.OpenDialogOptions) (string, error) {
-	return wailsRuntime.OpenFileDialog(ctx, options)
+func openFileDialog(requestContext context.Context, options wailsRuntime.OpenDialogOptions) (string, error) {
+	return wailsRuntime.OpenFileDialog(requestContext, options)
 }

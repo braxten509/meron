@@ -1,3 +1,7 @@
+// Finds server settings for the desktop account setup form.
+// Provider hints, autoconfiguration XML and DNS records supply candidates.
+// Username expansion and socket defaults turn those candidates into settings.
+
 package main
 
 import (
@@ -92,28 +96,28 @@ type clientConfig struct {
 // records (RFC 6186), and finally common-prefix guessing. The first method that
 // yields a usable config wins.
 func (a *App) autodiscover(payload map[string]any) (any, error) {
-	var req struct {
+	var request struct {
 		Email string `json:"email"`
 	}
-	if err := decode(payload, &req); err != nil {
+	if err := decode(payload, &request); err != nil {
 		return nil, err
 	}
-	email := strings.TrimSpace(req.Email)
+	email := strings.TrimSpace(request.Email)
 	at := strings.LastIndex(email, "@")
 	if at < 0 || at == len(email)-1 {
 		return nil, errors.New("invalid email")
 	}
 	domain := strings.ToLower(email[at+1:])
 
-	var cfg *DiscoveredConfig
+	var configuration *DiscoveredConfig
 	if c := a.discoverAutoconfig(email, domain); c != nil {
-		cfg = c
-		a.logf("autodiscover: %s via %s (imap=%s:%d smtp=%s:%d)", domain, cfg.Source, cfg.IMAPHost, cfg.IMAPPort, cfg.SMTPHost, cfg.SMTPPort)
+		configuration = c
+		a.logf("autodiscover: %s via %s (imap=%s:%d smtp=%s:%d)", domain, configuration.Source, configuration.IMAPHost, configuration.IMAPPort, configuration.SMTPHost, configuration.SMTPPort)
 	} else if c := a.discoverSRV(email, domain); c != nil {
-		cfg = c
-		a.logf("autodiscover: %s via srv (imap=%s:%d smtp=%s:%d)", domain, cfg.IMAPHost, cfg.IMAPPort, cfg.SMTPHost, cfg.SMTPPort)
+		configuration = c
+		a.logf("autodiscover: %s via srv (imap=%s:%d smtp=%s:%d)", domain, configuration.IMAPHost, configuration.IMAPPort, configuration.SMTPHost, configuration.SMTPPort)
 	} else {
-		cfg = &DiscoveredConfig{
+		configuration = &DiscoveredConfig{
 			IMAPHost: "imap." + domain,
 			IMAPPort: 993,
 			SMTPHost: "smtp." + domain,
@@ -123,8 +127,8 @@ func (a *App) autodiscover(payload map[string]any) (any, error) {
 		}
 		a.logf("autodiscover: %s falling back to guess", domain)
 	}
-	cfg.AppPasswordHint = appPasswordHint(strings.ToLower(cfg.IMAPHost), domain)
-	return cfg, nil
+	configuration.AppPasswordHint = appPasswordHint(strings.ToLower(configuration.IMAPHost), domain)
+	return configuration, nil
 }
 
 // discoverAutoconfig fetches and parses a Mozilla autoconfig document. It probes
@@ -140,10 +144,10 @@ func (a *App) discoverAutoconfig(email, domain string) *DiscoveredConfig {
 		{fmt.Sprintf("https://autoconfig.thunderbird.net/v1.1/%s", domain), "thunderbird"},
 	}
 	for _, u := range urls {
-		cfg := fetchAutoconfig(u.url, email)
-		if cfg != nil {
-			cfg.Source = u.source
-			return cfg
+		configuration := fetchAutoconfig(u.url, email)
+		if configuration != nil {
+			configuration.Source = u.source
+			return configuration
 		}
 	}
 	return nil
@@ -151,12 +155,12 @@ func (a *App) discoverAutoconfig(email, domain string) *DiscoveredConfig {
 
 func fetchAutoconfig(rawURL, email string) *DiscoveredConfig {
 	client := &http.Client{Timeout: 6 * time.Second}
-	req, err := http.NewRequest(http.MethodGet, rawURL, nil)
+	request, err := http.NewRequest(http.MethodGet, rawURL, nil)
 	if err != nil {
 		return nil
 	}
-	req.Header.Set("User-Agent", "Meron-Mail-Autoconfig")
-	res, err := client.Do(req)
+	request.Header.Set("User-Agent", "Meron-Mail-Autoconfig")
+	res, err := client.Do(request)
 	if err != nil {
 		return nil
 	}
@@ -173,45 +177,45 @@ func fetchAutoconfig(rawURL, email string) *DiscoveredConfig {
 		return nil
 	}
 
-	cfg := &DiscoveredConfig{Username: email, Provider: doc.EmailProvider.DisplayName}
+	configuration := &DiscoveredConfig{Username: email, Provider: doc.EmailProvider.DisplayName}
 	for _, in := range doc.EmailProvider.Incoming {
 		if strings.EqualFold(in.Type, "imap") && in.Hostname != "" {
-			cfg.IMAPHost = in.Hostname
-			cfg.IMAPPort = portFor(in.Port, in.SocketType, true)
+			configuration.IMAPHost = in.Hostname
+			configuration.IMAPPort = portFor(in.Port, in.SocketType, true)
 			if u := expandUsername(in.Username, email); u != "" {
-				cfg.Username = u
+				configuration.Username = u
 			}
 			break
 		}
 	}
 	for _, out := range doc.EmailProvider.Outgoing {
 		if strings.EqualFold(out.Type, "smtp") && out.Hostname != "" {
-			cfg.SMTPHost = out.Hostname
-			cfg.SMTPPort = portFor(out.Port, out.SocketType, false)
+			configuration.SMTPHost = out.Hostname
+			configuration.SMTPPort = portFor(out.Port, out.SocketType, false)
 			break
 		}
 	}
-	if cfg.IMAPHost == "" || cfg.SMTPHost == "" {
+	if configuration.IMAPHost == "" || configuration.SMTPHost == "" {
 		return nil
 	}
-	return cfg
+	return configuration
 }
 
 // discoverSRV implements RFC 6186 service discovery. _imaps/_submissions point
 // to implicit-TLS endpoints; _imap/_submission to STARTTLS ones. A target of "."
 // means the service is explicitly not offered.
 func (a *App) discoverSRV(email, domain string) *DiscoveredConfig {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	requestContext, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	resolver := net.DefaultResolver
 
-	imapHost, imapPort := lookupSRV(ctx, resolver, "imaps", domain)
+	imapHost, imapPort := lookupSRV(requestContext, resolver, "imaps", domain)
 	if imapHost == "" {
-		imapHost, imapPort = lookupSRV(ctx, resolver, "imap", domain)
+		imapHost, imapPort = lookupSRV(requestContext, resolver, "imap", domain)
 	}
-	smtpHost, smtpPort := lookupSRV(ctx, resolver, "submissions", domain)
+	smtpHost, smtpPort := lookupSRV(requestContext, resolver, "submissions", domain)
 	if smtpHost == "" {
-		smtpHost, smtpPort = lookupSRV(ctx, resolver, "submission", domain)
+		smtpHost, smtpPort = lookupSRV(requestContext, resolver, "submission", domain)
 	}
 	if imapHost == "" || smtpHost == "" {
 		return nil
@@ -226,8 +230,8 @@ func (a *App) discoverSRV(email, domain string) *DiscoveredConfig {
 	}
 }
 
-func lookupSRV(ctx context.Context, r *net.Resolver, service, domain string) (string, uint16) {
-	_, addrs, err := r.LookupSRV(ctx, service, "tcp", domain)
+func lookupSRV(requestContext context.Context, r *net.Resolver, service, domain string) (string, uint16) {
+	_, addrs, err := r.LookupSRV(requestContext, service, "tcp", domain)
 	if err != nil || len(addrs) == 0 {
 		return "", 0
 	}

@@ -37,9 +37,9 @@ func (t mcpTestTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 	r.Header.Set("Authorization", "Bearer test-secret")
 	return t.base.RoundTrip(r)
 }
-func connectTestMCP(t *testing.T, s *mcpService) *mcp.ClientSession {
+func connectTestMCP(t *testing.T, service *mcpService) *mcp.ClientSession {
 	t.Helper()
-	host := httptest.NewServer(s.handler())
+	host := httptest.NewServer(service.handler())
 	t.Cleanup(host.Close)
 	client := mcp.NewClient(&mcp.Implementation{Name: "test", Version: "1"}, nil)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -211,11 +211,11 @@ func TestMCPAllAccountsGrantPersistsWithoutAccounts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var cfg mcpConfig
-	if err := json.Unmarshal(data, &cfg); err != nil {
+	var configuration mcpConfig
+	if err := json.Unmarshal(data, &configuration); err != nil {
 		t.Fatal(err)
 	}
-	if len(cfg.Clients) != 2 || !cfg.Clients[1].AllAccounts {
+	if len(configuration.Clients) != 2 || !configuration.Clients[1].AllAccounts {
 		t.Fatalf("%s", data)
 	}
 	if err := s.removeAccount("future-mail"); err != nil {

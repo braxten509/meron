@@ -1,5 +1,9 @@
 //go:build linux
 
+// Builds and selects native Linux tray icons.
+// The renderer supplies the current style and unread state.
+// The adapter publishes named icons or falls back to an in-memory picture.
+
 package main
 
 import (
@@ -70,13 +74,13 @@ func applyPlatformTrayIcon(unread, monochrome bool) error {
 			icon = trayFallbackMonoUnreadPNG
 		}
 	}
-	dir, err := writeTrayIcons()
+	directory, err := writeTrayIcons()
 	if err != nil {
 		// Replace all three properties, including stale names and pixmaps.
 		traySetIconWithName(icon, "", "")
 		return err
 	}
-	traySetIconWithName(icon, trayIconNameFor(unread, monochrome), dir)
+	traySetIconWithName(icon, trayIconNameFor(unread, monochrome), directory)
 	return nil
 }
 
@@ -101,15 +105,15 @@ func writeTrayIcons() (string, error) {
 	defer trayIconFiles.Unlock()
 	root := trayIconDir()
 	// Hash only once per process; the embedded assets cannot change at runtime.
-	dir := filepath.Join(root, trayIconFilesVersion)
-	if trayIconFiles.dir == dir && trayIconFilesExist(dir) {
-		return dir, nil
+	directory := filepath.Join(root, trayIconFilesVersion)
+	if trayIconFiles.dir == directory && trayIconFilesExist(directory) {
+		return directory, nil
 	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(directory, 0o755); err != nil {
 		return "", err
 	}
 	for _, file := range trayIconAssets {
-		path := filepath.Join(dir, file.name)
+		path := filepath.Join(directory, file.name)
 		if current, err := os.ReadFile(path); err == nil && bytes.Equal(current, file.data) {
 			continue
 		}
@@ -117,14 +121,14 @@ func writeTrayIcons() (string, error) {
 			return "", err
 		}
 	}
-	trayIconFiles.dir = dir
-	pruneTrayIconDirectories(root, dir)
-	return dir, nil
+	trayIconFiles.dir = directory
+	pruneTrayIconDirectories(root, directory)
+	return directory, nil
 }
 
-func trayIconFilesExist(dir string) bool {
+func trayIconFilesExist(directory string) bool {
 	for _, file := range trayIconAssets {
-		if info, err := os.Stat(filepath.Join(dir, file.name)); err != nil || !info.Mode().IsRegular() {
+		if info, err := os.Stat(filepath.Join(directory, file.name)); err != nil || !info.Mode().IsRegular() {
 			return false
 		}
 	}

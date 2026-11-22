@@ -1,5 +1,9 @@
 //go:build !linux
 
+// Checks window activation on platforms using the default raise behavior.
+// Recorded window calls distinguish visible windows from minimized ones.
+// An already restored window must avoid an extra unminimize call.
+
 package main
 
 import (

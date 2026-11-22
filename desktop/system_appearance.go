@@ -1,3 +1,7 @@
+// Tracks the system color scheme for the desktop app.
+// Platform listeners report light or dark appearance through this interface.
+// The frontend reads the current value when following the system theme.
+
 package main
 
 import (

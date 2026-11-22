@@ -1,5 +1,9 @@
 //go:build integration
 
+// Starts the isolated mail server used by desktop integration tests.
+// The harness selects available ports and configures the container.
+// Test helpers run commands against that fixture for the duration of each suite.
+
 package main
 
 // Test harness that runs a real Postfix/Dovecot mail server via Docker and the Rust
@@ -251,8 +255,8 @@ func (l *eventLog) match(predicate func(sidecarEvent) bool) []sidecarEvent {
 // count returns how many recorded events satisfy predicate. Tests compare it
 // across an action rather than asserting on an absolute number: watchers emit a
 // catch-up event when they start, so only the delta is meaningful.
-func (l *eventLog) count(predicate func(sidecarEvent) bool) int {
-	return len(l.match(predicate))
+func (events *eventLog) count(predicate func(sidecarEvent) bool) int {
+	return len(events.match(predicate))
 }
 
 // connectAccount registers an account on the sidecar against the local mail server.
@@ -341,23 +345,23 @@ func startIMAPProxy(t *testing.T, targetPort int) *imapProxy {
 	return proxy
 }
 
-func (p *imapProxy) port() int {
-	return p.listener.Addr().(*net.TCPAddr).Port
+func (proxy *imapProxy) port() int {
+	return proxy.listener.Addr().(*net.TCPAddr).Port
 }
 
-func (p *imapProxy) track(conns ...net.Conn) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.conns = append(p.conns, conns...)
+func (proxy *imapProxy) track(conns ...net.Conn) {
+	proxy.mu.Lock()
+	defer proxy.mu.Unlock()
+	proxy.conns = append(proxy.conns, conns...)
 }
 
 // sever closes every connection opened so far. Connections made afterwards are
 // proxied normally, so a client that reconnects recovers.
-func (p *imapProxy) sever() {
-	p.mu.Lock()
-	conns := p.conns
-	p.conns = nil
-	p.mu.Unlock()
+func (proxy *imapProxy) sever() {
+	proxy.mu.Lock()
+	conns := proxy.conns
+	proxy.conns = nil
+	proxy.mu.Unlock()
 	for _, conn := range conns {
 		// RST rather than FIN: a half-closed socket still accepts writes, so
 		// the client would only notice several commands in. A reset surfaces

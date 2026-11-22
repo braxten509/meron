@@ -1,5 +1,9 @@
 //go:build darwin
 
+// Prints an open message using the native macOS print dialog.
+// The desktop reader supplies the rendered message HTML.
+// The platform adapter returns the print result to the reader command.
+
 package main
 
 /*

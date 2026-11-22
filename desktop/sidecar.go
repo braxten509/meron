@@ -1,3 +1,7 @@
+// Manages the Rust core process used by the desktop host.
+// Startup tracks database migration and readiness before serving requests.
+// The protocol transport routes core replies and events back to the app.
+
 package main
 
 import (
@@ -51,23 +55,23 @@ func NewSidecar(path string, stderr io.Writer) *Sidecar {
 	return &Sidecar{path: path, stderr: stderr, pending: map[uint64]chan sidecarResponse{}}
 }
 
-func (s *Sidecar) Started() bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.started
+func (sidecar *Sidecar) Started() bool {
+	sidecar.mu.Lock()
+	defer sidecar.mu.Unlock()
+	return sidecar.started
 }
 
-func (s *Sidecar) Start(ctx context.Context) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.started {
+func (sidecar *Sidecar) Start(requestContext context.Context) error {
+	sidecar.mu.Lock()
+	defer sidecar.mu.Unlock()
+	if sidecar.started {
 		return nil
 	}
 	runCtx, cancel := context.WithCancel(context.Background())
-	cmd := exec.CommandContext(runCtx, s.path)
+	cmd := exec.CommandContext(runCtx, sidecar.path)
 	cmd.Env = sidecarEnv()
 	hideSidecarConsole(cmd)
-	cmd.Stderr = s.stderr
+	cmd.Stderr = sidecar.stderr
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		cancel()
@@ -82,52 +86,52 @@ func (s *Sidecar) Start(ctx context.Context) error {
 		cancel()
 		return err
 	}
-	s.cmd = cmd
-	s.stdin = stdin
-	s.cancel = cancel
-	s.started = true
+	sidecar.cmd = cmd
+	sidecar.stdin = stdin
+	sidecar.cancel = cancel
+	sidecar.started = true
 	coreUp := make(chan struct{})
-	s.coreUp = coreUp
-	s.releaseCore = sync.OnceFunc(func() { close(coreUp) })
-	go s.readLoop(ctx, stdout)
+	sidecar.coreUp = coreUp
+	sidecar.releaseCore = sync.OnceFunc(func() { close(coreUp) })
+	go sidecar.readLoop(requestContext, stdout)
 	go func() {
 		_ = cmd.Wait()
-		s.mu.Lock()
-		s.started = false
-		for id, ch := range s.pending {
-			delete(s.pending, id)
+		sidecar.mu.Lock()
+		sidecar.started = false
+		for id, ch := range sidecar.pending {
+			delete(sidecar.pending, id)
 			ch <- sidecarResponse{Error: "sidecar exited"}
 		}
-		s.mu.Unlock()
-		s.finishStarting(ctx)
+		sidecar.mu.Unlock()
+		sidecar.finishStarting(requestContext)
 	}()
 	return nil
 }
 
 // Migrating reports whether the core is upgrading its store right now.
-func (s *Sidecar) Migrating() bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.migrating
+func (sidecar *Sidecar) Migrating() bool {
+	sidecar.mu.Lock()
+	defer sidecar.mu.Unlock()
+	return sidecar.migrating
 }
 
 // finishStarting lets waiting calls through: the core is ready, has reported it
 // cannot start (and now answers every call with the reason), or has exited.
-func (s *Sidecar) finishStarting(ctx context.Context) {
-	s.mu.Lock()
-	release := s.releaseCore
-	s.mu.Unlock()
+func (sidecar *Sidecar) finishStarting(requestContext context.Context) {
+	sidecar.mu.Lock()
+	release := sidecar.releaseCore
+	sidecar.mu.Unlock()
 	if release != nil {
 		release()
 	}
 	// After the release, so awaitCore can trust a cleared flag to mean coreUp is
 	// closed.
-	s.mu.Lock()
-	wasMigrating := s.migrating
-	s.migrating = false
-	s.mu.Unlock()
-	if wasMigrating && ctx != nil {
-		wailsRuntime.EventsEmit(ctx, "core.migrationDone")
+	sidecar.mu.Lock()
+	wasMigrating := sidecar.migrating
+	sidecar.migrating = false
+	sidecar.mu.Unlock()
+	if wasMigrating && requestContext != nil {
+		wailsRuntime.EventsEmit(requestContext, "core.migrationDone")
 	}
 }
 
@@ -136,10 +140,10 @@ func (s *Sidecar) finishStarting(ctx context.Context) {
 // upgrade is waited out however long it takes, because the UI says what is
 // happening. Any other stall (a keychain that never answers) still fails after
 // the call's own timeout, with the same error a late response would give.
-func (s *Sidecar) awaitCore(method string, timeout time.Duration) error {
-	s.mu.Lock()
-	coreUp := s.coreUp
-	s.mu.Unlock()
+func (sidecar *Sidecar) awaitCore(method string, timeout time.Duration) error {
+	sidecar.mu.Lock()
+	coreUp := sidecar.coreUp
+	sidecar.mu.Unlock()
 	if coreUp == nil {
 		return nil
 	}
@@ -151,7 +155,7 @@ func (s *Sidecar) awaitCore(method string, timeout time.Duration) error {
 		case <-coreUp:
 			return nil
 		case <-ticker.C:
-			if s.Migrating() {
+			if sidecar.Migrating() {
 				continue
 			}
 			select {
@@ -185,12 +189,12 @@ func sidecarEnv() []string {
 	return env
 }
 
-func (s *Sidecar) Close() {
-	s.mu.Lock()
-	cancel := s.cancel
-	cmd := s.cmd
-	s.started = false
-	s.mu.Unlock()
+func (sidecar *Sidecar) Close() {
+	sidecar.mu.Lock()
+	cancel := sidecar.cancel
+	cmd := sidecar.cmd
+	sidecar.started = false
+	sidecar.mu.Unlock()
 	if cancel != nil {
 		cancel()
 	}
@@ -199,31 +203,31 @@ func (s *Sidecar) Close() {
 	}
 }
 
-func (s *Sidecar) Call(method string, params any) (any, error) {
+func (sidecar *Sidecar) Call(method string, params any) (any, error) {
 	timeout := sidecarCallTimeout(method)
-	if err := s.awaitCore(method, timeout); err != nil {
+	if err := sidecar.awaitCore(method, timeout); err != nil {
 		return nil, err
 	}
-	s.mu.Lock()
-	if !s.started {
-		s.mu.Unlock()
+	sidecar.mu.Lock()
+	if !sidecar.started {
+		sidecar.mu.Unlock()
 		return nil, errors.New("sidecar not started")
 	}
-	s.nextID++
-	id := s.nextID
+	sidecar.nextID++
+	id := sidecar.nextID
 	ch := make(chan sidecarResponse, 1)
-	s.pending[id] = ch
+	sidecar.pending[id] = ch
 	req := map[string]any{"id": id, "method": method, "params": params}
 	line, err := json.Marshal(req)
 	if err != nil {
-		delete(s.pending, id)
-		s.mu.Unlock()
+		delete(sidecar.pending, id)
+		sidecar.mu.Unlock()
 		return nil, err
 	}
 	line = append(line, '\n')
 	start := time.Now()
-	_, err = s.stdin.Write(line)
-	s.mu.Unlock()
+	_, err = sidecar.stdin.Write(line)
+	sidecar.mu.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -234,14 +238,14 @@ func (s *Sidecar) Call(method string, params any) (any, error) {
 		}
 		return res.Result, nil
 	case <-time.After(timeout):
-		s.mu.Lock()
-		delete(s.pending, id)
-		s.mu.Unlock()
+		sidecar.mu.Lock()
+		delete(sidecar.pending, id)
+		sidecar.mu.Unlock()
 		return nil, fmt.Errorf("sidecar %s timeout after %s", method, time.Since(start).Round(time.Millisecond))
 	}
 }
 
-func (s *Sidecar) readLoop(ctx context.Context, stdout io.Reader) {
+func (sidecar *Sidecar) readLoop(requestContext context.Context, stdout io.Reader) {
 	scanner := bufio.NewScanner(stdout)
 	scanner.Buffer(make([]byte, 0, 64*1024), 16*1024*1024)
 	for scanner.Scan() {
@@ -252,17 +256,17 @@ func (s *Sidecar) readLoop(ctx context.Context, stdout io.Reader) {
 		if eventName, ok := object["event"].(string); ok {
 			switch eventName {
 			case "core.migrating":
-				s.mu.Lock()
-				s.migrating = true
-				s.mu.Unlock()
+				sidecar.mu.Lock()
+				sidecar.migrating = true
+				sidecar.mu.Unlock()
 			case "ready", "core.fatal":
-				s.finishStarting(ctx)
+				sidecar.finishStarting(requestContext)
 			}
-			if ctx != nil {
-				wailsRuntime.EventsEmit(ctx, eventName, object["detail"])
+			if requestContext != nil {
+				wailsRuntime.EventsEmit(requestContext, eventName, object["detail"])
 			}
-			if s.onEvent != nil {
-				s.onEvent(eventName, object["detail"])
+			if sidecar.onEvent != nil {
+				sidecar.onEvent(eventName, object["detail"])
 			}
 			continue
 		}
@@ -271,10 +275,10 @@ func (s *Sidecar) readLoop(ctx context.Context, stdout io.Reader) {
 			continue
 		}
 		id := uint64(idFloat)
-		s.mu.Lock()
-		ch := s.pending[id]
-		delete(s.pending, id)
-		s.mu.Unlock()
+		sidecar.mu.Lock()
+		ch := sidecar.pending[id]
+		delete(sidecar.pending, id)
+		sidecar.mu.Unlock()
 		if ch == nil {
 			continue
 		}
@@ -374,8 +378,8 @@ func bundledSidecarPath() string {
 // bundledSidecarPathIn is the testable core of bundledSidecarPath: it takes the
 // directory holding the running executable and returns "" when no sidecar sits
 // beside it.
-func bundledSidecarPathIn(dir string) string {
-	path := filepath.Join(dir, sidecarBinaryName)
+func bundledSidecarPathIn(directory string) string {
+	path := filepath.Join(directory, sidecarBinaryName)
 	info, err := os.Stat(path)
 	if err != nil || info.IsDir() {
 		return ""
@@ -390,11 +394,11 @@ func bundledSidecarPathIn(dir string) string {
 func extractEmbeddedSidecar() (string, error) {
 	sum := sha256.Sum256(embeddedSidecar)
 	name := "meron-core-" + hex.EncodeToString(sum[:8]) + sidecarExeSuffix
-	dir := filepath.Join(appCacheDir(), "bin")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	directory := filepath.Join(appCacheDir(), "bin")
+	if err := os.MkdirAll(directory, 0o755); err != nil {
 		return "", err
 	}
-	path := filepath.Join(dir, name)
+	path := filepath.Join(directory, name)
 	if info, err := os.Stat(path); err == nil && info.Size() == int64(len(embeddedSidecar)) {
 		return path, nil
 	}

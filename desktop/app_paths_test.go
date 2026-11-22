@@ -1,3 +1,7 @@
+// Checks where the host and the sidecar store desktop profiles.
+// The fixtures select production, Wails development and custom XDG directories.
+// Each test uses temporary paths so the real mail profile stays outside the fixture.
+
 package main
 
 import (

@@ -1,3 +1,7 @@
+// Routes desktop task commands to the shared core.
+// The Wails handler supplies the task operation and request payload.
+// The frontend uses the result to update its task lists.
+
 package main
 
 // tasksInvoke forwards one Tasks command to the core unchanged.

@@ -1,5 +1,9 @@
 //go:build darwin
 
+// Aligns the native macOS titlebar controls in the desktop window.
+// The shared titlebar path calls this small Go-to-AppKit adapter.
+// Its native counterpart positions the traffic-light buttons.
+
 package main
 
 /*

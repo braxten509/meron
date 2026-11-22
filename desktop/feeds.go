@@ -1,3 +1,7 @@
+// Connects desktop RSS account and subscription commands to the core.
+// The handlers add, remove or move feeds and exchange subscriptions through OPML.
+// The desktop UI consumes the resulting account and subscription data.
+
 package main
 
 import (

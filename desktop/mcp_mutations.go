@@ -65,25 +65,25 @@ func validateMCPSelection(account, folder string, uids []uint32, empty bool) err
 	}
 	return nil
 }
-func (s *mcpService) coreCall(method string, args any) (any, error) {
-	if s.app.sidecar == nil || !s.app.sidecar.Started() {
-		return nil, s.app.engineUnavailable()
+func (service *mcpService) coreCall(method string, args any) (any, error) {
+	if service.app.sidecar == nil || !service.app.sidecar.Started() {
+		return nil, service.app.engineUnavailable()
 	}
-	return s.app.sidecar.Call(method, args)
+	return service.app.sidecar.Call(method, args)
 }
-func (s *mcpService) registerMutationTools(server *mcp.Server, c mcpClient) {
+func (service *mcpService) registerMutationTools(server *mcp.Server, c mcpClient) {
 	// Kept available after a permission is removed so the client can learn the
 	// outcome of its own earlier request without reissuing the mutation.
-	mcpRegister(s, server, c, "operation_status", "Check an operation returned by send_message, delete_permanently or empty_trash. pending_approval is not success. Approval can only happen inside Meron. Do not retry a failed send with a new request_id without checking Sent: a network failure can leave its outcome uncertain.", mcpRead, func(mcpOperationArgs) string { return "" }, func(a mcpOperationArgs, grant mcpClient) (any, error) {
-		s.expireOperations()
-		op := s.operations[a.OperationID]
+	mcpRegister(service, server, c, "operation_status", "Check an operation returned by send_message, delete_permanently or empty_trash. pending_approval is not success. Approval can only happen inside Meron. Do not retry a failed send with a new request_id without checking Sent: a network failure can leave its outcome uncertain.", mcpRead, func(mcpOperationArgs) string { return "" }, func(a mcpOperationArgs, grant mcpClient) (any, error) {
+		service.expireOperations()
+		op := service.operations[a.OperationID]
 		if op == nil || op.client.ID != grant.ID || op.client.TokenHash != grant.TokenHash || !mcpAllows(grant, op.Account) {
 			return nil, errors.New("Operation not found")
 		}
 		return op.response(), nil
 	})
 	if c.Organize {
-		mcpRegister(s, server, c, "organize_messages", "Mark selected mail messages read/unread, star/unstar, archive, move to trash or move to another folder in the same account. Trash always moves; it never permanently deletes, including from Drafts. Moving requires IMAP MOVE or UIDPLUS.", mcpOrganize, func(a mcpOrganizeArgs) string { return a.AccountID }, func(a mcpOrganizeArgs, _ mcpClient) (any, error) {
+		mcpRegister(service, server, c, "organize_messages", "Mark selected mail messages read/unread, star/unstar, archive, move to trash or move to another folder in the same account. Trash always moves; it never permanently deletes, including from Drafts. Moving requires IMAP MOVE or UIDPLUS.", mcpOrganize, func(a mcpOrganizeArgs) string { return a.AccountID }, func(a mcpOrganizeArgs, _ mcpClient) (any, error) {
 			if err := validateMCPSelection(a.AccountID, a.FolderID, a.UIDs, false); err != nil {
 				return nil, err
 			}
@@ -95,13 +95,13 @@ func (s *mcpService) registerMutationTools(server *mcp.Server, c mcpClient) {
 			if a.Action == "move" && (strings.TrimSpace(a.TargetFolderID) == "" || strings.ContainsAny(a.TargetFolderID, "\r\n\x00")) {
 				return nil, errors.New("A target folder is required")
 			}
-			result, err := s.coreCall("mcp.organize", map[string]any{"account": a.AccountID, "folder": a.FolderID, "uids": a.UIDs, "action": a.Action, "target_folder": a.TargetFolderID})
-			s.notifyMailChanged(a.AccountID)
+			result, err := service.coreCall("mcp.organize", map[string]any{"account": a.AccountID, "folder": a.FolderID, "uids": a.UIDs, "action": a.Action, "target_folder": a.TargetFolderID})
+			service.notifyMailChanged(a.AccountID)
 			return result, err
 		})
 	}
 	if c.Organize {
-		mcpRegister(s, server, c, "tag_messages", "Add or remove tags on selected mail messages, in every folder holding a copy. Tagging never moves mail and is safe to undo, so prefer it to moving when sorting. Saved locally at once and synced to the server as IMAP keywords where it supports them. Returns the tags the messages now carry. Find tagged mail with the tag:name query of search_messages.", mcpOrganize, func(a mcpTagArgs) string { return a.AccountID }, func(a mcpTagArgs, _ mcpClient) (any, error) {
+		mcpRegister(service, server, c, "tag_messages", "Add or remove tags on selected mail messages, in every folder holding a copy. Tagging never moves mail and is safe to undo, so prefer it to moving when sorting. Saved locally at once and synced to the server as IMAP keywords where it supports them. Returns the tags the messages now carry. Find tagged mail with the tag:name query of search_messages.", mcpOrganize, func(a mcpTagArgs) string { return a.AccountID }, func(a mcpTagArgs, _ mcpClient) (any, error) {
 			if err := validateMCPSelection(a.AccountID, a.FolderID, a.UIDs, false); err != nil {
 				return nil, err
 			}
@@ -117,13 +117,13 @@ func (s *mcpService) registerMutationTools(server *mcp.Server, c mcpClient) {
 			if a.Remove == nil {
 				a.Remove = []string{}
 			}
-			result, err := s.coreCall("messages.setTags", map[string]any{"account": a.AccountID, "folder": a.FolderID, "uids": a.UIDs, "add": a.Add, "remove": a.Remove})
-			s.notifyMailChanged(a.AccountID)
+			result, err := service.coreCall("messages.setTags", map[string]any{"account": a.AccountID, "folder": a.FolderID, "uids": a.UIDs, "add": a.Add, "remove": a.Remove})
+			service.notifyMailChanged(a.AccountID)
 			return result, err
 		})
 	}
 	if c.Send {
-		mcpRegister(s, server, c, "send_message", "Send a plain text email, reply or forward. Usually returns pending_approval for review inside Meron; poll operation_status until completed. Sending is separate from draft permission. Reuse request_id unchanged for retries. No attachments or sender override.", mcpSend, func(a mcpSendArgs) string { return a.AccountID }, func(a mcpSendArgs, grant mcpClient) (any, error) {
+		mcpRegister(service, server, c, "send_message", "Send a plain text email, reply or forward. Usually returns pending_approval for review inside Meron; poll operation_status until completed. Sending is separate from draft permission. Reuse request_id unchanged for retries. No attachments or sender override.", mcpSend, func(a mcpSendArgs) string { return a.AccountID }, func(a mcpSendArgs, grant mcpClient) (any, error) {
 			if a.AccountID == "" || isRSSAccountID(a.AccountID) {
 				return nil, errors.New("A mail account is required")
 			}
@@ -148,7 +148,7 @@ func (s *mcpService) registerMutationTools(server *mcp.Server, c mcpClient) {
 					}
 				}
 			}
-			previous, fingerprint, err := s.previousOperation(grant, "send_message", a.RequestID, a)
+			previous, fingerprint, err := service.previousOperation(grant, "send_message", a.RequestID, a)
 			if err != nil {
 				return nil, err
 			}
@@ -157,25 +157,25 @@ func (s *mcpService) registerMutationTools(server *mcp.Server, c mcpClient) {
 			}
 			messageID := fmt.Sprintf("<%s@meron.local>", uuid.NewString())
 			preview := map[string]any{"kind": "send", "to": a.To, "cc": a.Cc, "bcc": a.Bcc, "subject": a.Subject, "body": a.Body, "in_reply_to": a.InReplyTo, "references": a.References}
-			return s.newOperation(grant, "send_message", a.AccountID, a.RequestID, fingerprint, mcpSend, !grant.SendWithoutConfirmation, preview, func() (any, error) {
-				return s.app.mailSend(map[string]any{"account_id": a.AccountID, "to": a.To, "cc": a.Cc, "bcc": a.Bcc, "subject": a.Subject, "body": a.Body, "in_reply_to": a.InReplyTo, "references": a.References, "message_id": messageID})
+			return service.newOperation(grant, "send_message", a.AccountID, a.RequestID, fingerprint, mcpSend, !grant.SendWithoutConfirmation, preview, func() (any, error) {
+				return service.app.mailSend(map[string]any{"account_id": a.AccountID, "to": a.To, "cc": a.Cc, "bcc": a.Bcc, "subject": a.Subject, "body": a.Body, "in_reply_to": a.InReplyTo, "references": a.References, "message_id": messageID})
 			}), nil
 		})
 	}
 	if c.Delete {
-		mcpRegister(s, server, c, "delete_permanently", "Permanently delete the exact selected messages, skipping Trash. Usually returns pending_approval; poll operation_status. Preview is fetched from the server. Requires IMAP UIDPLUS. Reuse request_id unchanged for retries.", mcpDelete, func(a mcpDeleteArgs) string { return a.AccountID }, func(a mcpDeleteArgs, grant mcpClient) (any, error) {
-			return s.prepareDelete(grant, "delete_permanently", a.AccountID, a.FolderID, a.UIDs, a.RequestID, false, a)
+		mcpRegister(service, server, c, "delete_permanently", "Permanently delete the exact selected messages, skipping Trash. Usually returns pending_approval; poll operation_status. Preview is fetched from the server. Requires IMAP UIDPLUS. Reuse request_id unchanged for retries.", mcpDelete, func(a mcpDeleteArgs) string { return a.AccountID }, func(a mcpDeleteArgs, grant mcpClient) (any, error) {
+			return service.prepareDelete(grant, "delete_permanently", a.AccountID, a.FolderID, a.UIDs, a.RequestID, false, a)
 		})
-		mcpRegister(s, server, c, "empty_trash", "Snapshot and permanently delete messages currently in Trash (maximum 1000). New arrivals after the snapshot are excluded. Usually returns pending_approval; poll operation_status. Requires IMAP UIDPLUS. Reuse request_id unchanged for retries.", mcpDelete, func(a mcpEmptyTrashArgs) string { return a.AccountID }, func(a mcpEmptyTrashArgs, grant mcpClient) (any, error) {
-			return s.prepareDelete(grant, "empty_trash", a.AccountID, a.FolderID, nil, a.RequestID, true, a)
+		mcpRegister(service, server, c, "empty_trash", "Snapshot and permanently delete messages currently in Trash (maximum 1000). New arrivals after the snapshot are excluded. Usually returns pending_approval; poll operation_status. Requires IMAP UIDPLUS. Reuse request_id unchanged for retries.", mcpDelete, func(a mcpEmptyTrashArgs) string { return a.AccountID }, func(a mcpEmptyTrashArgs, grant mcpClient) (any, error) {
+			return service.prepareDelete(grant, "empty_trash", a.AccountID, a.FolderID, nil, a.RequestID, true, a)
 		})
 	}
 }
-func (s *mcpService) prepareDelete(c mcpClient, tool, account, folder string, uids []uint32, requestID string, empty bool, args any) (any, error) {
+func (service *mcpService) prepareDelete(c mcpClient, tool, account, folder string, uids []uint32, requestID string, empty bool, args any) (any, error) {
 	if err := validateMCPSelection(account, folder, uids, empty); err != nil {
 		return nil, err
 	}
-	previous, fingerprint, err := s.previousOperation(c, tool, requestID, args)
+	previous, fingerprint, err := service.previousOperation(c, tool, requestID, args)
 	if err != nil {
 		return nil, err
 	}
@@ -185,10 +185,10 @@ func (s *mcpService) prepareDelete(c mcpClient, tool, account, folder string, ui
 	if uids == nil {
 		uids = []uint32{}
 	}
-	snapshot, err := s.coreCall("mcp.prepareDelete", map[string]any{"account": account, "folder": folder, "uids": uids, "empty_trash": empty})
+	snapshot, err := service.coreCall("mcp.prepareDelete", map[string]any{"account": account, "folder": folder, "uids": uids, "empty_trash": empty})
 	if err != nil {
 		return nil, err
 	}
 	preview := map[string]any{"kind": "delete", "selection": snapshot}
-	return s.newOperation(c, tool, account, requestID, fingerprint, mcpDelete, !c.DeleteWithoutConfirmation, preview, func() (any, error) { return s.coreCall("mcp.delete", snapshot) }), nil
+	return service.newOperation(c, tool, account, requestID, fingerprint, mcpDelete, !c.DeleteWithoutConfirmation, preview, func() (any, error) { return service.coreCall("mcp.delete", snapshot) }), nil
 }

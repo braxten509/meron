@@ -1,3 +1,7 @@
+// Handles local-only desktop accounts and their stored mail.
+// Account commands obtain statistics and initiate backup or restore.
+// The local account identity distinguishes these operations from server sync.
+
 package main
 
 import (

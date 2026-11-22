@@ -1,3 +1,7 @@
+// Connects password-based accounts through the desktop host.
+// The setup dialog supplies server settings and the certificate decision.
+// The resulting core request also distinguishes a reconnect from a new account.
+
 package main
 
 import (
@@ -7,71 +11,71 @@ import (
 )
 
 func (a *App) accountAddPassword(payload map[string]any) (any, error) {
-	var req AddPasswordAccountRequest
-	if err := decode(payload, &req); err != nil {
+	var request AddPasswordAccountRequest
+	if err := decode(payload, &request); err != nil {
 		return nil, err
 	}
-	if !strings.Contains(req.Email, "@") {
+	if !strings.Contains(request.Email, "@") {
 		return nil, errors.New("invalid email")
 	}
-	if req.IMAPHost == "" || req.SMTPHost == "" {
+	if request.IMAPHost == "" || request.SMTPHost == "" {
 		return nil, errors.New("server required")
 	}
 	_, passwordProvided := payload["password"]
-	if req.Username == "" || (passwordProvided && req.Password == "") || (!passwordProvided && req.ID == "") {
+	if request.Username == "" || (passwordProvided && request.Password == "") || (!passwordProvided && request.ID == "") {
 		return nil, errors.New("credentials required")
 	}
-	if req.IMAPPort == 0 {
-		req.IMAPPort = 993
+	if request.IMAPPort == 0 {
+		request.IMAPPort = 993
 	}
-	if req.SMTPPort == 0 {
-		req.SMTPPort = 465
+	if request.SMTPPort == 0 {
+		request.SMTPPort = 465
 	}
 	if a.sidecar == nil || !a.sidecar.Started() {
 		return nil, a.engineUnavailable()
 	}
-	id, _, err := a.accountSaveID(req.ID, req.Email)
+	id, _, err := a.accountSaveID(request.ID, request.Email)
 	if err != nil {
 		return nil, err
 	}
-	if !passwordProvided && id != strings.TrimSpace(req.ID) {
+	if !passwordProvided && id != strings.TrimSpace(request.ID) {
 		return nil, errors.New("credentials required")
 	}
-	a.logf("account.addPassword: connecting account=%s imap=%s:%d smtp=%s:%d", id, req.IMAPHost, req.IMAPPort, req.SMTPHost, req.SMTPPort)
+	a.logf("account.addPassword: connecting account=%s imap=%s:%d smtp=%s:%d", id, request.IMAPHost, request.IMAPPort, request.SMTPHost, request.SMTPPort)
 	legacyTLS := true
-	if req.TLS != nil {
-		legacyTLS = *req.TLS
+	if request.TLS != nil {
+		legacyTLS = *request.TLS
 	}
 	var imapExplicitTLS *bool
-	if req.StartTLS != nil {
-		imapExplicitTLS = req.TLS
+	if request.StartTLS != nil {
+		imapExplicitTLS = request.TLS
 	}
-	imapTLS, imapStartTLS := selectedTLSMode(legacyTLS, imapExplicitTLS, req.StartTLS, req.IMAPPort)
-	smtpTLS, smtpStartTLS := selectedTLSMode(legacyTLS, req.SMTPTLS, req.SMTPStartTLS, req.SMTPPort)
+	imapTLS, imapStartTLS := selectedTLSMode(legacyTLS, imapExplicitTLS, request.StartTLS, request.IMAPPort)
+	smtpTLS, smtpStartTLS := selectedTLSMode(legacyTLS, request.SMTPTLS, request.SMTPStartTLS, request.SMTPPort)
 	connect := map[string]any{
 		"id":            id,
-		"host":          req.IMAPHost,
-		"port":          req.IMAPPort,
-		"user":          req.Username,
+		"host":          request.IMAPHost,
+		"port":          request.IMAPPort,
+		"user":          request.Username,
 		"tls":           imapTLS,
 		"starttls":      imapStartTLS,
-		"smtp_host":     req.SMTPHost,
-		"smtp_port":     req.SMTPPort,
+		"smtp_host":     request.SMTPHost,
+		"smtp_port":     request.SMTPPort,
 		"smtp_tls":      smtpTLS,
 		"smtp_starttls": smtpStartTLS,
-		"email":         req.Email,
-		"display_name":  req.DisplayName,
-		"sender_name":   req.SenderName,
+		"email":         request.Email,
+		"display_name":  request.DisplayName,
+		"sender_name":   request.SenderName,
 		"provider":      "custom",
 	}
 	// Omission lets account.connect hydrate the existing keychain password.
 	if passwordProvided {
-		connect["password"] = req.Password
+		connect["password"] = request.Password
 	}
-	if pin := strings.TrimSpace(req.CertPin); pin != "" {
+	if pin := strings.TrimSpace(request.CertPin); pin != "" {
 		connect["cert_pin"] = pin
 	}
-	if pin := strings.TrimSpace(req.SMTPCertPin); pin != "" {
+	if pin := strings.TrimSpace(request.SMTPCertPin); pin != "" {
 		connect["smtp_cert_pin"] = pin
 	}
 	if _, err := a.sidecar.Call("account.connect", connect); err != nil {
@@ -81,16 +85,16 @@ func (a *App) accountAddPassword(payload map[string]any) (any, error) {
 
 	account := Account{
 		ID:                id,
-		Email:             req.Email,
-		DisplayName:       req.DisplayName,
-		SenderName:        req.SenderName,
+		Email:             request.Email,
+		DisplayName:       request.DisplayName,
+		SenderName:        request.SenderName,
 		Provider:          "custom",
 		AuthType:          "password",
 		IncludedInUnified: true,
-		IMAPHost:          req.IMAPHost,
-		IMAPPort:          req.IMAPPort,
-		SMTPHost:          req.SMTPHost,
-		SMTPPort:          req.SMTPPort,
+		IMAPHost:          request.IMAPHost,
+		IMAPPort:          request.IMAPPort,
+		SMTPHost:          request.SMTPHost,
+		SMTPPort:          request.SMTPPort,
 		TLS:               imapTLS,
 		StartTLS:          imapStartTLS,
 		SMTPTLS:           smtpTLS,
@@ -138,7 +142,7 @@ func (a *App) accountSaveID(existingID, email string) (string, *Account, error) 
 // self-signed certificate (Proton Mail Bridge on 127.0.0.1, for one) are
 // unreachable until their exact certificate is accepted.
 func (a *App) accountProbeCert(payload map[string]any) (any, error) {
-	var req struct {
+	var request struct {
 		Host     string `json:"host"`
 		Port     uint16 `json:"port"`
 		Protocol string `json:"protocol"`
@@ -148,21 +152,21 @@ func (a *App) accountProbeCert(payload map[string]any) (any, error) {
 		// connection with no account override does.
 		Proxy any `json:"proxy"`
 	}
-	if err := decode(payload, &req); err != nil {
+	if err := decode(payload, &request); err != nil {
 		return nil, err
 	}
-	if strings.TrimSpace(req.Host) == "" {
+	if strings.TrimSpace(request.Host) == "" {
 		return nil, errors.New("server required")
 	}
 	if a.sidecar == nil || !a.sidecar.Started() {
 		return nil, a.engineUnavailable()
 	}
 	return a.sidecar.Call("account.probeCert", map[string]any{
-		"host":     req.Host,
-		"port":     req.Port,
-		"protocol": req.Protocol,
-		"starttls": req.StartTLS,
-		"proxy":    req.Proxy,
+		"host":     request.Host,
+		"port":     request.Port,
+		"protocol": request.Protocol,
+		"starttls": request.StartTLS,
+		"proxy":    request.Proxy,
 	})
 }
 
@@ -171,25 +175,25 @@ func (a *App) accountProbeCert(payload map[string]any) (any, error) {
 // cannot be validated, say. Only the server named by the payload is pinned; an
 // omitted key leaves that server's stored pin alone.
 func (a *App) accountSetCertPin(payload map[string]any) (any, error) {
-	var req struct {
+	var request struct {
 		ID          string `json:"id"`
 		CertPin     string `json:"cert_pin"`
 		SMTPCertPin string `json:"smtp_cert_pin"`
 	}
-	if err := decode(payload, &req); err != nil {
+	if err := decode(payload, &request); err != nil {
 		return nil, err
 	}
-	if strings.TrimSpace(req.ID) == "" {
+	if strings.TrimSpace(request.ID) == "" {
 		return nil, errors.New("account required")
 	}
 	if a.sidecar == nil || !a.sidecar.Started() {
 		return nil, a.engineUnavailable()
 	}
-	params := map[string]any{"id": req.ID}
-	if pin := strings.TrimSpace(req.CertPin); pin != "" {
+	params := map[string]any{"id": request.ID}
+	if pin := strings.TrimSpace(request.CertPin); pin != "" {
 		params["cert_pin"] = pin
 	}
-	if pin := strings.TrimSpace(req.SMTPCertPin); pin != "" {
+	if pin := strings.TrimSpace(request.SMTPCertPin); pin != "" {
 		params["smtp_cert_pin"] = pin
 	}
 	return a.sidecar.Call("account.setCertPin", params)

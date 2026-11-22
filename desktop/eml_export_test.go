@@ -1,3 +1,7 @@
+// Exercises single-message and archive exports using a fake message fetcher.
+// Tests inspect the written EML files and ZIP entries, including partial success.
+// Cancellation and empty results must preserve an existing destination file.
+
 package main
 
 import (

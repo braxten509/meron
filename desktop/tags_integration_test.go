@@ -1,5 +1,9 @@
 //go:build integration
 
+// Exercises mail tags through the app and a local IMAP server.
+// The fixture changes server keywords and waits for updated thread cards.
+// Assertions compare the server-visible keywords with the tags shown by Meron.
+
 package main
 
 import (

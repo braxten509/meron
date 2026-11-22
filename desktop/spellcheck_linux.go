@@ -1,5 +1,9 @@
 //go:build linux && webkit2_41 && !bindings
 
+// Enables native spell checking in the desktop Linux editor.
+// The host configures the default WebKit context on the GTK event loop.
+// WebKit uses the desktop language list when checking editable text.
+
 package main
 
 /*

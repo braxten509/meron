@@ -1,3 +1,7 @@
+// Requests desktop release notes from the Rust sidecar.
+// The core fetches the release feed and filters tags for the desktop variant.
+// The Wails command returns that result to the changelog view.
+
 package main
 
 // changelogFetch returns the in-app changelog (the GitHub releases atom feed,

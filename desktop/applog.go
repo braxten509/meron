@@ -1,3 +1,7 @@
+// Captures desktop diagnostics for the log viewer.
+// The writer removes email addresses from output and retains recent log data.
+// Crash capture feeds the same diagnostics path used by the running host.
+
 package main
 
 import (
@@ -23,14 +27,14 @@ const maxLogViewLines = 1000
 // the log file left meron.log empty, exactly when a user needs it most.
 type logSinks []io.Writer
 
-func (sinks logSinks) Write(p []byte) (int, error) {
+func (sinks logSinks) Write(data []byte) (int, error) {
 	for _, sink := range sinks {
 		if sink == nil {
 			continue
 		}
-		_, _ = sink.Write(p)
+		_, _ = sink.Write(data)
 	}
-	return len(p), nil
+	return len(data), nil
 }
 
 var logEmailRegexp = regexp.MustCompile(`[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}`)
@@ -51,12 +55,12 @@ func redactLogEmails(text string) string {
 // appLogTail returns the newest maxLogViewLines of meron.log with email
 // addresses redacted, ready to show in the Settings log viewer or export.
 func appLogTail() (string, error) {
-	data, err := os.ReadFile(filepath.Join(appConfigDir(), "meron.log"))
-	if err != nil {
-		if os.IsNotExist(err) {
+	data, operationError := os.ReadFile(filepath.Join(appConfigDir(), "meron.log"))
+	if operationError != nil {
+		if os.IsNotExist(operationError) {
 			return "", nil
 		}
-		return "", err
+		return "", operationError
 	}
 	lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
 	if len(lines) > maxLogViewLines {
@@ -66,9 +70,9 @@ func appLogTail() (string, error) {
 }
 
 func (a *App) logRead() (any, error) {
-	tail, err := appLogTail()
-	if err != nil {
-		return nil, err
+	tail, operationError := appLogTail()
+	if operationError != nil {
+		return nil, operationError
 	}
 	return map[string]any{"log": tail}, nil
 }
@@ -89,23 +93,23 @@ func captureCrashes(logFile *os.File) {
 // recoverInvoke turns a panic in a bridge call into a logged error instead of a
 // dead app: one bad message or malformed payload should not take the window
 // down. The traceback goes to the log so the crash is still diagnosable.
-func (a *App) recoverInvoke(command string, err *error) {
+func (a *App) recoverInvoke(command string, operationError *error) {
 	panicked := recover()
 	if panicked == nil {
 		return
 	}
 	a.logf("invoke %s panicked: %v\n%s", command, panicked, debug.Stack())
-	*err = fmt.Errorf("internal error in %s: %v", command, panicked)
+	*operationError = fmt.Errorf("internal error in %s: %v", command, panicked)
 }
 
 // logExport writes the redacted log tail to a user-chosen path via a native
 // save dialog, with a disclosure header matching the mobile share flow.
 func (a *App) logExport() (any, error) {
-	tail, err := appLogTail()
-	if err != nil {
-		return nil, err
+	tail, operationError := appLogTail()
+	if operationError != nil {
+		return nil, operationError
 	}
-	dest, err := saveFileDialog(a.ctx, wailsRuntime.SaveDialogOptions{
+	dest, operationError := saveFileDialog(a.ctx, wailsRuntime.SaveDialogOptions{
 		Title:                "Export log",
 		DefaultFilename:      "meron-log.txt",
 		CanCreateDirectories: true,
@@ -113,16 +117,16 @@ func (a *App) logExport() (any, error) {
 			{DisplayName: "Text files (*.txt)", Pattern: "*.txt"},
 		},
 	})
-	if err != nil {
-		return nil, err
+	if operationError != nil {
+		return nil, operationError
 	}
 	if dest == "" {
 		return map[string]any{"saved": false}, nil // user cancelled
 	}
 	disclosure := "Account emails below are masked to only the first letter and domain (e.g. j***@gmail.com).\n" +
 		"Review before sharing.\n\n"
-	if err := os.WriteFile(dest, []byte(disclosure+tail), 0o644); err != nil {
-		return nil, fmt.Errorf("write log: %w", err)
+	if operationError := os.WriteFile(dest, []byte(disclosure+tail), 0o644); operationError != nil {
+		return nil, fmt.Errorf("write log: %w", operationError)
 	}
 	a.logf("log.export: wrote %s", dest)
 	return map[string]any{"saved": true, "path": dest}, nil

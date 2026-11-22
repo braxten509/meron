@@ -1,3 +1,7 @@
+// Checks how core thread cards appear in the desktop conversation list.
+// Fixtures exercise sender details, folder fallbacks and missing thread keys.
+// Pagination assertions keep the next-page cursor attached to its result.
+
 package main
 
 import (

@@ -1,3 +1,7 @@
+// Coordinates the desktop app lifecycle with the Rust sidecar.
+// Wails supplies the window context and calls the startup and shutdown hooks.
+// Core startup errors are retained for commands issued before the engine is ready.
+
 package main
 
 import (
@@ -120,12 +124,12 @@ func NewApp() *App {
 	return app
 }
 
-func (a *App) Startup(ctx context.Context) {
-	a.ctx = ctx
+func (a *App) Startup(requestContext context.Context) {
+	a.ctx = requestContext
 	a.armStartupWindowFallback(startupWindowRevealDelay)
 	a.quitOnSignal()
 	a.queueStartupMailtoURLs(os.Args[1:])
-	if wailsRuntime.Environment(ctx).BuildType != "dev" {
+	if wailsRuntime.Environment(requestContext).BuildType != "dev" {
 		installDesktopEntry()
 	}
 	// A staged update either landed on the last quit or was abandoned; either
@@ -136,7 +140,7 @@ func (a *App) Startup(ctx context.Context) {
 	a.logf("startup: core path=%s", coreBinaryPath())
 	a.sidecar = NewSidecar(coreBinaryPath(), a.logWriter())
 	a.sidecar.onEvent = a.handleSidecarEvent
-	if err := a.sidecar.Start(ctx); err != nil {
+	if err := a.sidecar.Start(requestContext); err != nil {
 		a.setCoreError(fmt.Sprintf("core failed to start: %v (path: %s)", err, coreBinaryPath()))
 		a.logf("core failed to start: %v", err)
 		fmt.Fprintf(os.Stderr, "meron: core failed to start: %v (path: %s)\n", err, coreBinaryPath())
@@ -147,7 +151,7 @@ func (a *App) Startup(ctx context.Context) {
 	a.setupNotificationListener()
 	go a.runReminders()
 	a.setupResumeListener()
-	a.setupFileDrop(ctx)
+	a.setupFileDrop(requestContext)
 	a.setupAppearanceListener()
 }
 
@@ -178,7 +182,7 @@ func (a *App) HandleSecondInstanceLaunch(args []string) {
 	}
 }
 
-func (a *App) Shutdown(ctx context.Context) {
+func (a *App) Shutdown(requestContext context.Context) {
 	a.logf("shutdown")
 	if a.mcp != nil {
 		a.mcp.close()

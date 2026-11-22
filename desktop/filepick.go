@@ -1,3 +1,7 @@
+// Handles the desktop composer's native file and image pickers.
+// The host remembers the last usable directory for subsequent selections.
+// Opening an attachment uses a sanitized file name in the app cache.
+
 package main
 
 import (
@@ -41,27 +45,27 @@ func (a *App) pickFiles(payload map[string]any, imagesOnly, multiple bool) (any,
 	}
 
 	a.filePickerMu.Lock()
-	defaultDir := a.lastFileDir
+	defaultDirectory := a.lastFileDir
 	lastDirPath := lastFileDirPath()
 	if imagesOnly {
-		defaultDir = a.lastImageDir
+		defaultDirectory = a.lastImageDir
 		lastDirPath = lastImageDirPath()
 	}
-	if defaultDir == "" {
+	if defaultDirectory == "" {
 		if data, err := os.ReadFile(lastDirPath); err == nil {
-			defaultDir = strings.TrimSpace(string(data))
+			defaultDirectory = strings.TrimSpace(string(data))
 			if imagesOnly {
-				a.lastImageDir = defaultDir
+				a.lastImageDir = defaultDirectory
 			} else {
-				a.lastFileDir = defaultDir
+				a.lastFileDir = defaultDirectory
 			}
 		}
 	}
 	a.filePickerMu.Unlock()
 
-	defaultDir = filePickerDefaultDir(defaultDir)
+	defaultDirectory = filePickerDefaultDir(defaultDirectory)
 
-	paths, usedPortal, err := openFilePicker(a.ctx, title, defaultDir, imagesOnly, multiple)
+	paths, usedPortal, err := openFilePicker(a.ctx, title, defaultDirectory, imagesOnly, multiple)
 	if err != nil {
 		return nil, err
 	}
@@ -99,15 +103,15 @@ func (a *App) pickFiles(payload map[string]any, imagesOnly, multiple bool) (any,
 }
 
 func openWailsFilePicker(
-	ctx context.Context,
+	requestContext context.Context,
 	title string,
-	defaultDir string,
+	defaultDirectory string,
 	imagesOnly bool,
 	multiple bool,
 ) ([]string, error) {
 	options := wailsRuntime.OpenDialogOptions{
 		Title:            title,
-		DefaultDirectory: defaultDir,
+		DefaultDirectory: defaultDirectory,
 	}
 	if imagesOnly {
 		options.Filters = []wailsRuntime.FileFilter{
@@ -116,9 +120,9 @@ func openWailsFilePicker(
 	}
 
 	if multiple {
-		return wailsRuntime.OpenMultipleFilesDialog(ctx, options)
+		return wailsRuntime.OpenMultipleFilesDialog(requestContext, options)
 	}
-	path, err := wailsRuntime.OpenFileDialog(ctx, options)
+	path, err := wailsRuntime.OpenFileDialog(requestContext, options)
 	if err != nil || path == "" {
 		return nil, err
 	}

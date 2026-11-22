@@ -1,5 +1,9 @@
 //go:build darwin
 
+// Connects desktop clipboard and file actions to the macOS pasteboard.
+// The composer reads native image data and the reader can copy an image back.
+// Opening a local file delegates to the operating system.
+
 package main
 
 /*

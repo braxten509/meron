@@ -1,3 +1,7 @@
+// Covers conversions and paths shared by the desktop command handlers.
+// Fixtures exercise JSON coercion, sidecar lookup and filesystem probes.
+// Timeout and error cases check what callers receive when the core is unavailable.
+
 package main
 
 import (

@@ -1,3 +1,7 @@
+// Checks which dropped files reach the composer.
+// Fixtures cover filename-based types, oversized entries and empty drops.
+// Reported skip counts include paths missing from a partial match.
+
 package main
 
 import (

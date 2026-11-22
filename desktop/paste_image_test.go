@@ -1,3 +1,7 @@
+// Exercises clipboard image handling with temporary media files.
+// Fixtures check media paths, filename types and clipboard type spelling.
+// Invalid media keys are rejected before a native clipboard call.
+
 package main
 
 import (

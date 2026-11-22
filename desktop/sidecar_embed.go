@@ -1,5 +1,9 @@
 //go:build embed_sidecar
 
+// Supplies the bundled core binary for desktop release builds.
+// The embed_sidecar tag selects the executable staged by the build script.
+// The host uses those bytes when starting the Rust sidecar.
+
 package main
 
 import _ "embed"

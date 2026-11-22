@@ -1,3 +1,7 @@
+// Persists desktop window size and maximized state between launches.
+// The host samples resize changes and writes the saved state to its profile.
+// Startup restores usable geometry or selects the default window state.
+
 package main
 
 import (
@@ -92,15 +96,15 @@ var windowSaveDelay = 500 * time.Millisecond
 // it, and before the window is hidden or the app quits. A hidden window was
 // sampled when it was hidden, and a minimised or fullscreen one says nothing
 // about the size to come back to, so both keep what was recorded before.
-func (a *App) sampleWindowState(ctx context.Context) {
+func (a *App) sampleWindowState(requestContext context.Context) {
 	if a.windowHidden.Load() {
 		return
 	}
-	maximised := windowIsMaximised(ctx)
-	normal := !maximised && windowIsNormal(ctx)
+	maximised := windowIsMaximised(requestContext)
+	normal := !maximised && windowIsNormal(requestContext)
 	var width, height int
 	if normal {
-		width, height = windowGetSize(ctx)
+		width, height = windowGetSize(requestContext)
 	}
 	a.windowMu.Lock()
 	defer a.windowMu.Unlock()
@@ -117,12 +121,12 @@ func (a *App) sampleWindowState(ctx context.Context) {
 
 // windowResized samples the window as it changes and saves once it settles.
 func (a *App) windowResized() (any, error) {
-	ctx := a.runtimeContext()
-	if ctx == nil {
+	requestContext := a.runtimeContext()
+	if requestContext == nil {
 		return map[string]any{"ok": true}, nil
 	}
-	a.sampleWindowState(ctx)
-	normal := windowIsNormal(ctx)
+	a.sampleWindowState(requestContext)
+	normal := windowIsNormal(requestContext)
 	// A tiled (half-screen) window is square like a maximised one, and so is a
 	// window whose frame the desktop draws (see gtkFrame in window_chrome_linux.go).
 	rounded := roundedWindowCorners && normal && !windowIsTiled() && windowDrawsFrame()
@@ -135,13 +139,13 @@ func (a *App) windowResized() (any, error) {
 			a.windowSaveTimer.Reset(windowSaveDelay)
 		}
 	}
-	return map[string]any{"ok": true, "rounded": rounded, "maximised": windowIsMaximised(ctx)}, nil
+	return map[string]any{"ok": true, "rounded": rounded, "maximised": windowIsMaximised(requestContext)}, nil
 }
 
 // rememberWindowState samples the window and saves it straight away, for
 // when it is about to be hidden or the app is about to quit.
-func (a *App) rememberWindowState(ctx context.Context) {
-	a.sampleWindowState(ctx)
+func (a *App) rememberWindowState(requestContext context.Context) {
+	a.sampleWindowState(requestContext)
 	a.flushWindowState()
 }
 
@@ -164,7 +168,7 @@ func (a *App) flushWindowState() {
 // beforeClose runs for the close button and for every quit. With
 // close-to-tray on, the close button only hides the window; the tray's Quit
 // and the updater mark the quit as intended first, so they still go through.
-func (a *App) beforeClose(ctx context.Context) (prevent bool) {
+func (a *App) beforeClose(requestContext context.Context) (prevent bool) {
 	if !hideOnCloseNatively && !a.quitting.Load() && a.closeToTray.Load() {
 		a.hideMainWindow()
 		return true
@@ -174,7 +178,7 @@ func (a *App) beforeClose(ctx context.Context) (prevent bool) {
 	if a.closing.Swap(true) {
 		return true
 	}
-	a.rememberWindowState(ctx)
+	a.rememberWindowState(requestContext)
 	return false
 }
 
@@ -183,12 +187,12 @@ var appQuit = wailsRuntime.Quit
 
 // quit exits the app, bypassing close-to-tray.
 func (a *App) quit() {
-	ctx := a.runtimeContext()
-	if ctx == nil {
+	requestContext := a.runtimeContext()
+	if requestContext == nil {
 		return
 	}
 	a.quitting.Store(true)
-	appQuit(ctx)
+	appQuit(requestContext)
 }
 
 // requestQuit is the Ctrl+Q shortcut (Linux/Windows; macOS has a native ⌘Q).

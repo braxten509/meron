@@ -1,5 +1,9 @@
 //go:build integration
 
+// Exercises local folders through desktop app commands.
+// The fixture connects local account operations to the test core.
+// It follows the mail through the local folder lifecycle.
+
 package main
 
 import (

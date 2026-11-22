@@ -1,3 +1,7 @@
+// Connects desktop file dialogs to core backup import and export.
+// The chosen path controls where a private backup is read or written.
+// The command layer returns the core import summary to the frontend.
+
 package main
 
 import (

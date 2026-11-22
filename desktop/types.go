@@ -1,3 +1,7 @@
+// Defines the desktop account and request shapes shared by Go handlers.
+// JSON field names connect the frontend payloads with native commands.
+// Keep account transport and identity fields compatible with saved settings.
+
 package main
 
 type Account struct {

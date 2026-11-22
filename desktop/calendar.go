@@ -1,3 +1,7 @@
+// Routes desktop calendar requests to the mail core.
+// The Wails command handler passes the requested calendar operation and its payload.
+// The core supplies the event data returned to the calendar view.
+
 package main
 
 // calendarInvoke forwards one calendar command to the core unchanged, like

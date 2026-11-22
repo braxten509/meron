@@ -1,3 +1,7 @@
+// Exercises mail commands at the Go-to-core boundary.
+// A test app captures sidecar requests and supplies controlled responses.
+// Assertions check the command name, parameters and result presented to the UI.
+
 package main
 
 import (
@@ -39,23 +43,23 @@ func newMailHandlerTestApp(t *testing.T, responses ...sidecarResponsePlan) (*App
 }
 
 func (w *recordingSidecarWriter) Write(data []byte) (int, error) {
-	var req struct {
+	var request struct {
 		ID     uint64         `json:"id"`
 		Method string         `json:"method"`
 		Params map[string]any `json:"params"`
 	}
-	if err := json.Unmarshal(data, &req); err != nil {
+	if err := json.Unmarshal(data, &request); err != nil {
 		w.t.Fatalf("sidecar request JSON: %v", err)
 	}
-	w.calls = append(w.calls, sidecarCallRecord{Method: req.Method, Params: req.Params})
+	w.calls = append(w.calls, sidecarCallRecord{Method: request.Method, Params: request.Params})
 	if len(w.responses) == 0 {
-		w.t.Fatalf("unexpected sidecar call %s with params %#v", req.Method, req.Params)
+		w.t.Fatalf("unexpected sidecar call %s with params %#v", request.Method, request.Params)
 	}
 	response := w.responses[0]
 	w.responses = w.responses[1:]
-	ch := w.sidecar.pending[req.ID]
+	ch := w.sidecar.pending[request.ID]
 	if ch == nil {
-		w.t.Fatalf("missing pending response channel for request %d", req.ID)
+		w.t.Fatalf("missing pending response channel for request %d", request.ID)
 	}
 	ch <- sidecarResponse{Result: response.Result, Error: response.Error}
 	return len(data), nil

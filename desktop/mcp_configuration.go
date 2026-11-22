@@ -207,11 +207,11 @@ func mcpValidateSetting(specs map[string]mcpSettingSpec, key string, value any) 
 	return nil
 }
 
-func (s *mcpService) configurationAccounts() ([]Account, error) {
-	if s.app.sidecar == nil || !s.app.sidecar.Started() {
-		return nil, s.app.engineUnavailable()
+func (service *mcpService) configurationAccounts() ([]Account, error) {
+	if service.app.sidecar == nil || !service.app.sidecar.Started() {
+		return nil, service.app.engineUnavailable()
 	}
-	res, err := s.app.accountList()
+	res, err := service.app.accountList()
 	if err != nil {
 		return nil, err
 	}
@@ -226,16 +226,16 @@ func (s *mcpService) configurationAccounts() ([]Account, error) {
 	return accounts, nil
 }
 
-func (s *mcpService) notifyConfigurationChanged(keys ...string) {
-	if s.app.ctx != nil {
-		wailsRuntime.EventsEmit(s.app.ctx, "configuration.changed", map[string]any{"keys": keys})
+func (service *mcpService) notifyConfigurationChanged(keys ...string) {
+	if service.app.ctx != nil {
+		wailsRuntime.EventsEmit(service.app.ctx, "configuration.changed", map[string]any{"keys": keys})
 	}
 }
 
-func (s *mcpService) registerConfigurationTools(server *mcp.Server, c mcpClient) {
+func (service *mcpService) registerConfigurationTools(server *mcp.Server, c mcpClient) {
 	none := func(struct{}) string { return "" }
 	if c.ManageAccounts || c.ManageSettings {
-		mcpRegister(s, server, c, "configuration_capabilities", "Discover Meron's receiving interfaces. Translate external configuration into these supported settings; no source-specific backup format is required. Configuration permissions are app-wide and do not grant mail access.", mcpReadConfiguration, none, func(_ struct{}, grant mcpClient) (any, error) {
+		mcpRegister(service, server, c, "configuration_capabilities", "Discover Meron's receiving interfaces. Translate external configuration into these supported settings; no source-specific backup format is required. Configuration permissions are app-wide and do not grant mail access.", mcpReadConfiguration, none, func(_ struct{}, grant mcpClient) (any, error) {
 			out := map[string]any{}
 			if grant.ManageAccounts {
 				out["account_settings"] = mcpAccountSettings
@@ -248,15 +248,15 @@ func (s *mcpService) registerConfigurationTools(server *mcp.Server, c mcpClient)
 		})
 	}
 	if c.ManageAccounts {
-		mcpRegister(s, server, c, "list_account_configurations", "List configuration for every account, without passwords, OAuth tokens or proxy credentials. Requires app-wide Manage accounts; does not grant access to messages.", mcpReadAccounts, none, func(_ struct{}, _ mcpClient) (any, error) {
-			accounts, err := s.configurationAccounts()
+		mcpRegister(service, server, c, "list_account_configurations", "List configuration for every account, without passwords, OAuth tokens or proxy credentials. Requires app-wide Manage accounts; does not grant access to messages.", mcpReadAccounts, none, func(_ struct{}, _ mcpClient) (any, error) {
+			accounts, err := service.configurationAccounts()
 			return map[string]any{"accounts": accounts}, err
 		})
-		mcpRegister(s, server, c, "create_password_account", "Connect and save a new IMAP/SMTP account using a password or app password. Requires validated TLS or STARTTLS for both servers; plaintext and certificate pins are not supported over MCP. Ports default to 993 and 465. Set tls/starttls and smtp_tls/smtp_starttls explicitly for STARTTLS. Rejects existing account IDs rather than overwriting credentials. Does not add mail grants; an existing all-accounts grant covers the new account. Revoking access does not cancel an already dispatched setup. OAuth and certificate exceptions are available inside Meron.", mcpCreateAccount, func(a mcpCreateAccountArgs) string { return accountID(a.Email) }, func(args mcpCreateAccountArgs, _ mcpClient) (any, error) {
+		mcpRegister(service, server, c, "create_password_account", "Connect and save a new IMAP/SMTP account using a password or app password. Requires validated TLS or STARTTLS for both servers; plaintext and certificate pins are not supported over MCP. Ports default to 993 and 465. Set tls/starttls and smtp_tls/smtp_starttls explicitly for STARTTLS. Rejects existing account IDs rather than overwriting credentials. Does not add mail grants; an existing all-accounts grant covers the new account. Revoking access does not cancel an already dispatched setup. OAuth and certificate exceptions are available inside Meron.", mcpCreateAccount, func(a mcpCreateAccountArgs) string { return accountID(a.Email) }, func(args mcpCreateAccountArgs, _ mcpClient) (any, error) {
 			if err := args.validateTLS(); err != nil {
 				return nil, err
 			}
-			accounts, err := s.configurationAccounts()
+			accounts, err := service.configurationAccounts()
 			if err != nil {
 				return nil, err
 			}
@@ -273,18 +273,18 @@ func (s *mcpService) registerConfigurationTools(server *mcp.Server, c mcpClient)
 			if err := json.Unmarshal(data, &payload); err != nil {
 				return nil, err
 			}
-			result, err := s.app.accountAddPassword(payload)
+			result, err := service.app.accountAddPassword(payload)
 			if err == nil {
-				s.notifyConfigurationChanged()
+				service.notifyConfigurationChanged()
 			}
 			return result, err
 		})
-		mcpRegister(s, server, c, "set_account_setting", "Set one preference on any existing account. Discover keys and value types with configuration_capabilities. Aliases replace the entire list. Disabling a signature preserves its saved HTML when html is omitted. Does not change server credentials or mail permissions.", mcpManageAccounts, func(a mcpSetAccountSettingArgs) string { return a.AccountID }, func(args mcpSetAccountSettingArgs, _ mcpClient) (any, error) {
+		mcpRegister(service, server, c, "set_account_setting", "Set one preference on any existing account. Discover keys and value types with configuration_capabilities. Aliases replace the entire list. Disabling a signature preserves its saved HTML when html is omitted. Does not change server credentials or mail permissions.", mcpManageAccounts, func(a mcpSetAccountSettingArgs) string { return a.AccountID }, func(args mcpSetAccountSettingArgs, _ mcpClient) (any, error) {
 			if err := mcpValidateSetting(mcpAccountSettings, args.Key, args.Value); err != nil {
 				return nil, err
 			}
 			args.Value = mcpSanitizeSetting(args.Key, args.Value)
-			accounts, err := s.configurationAccounts()
+			accounts, err := service.configurationAccounts()
 			if err != nil {
 				return nil, err
 			}
@@ -329,35 +329,35 @@ func (s *mcpService) registerConfigurationTools(server *mcp.Server, c mcpClient)
 			case "save_sent_copy":
 				method, field = "account.setSaveSentCopy", "value"
 			}
-			result, err := s.app.sidecar.Call(method, map[string]any{"account": args.AccountID, field: args.Value})
+			result, err := service.app.sidecar.Call(method, map[string]any{"account": args.AccountID, field: args.Value})
 			if err == nil {
-				s.notifyConfigurationChanged()
+				service.notifyConfigurationChanged()
 			}
 			return result, err
 		})
 	}
 	if c.ManageSettings {
-		mcpRegister(s, server, c, "get_app_settings", "Read supported app-wide preferences. Missing keys use Meron's defaults. Does not expose internal session state or credentials.", mcpReadSettings, none, func(_ struct{}, _ mcpClient) (any, error) {
-			if s.app.sidecar == nil || !s.app.sidecar.Started() {
-				return nil, s.app.engineUnavailable()
+		mcpRegister(service, server, c, "get_app_settings", "Read supported app-wide preferences. Missing keys use Meron's defaults. Does not expose internal session state or credentials.", mcpReadSettings, none, func(_ struct{}, _ mcpClient) (any, error) {
+			if service.app.sidecar == nil || !service.app.sidecar.Started() {
+				return nil, service.app.engineUnavailable()
 			}
 			keys := []string{}
 			for key := range mcpAppSettings {
 				keys = append(keys, key)
 			}
-			return s.app.appPrefsGet(map[string]any{"keys": keys})
+			return service.app.appPrefsGet(map[string]any{"keys": keys})
 		})
-		mcpRegister(s, server, c, "set_app_setting", "Set one supported app-wide preference. Discover keys and allowed values with configuration_capabilities. Applies immediately in Meron.", mcpManageSettings, func(mcpSetSettingArgs) string { return "" }, func(args mcpSetSettingArgs, _ mcpClient) (any, error) {
+		mcpRegister(service, server, c, "set_app_setting", "Set one supported app-wide preference. Discover keys and allowed values with configuration_capabilities. Applies immediately in Meron.", mcpManageSettings, func(mcpSetSettingArgs) string { return "" }, func(args mcpSetSettingArgs, _ mcpClient) (any, error) {
 			if err := mcpValidateSetting(mcpAppSettings, args.Key, args.Value); err != nil {
 				return nil, err
 			}
 			args.Value = mcpSanitizeSetting(args.Key, args.Value)
-			if s.app.sidecar == nil || !s.app.sidecar.Started() {
-				return nil, s.app.engineUnavailable()
+			if service.app.sidecar == nil || !service.app.sidecar.Started() {
+				return nil, service.app.engineUnavailable()
 			}
-			result, err := s.app.appPrefsSet(map[string]any{"key": args.Key, "value": args.Value})
+			result, err := service.app.appPrefsSet(map[string]any{"key": args.Key, "value": args.Value})
 			if err == nil {
-				s.notifyConfigurationChanged(args.Key)
+				service.notifyConfigurationChanged(args.Key)
 			}
 			return result, err
 		})

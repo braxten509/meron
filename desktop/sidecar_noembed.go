@@ -1,5 +1,9 @@
 //go:build !embed_sidecar
 
+// Selects an external Rust core during desktop development.
+// Without the embed_sidecar tag the host starts with an empty embedded image.
+// The sidecar launcher then resolves the configured or locally built executable.
+
 package main
 
 // embeddedSidecar is empty in dev builds; the sidecar is found via the

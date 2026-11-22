@@ -1,3 +1,7 @@
+// Verifies the message and identifier shapes passed to the desktop reader.
+// Examples cover both IMAP UIDs and RSS item keys in command payloads.
+// These conversions connect a selected conversation to its messages.
+
 package main
 
 import (

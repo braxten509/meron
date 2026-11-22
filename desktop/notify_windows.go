@@ -1,5 +1,9 @@
 //go:build windows
 
+// Handles Windows notification delivery and activation.
+// The desktop host supplies the notification and its conversation target.
+// Activation arguments are parsed when Windows returns control to Meron.
+
 package main
 
 import (

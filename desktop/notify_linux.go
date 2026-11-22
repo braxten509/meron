@@ -1,5 +1,9 @@
 //go:build linux
 
+// Delivers Linux notifications and resolves their activation targets.
+// The desktop host attaches the account and thread to each delivery.
+// Portal and desktop notification callbacks route activation back to the reader.
+
 package main
 
 import (

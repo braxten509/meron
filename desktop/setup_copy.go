@@ -1,3 +1,7 @@
+// Connects desktop setup transfer commands to the shared core.
+// The desktop host forwards the selected operation and its payload.
+// The setup screen receives the status or result through the command dispatcher.
+
 package main
 
 import "fmt"

@@ -1,3 +1,7 @@
+// Exercises account pictures returned by OAuth providers.
+// Download fixtures cover saving a remote picture and ignoring unsuitable sources.
+// Reconnect cases verify which account picture survives a second sign-in.
+
 package main
 
 import (

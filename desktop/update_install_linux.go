@@ -1,3 +1,7 @@
+// Applies a downloaded desktop update on Linux.
+// The detected channel determines whether to replace an AppImage or a tarball binary.
+// Archive handling locates the executable the running app will use next.
+
 package main
 
 import (
@@ -15,8 +19,8 @@ import (
 // The replacement is a rename within the target's own directory, so it is
 // atomic and the running process keeps the old inode until it exits.
 func applyUpdate(channel updateChannel, payload string) error {
-	if err := replaceTarget(channel, payload); err != nil {
-		return err
+	if operationError := replaceTarget(channel, payload); operationError != nil {
+		return operationError
 	}
 	return scheduleRelaunch(channel.Target)
 }
@@ -29,35 +33,35 @@ func replaceTarget(channel updateChannel, payload string) error {
 		return fmt.Errorf("update: unsupported channel %q", channel.Kind)
 	}
 	parent := filepath.Dir(target)
-	if err := ensureWritableDir(parent); err != nil {
-		return fmt.Errorf("update: %s is not writable — install the update manually: %w", parent, err)
+	if operationError := ensureWritableDir(parent); operationError != nil {
+		return fmt.Errorf("update: %s is not writable — install the update manually: %w", parent, operationError)
 	}
 
 	staging := filepath.Join(parent, fmt.Sprintf(".meron-update-%d", os.Getpid()))
 	_ = os.Remove(staging)
 
-	var err error
+	var operationError error
 	switch channel.Kind {
 	case channelAppImage:
 		// The payload is the new AppImage itself.
-		err = copyFile(payload, staging, 0o755)
+		operationError = copyFile(payload, staging, 0o755)
 	case channelTarball:
-		err = extractBinaryFromTarGz(payload, "meron", staging)
+		operationError = extractBinaryFromTarGz(payload, "meron", staging)
 	default:
 		return fmt.Errorf("update: unsupported channel %q", channel.Kind)
 	}
-	if err != nil {
+	if operationError != nil {
 		_ = os.Remove(staging)
-		return err
+		return operationError
 	}
 
-	if err := os.Chmod(staging, 0o755); err != nil {
+	if operationError := os.Chmod(staging, 0o755); operationError != nil {
 		_ = os.Remove(staging)
-		return err
+		return operationError
 	}
-	if err := os.Rename(staging, target); err != nil {
+	if operationError := os.Rename(staging, target); operationError != nil {
 		_ = os.Remove(staging)
-		return fmt.Errorf("update: could not replace %s: %w", target, err)
+		return fmt.Errorf("update: could not replace %s: %w", target, operationError)
 	}
 	return nil
 }
@@ -66,36 +70,36 @@ func replaceTarget(channel updateChannel, payload string) error {
 // archive only ever holds the `meron` binary, but the name is matched on the
 // basename so a leading directory in a future layout still works.
 func extractBinaryFromTarGz(archive, name, dest string) error {
-	file, err := os.Open(archive)
-	if err != nil {
-		return err
+	file, operationError := os.Open(archive)
+	if operationError != nil {
+		return operationError
 	}
 	defer file.Close()
-	gz, err := gzip.NewReader(file)
-	if err != nil {
-		return err
+	gz, operationError := gzip.NewReader(file)
+	if operationError != nil {
+		return operationError
 	}
 	defer gz.Close()
 
 	reader := tar.NewReader(gz)
 	for {
-		header, err := reader.Next()
-		if err == io.EOF {
+		header, operationError := reader.Next()
+		if operationError == io.EOF {
 			return fmt.Errorf("update: %s not found in the downloaded archive", name)
 		}
-		if err != nil {
-			return err
+		if operationError != nil {
+			return operationError
 		}
 		if header.Typeflag != tar.TypeReg || filepath.Base(header.Name) != name {
 			continue
 		}
-		out, err := os.OpenFile(dest, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o755)
-		if err != nil {
-			return err
+		out, operationError := os.OpenFile(dest, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o755)
+		if operationError != nil {
+			return operationError
 		}
-		if _, err := io.Copy(out, reader); err != nil {
+		if _, operationError := io.Copy(out, reader); operationError != nil {
 			out.Close()
-			return err
+			return operationError
 		}
 		return out.Close()
 	}

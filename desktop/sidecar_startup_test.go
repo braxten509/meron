@@ -1,3 +1,7 @@
+// Exercises the readiness timeout during desktop core startup.
+// The fixture distinguishes a database migration from a stalled launch.
+// It also covers commands issued before any launch attempt.
+
 package main
 
 import (

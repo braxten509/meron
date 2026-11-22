@@ -1,3 +1,7 @@
+// Schedules desktop delivery of due task and calendar reminders.
+// The running app checks the core for reminders ready to display.
+// Delivery passes the results to the native notification layer.
+
 package main
 
 import (

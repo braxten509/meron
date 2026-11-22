@@ -1,3 +1,7 @@
+// Coordinates Windows installation after the desktop app exits.
+// A helper launches the installer and records failures for the next startup.
+// The update UI receives the resulting status through the host.
+
 package main
 
 import (

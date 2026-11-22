@@ -1,3 +1,7 @@
+// Coordinates changes to the desktop tray image.
+// Unread counts and monochrome preferences both update the requested state.
+// The renderer turns those updates into platform-specific icon requests.
+
 package main
 
 import (

@@ -68,8 +68,8 @@ func (a *App) setupResumeListener() {
 		runtime.LockOSThread()
 		defer runtime.UnlockOSThread()
 
-		wndProc := syscall.NewCallback(func(hwnd windows.Handle, msg uint32, wParam, lParam uintptr) uintptr {
-			switch msg {
+		wndProc := syscall.NewCallback(func(hwnd windows.Handle, message uint32, wParam, lParam uintptr) uintptr {
+			switch message {
 			case wmPowerBroadcast:
 				if wParam == pbtApmResumeAuto || wParam == pbtApmResumeSuspend {
 					go a.onSystemResumed()
@@ -79,7 +79,7 @@ func (a *App) setupResumeListener() {
 				procPostQuit.Call(0)
 				return 0
 			}
-			ret, _, _ := procDefWindowProc.Call(uintptr(hwnd), uintptr(msg), wParam, lParam)
+			ret, _, _ := procDefWindowProc.Call(uintptr(hwnd), uintptr(message), wParam, lParam)
 			return ret
 		})
 
@@ -112,13 +112,13 @@ func (a *App) setupResumeListener() {
 		resumeHwnd = windows.Handle(hwnd)
 		resumeMu.Unlock()
 
-		var msg winMsg
+		var message winMsg
 		for {
-			ret, _, _ := procGetMessage.Call(uintptr(unsafe.Pointer(&msg)), 0, 0, 0)
+			ret, _, _ := procGetMessage.Call(uintptr(unsafe.Pointer(&message)), 0, 0, 0)
 			if int32(ret) <= 0 { // 0 = WM_QUIT, -1 = error
 				break
 			}
-			procDispatchMsg.Call(uintptr(unsafe.Pointer(&msg)))
+			procDispatchMsg.Call(uintptr(unsafe.Pointer(&message)))
 		}
 	}()
 }

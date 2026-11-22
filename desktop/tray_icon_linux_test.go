@@ -1,5 +1,9 @@
 //go:build linux
 
+// Checks Linux tray image selection using recorded native calls.
+// Fixtures exercise symbolic and color styles, unread changes and write failures.
+// The visible icon must update when the selected style changes.
+
 package main
 
 import (

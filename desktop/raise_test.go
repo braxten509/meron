@@ -1,3 +1,7 @@
+// Supplies a recording window implementation for desktop activation tests.
+// Platform-specific tests set up the window state with this fixture.
+// They inspect the recorded calls after requesting activation.
+
 package main
 
 import (

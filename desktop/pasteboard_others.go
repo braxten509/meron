@@ -1,5 +1,9 @@
 //go:build !darwin
 
+// Provides the non-macOS side of the pasteboard interface.
+// The shared clipboard commands use these platform entry points.
+// Their fallback results let the caller choose an available clipboard or file action.
+
 package main
 
 import "errors"

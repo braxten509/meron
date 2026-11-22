@@ -1,3 +1,7 @@
+// Handles desktop sign-in and reconnect for OAuth mail accounts.
+// Google and Outlook flows hand their credentials back to the account command.
+// Account creation also records the provider's identity and profile details.
+
 package main
 
 import (
@@ -54,44 +58,44 @@ func (a *App) accountAddOutlookOAuth(payload map[string]any) (any, error) {
 // profile photo; an avatar already set, possibly chosen by the user, stays.
 func (a *App) accountAddOAuth(provider string, payload map[string]any) (any, error) {
 	box := oauthMailboxes[provider]
-	var req AddOAuthRequest
-	if err := decode(payload, &req); err != nil {
+	var request AddOAuthRequest
+	if err := decode(payload, &request); err != nil {
 		return nil, err
 	}
-	if req.AccessToken == "" || req.RefreshToken == "" {
+	if request.AccessToken == "" || request.RefreshToken == "" {
 		return nil, fmt.Errorf("%s sign-in returned no tokens; sign in again", box.label)
 	}
-	if !strings.Contains(req.Email, "@") {
+	if !strings.Contains(request.Email, "@") {
 		return nil, errors.New("invalid email")
 	}
 
 	if a.sidecar == nil || !a.sidecar.Started() {
 		return nil, a.engineUnavailable()
 	}
-	id, existing, err := a.accountSaveID(req.ID, req.Email)
+	id, existing, err := a.accountSaveID(request.ID, request.Email)
 	if err != nil {
 		return nil, err
 	}
 	switch {
 	case existing != nil && existing.AvatarURL != "":
 		// The connect below keeps the stored avatar when it's sent none.
-		req.AvatarURL = existing.AvatarURL
-	case req.AvatarURL != "":
-		req.AvatarURL = a.downloadAndSaveAvatar(id, req.AvatarURL)
+		request.AvatarURL = existing.AvatarURL
+	case request.AvatarURL != "":
+		request.AvatarURL = a.downloadAndSaveAvatar(id, request.AvatarURL)
 	default:
-		if photo, err := a.fetchOAuthPhoto(provider, req.AccessToken, req.RefreshToken); err != nil {
+		if photo, err := a.fetchOAuthPhoto(provider, request.AccessToken, request.RefreshToken); err != nil {
 			a.logf("account.add%sOAuth: profile photo unavailable: %v", box.label, err)
 		} else {
-			req.AvatarURL = a.saveAvatar(id, photo)
+			request.AvatarURL = a.saveAvatar(id, photo)
 		}
 	}
-	expiresAt := time.Now().Unix() + req.ExpiresIn
-	a.logf("account.add%sOAuth: connecting account=%s email=%s token_present=%t refresh_present=%t", box.label, id, req.Email, req.AccessToken != "", req.RefreshToken != "")
+	expiresAt := time.Now().Unix() + request.ExpiresIn
+	a.logf("account.add%sOAuth: connecting account=%s email=%s token_present=%t refresh_present=%t", box.label, id, request.Email, request.AccessToken != "", request.RefreshToken != "")
 	if _, err := a.sidecar.Call("account.connect", map[string]any{
 		"id":               id,
 		"host":             box.imapHost,
 		"port":             993,
-		"user":             req.Email,
+		"user":             request.Email,
 		"password":         "",
 		"tls":              true,
 		"smtp_host":        box.smtpHost,
@@ -99,14 +103,14 @@ func (a *App) accountAddOAuth(provider string, payload map[string]any) (any, err
 		"smtp_tls":         box.smtpTLS,
 		"smtp_starttls":    !box.smtpTLS,
 		"auth_type":        box.authType,
-		"access_token":     req.AccessToken,
-		"refresh_token":    req.RefreshToken,
+		"access_token":     request.AccessToken,
+		"refresh_token":    request.RefreshToken,
 		"token_expires_at": expiresAt,
 		"validate":         false,
-		"email":            req.Email,
-		"display_name":     req.DisplayName,
-		"sender_name":      req.SenderName,
-		"avatar_url":       req.AvatarURL,
+		"email":            request.Email,
+		"display_name":     request.DisplayName,
+		"sender_name":      request.SenderName,
+		"avatar_url":       request.AvatarURL,
 		"provider":         provider,
 	}); err != nil {
 		return nil, err
@@ -115,10 +119,10 @@ func (a *App) accountAddOAuth(provider string, payload map[string]any) (any, err
 
 	account := Account{
 		ID:                id,
-		Email:             req.Email,
-		DisplayName:       req.DisplayName,
-		SenderName:        req.SenderName,
-		AvatarURL:         req.AvatarURL,
+		Email:             request.Email,
+		DisplayName:       request.DisplayName,
+		SenderName:        request.SenderName,
+		AvatarURL:         request.AvatarURL,
 		Provider:          provider,
 		AuthType:          box.authType,
 		IncludedInUnified: true,
@@ -129,8 +133,8 @@ func (a *App) accountAddOAuth(provider string, payload map[string]any) (any, err
 		TLS:               true,
 		SMTPTLS:           box.smtpTLS,
 		SMTPStartTLS:      !box.smtpTLS,
-		AccessToken:       req.AccessToken,
-		RefreshToken:      req.RefreshToken,
+		AccessToken:       request.AccessToken,
+		RefreshToken:      request.RefreshToken,
 		TokenExpiresAt:    expiresAt,
 	}
 	a.logf("account.add%sOAuth: saved account=%s", box.label, id)

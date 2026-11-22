@@ -43,18 +43,18 @@ type fakeTrayClock struct {
 func configureTrayClock(r *trayRenderer) *fakeTrayClock {
 	c := &fakeTrayClock{current: time.Unix(100, 0)}
 	r.now = func() time.Time { c.mu.Lock(); defer c.mu.Unlock(); return c.current }
-	r.after = func(d time.Duration, fn func()) trayTimer {
+	r.after = func(duration time.Duration, fn func()) trayTimer {
 		c.mu.Lock()
 		defer c.mu.Unlock()
-		timer := &fakeTrayTimer{fn: fn, at: c.current.Add(d), clock: c}
+		timer := &fakeTrayTimer{fn: fn, at: c.current.Add(duration), clock: c}
 		c.timers = append(c.timers, timer)
 		return timer
 	}
 	return c
 }
-func (c *fakeTrayClock) advance(d time.Duration) {
+func (c *fakeTrayClock) advance(duration time.Duration) {
 	c.mu.Lock()
-	c.current = c.current.Add(d)
+	c.current = c.current.Add(duration)
 	var due []func()
 	for _, timer := range c.timers {
 		if !timer.stopped && !c.current.Before(timer.at) {

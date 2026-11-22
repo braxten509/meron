@@ -1,3 +1,7 @@
+// Resolves desktop profile paths and common account request values.
+// The host uses these helpers when loading configuration and preparing core requests.
+// Shared conversions include account identities, TLS settings and generated tokens.
+
 package main
 
 import (

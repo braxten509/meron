@@ -27,8 +27,8 @@ const (
 	mcpCreateAccount     mcpPermission = "create_account"
 )
 
-func mcpPermitted(c mcpClient, p mcpPermission) bool {
-	switch p {
+func mcpPermitted(c mcpClient, permission mcpPermission) bool {
+	switch permission {
 	case mcpRead:
 		return true
 	case mcpDraft:
@@ -73,7 +73,7 @@ func (op *mcpOperation) response() map[string]any {
 
 // Caller holds s.mu. Results remain available for one hour in this process;
 // request IDs prevent network retries from repeating sends or deletions.
-func (s *mcpService) previousOperation(c mcpClient, tool, requestID string, args any) (*mcpOperation, string, error) {
+func (service *mcpService) previousOperation(c mcpClient, tool, requestID string, args any) (*mcpOperation, string, error) {
 	if len(requestID) < 1 || len(requestID) > 128 {
 		return nil, "", errors.New("request_id must contain 1–128 characters")
 	}
@@ -83,8 +83,8 @@ func (s *mcpService) previousOperation(c mcpClient, tool, requestID string, args
 	}
 	hash := sha256.Sum256(encoded)
 	fingerprint := hex.EncodeToString(hash[:])
-	s.expireOperations()
-	for _, op := range s.operations {
+	service.expireOperations()
+	for _, op := range service.operations {
 		if op.client.ID == c.ID && op.requestID == requestID {
 			if op.Tool != tool || op.fingerprint != fingerprint {
 				return nil, "", errors.New("request_id was already used with different arguments")
@@ -93,7 +93,7 @@ func (s *mcpService) previousOperation(c mcpClient, tool, requestID string, args
 		}
 	}
 	pending := 0
-	for _, op := range s.operations {
+	for _, op := range service.operations {
 		if op.client.ID == c.ID && op.Status == "pending_approval" {
 			pending++
 		}
@@ -101,28 +101,28 @@ func (s *mcpService) previousOperation(c mcpClient, tool, requestID string, args
 	if pending >= 8 {
 		return nil, "", errors.New("Resolve pending approvals before requesting more")
 	}
-	if len(s.operations) >= 64 {
+	if len(service.operations) >= 64 {
 		return nil, "", errors.New("Too many recent operations; try again later")
 	}
 	return nil, fingerprint, nil
 }
-func (s *mcpService) newOperation(c mcpClient, tool, account, requestID, fingerprint string, p mcpPermission, ask bool, preview any, execute func() (any, error)) any {
-	if s.operations == nil {
-		s.operations = map[string]*mcpOperation{}
+func (service *mcpService) newOperation(c mcpClient, tool, account, requestID, fingerprint string, p mcpPermission, ask bool, preview any, execute func() (any, error)) any {
+	if service.operations == nil {
+		service.operations = map[string]*mcpOperation{}
 	}
 	op := &mcpOperation{ID: uuid.NewString(), ClientName: c.Name, Account: account, Tool: tool, Status: "pending_approval", ExpiresAt: time.Now().Add(5 * time.Minute), Preview: preview, client: c, permission: p, requestID: requestID, fingerprint: fingerprint, created: time.Now(), execute: execute}
-	s.operations[op.ID] = op
+	service.operations[op.ID] = op
 	if ask {
-		s.notifyApprovals()
+		service.notifyApprovals()
 	} else {
-		s.executeOperation(op)
+		service.executeOperation(op)
 	}
 	return op.response()
 }
-func (s *mcpService) expireOperations() {
+func (service *mcpService) expireOperations() {
 	now := time.Now()
 	expired := false
-	for id, op := range s.operations {
+	for id, op := range service.operations {
 		if op.Status == "pending_approval" && !now.Before(op.ExpiresAt) {
 			op.Status = "expired"
 			op.execute = nil
@@ -130,16 +130,16 @@ func (s *mcpService) expireOperations() {
 			expired = true
 		}
 		if now.Sub(op.created) > time.Hour {
-			delete(s.operations, id)
+			delete(service.operations, id)
 		}
 	}
 	if expired {
-		s.notifyApprovals()
+		service.notifyApprovals()
 	}
 }
-func (s *mcpService) cancelPending() {
+func (service *mcpService) cancelPending() {
 	cancelled := false
-	for _, op := range s.operations {
+	for _, op := range service.operations {
 		if op.Status == "pending_approval" {
 			op.Status = "cancelled"
 			op.execute = nil
@@ -148,13 +148,13 @@ func (s *mcpService) cancelPending() {
 		}
 	}
 	if cancelled {
-		s.notifyApprovals()
+		service.notifyApprovals()
 	}
 }
-func (s *mcpService) pendingApprovals() any {
-	s.expireOperations()
+func (service *mcpService) pendingApprovals() any {
+	service.expireOperations()
 	pending := []*mcpOperation{}
-	for _, op := range s.operations {
+	for _, op := range service.operations {
 		if op.Status == "pending_approval" {
 			pending = append(pending, op)
 		}
@@ -165,9 +165,9 @@ func (s *mcpService) pendingApprovals() any {
 	_ = json.Unmarshal(data, &out)
 	return out
 }
-func (s *mcpService) resolveOperation(id string, approve bool) (any, error) {
-	s.expireOperations()
-	op := s.operations[id]
+func (service *mcpService) resolveOperation(id string, approve bool) (any, error) {
+	service.expireOperations()
+	op := service.operations[id]
 	if op == nil {
 		return nil, errors.New("Request no longer exists")
 	}
@@ -178,28 +178,28 @@ func (s *mcpService) resolveOperation(id string, approve bool) (any, error) {
 		op.Status = "denied"
 		op.execute = nil
 		op.Preview = nil
-		s.notifyApprovals()
+		service.notifyApprovals()
 		return op.response(), nil
 	}
 	// No MCP tool exposes this method. The trusted Wails UI alone can approve.
 	allowed := false
-	for _, c := range s.config.Clients {
+	for _, c := range service.config.Clients {
 		if c.ID == op.client.ID && c.TokenHash == op.client.TokenHash && mcpAllows(c, op.Account) && mcpPermitted(c, op.permission) {
 			allowed = true
 			break
 		}
 	}
-	if !s.config.Enabled || !allowed {
+	if !service.config.Enabled || !allowed {
 		op.Status = "cancelled"
 		op.execute = nil
 		op.Preview = nil
-		s.notifyApprovals()
+		service.notifyApprovals()
 		return op.response(), nil
 	}
-	s.executeOperation(op)
+	service.executeOperation(op)
 	return op.response(), nil
 }
-func (s *mcpService) executeOperation(op *mcpOperation) {
+func (service *mcpService) executeOperation(op *mcpOperation) {
 	op.Status = "running"
 	result, err := op.execute()
 	op.result = result
@@ -211,28 +211,28 @@ func (s *mcpService) executeOperation(op *mcpOperation) {
 	} else {
 		op.Status = "completed"
 	}
-	s.record(op.client, op.Tool, op.Account, err)
-	s.notifyApprovals()
+	service.record(op.client, op.Tool, op.Account, err)
+	service.notifyApprovals()
 	// A failed transport can still mean the mutation landed; refresh either way.
-	s.notifyMailChanged(op.Account)
+	service.notifyMailChanged(op.Account)
 }
 
 // The approval prompt and the settings panel listen for these instead of
 // polling: an idle Meron should not be asking the backend anything at all.
-func (s *mcpService) notifyApprovals() {
-	if s.app != nil && s.app.ctx != nil {
-		wailsRuntime.EventsEmit(s.app.ctx, "mcp.approvals")
+func (service *mcpService) notifyApprovals() {
+	if service.app != nil && service.app.ctx != nil {
+		wailsRuntime.EventsEmit(service.app.ctx, "mcp.approvals")
 	}
 }
-func (s *mcpService) notifyActivity() {
-	if s.app != nil && s.app.ctx != nil {
-		wailsRuntime.EventsEmit(s.app.ctx, "mcp.activity")
+func (service *mcpService) notifyActivity() {
+	if service.app != nil && service.app.ctx != nil {
+		wailsRuntime.EventsEmit(service.app.ctx, "mcp.activity")
 	}
 }
-func (s *mcpService) notifyMailChanged(account string) {
-	if s.app.ctx != nil {
-		wailsRuntime.EventsEmit(s.app.ctx, "mail.synced", map[string]any{"account": account, "folders": true})
+func (service *mcpService) notifyMailChanged(account string) {
+	if service.app.ctx != nil {
+		wailsRuntime.EventsEmit(service.app.ctx, "mail.synced", map[string]any{"account": account, "folders": true})
 	}
 	// Mail an MCP client read, moved or deleted may still be announced on screen.
-	s.app.requestNotificationReconcile()
+	service.app.requestNotificationReconcile()
 }

@@ -1,5 +1,9 @@
 //go:build linux && !bindings
 
+// Exercises Linux startup with a native titlebar.
+// The fixture observes how the app first shows and maximizes its window.
+// The regression covers the startup path used by integrated window controls.
+
 package main
 
 import (

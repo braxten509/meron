@@ -1,3 +1,7 @@
+// Tests how the desktop picker chooses its initial directory.
+// Fixtures supply existing directories, missing paths and symbolic links.
+// The fallback uses the home directory when a candidate cannot be opened.
+
 package main
 
 import (
