@@ -240,10 +240,9 @@ private suspend fun MeronMobileState.refreshTaskLists() {
 /**
  * Follow a task back to the message it was made from.
  *
- * The task keeps only the composite thread id, which the core's thread read
- * resolves by itself — across the account's folders, so a mail that has since
- * been archived or trashed still opens. Nothing here loads a mailbox: the
- * conversation is shown over whatever the user was looking at, as a
+ * The task keeps only the composite thread id, which the core's thread read resolves by itself —
+ * across the account's folders, so a mail that has since been archived or trashed still opens. Nothing
+ * here loads a mailbox: the conversation is shown over whatever the user was looking at, as a
  * notification tap-through does.
  */
 internal fun MeronMobileState.openTaskThread(task: TaskSummary) {

@@ -1,3 +1,7 @@
+// Checks the transition from Google device sign-in to browser
+// authorization. Cancellation, an ordinary failure and the
+// availability of a redirect URI determine the next action.
+
 package jp.nonbili.meron.ui
 
 import jp.nonbili.meron.shared.CloseableHandle

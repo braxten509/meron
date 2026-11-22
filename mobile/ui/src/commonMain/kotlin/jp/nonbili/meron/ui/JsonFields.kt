@@ -33,7 +33,16 @@ internal fun String.decodeJsonString(): String {
     while (index < length) {
         val ch = this[index]
         if (ch == '\\' && index + 1 < length) {
-            when (val escaped = this[index + 1]) {
+            val escaped = this[index + 1]
+            if (escaped == 'u' && index + 6 <= length) {
+                val digits = substring(index + 2, index + 6)
+                if (digits.all { it in '0'..'9' || it in 'A'..'F' || it in 'a'..'f' }) {
+                    out.append(digits.toInt(16).toChar())
+                    index += 6
+                    continue
+                }
+            }
+            when (escaped) {
                 '"', '\\', '/' -> out.append(escaped)
                 'b' -> out.append('\b')
                 'f' -> out.append('\u000c')

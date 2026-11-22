@@ -5,7 +5,6 @@
 
 package jp.nonbili.meron.ui
 
-import androidx.compose.material.icons.filled.Add
 import jp.nonbili.meron.shared.AddOAuthAccountParams
 import jp.nonbili.meron.shared.ExchangeOAuthCodeParams
 import jp.nonbili.meron.shared.MobileMailCommandClient
@@ -148,12 +147,10 @@ private fun MeronMobileState.addGoogleDeviceAccount(account: GoogleDeviceAccount
 }
 
 /**
- * For host-managed Gmail accounts, mint a fresh access token and push it into
- * meron-core before a server-touching command. No-op for browser-flow /
- * non-managed accounts, and — unless [force] — while the last pushed token is
- * comfortably before expiry. Returns true only when a fresh token was pushed
- * into core. Failures are swallowed so a stale token still attempts the
- * command.
+ * For host-managed Gmail accounts, mint a fresh access token and push it into meron-core before a
+ * server-touching command. No-op for browser-flow / non-managed accounts, and — unless [force] — while
+ * the last pushed token is comfortably before expiry. Returns true only when a fresh token was pushed
+ * into core. Failures are swallowed so a stale token still attempts the command.
  */
 internal suspend fun MeronMobileState.ensureManagedGoogleToken(
     client: MobileMailCommandClient,

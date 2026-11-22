@@ -699,11 +699,12 @@ internal suspend fun MeronMobileState.refreshOpenThreadCoalesced() {
     waiter.await()
 }
 
-/** Opens the conversation a tapped notification names, layered over whatever
- *  the user was looking at: the mailbox behind it keeps its account, folder,
- *  search and filter, so backing out returns to the Mail or Kanban view the tap
- *  interrupted rather than to the notification's own folder. The thread is
- *  opened directly by composite id without searching the mailbox. */
+/**
+ * Opens the conversation a tapped notification names, layered over whatever the user was looking at:
+ * the mailbox behind it keeps its account, folder, search and filter, so backing out returns to the
+ * Mail or Kanban view the tap interrupted rather than to the notification's own folder. The thread is
+ * opened directly by composite id without searching the mailbox.
+ */
 internal fun MeronMobileState.openNotificationThread(target: NotificationThreadTarget) {
     if (!coreLoaded) {
         status = coreUnavailableMessage

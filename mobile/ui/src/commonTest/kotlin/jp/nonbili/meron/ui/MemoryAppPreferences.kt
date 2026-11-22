@@ -1,3 +1,7 @@
+// Provides an in-memory preference store for mobile UI tests.
+// Typed setters and getters let state fixtures round-trip
+// values without writing to a real device's settings.
+
 package jp.nonbili.meron.ui
 
 internal class MemoryAppPreferences : AppPreferences {

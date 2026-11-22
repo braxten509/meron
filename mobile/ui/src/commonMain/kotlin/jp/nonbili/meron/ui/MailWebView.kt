@@ -10,28 +10,30 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpOffset
 
-/** Renders a complete HTML document (mail body). WKWebView on iOS, WebView on
- *  Android. JavaScript is enabled so the embedded measurement script can report
- *  content height via [onContentHeight] (in dp), letting the caller size the
- *  view to fit the email.
+/**
+ * Renders a complete HTML document (mail body).
  *
- *  [onLinkLongPress] reports a long press on a link, with the press position
- *  relative to the view's top-left corner, so the caller can show its own menu
- *  at the finger. iOS ignores it: WKWebView shows the native link menu itself.
+ * WKWebView on iOS, WebView on Android. JavaScript is enabled so the embedded measurement script can
+ * report content height via [onContentHeight] (in dp), letting the caller size the view to fit the
+ * email.
  *
- *  [fitWideContent] lets a page that is still wider than the view after the CSS
- *  reflow overrides shrink to fit instead of being clipped, the way Gmail renders
- *  fixed-width mail: the page lays out at its natural width and is scaled down,
- *  with WebView's text autosizing inflating fonts so the smaller scale stays
- *  readable. The height bridge reports pre-scale CSS pixels, so the script
- *  multiplies by the fit scale to keep reported height in dp. Only the
- *  full-screen reader enables it — in a chat bubble a 640px mail would scale to
- *  a thumbnail, so bubbles reflow only unless the reader opts in (the auto-fit
- *  setting). iOS ignores it (see MailWebView.ios.kt).
+ * [onLinkLongPress] reports a long press on a link, with the press position relative to the view's
+ * top-left corner, so the caller can show its own menu at the finger. iOS ignores it: WKWebView shows
+ * the native link menu itself.
  *
- *  [transparentBackground] lets whatever is behind the view show through where
- *  the page paints nothing, which darkened mail relies on. WKWebView is already
- *  non-opaque, so only Android acts on it. */
+ * [fitWideContent] lets a page that is still wider than the view after the CSS reflow overrides shrink
+ * to fit instead of being clipped, the way Gmail renders fixed-width mail: the page lays out at its
+ * natural width and is scaled down, with WebView's text autosizing inflating fonts so the smaller
+ * scale stays readable.
+ *
+ * The height bridge reports pre-scale CSS pixels, so the script multiplies by the fit scale to keep
+ * reported height in dp. Only the full-screen reader enables it — in a chat bubble a 640px mail would
+ * scale to a thumbnail, so bubbles reflow only unless the reader opts in (the auto-fit setting). iOS
+ * ignores it (see MailWebView.ios.kt).
+ *
+ * [transparentBackground] lets whatever is behind the view show through where the page paints nothing,
+ * which darkened mail relies on. WKWebView is already non-opaque, so only Android acts on it.
+ */
 @Composable
 expect fun MailWebView(
     html: String,
@@ -57,15 +59,14 @@ expect fun MailWebView(
 )
 
 /**
- * Whether the platform's web view already sizes CSS text by the system font
- * setting, the way `sp` sizes are scaled for the rest of the app.
+ * Whether the platform's web view already sizes CSS text by the system font setting, the way `sp` sizes are scaled for the rest of the app.
  *
- * Android's WebView does: at a 1.5 system font scale, measured body line
- * heights grow by the same ~1.5 the Compose UI grows by. WKWebView does not —
- * Dynamic Type reaches Compose (`Density.fontScale`, mapped from the trait
- * collection's content size category) but never the web content, so message
- * bodies there have to be scaled by hand or HTML mail would stay at one size
- * while every plain-text body around it grew.
+ * Android's WebView does: at a 1.5 system font scale, measured body line heights grow by the same ~1.5
+ * the Compose UI grows by.
+ *
+ * WKWebView does not — Dynamic Type reaches Compose (`Density.fontScale`, mapped from the trait
+ * collection's content size category) but never the web content, so message bodies there have to be
+ * scaled by hand or HTML mail would stay at one size while every plain-text body around it grew.
  */
 internal expect val MailWebViewFollowsSystemFontScale: Boolean
 

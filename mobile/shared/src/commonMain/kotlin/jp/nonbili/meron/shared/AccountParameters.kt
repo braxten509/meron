@@ -319,13 +319,13 @@ data class AccountProxyParams(
 }
 
 /**
- * The server to fetch a certificate from, for a user who has to decide whether
- * to trust it. [protocol] is "imap" or "smtp" — the two can be different
- * daemons — and [starttls] picks the cleartext-then-upgrade form.
+ * The server to fetch a certificate from, for a user who has to decide whether to trust it.
  *
- * [proxy] is the account's own proxy choice, so the probe takes the same route
- * as the connection that failed; null follows the app-wide proxy, as a
- * connection with no account override does.
+ * [protocol] is "imap" or "smtp" — the two can be different daemons — and [starttls] picks the
+ * cleartext-then-upgrade form.
+ *
+ * [proxy] is the account's own proxy choice, so the probe takes the same route as the connection that
+ * failed; null follows the app-wide proxy, as a connection with no account override does.
  */
 data class ProbeCertParams(
     val host: String,

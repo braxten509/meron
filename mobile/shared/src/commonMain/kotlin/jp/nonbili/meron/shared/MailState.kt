@@ -308,11 +308,12 @@ data class ReplyRecipients(
     val cc: String,
 )
 
-/** Both reply forms of one message, as the core decided them (see
- * meron-core/src/reply.rs): `to`/`cc` for a plain reply, `allTo`/`allCc` for
- * reply-all, whether reply-all reaches anyone the plain reply does not, and
- * whether a reply reaches anyone at all (false for no-reply and bounce
- * addresses, which quick replies pass over). */
+/**
+ * Both reply forms of one message, as the core decided them (see meron-core/src/reply.rs): `to`/`cc`
+ * for a plain reply, `allTo`/`allCc` for reply-all, whether reply-all reaches anyone the plain reply
+ * does not, and whether a reply reaches anyone at all (false for no-reply and bounce addresses, which
+ * quick replies pass over).
+ */
 data class MessageReply(
     val to: String = "",
     val cc: String = "",
@@ -420,15 +421,14 @@ fun threadIdIsRss(threadId: String): Boolean = threadId.contains("#rss#")
 fun accountIdIsRss(accountId: String): Boolean = accountId.startsWith("rss-")
 
 /**
- * The mailbox a mail thread id names, or "" when [threadId] carries none (an
- * RSS thread, or an id the core did not mint). Mail ids are
- * `account#folder#key`, where the key is a UID or base64 and so never contains
- * "#" while a mailbox name can, which makes the folder everything between the
- * first and last separator — the same split the core's `parse_thread_id` does.
+ * The mailbox a mail thread id names, or "" when [threadId] carries none (an RSS thread, or an id the core did not mint).
  *
- * The card's own folder has to come from here rather than from a `folder`
- * field, which the UI overwrites with a Kanban column id when a thread is
- * opened from a column.
+ * Mail ids are `account#folder#key`, where the key is a UID or base64 and so never contains "#" while
+ * a mailbox name can, which makes the folder everything between the first and last separator — the
+ * same split the core's `parse_thread_id` does.
+ *
+ * The card's own folder has to come from here rather than from a `folder` field, which the UI
+ * overwrites with a Kanban column id when a thread is opened from a column.
  */
 fun mailThreadIdFolder(threadId: String): String {
     if (threadIdIsRss(threadId)) return ""

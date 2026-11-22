@@ -57,13 +57,13 @@ private fun proxySummary(spec: ProxySpec): String =
     }
 
 /**
- * The proxy row plus its editor. Used for the app-wide proxy and, with
- * [accountScoped] set, for a single account's override — the only difference is
- * which modes are offered and the hint text.
+ * The proxy row plus its editor.
  *
- * Saving is explicit (the dialog's confirm button) rather than per-keystroke:
- * a half-typed host would otherwise be pushed to the core and break the next
- * connection attempt.
+ * Used for the app-wide proxy and, with [accountScoped] set, for a single account's override — the
+ * only difference is which modes are offered and the hint text.
+ *
+ * Saving is explicit (the dialog's confirm button) rather than per-keystroke: a half-typed host would
+ * otherwise be pushed to the core and break the next connection attempt.
  */
 @Composable
 internal fun SettingsProxyRow(

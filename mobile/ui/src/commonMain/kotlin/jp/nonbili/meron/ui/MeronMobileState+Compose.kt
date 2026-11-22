@@ -6,9 +6,7 @@
 package jp.nonbili.meron.ui
 
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.outlined.Drafts
 import androidx.compose.ui.input.key.key
 import jp.nonbili.meron.shared.AccountSummary
@@ -181,11 +179,10 @@ internal fun MeronMobileState.clearComposeDraftState() {
 }
 
 /**
- * The composer with the signature this app seeded taken back out, and a reply's
- * seeded quote with it while the quote is untouched. A signature the user has
- * typed into can no longer be identified (see [bodyWithSwappedSignature]), which
- * is the same answer as "this text is theirs now". Mirrors the reply bar's
- * [quickReplyIsBlank].
+ * The composer with the signature this app seeded taken back out, and a reply's seeded quote with it
+ * while the quote is untouched. A signature the user has typed into can no longer be identified (see
+ * [bodyWithSwappedSignature]), which is the same answer as "this text is theirs now". Mirrors the
+ * reply bar's [quickReplyIsBlank].
  */
 private fun MeronMobileState.composeBodyWithoutSignature(): String {
     val quoteAt = if (composeReplyQuote.isBlank()) -1 else body.lastIndexOf(composeReplyQuote)
@@ -655,11 +652,12 @@ internal fun MeronMobileState.canReplyAllToMessage(message: MessageBody): Boolea
 
 internal fun MeronMobileState.replyAllToMessage(message: MessageBody) = replyToMessage(message, replyAll = true)
 
-/** Reply (or reply-all) to one message, rather than to the conversation's reply
- * target: the message menu and the reader act on the message they belong to.
- * Opens the full composer — for reply-all the recipients are the point of the
- * action, and only the composer shows them. The reply bar and any draft it
- * holds are left untouched. */
+/**
+ * Reply (or reply-all) to one message, rather than to the conversation's reply target: the message
+ * menu and the reader act on the message they belong to. Opens the full composer — for reply-all the
+ * recipients are the point of the action, and only the composer shows them. The reply bar and any
+ * draft it holds are left untouched.
+ */
 internal fun MeronMobileState.replyToMessage(
     message: MessageBody,
     replyAll: Boolean,

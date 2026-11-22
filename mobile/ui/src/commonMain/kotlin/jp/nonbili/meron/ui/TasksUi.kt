@@ -62,8 +62,7 @@ import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 
 /**
- * The Tasks screen body: an add field, the open tasks, then the completed ones
- * under a collapsible heading, as in Google Tasks.
+ * The Tasks screen body: an add field, the open tasks, then the completed ones under a collapsible heading, as in Google Tasks.
  *
  * Open tasks reorder by long-pressing a row and dragging it.
  */

@@ -6,9 +6,6 @@
 package jp.nonbili.meron.ui
 
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.automirrored.filled.Reply
-import androidx.compose.material.icons.automirrored.filled.Send
 import jp.nonbili.meron.shared.AccountSummary
 import jp.nonbili.meron.shared.ComposeDraft
 import jp.nonbili.meron.shared.DiscardDraftParams
@@ -196,12 +193,11 @@ internal fun MeronMobileState.seedQuickReplySignature() {
 }
 
 /**
- * Re-seed a reply bar the user has not written in yet, so it isn't left holding
- * a signature that is no longer the one it would send. Called whenever the
- * app-wide or an account's signature is rewritten — the settings screen can be
- * opened and left with the thread still behind it, and the bar is what gets
- * sent. A bar with anything of theirs in it — text, an attachment, a hydrated
- * draft — is never rewritten.
+ * Re-seed a reply bar the user has not written in yet, so it isn't left holding a signature that is no longer the one it would send.
+ *
+ * Called whenever the app-wide or an account's signature is rewritten — the settings screen can be
+ * opened and left with the thread still behind it, and the bar is what gets sent. A bar with anything
+ * of theirs in it — text, an attachment, a hydrated draft — is never rewritten.
  */
 internal fun MeronMobileState.reseedUntouchedQuickReply() {
     if (quickReplyThreadId.isBlank()) return
@@ -369,11 +365,10 @@ internal fun MeronMobileState.autoSaveQuickReplyDraft() {
 }
 
 /**
- * Run a save that a send in flight turned away. The bar empties on the click, so
- * the user can start their next reply while the previous one is still going out
- * — and that reply's debounce lands inside the send, where saving is refused.
- * Nothing else reschedules it: until it runs, the copy in Drafts still holds the
- * text that was already sent, and the reply on screen is not saved anywhere.
+ * Run a save that a send in flight turned away. The bar empties on the click, so the user can start
+ * their next reply while the previous one is still going out — and that reply's debounce lands inside
+ * the send, where saving is refused. Nothing else reschedules it: until it runs, the copy in Drafts
+ * still holds the text that was already sent, and the reply on screen is not saved anywhere.
  */
 private fun MeronMobileState.runDeferredQuickReplyAutosave() {
     if (!quickReplyAutosaveDeferred) return
@@ -878,11 +873,10 @@ private suspend fun MeronMobileState.dispatchQuickReplySend(pending: PendingQuic
 }
 
 /**
- * Keep trying to discard the draft of a message that already went out, after
- * the discard that followed the send failed. Until one succeeds the draft stays
- * among [MeronMobileState.quickReplyConsumedDraftIds]: hidden from the
- * conversation and never hydrated into the reply bar, where it would put text
- * that was already sent one tap from going out twice.
+ * Keep trying to discard the draft of a message that already went out, after the discard that followed
+ * the send failed. Until one succeeds the draft stays among
+ * [MeronMobileState.quickReplyConsumedDraftIds]: hidden from the conversation and never hydrated into
+ * the reply bar, where it would put text that was already sent one tap from going out twice.
  */
 internal fun MeronMobileState.retrySentDraftDiscard(owner: ComposeDraftOwner) {
     val id = owner.draftId.normalizedComposeDraftId()

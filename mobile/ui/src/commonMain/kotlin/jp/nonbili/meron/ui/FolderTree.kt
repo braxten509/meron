@@ -55,11 +55,10 @@ internal fun folderTreeDelimiter(folders: List<FolderSummary>): String =
     }
 
 /**
- * The folder a "delete folder" action may target: an ordinary folder of a single
- * account. Special-use folders carry the app's own routing
- * (Inbox/Sent/Drafts/Trash/Junk/Archive), and that rules out a parent holding one
- * as well, because deleting a folder takes everything nested under it too. The
- * core re-checks both rules.
+ * The folder a "delete folder" action may target: an ordinary folder of a single account. Special-use
+ * folders carry the app's own routing (Inbox/Sent/Drafts/Trash/Junk/Archive), and that rules out a
+ * parent holding one as well, because deleting a folder takes everything nested under it too. The core
+ * re-checks both rules.
  */
 internal fun deletableFolder(
     folders: List<FolderSummary>,

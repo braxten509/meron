@@ -17,12 +17,12 @@ import {
   ensureFile,
   envFlag,
   fail,
-  mobileDir,
+  mobileDirectory,
   repoRoot,
   requireEnv,
   run,
   writeAppleReleaseNotes,
-} from '../mobile/scripts/release-utils'
+} from '../mobile/scripts/release-environment'
 
 const [pkgArg] = Bun.argv.slice(2)
 
@@ -37,7 +37,7 @@ const defaultPkgPath = resolve(repoRoot, 'dist/Meron-mas.pkg')
 const pkgPath = pkgArg ?? process.env.PKG_PATH ?? defaultPkgPath
 const appIdentifier = process.env.MAC_APP_IDENTIFIER ?? 'jp.nonbili.meron'
 const releaseNotesPath = process.env.MAC_RELEASE_NOTES_PATH
-  ?? resolve(mobileDir, 'fastlane/metadata/mac/en-US/release_notes.txt')
+  ?? resolve(mobileDirectory, 'fastlane/metadata/mac/en-US/release_notes.txt')
 const skipBinaryUpload = envFlag('MAC_SKIP_BINARY_UPLOAD', false)
 // Build by default, as the iOS script does. Nothing to build when the binary
 // upload is being skipped.
@@ -124,13 +124,13 @@ if (skipBinaryUpload && submitForReview) {
 if (rejectIfPossible) {
   console.log('Cancelling any in-progress review submission first...')
   await run(['bundle', 'exec', 'fastlane', 'mac', 'cancel_review'], {
-    cwd: mobileDir,
+    cwd: mobileDirectory,
     env: { MAC_APP_IDENTIFIER: appIdentifier },
   })
 }
 
 await run(['bundle', 'exec', 'fastlane', 'mac', 'upload_pkg'], {
-  cwd: mobileDir,
+  cwd: mobileDirectory,
   env: {
     MAC_APP_IDENTIFIER: appIdentifier,
     MAC_APP_VERSION: version,

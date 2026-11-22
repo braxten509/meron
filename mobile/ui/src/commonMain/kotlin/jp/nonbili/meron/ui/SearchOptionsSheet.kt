@@ -72,20 +72,18 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Gmail-style search options: a form for the operators the core understands
- * (`from:`, `to:`, `subject:`, `is:unread`, …). The query text stays the source
- * of truth — the sheet opens with [query] read into the form, and searching
- * hands the form back to [onSearch] as query text.
+ * Gmail-style search options: a form for the operators the core understands (`from:`, `to:`, `subject:`, `is:unread`, …).
  *
- * On a board, [saveColumns] are the columns the query can be saved into as a
- * column of its own: one is saved into directly, several offer a pick.
- * From and To suggest [contactsAccountId]'s correspondents, or every
- * account's when it's blank.
+ * The query text stays the source of truth — the sheet opens with [query] read into the form, and
+ * searching hands the form back to [onSearch] as query text.
  *
- * With [scopeColumns], a "Search in" picker narrows the search to one of them,
- * as on desktop: it starts at [scope] and hands the pick to [onScopeChange] on
- * search. The pick then also decides which [saveColumns] are offered and
- * whose correspondents are suggested.
+ * On a board, [saveColumns] are the columns the query can be saved into as a column of its own: one is
+ * saved into directly, several offer a pick. From and To suggest [contactsAccountId]'s correspondents,
+ * or every account's when it's blank.
+ *
+ * With [scopeColumns], a "Search in" picker narrows the search to one of them, as on desktop: it
+ * starts at [scope] and hands the pick to [onScopeChange] on search. The pick then also decides which
+ * [saveColumns] are offered and whose correspondents are suggested.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

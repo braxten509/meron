@@ -55,11 +55,10 @@ import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
 
 /**
- * Theme picker page: the "match system" switch over light and dark sections of
- * preview swatches, mirroring the desktop ThemeDialog grid. While the theme
- * follows the system each section holds its own pick. Custom themes sit after
- * the built-ins; there is no editor, so they arrive through Import as the
- * one-line string desktop shares.
+ * Theme picker page: the "match system" switch over light and dark sections of preview swatches,
+ * mirroring the desktop ThemeDialog grid. While the theme follows the system each section holds its
+ * own pick. Custom themes sit after the built-ins; there is no editor, so they arrive through Import
+ * as the one-line string desktop shares.
  */
 @Composable
 internal fun ThemePickerPage(

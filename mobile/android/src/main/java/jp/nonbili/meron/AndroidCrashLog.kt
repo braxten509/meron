@@ -37,12 +37,10 @@ internal fun truncateTrace(trace: String): String {
 }
 
 /**
- * Captures fatal crashes into the shareable diagnostic log, and leaves a marker
- * so the next launch can offer to send the report.
+ * Captures fatal crashes into the shareable diagnostic log, and leaves a marker so the next launch can offer to send the report.
  *
- * Deliberately local-only: nothing leaves the device unless the user picks
- * "Send report" and reviews the share sheet, which is why the app carries no
- * crash-reporting SDK.
+ * Deliberately local-only: nothing leaves the device unless the user picks "Send report" and reviews
+ * the share sheet, which is why the app carries no crash-reporting SDK.
  */
 object AndroidCrashLog {
     private const val MARKER_FILE_NAME = "pending-crash.txt"

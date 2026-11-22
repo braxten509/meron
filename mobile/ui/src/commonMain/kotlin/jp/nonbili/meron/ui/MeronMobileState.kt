@@ -22,7 +22,6 @@ import jp.nonbili.meron.shared.MessageBody
 import jp.nonbili.meron.shared.ProxySpec
 import jp.nonbili.meron.shared.SignatureMark
 import jp.nonbili.meron.shared.SignatureTracking
-import jp.nonbili.meron.shared.StarredItemSummary
 import jp.nonbili.meron.shared.StorageUsage
 import jp.nonbili.meron.shared.TaskListSummary
 import jp.nonbili.meron.shared.TaskSummary
@@ -263,11 +262,11 @@ internal class MeronMobileState(
     var activeKanbanBoardId by mutableStateOf(loadActiveKanbanBoardId(kanbanPrefs))
     var kanbanColumns by mutableStateOf(emptyMap<String, KanbanColumnState>())
 
-    /** Newest `loadKanbanColumn` request per column key. Two reloads of one
-     *  column can be out at once — the Sent copy event's and a post-discard
-     *  one — and only the newest may write: the earlier read the store before
-     *  the change the later is reacting to, and landing last it would put the
-     *  stale card back. */
+    /**
+     * Newest `loadKanbanColumn` request per column key. Two reloads of one column can be out at once — the
+     * Sent copy event's and a post-discard one — and only the newest may write: the earlier read the store
+     * before the change the later is reacting to, and landing last it would put the stale card back.
+     */
     val kanbanColumnLoadTokens = mutableMapOf<String, Long>()
     var kanbanFilter by mutableStateOf(loadKanbanFilter(kanbanPrefs))
     var kanbanAttachmentsOnly by mutableStateOf(loadKanbanAttachmentsOnly(kanbanPrefs))

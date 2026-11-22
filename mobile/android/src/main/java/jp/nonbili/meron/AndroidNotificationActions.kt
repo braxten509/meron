@@ -48,15 +48,14 @@ private const val KEY_ACCOUNT_NAME = "accountName"
 private const val KEY_TITLE = "title"
 private const val KEY_NOTIFICATION_ID = "notificationId"
 
-/** Handles the Archive / Mark as read / Undo buttons on a new-mail
- *  notification.
+/**
+ * Handles the Archive / Mark as read / Undo buttons on a new-mail notification.
  *
- *  The shade is updated here and now — the row disappears the moment the button
- *  is pressed — while the mailbox change runs in a [NotificationActionWorker].
- *  A receiver only gets a few seconds before the system may kill the process,
- *  which an IMAP move over a cold connection can easily outlast; WorkManager
- *  also survives the reboot or process death that would otherwise drop the
- *  change silently. */
+ * The shade is updated here and now — the row disappears the moment the button is pressed — while the
+ * mailbox change runs in a [NotificationActionWorker]. A receiver only gets a few seconds before the
+ * system may kill the process, which an IMAP move over a cold connection can easily outlast;
+ * WorkManager also survives the reboot or process death that would otherwise drop the change silently.
+ */
 class AndroidNotificationActionReceiver : BroadcastReceiver() {
     override fun onReceive(
         context: Context,
@@ -316,11 +315,12 @@ class NotificationActionWorker(
             .toString()
 }
 
-/** Where a notification-archived thread was moved to, kept only until its undo
- *  offer is taken or expires.
+/**
+ * Where a notification-archived thread was moved to, kept only until its undo offer is taken or expires.
  *
- *  Its own preferences file rather than the app's: these entries are transient
- *  bookkeeping between two background workers, and the app never reads them. */
+ * Its own preferences file rather than the app's: these entries are transient bookkeeping between two
+ * background workers, and the app never reads them.
+ */
 private const val ARCHIVED_FOLDER_PREFS = "meron_notification_archived"
 
 private fun archivedFolderKey(

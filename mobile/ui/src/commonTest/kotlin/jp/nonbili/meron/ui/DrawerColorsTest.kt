@@ -1,3 +1,7 @@
+// Checks contrast in the mobile mail drawer for each built-in
+// theme. Text must remain legible on the drawer surface
+// and unread counts must stand out on the accent color.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.ui.graphics.Color

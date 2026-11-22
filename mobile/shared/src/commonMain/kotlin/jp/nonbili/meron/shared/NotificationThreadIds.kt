@@ -12,17 +12,17 @@ import kotlin.io.encoding.ExperimentalEncodingApi
  *  lowercase "inbox" that IMAP would not recognize. */
 private const val CORE_INBOX_FOLDER = "INBOX"
 
-/** Compose the `thread_id` core expects from the fields a notification carries.
+/**
+ * Compose the `thread_id` core expects from the fields a notification carries.
  *
- *  Notification payloads carry the account, folder and bare thread key
- *  separately, but every `mail.*` thread method keys on the composite
- *  `account#folder#key` (see `parse_thread_id` in meron-core). Keys minted from
- *  message headers are base64url-encoded behind a `t.` prefix; uid-derived keys
- *  are written as the bare uid.
+ * Notification payloads carry the account, folder and bare thread key separately, but every `mail.*`
+ * thread method keys on the composite `account#folder#key` (see `parse_thread_id` in meron-core). Keys
+ * minted from message headers are base64url-encoded behind a `t.` prefix; uid-derived keys are written
+ * as the bare uid.
  *
- *  Lives here rather than in the UI so notification *actions* — which run in a
- *  background receiver with no UI state — build the same id the tap-through
- *  does. */
+ * Lives here rather than in the UI so notification *actions* — which run in a background receiver with
+ * no UI state — build the same id the tap-through does.
+ */
 @OptIn(ExperimentalEncodingApi::class)
 fun notificationThreadId(
     accountId: String,
@@ -51,15 +51,14 @@ data class ParsedThreadId(
 )
 
 /**
- * The inverse of [notificationThreadId]: split a stored `thread_id` back into
- * the fields a thread-open needs.
+ * The inverse of [notificationThreadId]: split a stored `thread_id` back into the fields a thread-open needs.
  *
- * A Tasks entry keeps only the composite id — that is all the core hands the
- * clients — but reopening the thread on mobile needs the folder to load and the
- * key to match against, so the id has to come apart again.
+ * A Tasks entry keeps only the composite id — that is all the core hands the clients — but reopening
+ * the thread on mobile needs the folder to load and the key to match against, so the id has to come
+ * apart again.
  *
- * Returns null for anything that is not the three-part shape. Feed ids preserve
- * their subscription key when the middle segment is `rss`.
+ * Returns null for anything that is not the three-part shape. Feed ids preserve their subscription key
+ * when the middle segment is `rss`.
  */
 @OptIn(ExperimentalEncodingApi::class)
 fun parseNotificationThreadId(threadId: String): ParsedThreadId? {

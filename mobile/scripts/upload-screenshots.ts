@@ -1,6 +1,10 @@
 #!/usr/bin/env bun
 
-import { commandExists, fail, mobileDir, run } from './release-utils'
+// Prepares the mobile store screenshot upload. The release
+// script uses the platform-specific screenshot directories
+// and metadata to locate the images for the selected store.
+
+import { commandExists, fail, mobileDirectory, run } from './release-environment'
 
 const platform = Bun.argv[2]
 if (platform !== 'ios' && platform !== 'android') {
@@ -16,11 +20,11 @@ if (platform === 'android') {
     fail('set GOOGLE_PLAY_JSON_KEY to your Play service account JSON path.')
   }
   await run(['bundle', 'exec', 'fastlane', 'android', 'upload_screenshots'], {
-    cwd: mobileDir,
+    cwd: mobileDirectory,
     env: { GOOGLE_PLAY_JSON_KEY: jsonKey },
   })
 } else {
-  await run(['bundle', 'exec', 'fastlane', 'ios', 'upload_screenshots'], { cwd: mobileDir })
+  await run(['bundle', 'exec', 'fastlane', 'ios', 'upload_screenshots'], { cwd: mobileDirectory })
 }
 
 console.log('Done.')

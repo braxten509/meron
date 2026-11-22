@@ -1,3 +1,7 @@
+// Exercises folder counts when a read-state write overlaps
+// a refresh. Versioned responses and rollback snapshots
+// protect a later local change from an older server result.
+
 package jp.nonbili.meron.ui
 
 import jp.nonbili.meron.shared.FolderSummary

@@ -1,3 +1,7 @@
+// Checks how message rendering chooses a lower brightness
+// bound. The test compares transformed colors with the
+// active surface and exercises the black-surface boundary.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.ui.graphics.Color

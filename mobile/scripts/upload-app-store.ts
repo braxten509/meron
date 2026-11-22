@@ -1,5 +1,9 @@
 #!/usr/bin/env bun
 
+// Runs the App Store upload step for mobile releases. The
+// script resolves the configured release inputs and credentials
+// before handing the iOS artifact to the upload tooling.
+
 import { resolve } from 'node:path'
 import {
   changelogSource,
@@ -7,19 +11,19 @@ import {
   ensureFile,
   envFlag,
   fail,
-  mobileDir,
+  mobileDirectory,
   packageInfo,
   requireEnv,
   run,
   writeAppleReleaseNotes,
-} from './release-utils'
+} from './release-environment'
 
 const [ipaArg] = Bun.argv.slice(2)
 const pkg = await packageInfo()
-const ipaPath = ipaArg ?? process.env.IPA_PATH ?? resolve(mobileDir, 'ios/build/Meron.ipa')
+const ipaPath = ipaArg ?? process.env.IPA_PATH ?? resolve(mobileDirectory, 'ios/build/Meron.ipa')
 const appIdentifier = process.env.IOS_APP_IDENTIFIER ?? 'jp.nonbili.meron'
 const releaseNotesPath = process.env.IOS_RELEASE_NOTES_PATH
-  ?? resolve(mobileDir, 'fastlane/metadata/ios/en-US/release_notes.txt')
+  ?? resolve(mobileDirectory, 'fastlane/metadata/ios/en-US/release_notes.txt')
 const skipBinaryUpload = envFlag('IOS_SKIP_BINARY_UPLOAD', false)
 const skipBuild = envFlag('SKIP_BUILD', skipBinaryUpload)
 const submitForReview = envFlag('IOS_SUBMIT_FOR_REVIEW', true)
@@ -61,7 +65,7 @@ if (skipBinaryUpload && submitForReview) {
 }
 
 await run(['bundle', 'exec', 'fastlane', 'ios', 'upload_ipa'], {
-  cwd: mobileDir,
+  cwd: mobileDirectory,
   env: {
     IOS_APP_IDENTIFIER: appIdentifier,
     IOS_APP_VERSION: pkg.version,

@@ -131,11 +131,10 @@ private fun reinsertThreads(
 }
 
 /**
- * Puts the rows [ids] of a bulk action back into what is on screen now, where
- * the snapshots taken at the action had them: the list only while it still
- * shows the mailbox it was taken from ([mailboxKey]), each Kanban column from
- * its own snapshot. Nothing else in the current list or columns changes, so a
- * folder switched to or a row removed since stays as it is.
+ * Puts the rows [ids] of a bulk action back into what is on screen now, where the snapshots taken at
+ * the action had them: the list only while it still shows the mailbox it was taken from
+ * ([mailboxKey]), each Kanban column from its own snapshot. Nothing else in the current list or
+ * columns changes, so a folder switched to or a row removed since stays as it is.
  */
 internal fun MeronMobileState.reinsertBulkRows(
     ids: Set<String>,

@@ -75,7 +75,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import jp.nonbili.meron.ui.resources.Res
-import jp.nonbili.meron.ui.resources.ic_google_g
+import jp.nonbili.meron.ui.resources.ic_google_logo
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.painterResource
 
@@ -380,7 +380,7 @@ internal fun OAuthBrandIcon(
         }
     } else {
         Image(
-            painter = painterResource(Res.drawable.ic_google_g),
+            painter = painterResource(Res.drawable.ic_google_logo),
             contentDescription = null,
             modifier = Modifier.size(size),
         )

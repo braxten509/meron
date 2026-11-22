@@ -1075,11 +1075,10 @@ class ComposeSaveLifecycleTest {
         }
 
     /**
-     * Wait for composer state the core call writes *after* it returns. The
-     * `CompletableDeferred`s in [SaveCore] are completed inside the call, which
-     * runs on [ioDispatcher], so awaiting one can resume this test before the
-     * caller's `withContext` return is even queued on the `runBlocking` loop —
-     * a single `yield()` is not a barrier across that.
+     * Wait for composer state the core call writes *after* it returns. The `CompletableDeferred`s in
+     * [SaveCore] are completed inside the call, which runs on [ioDispatcher], so awaiting one can resume
+     * this test before the caller's `withContext` return is even queued on the `runBlocking` loop — a
+     * single `yield()` is not a barrier across that.
      */
     private suspend fun awaitState(settled: () -> Boolean) {
         withTimeout(1_000) {

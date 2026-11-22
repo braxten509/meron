@@ -1,3 +1,7 @@
+// Exercises mobile mail actions that may need Google authorization
+// renewed. The board fixtures verify retries, optimistic
+// read counts and rollback for only the failed column.
+
 package jp.nonbili.meron.ui
 
 import jp.nonbili.meron.shared.AccountSummary

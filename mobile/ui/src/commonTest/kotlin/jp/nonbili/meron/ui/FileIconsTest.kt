@@ -1,3 +1,7 @@
+// Checks how the attachment view chooses icons from filenames
+// and MIME types. Specific contact, calendar, signature and
+// mail formats take priority over the generic file fallback.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.material.icons.Icons

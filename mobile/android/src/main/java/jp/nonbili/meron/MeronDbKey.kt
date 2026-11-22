@@ -16,18 +16,15 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
 /**
- * Provides the SQLCipher passphrase (64 hex chars = a raw 32-byte key) for the
- * local meron.db.
+ * Provides the SQLCipher passphrase (64 hex chars = a raw 32-byte key) for the local meron.db.
  *
- * The passphrase is random, generated once, and stored encrypted at rest: a
- * hardware-backed AES-GCM key in the Android Keystore wraps it, and only the
- * wrapped blob lives in app storage. The Keystore key material never leaves
- * secure hardware, so the passphrase cannot be recovered from the DB file or
+ * The passphrase is random, generated once, and stored encrypted at rest: a hardware-backed AES-GCM
+ * key in the Android Keystore wraps it, and only the wrapped blob lives in app storage. The Keystore
+ * key material never leaves secure hardware, so the passphrase cannot be recovered from the DB file or
  * the wrapped blob alone.
  *
- * The Keystore key is intentionally not gated on user authentication or device
- * unlock, so the background sync worker can open the store while the device is
- * locked.
+ * The Keystore key is intentionally not gated on user authentication or device unlock, so the
+ * background sync worker can open the store while the device is locked.
  */
 object MeronDbKey {
     private const val KEYSTORE = "AndroidKeyStore"

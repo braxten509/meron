@@ -1,20 +1,24 @@
 #!/usr/bin/env bash
+# Builds the Rust core for the iOS targets required by the
+# mobile host. The packaging step selects the device or
+# simulator libraries used when linking the native application.
+
 set -euo pipefail
 
 TARGET="${TARGET:-aarch64-apple-ios-sim}"
 # PROFILE selects the Cargo profile. Xcode Release/archive builds pass
 # PROFILE=release; local simulator builds default to debug for faster iteration.
 PROFILE="${PROFILE:-debug}"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MOBILE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-REPO_DIR="$(cd "$MOBILE_DIR/.." && pwd)"
-CORE_DIR="$REPO_DIR/meron-core"
-OUT_DIR="$MOBILE_DIR/ios/RustCore"
+SCRIPT_DIRECTORY="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+MOBILE_DIRECTORY="$(cd "$SCRIPT_DIRECTORY/.." && pwd)"
+REPOSITORY_DIRECTORY="$(cd "$MOBILE_DIRECTORY/.." && pwd)"
+CORE_DIRECTORY="$REPOSITORY_DIRECTORY/meron-core"
+OUTPUT_DIRECTORY="$MOBILE_DIRECTORY/ios/RustCore"
 
 export PATH="/opt/homebrew/bin:/usr/local/bin:$HOME/.nix-profile/bin:/nix/var/nix/profiles/default/bin:$HOME/.cargo/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
 
 if ! command -v rustup >/dev/null 2>&1 && [[ -z "${IN_NIX_SHELL:-}" ]] && command -v nix-shell >/dev/null 2>&1; then
-  exec nix-shell "$REPO_DIR/shell.nix" --run "$SCRIPT_DIR/$(basename "$0")"
+  exec nix-shell "$REPOSITORY_DIRECTORY/shell.nix" --run "$SCRIPT_DIRECTORY/$(basename "$0")"
 fi
 
 if [[ -z "${DEVELOPER_DIR:-}" || "${DEVELOPER_DIR:-}" == /nix/store/* ]]; then
@@ -51,17 +55,17 @@ elif [[ "$PROFILE" != "debug" ]]; then
 fi
 
 echo "Building meron-core ($PROFILE) for $TARGET"
-cargo build --manifest-path "$CORE_DIR/Cargo.toml" --lib --target "$TARGET" "${CARGO_PROFILE_ARGS[@]}"
+cargo build --manifest-path "$CORE_DIRECTORY/Cargo.toml" --lib --target "$TARGET" "${CARGO_PROFILE_ARGS[@]}"
 
-LIB_PATH="$CORE_DIR/target/$TARGET/$PROFILE/libmeron_core.a"
+LIB_PATH="$CORE_DIRECTORY/target/$TARGET/$PROFILE/libmeron_core.a"
 if [[ ! -f "$LIB_PATH" ]]; then
   echo "Build completed, but $LIB_PATH was not produced." >&2
   exit 1
 fi
 
-mkdir -p "$OUT_DIR"
-cp "$LIB_PATH" "$OUT_DIR/libmeron_core.a"
+mkdir -p "$OUTPUT_DIRECTORY"
+cp "$LIB_PATH" "$OUTPUT_DIRECTORY/libmeron_core.a"
 if [[ "$PROFILE" == "release" ]]; then
-  strip -S "$OUT_DIR/libmeron_core.a" 2>/dev/null || true
+  strip -S "$OUTPUT_DIRECTORY/libmeron_core.a" 2>/dev/null || true
 fi
-echo "Packaged $OUT_DIR/libmeron_core.a"
+echo "Packaged $OUTPUT_DIRECTORY/libmeron_core.a"

@@ -18,11 +18,10 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 /**
- * The remote-content allowlist is one whole-list row shared with desktop, so
- * every edit is a read-modify-write against the store. These pin what that has
- * to guarantee: no edit is written against a list this state has not read yet,
- * concurrent edits do not drop each other, and a failed write takes back only
- * its own change.
+ * The remote-content allowlist is one whole-list row shared with desktop, so every edit is a
+ * read-modify-write against the store. These pin what that has to guarantee: no edit is written
+ * against a list this state has not read yet, concurrent edits do not drop each other, and a failed
+ * write takes back only its own change.
  */
 class RemoteSendersStateTest {
     @Test

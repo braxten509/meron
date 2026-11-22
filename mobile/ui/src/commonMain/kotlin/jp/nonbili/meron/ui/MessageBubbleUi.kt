@@ -102,11 +102,12 @@ import kotlin.random.Random
 /** Bubble inner padding; capped bodies offset their scrollbar back over it. */
 private val BubbleHorizontalPadding = 14.dp
 
-/** Bubble inner padding for an HTML body. Mail HTML usually centres itself in a
- *  wrapper with 20-40px of padding of its own, and on a phone the two gutters
- *  together eat most of the bubble, so the bubble keeps only enough of its own
- *  to hold the body off the rounded corners. The chrome around the body pads
- *  back up to [BubbleHorizontalPadding] so it still lines up bubble to bubble. */
+/**
+ * Bubble inner padding for an HTML body. Mail HTML usually centres itself in a wrapper with 20-40px of
+ * padding of its own, and on a phone the two gutters together eat most of the bubble, so the bubble
+ * keeps only enough of its own to hold the body off the rounded corners. The chrome around the body
+ * pads back up to [BubbleHorizontalPadding] so it still lines up bubble to bubble.
+ */
 private val HtmlBubbleHorizontalPadding = 6.dp
 
 /** How long a bubble stays invisible waiting for its web view to report a width
@@ -147,13 +148,16 @@ private object NoIntrinsicWidth : LayoutModifier {
     ): Int = 0
 }
 
-/** Sizes a bubble to [fraction] of the available width, capped at [MaxBubbleWidth].
- *  Narrower when it can hug its content: [hugIntrinsic] takes the content's own
- *  widest line (plain text, which Compose can measure), widened to fit
- *  [imageColumns] grid tiles at the size a full-width bubble gives them; a
- *  measured HTML [natural] width takes that plus [chrome], widened to whatever
- *  the header and the rest of the bubble need (the web view counts for nothing
- *  there). A [natural] of zero or less means the HTML body fills the bubble. */
+/**
+ * Sizes a bubble to [fraction] of the available width, capped at [MaxBubbleWidth].
+ *
+ * Narrower when it can hug its content: [hugIntrinsic] takes the content's own widest line (plain
+ * text, which Compose can measure), widened to fit [imageColumns] grid tiles at the size a full-width
+ * bubble gives them; a measured HTML [natural] width takes that plus [chrome], widened to whatever the
+ * header and the rest of the bubble need (the web view counts for nothing there).
+ *
+ * A [natural] of zero or less means the HTML body fills the bubble.
+ */
 private fun Modifier.bubbleWidth(
     fraction: Float,
     natural: Dp = 0.dp,
@@ -775,11 +779,10 @@ internal fun MessageActionsMenu(
 }
 
 /**
- * Everything below a message's header: the optional subject, a calendar
- * invitation's card, the body (HTML or plain), standalone attachments, and the
- * send-status line. MessageBubble (chat) and MessageRow (traditional) each wrap
- * it in their own chrome, so the two layouts differ only in the frame around
- * this.
+ * Everything below a message's header: the optional subject, a calendar invitation's card, the body
+ * (HTML or plain), standalone attachments, and the send-status line. MessageBubble (chat) and
+ * MessageRow (traditional) each wrap it in their own chrome, so the two layouts differ only in the
+ * frame around this.
  */
 @Composable
 internal fun ColumnScope.MessageBodyContent(
@@ -1130,11 +1133,10 @@ private val HUE_TURN =
     )
 
 /**
- * The color a darkened body has to be painted with to come out as [surface]:
- * the darkening filter run backwards, like desktop's darkenedFloor. The filter
- * can't reach every color — a very saturated surface falls outside what it
- * produces — and then this is the nearest it gets to, a shade duller than the
- * surface itself.
+ * The color a darkened body has to be painted with to come out as [surface]: the darkening filter run
+ * backwards, like desktop's darkenedFloor. The filter can't reach every color — a very saturated
+ * surface falls outside what it produces — and then this is the nearest it gets to, a shade duller
+ * than the surface itself.
  */
 internal fun darkenedFloor(surface: Color): Color {
     val channels = floatArrayOf(surface.red, surface.green, surface.blue)

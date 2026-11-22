@@ -4,15 +4,15 @@
 package jp.nonbili.meron.shared
 
 /**
- * Backup export options. A passphrase encrypts the document; [includeSecrets]
- * additionally puts account passwords and OAuth tokens in it, which the core
- * refuses to do without a passphrase.
+ * Backup export options.
  *
- * [appVersion] is the host bundle's version name and [platform] is "android"
- * or "ios"; both are recorded in the backup envelope. The core knows neither:
- * its crate version is not the app's, and desktop and mobile are versioned on
- * separate tracks, so the number only identifies a build alongside the
- * platform that wrote it.
+ * A passphrase encrypts the document; [includeSecrets] additionally puts account passwords and OAuth
+ * tokens in it, which the core refuses to do without a passphrase.
+ *
+ * [appVersion] is the host bundle's version name and [platform] is "android" or "ios"; both are
+ * recorded in the backup envelope. The core knows neither: its crate version is not the app's, and
+ * desktop and mobile are versioned on separate tracks, so the number only identifies a build alongside
+ * the platform that wrote it.
  */
 data class ExportBackupParams(
     val includeSecrets: Boolean = false,

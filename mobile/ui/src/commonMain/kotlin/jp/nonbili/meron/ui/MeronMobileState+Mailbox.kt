@@ -7,7 +7,6 @@ package jp.nonbili.meron.ui
 
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.ui.input.key.key
 import jp.nonbili.meron.shared.AccountSummary
 import jp.nonbili.meron.shared.AddRssFeedParams
@@ -238,18 +237,17 @@ internal fun MeronMobileState.scheduleVisibleMailboxReload() {
 internal const val MAILBOX_RELOAD_TOP_UP_PAGES = 10
 
 /**
- * Read on from a reload's [first] page, with [nextPage], until it reaches back
- * to [oldestShown], the oldest row the list showed before. The page depth is
- * only a first guess at how far the reader had scrolled: the core may read past
- * it (an attachments-filtered page skips empty stretches, and its limit counts
- * messages, which group into fewer threads), and the reload cap stops short of
- * a very deep list. Returns the pages joined, and the depth to read next time.
+ * Read on from a reload's [first] page, with [nextPage], until it reaches back to [oldestShown], the oldest row the list showed before.
  *
- * A further page usually reads past [oldestShown] (new mail on top pushed the
- * list down). The cards older than it were not on screen, so they are not
- * shown now either: they go into [MailboxLoadResult.heldThreads] for the next
- * "load more", and the depth becomes the cards kept, never a page more per
- * reload. Otherwise every refresh after new mail added a page of older mail.
+ * The page depth is only a first guess at how far the reader had scrolled: the core may read past it
+ * (an attachments-filtered page skips empty stretches, and its limit counts messages, which group into
+ * fewer threads), and the reload cap stops short of a very deep list. Returns the pages joined, and
+ * the depth to read next time.
+ *
+ * A further page usually reads past [oldestShown] (new mail on top pushed the list down). The cards
+ * older than it were not on screen, so they are not shown now either: they go into
+ * [MailboxLoadResult.heldThreads] for the next "load more", and the depth becomes the cards kept,
+ * never a page more per reload. Otherwise every refresh after new mail added a page of older mail.
  */
 internal suspend fun readMailboxToOldestShown(
     first: MailboxLoadResult,

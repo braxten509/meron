@@ -552,11 +552,10 @@ private fun DeviceBox(
 }
 
 /**
- * First-run shortcut under the welcome screen's "Add account": set this phone
- * up from a computer that already runs Meron, through the same QR copy as
- * Settings. The copy keeps whichever side has accounts, so an empty phone
- * receives by default. Once the copy lands the welcome screen (and this) goes
- * away on its own.
+ * First-run shortcut under the welcome screen's "Add account": set this phone up from a computer that
+ * already runs Meron, through the same QR copy as Settings. The copy keeps whichever side has
+ * accounts, so an empty phone receives by default. Once the copy lands the welcome screen (and this)
+ * goes away on its own.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

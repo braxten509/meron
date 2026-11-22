@@ -162,11 +162,12 @@ interface MobileHost {
      *  where unsupported. */
     fun connectGoogleDeviceAccount(onResult: (GoogleDeviceAccountResult) -> Unit)
 
-    /** Silently mint a fresh access token for a managed Google account before a
-     *  server-touching command. Unless [force], the host may skip minting and
-     *  return [ManagedTokenRefresh.StillFresh] while the last pushed token is
-     *  comfortably before expiry; [force] mints regardless — used after the
-     *  server rejected the stored token. */
+    /**
+     * Silently mint a fresh access token for a managed Google account before a server-touching command.
+     * Unless [force], the host may skip minting and return [ManagedTokenRefresh.StillFresh] while the last
+     * pushed token is comfortably before expiry; [force] mints regardless — used after the server rejected
+     * the stored token.
+     */
     suspend fun refreshManagedGoogleToken(
         accountId: String,
         force: Boolean = false,

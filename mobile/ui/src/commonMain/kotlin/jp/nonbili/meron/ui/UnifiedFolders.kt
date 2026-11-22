@@ -79,11 +79,10 @@ internal fun unifiedFolders(): List<FolderSummary> =
 internal fun unifiedFolderLabel(folderId: String): String = if (isUnifiedStarredFolder(folderId)) tr("filters.starred") else tr(UNIFIED_ROLE_LABEL_KEYS.getValue(unifiedFolderRole(folderId)))
 
 /**
- * A unified Kanban column's own name. Unlike the mail list — where the unified
- * mailbox is the whole screen and the folder name alone is unambiguous — a
- * column sits beside single-account columns whose folders are called the same
- * thing, so it has to carry "Unified" itself. Spelled out per role rather than
- * composed from "Unified" + a folder name, which no language agrees on.
+ * A unified Kanban column's own name. Unlike the mail list — where the unified mailbox is the whole
+ * screen and the folder name alone is unambiguous — a column sits beside single-account columns whose
+ * folders are called the same thing, so it has to carry "Unified" itself. Spelled out per role rather
+ * than composed from "Unified" + a folder name, which no language agrees on.
  */
 private val UNIFIED_COLUMN_LABEL_KEYS =
     mapOf(
@@ -100,16 +99,15 @@ private val UNIFIED_COLUMN_LABEL_KEYS =
 internal fun unifiedColumnLabel(folderId: String): String = tr(UNIFIED_COLUMN_LABEL_KEYS.getValue(if (isUnifiedStarredFolder(folderId)) STARRED_FOLDER else unifiedFolderRole(folderId)))
 
 /**
- * Whether a message stored in [messageFolder] is counted by the thread card
- * shown for [cardFolder].
+ * Whether a message stored in [messageFolder] is counted by the thread card shown for [cardFolder].
  *
- * A card's unread count is mailbox-scoped, so a thread that spans folders (an
- * INBOX message and its reply in Sent) must only take its own folder's reads
- * off each card. Callers pass the mailbox read off the card's thread id; the
- * role handling below is the fallback for ids that carry none, since a card
- * opened from a Kanban column has its `folder` replaced by the column id — a
- * role ("inbox", "sent") for a unified column, resolving to a different
- * mailbox per account.
+ * A card's unread count is mailbox-scoped, so a thread that spans folders (an INBOX message and its
+ * reply in Sent) must only take its own folder's reads off each card.
+ *
+ * Callers pass the mailbox read off the card's thread id; the role handling below is the fallback for
+ * ids that carry none, since a card opened from a Kanban column has its `folder` replaced by the
+ * column id — a role ("inbox", "sent") for a unified column, resolving to a different mailbox per
+ * account.
  */
 internal fun threadCardCoversFolder(
     cardFolder: String,

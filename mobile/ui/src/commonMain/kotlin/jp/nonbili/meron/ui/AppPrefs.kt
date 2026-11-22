@@ -235,12 +235,11 @@ internal fun appLanguageNeedsPersisting(
 ): Boolean = systemTag != null && systemTag != storedTag
 
 /**
- * Pick the catalog language for a device locale such as `fr-FR` or `zh-Hant-TW`,
- * falling back to English when nothing matches.
+ * Pick the catalog language for a device locale such as `fr-FR` or `zh-Hant-TW`, falling back to English when nothing matches.
  *
- * Mirrors `resolveI18nLanguageFromWebLocale` in the desktop frontend, so the same
- * device resolves to the same translation on both — only the tag spelling differs
- * (mobile hyphenates where desktop uses underscores).
+ * Mirrors `resolveI18nLanguageFromWebLocale` in the desktop frontend, so the same device resolves to
+ * the same translation on both — only the tag spelling differs (mobile hyphenates where desktop uses
+ * underscores).
  */
 internal fun resolveDeviceLanguageTag(deviceTag: String): String =
     normalizeAppLanguageTag(deviceTag).ifEmpty { "en" }

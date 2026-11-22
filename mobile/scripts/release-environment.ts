@@ -1,5 +1,9 @@
 #!/usr/bin/env bun
 
+// Shares paths and environment validation between the mobile
+// release scripts. The commands resolve the repository and mobile
+// roots before reading the options needed for their release step.
+
 import { dirname, resolve } from 'node:path'
 
 type PackageInfo = {
@@ -9,8 +13,8 @@ type PackageInfo = {
 }
 
 // mobile/ holds the fastlane setup (incl. the shared changelogs); desktop/ holds wails.json.
-export const mobileDir = resolve(import.meta.dir, '..')
-export const repoRoot = resolve(mobileDir, '..')
+export const mobileDirectory = resolve(import.meta.dir, '..')
+export const repoRoot = resolve(mobileDirectory, '..')
 
 export const envFlag = (name: string, defaultValue: boolean) => {
   const value = process.env[name]
@@ -33,7 +37,7 @@ export const requireEnv = (name: string) => {
 // The Android versionCode lives in build.gradle; reuse it so the upload script
 // and the build agree.
 const gradleVersionCode = async (): Promise<string> => {
-  const gradle = await Bun.file(resolve(mobileDir, 'android/build.gradle')).text()
+  const gradle = await Bun.file(resolve(mobileDirectory, 'android/build.gradle')).text()
   const match = gradle.match(/def\s+releaseVersionCode\s*=\s*(\d+)/)
   if (!match) {
     fail('Could not read releaseVersionCode from android/build.gradle')
@@ -45,7 +49,7 @@ const gradleVersionCode = async (): Promise<string> => {
 // The iOS marketing version and build number live in Version.xcconfig
 // (MARKETING_VERSION / CURRENT_PROJECT_VERSION).
 const iosVersion = async (): Promise<{ marketingVersion: string, buildNumber: string }> => {
-  const xcconfig = await Bun.file(resolve(mobileDir, 'ios/Version.xcconfig')).text()
+  const xcconfig = await Bun.file(resolve(mobileDirectory, 'ios/Version.xcconfig')).text()
   const marketing = xcconfig.match(/MARKETING_VERSION\s*=\s*(\S+)/)
   const build = xcconfig.match(/CURRENT_PROJECT_VERSION\s*=\s*(\d+)/)
   if (!marketing) {
@@ -73,7 +77,7 @@ export const packageInfo = async (): Promise<PackageInfo> => {
 // The single source changelog, shared by both mobile stores and F-Droid:
 // mobile/fastlane/metadata/android/en-US/changelogs/<versionCode>.txt
 export const changelogSource = (versionCode: string) => (
-  resolve(mobileDir, `fastlane/metadata/android/en-US/changelogs/${versionCode}.txt`)
+  resolve(mobileDirectory, `fastlane/metadata/android/en-US/changelogs/${versionCode}.txt`)
 )
 
 export const fileExists = async (path: string) => (

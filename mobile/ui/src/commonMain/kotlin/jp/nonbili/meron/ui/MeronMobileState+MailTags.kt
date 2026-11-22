@@ -98,11 +98,10 @@ private fun MeronMobileState.reloadTagColumns() {
 }
 
 /**
- * Rename [tag] everywhere, or delete it with no [to], and report to [onDone] whether
- * the core took it. It handles mail and rules; boards live here, so their saved
- * searches go through it to be rewritten. Two columns that come to mean the same
- * search become one, and a search scoped to a column stays on it. On the app's
- * scope, not a dialog's: closing one mid-way must not leave the boards behind.
+ * Rename [tag] everywhere, or delete it with no [to], and report to [onDone] whether the core took it.
+ * It handles mail and rules; boards live here, so their saved searches go through it to be rewritten.
+ * Two columns that come to mean the same search become one, and a search scoped to a column stays on
+ * it. On the app's scope, not a dialog's: closing one mid-way must not leave the boards behind.
  */
 internal fun MeronMobileState.replaceTag(
     tag: String,

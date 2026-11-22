@@ -1,9 +1,19 @@
+// Checks extraction of text values from JSON passed to
+// the mobile UI. Fixtures include missing keys, malformed
+// input and a quoted value with an escaped character.
+
 package jp.nonbili.meron.ui
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
-class JsonUtilsTest {
+class JsonFieldsTest {
+    @Test
+    fun escapedUnicodePreservesFolderNames() {
+        val json = """{"folder":"Reuni\u00e3o \u041f\u043e\u0447\u0442\u0430 \ud83d\udce8"}"""
+        assertEquals("Reunião Почта 📨", json.jsonStringValue("folder"))
+    }
+
     @Test
     fun jsonStringValueExtractsBasicKey() {
         val json = """{"name":"Alice","age":30}"""

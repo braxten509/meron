@@ -1,5 +1,9 @@
 #!/usr/bin/env bun
 
+// Runs the Google Play upload step for mobile releases.
+// The script obtains the configured Android release
+// artifact and store settings from the release environment.
+
 import { resolve } from 'node:path'
 import {
   changelogSource,
@@ -7,18 +11,18 @@ import {
   ensureFile,
   envFlag,
   fail,
-  mobileDir,
+  mobileDirectory,
   packageInfo,
   repoRoot,
   run,
-} from './release-utils'
+} from './release-environment'
 
 const [trackArg, aabArg] = Bun.argv.slice(2)
 const pkg = await packageInfo()
 const track = trackArg ?? process.env.GOOGLE_PLAY_TRACK ?? 'production'
 const aabPath = aabArg
   ?? process.env.AAB_PATH
-  ?? resolve(mobileDir, 'android/build/outputs/bundle/release/android-release.aab')
+  ?? resolve(mobileDirectory, 'android/build/outputs/bundle/release/android-release.aab')
 const packageName = process.env.ANDROID_PACKAGE_NAME ?? 'jp.nonbili.meron'
 const jsonKey = process.env.GOOGLE_PLAY_JSON_KEY ?? process.env.SUPPLY_JSON_KEY
 const jsonKeyData = process.env.GOOGLE_PLAY_JSON_KEY_DATA ?? process.env.SUPPLY_JSON_KEY_DATA
@@ -42,7 +46,7 @@ if (uploadChangelogs) {
 }
 
 if (!envFlag('SKIP_BUILD', false)) {
-  const gradleArgs = ['gradle', '-p', mobileDir, ':android:bundleRelease', '-PpackageRustCore']
+  const gradleArgs = ['gradle', '-p', mobileDirectory, ':android:bundleRelease', '-PpackageRustCore']
 
   const props: Record<string, string> = {
     meronReleaseStoreFile: 'MERON_ANDROID_RELEASE_STORE_FILE',
@@ -72,7 +76,7 @@ await ensureFile(aabPath, `AAB not found: ${aabPath}`)
 
 console.log(`Uploading ${aabPath} to Google Play track '${track}' for ${packageName}...`)
 await run(['bundle', 'exec', 'fastlane', 'android', 'upload_aab'], {
-  cwd: mobileDir,
+  cwd: mobileDirectory,
   env: {
     ANDROID_PACKAGE_NAME: packageName,
     AAB_PATH: aabPath,

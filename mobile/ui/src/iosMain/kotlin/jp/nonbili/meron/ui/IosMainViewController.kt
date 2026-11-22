@@ -1,5 +1,9 @@
 @file:OptIn(kotlinx.cinterop.BetaInteropApi::class, kotlinx.cinterop.ExperimentalForeignApi::class)
 
+// Creates the Compose view controller embedded by the iOS
+// app. The host also provides diagnostic log reading and
+// sharing through the platform's native presentation APIs.
+
 package jp.nonbili.meron.ui
 
 import androidx.compose.foundation.ComposeFoundationFlags

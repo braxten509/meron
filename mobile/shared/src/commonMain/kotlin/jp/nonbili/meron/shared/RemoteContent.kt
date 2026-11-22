@@ -116,13 +116,11 @@ fun htmlHasRemoteMedia(html: String): Boolean = html.isNotEmpty() && REMOTE_MEDI
 // ---- The policy the viewer enforces ----------------------------------------
 
 /**
- * The `Content-Security-Policy` the mail viewer puts in its own head, which is
- * where a meta policy has to sit to be honoured at all.
+ * The `Content-Security-Policy` the mail viewer puts in its own head, which is where a meta policy has to sit to be honoured at all.
  *
- * It mirrors `prepare_html` in the core, except for `script-src`: the viewer's
- * height-reporting bridge is an inline script of ours, so it is admitted by
- * [scriptNonce] — a value the mail cannot know — while the mail's own scripts
- * stay blocked, behind the core having already stripped them.
+ * It mirrors `prepare_html` in the core, except for `script-src`: the viewer's height-reporting bridge
+ * is an inline script of ours, so it is admitted by [scriptNonce] — a value the mail cannot know —
+ * while the mail's own scripts stay blocked, behind the core having already stripped them.
  */
 fun mailBodyCsp(
     allowRemote: Boolean,
@@ -146,12 +144,12 @@ private val REMOTE_TOKENS = setOf("http:", "https:", "*", "http://*", "https://*
 /**
  * Rewrite the CSP the core baked into a body to the caller's current decision.
  *
- * The viewer's own head policy is what the browser enforces, but the two
- * intersect wherever a web view does honour the baked one: leaving a body that
- * was read while its sender was blocked at "no remote content" would then keep
- * a reveal from taking effect, and leaving a body read while the sender was
- * allowed permissive would keep loading remote content after that allowance was
- * withdrawn. So both directions are applied.
+ * The viewer's own head policy is what the browser enforces, but the two intersect wherever a web view
+ * does honour the baked one: leaving a body that was read while its sender was blocked at "no remote
+ * content" would then keep a reveal from taking effect, and leaving a body read while the sender was
+ * allowed permissive would keep loading remote content after that allowance was withdrawn.
+ *
+ * So both directions are applied.
  */
 fun applyRemoteContentPolicy(
     html: String,

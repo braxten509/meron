@@ -95,9 +95,9 @@ internal fun avatarInitials(value: String): String {
 }
 
 internal fun isAuthError(message: String): Boolean {
-    val m = message.lowercase()
+    val normalizedMessage = message.lowercase()
     return listOf("auth", "login", "credential", "password", "unauthor", "permission", "token", "401", "535")
-        .any { m.contains(it) }
+        .any { normalizedMessage.contains(it) }
 }
 
 internal fun isOutgoing(
@@ -180,12 +180,14 @@ internal fun kanbanKeyAccountFolder(key: String): Pair<String, String> {
  *  joins its parts with newlines, so a query must not carry one. */
 internal fun normalizeKanbanColumnQuery(query: String): String = query.replace(Regex("\\s+"), " ").trim()
 
-/** The board search inside a saved search column narrows it. The core reads each
- *  side of an `AND` as its own query that must also match, so free text, dates
- *  and read state narrow the saved query rather than merging into or replacing
- *  its own. The search starts a line of its own, which no quote or group left
- *  open in the saved query reaches into. A leading `OR` would be a stray word
- *  there, so it is dropped. */
+/**
+ * The board search inside a saved search column narrows it.
+ *
+ * The core reads each side of an `AND` as its own query that must also match, so free text, dates and
+ * read state narrow the saved query rather than merging into or replacing its own. The search starts a
+ * line of its own, which no quote or group left open in the saved query reaches into. A leading `OR`
+ * would be a stray word there, so it is dropped.
+ */
 internal fun narrowKanbanQuery(
     saved: String,
     query: String,

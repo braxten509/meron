@@ -89,11 +89,10 @@ internal val mobileSettings =
     )
 
 /**
- * Platform-store key holding the settings the table is behind on, so that
- * survives the process (see [SettingsMirror]).
+ * Platform-store key holding the settings the table is behind on, so that survives the process (see [SettingsMirror]).
  *
- * Deliberately *not* a registry entry: it is bookkeeping about the mirror, not a
- * user setting, so it is never mirrored into the table nor carried in a backup.
+ * Deliberately *not* a registry entry: it is bookkeeping about the mirror, not a user setting, so it
+ * is never mirrored into the table nor carried in a backup.
  */
 internal const val PENDING_SETTINGS_PREF = "pending_settings_v1"
 
@@ -116,11 +115,10 @@ internal const val APP_SIGNATURE_SETTING_KEY = "signature"
 internal const val REMOTE_IMAGE_SENDERS_SETTING_KEY = "remote_image_senders"
 
 /**
- * Core `settings` row holding the default event alert, in minutes before start
- * or [NO_ALERT] (see EventAlerts.kt).
+ * Core `settings` row holding the default event alert, in minutes before start or [NO_ALERT] (see EventAlerts.kt).
  *
- * Shared with desktop and read by the core itself (it plans reminders), so like
- * the allowlist it is neither namespaced under `mobile.` nor a registry entry.
+ * Shared with desktop and read by the core itself (it plans reminders), so like the allowlist it is
+ * neither namespaced under `mobile.` nor a registry entry.
  */
 internal const val REMINDER_LEAD_SETTING_KEY = "reminder_lead_minutes"
 

@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
+# Runs the local checks for the mobile project and its shared
+# core. Command-line options select desktop checks, Android
+# instrumentation and iOS simulator coverage for the current host.
+
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MOBILE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-REPO_DIR="$(cd "$MOBILE_DIR/.." && pwd)"
+SCRIPT_DIRECTORY="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+MOBILE_DIRECTORY="$(cd "$SCRIPT_DIRECTORY/.." && pwd)"
+REPOSITORY_DIRECTORY="$(cd "$MOBILE_DIRECTORY/.." && pwd)"
 
 RUN_DESKTOP=1
 RUN_WAILS=0
@@ -65,15 +69,15 @@ has_android_device() {
 }
 
 if [[ "$RUN_DESKTOP" -eq 1 ]]; then
-  run cargo test --manifest-path "$REPO_DIR/meron-core/Cargo.toml"
+  run cargo test --manifest-path "$REPOSITORY_DIRECTORY/meron-core/Cargo.toml"
   run bun run test
   if [[ "$RUN_WAILS" -eq 1 ]]; then
-    (cd "$REPO_DIR/desktop" && run wails build -clean)
+    (cd "$REPOSITORY_DIRECTORY/desktop" && run wails build -clean)
   fi
 fi
 
-run "$MOBILE_DIR/scripts/verify-oauth-association.sh"
-run gradle -p "$MOBILE_DIR" \
+run "$MOBILE_DIRECTORY/scripts/verify-oauth-association.sh"
+run gradle -p "$MOBILE_DIRECTORY" \
   :shared:check \
   :ui:compileAndroidMain \
   :ui:compileKotlinIosArm64 \
@@ -84,7 +88,7 @@ run gradle -p "$MOBILE_DIR" \
 
 if [[ "$RUN_ANDROID_CONNECTED" -eq 1 ]]; then
   if has_android_device; then
-    run gradle -p "$MOBILE_DIR" :android:connectedDebugAndroidTest
+    run gradle -p "$MOBILE_DIRECTORY" :android:connectedDebugAndroidTest
   else
     echo
     echo "==> Skipping Android connected tests: no adb device is connected."
@@ -94,7 +98,7 @@ fi
 if [[ "$RUN_IOS" -eq 1 ]]; then
   if command -v xcodebuild >/dev/null 2>&1; then
     run xcodebuild test -quiet \
-      -project "$MOBILE_DIR/ios/Meron.xcodeproj" \
+      -project "$MOBILE_DIRECTORY/ios/Meron.xcodeproj" \
       -scheme Meron \
       -sdk iphonesimulator \
       -destination "platform=iOS Simulator,name=iPhone 17" \

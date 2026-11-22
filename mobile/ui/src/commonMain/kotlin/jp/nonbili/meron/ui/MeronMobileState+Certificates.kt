@@ -17,14 +17,13 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * The certificate prompt for a save whose servers are not stored yet — a new
- * account, or an edit that failed before it could be written. Same flow as
- * [showServerCertificate], but probing the endpoint the user just typed rather
- * than the account's recorded one, which is stale or absent in both cases.
+ * The certificate prompt for a save whose servers are not stored yet — a new account, or an edit that failed before it could be written.
  *
- * [message] is the failure carrying the core's marker; it names which of the
- * two servers refused. It is restored as the banner if the probe itself fails,
- * so a dead end still explains itself.
+ * Same flow as [showServerCertificate], but probing the endpoint the user just typed rather than the
+ * account's recorded one, which is stale or absent in both cases.
+ *
+ * [message] is the failure carrying the core's marker; it names which of the two servers refused. It
+ * is restored as the banner if the probe itself fails, so a dead end still explains itself.
  */
 internal fun MeronMobileState.showTypedServerCertificate(
     accountId: String,
@@ -86,14 +85,13 @@ internal fun MeronMobileState.showTypedServerCertificate(
 }
 
 /**
- * Fetch the certificate the failing server presented and put it in front of the
- * user. A server whose certificate cannot be validated — a local Proton Mail
- * Bridge serves a self-signed CA certificate as its leaf — is unreachable until
- * that exact certificate is pinned, so the alternative to this prompt is an
- * account that can never sync.
+ * Fetch the certificate the failing server presented and put it in front of the user.
  *
- * [message] is the failure that carries the core's marker; it names which of
- * the two servers refused.
+ * A server whose certificate cannot be validated — a local Proton Mail Bridge serves a self-signed CA
+ * certificate as its leaf — is unreachable until that exact certificate is pinned, so the alternative
+ * to this prompt is an account that can never sync.
+ *
+ * [message] is the failure that carries the core's marker; it names which of the two servers refused.
  */
 internal fun MeronMobileState.showServerCertificate(
     accountId: String,

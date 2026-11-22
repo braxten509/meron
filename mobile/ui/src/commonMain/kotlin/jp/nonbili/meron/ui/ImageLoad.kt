@@ -51,11 +51,12 @@ private val imageBitmapCacheMutex = Mutex()
 private val imageBitmapCache = LinkedHashMap<String, CachedBitmap>()
 private var imageBitmapCacheBytes = 0L
 
-/** Decoded [ImageBitmap]s are expensive to produce (disk/network read + decode) and a
- *  Composable's `remember` is discarded once a LazyColumn row scrolls out of the
- *  composition window, so scrolling back over the same media redoes that work from
- *  scratch. This cache keeps recently used bitmaps in memory (bounded by approximate
- *  pixel-buffer size) so re-entering the viewport is a cache hit. */
+/**
+ * Decoded [ImageBitmap]s are expensive to produce (disk/network read + decode) and a Composable's
+ * `remember` is discarded once a LazyColumn row scrolls out of the composition window, so scrolling
+ * back over the same media redoes that work from scratch. This cache keeps recently used bitmaps in
+ * memory (bounded by approximate pixel-buffer size) so re-entering the viewport is a cache hit.
+ */
 internal suspend fun loadCachedImageBitmap(
     key: String,
     load: suspend () -> ImageBitmap?,

@@ -149,16 +149,17 @@ object GoogleAccountManagerAuth {
             .getLong(expiryKey(accountId), 0L)
 
     /**
-     * Mint a fresh access token for managed accounts before sync. Returns
-     * [TokenRefresh.NotNeeded] only for non-managed accounts.
+     * Mint a fresh access token for managed accounts before sync.
      *
-     * The local expiry is advisory UI state; meron-core has the authoritative
-     * token and can drift from this preference after reconnects or restores.
-     * Re-minting here keeps platform-managed Gmail from falling back to core's
-     * browser OAuth refresh path. [skipIfFresh] trades that certainty for
-     * cheapness: it skips minting while the recorded expiry is comfortably
-     * away, for callers that run before every server-touching command and
-     * force-mint on an auth failure anyway.
+     * Returns [TokenRefresh.NotNeeded] only for non-managed accounts.
+     *
+     * The local expiry is advisory UI state; meron-core has the authoritative token and can drift from
+     * this preference after reconnects or restores. Re-minting here keeps platform-managed Gmail from
+     * falling back to core's browser OAuth refresh path.
+     *
+     * [skipIfFresh] trades that certainty for cheapness: it skips minting while the recorded expiry is
+     * comfortably away, for callers that run before every server-touching command and force-mint on an
+     * auth failure anyway.
      */
     suspend fun mintIfNeeded(
         context: Context,
@@ -183,11 +184,10 @@ object GoogleAccountManagerAuth {
     }
 
     /**
-     * Mint a fresh token for a managed account and push it into meron-core via
-     * `account.updateOAuthToken`, so the next IMAP/SMTP login uses it. Shared by
-     * the foreground app, background sync worker, and live-push service.
-     * [skipIfFresh] avoids invalidating AccountManager's cached token when the
-     * last token pushed into core is still comfortably before expiry.
+     * Mint a fresh token for a managed account and push it into meron-core via `account.updateOAuthToken`,
+     * so the next IMAP/SMTP login uses it. Shared by the foreground app, background sync worker, and
+     * live-push service. [skipIfFresh] avoids invalidating AccountManager's cached token when the last
+     * token pushed into core is still comfortably before expiry.
      */
     suspend fun mintAndPushToken(
         context: Context,
@@ -247,11 +247,9 @@ object GoogleAccountManagerAuth {
     }
 
     /**
-     * Silent token request, used before sync. Invalidates the cached token and
-     * mints a fresh one. Returns null when user interaction is required (e.g.
-     * consent revoked) — the caller should then surface "needs reconnect".
-     * Throws [IOException] on transient network failure, which is not a
-     * reconnect case.
+     * Silent token request, used before sync. Invalidates the cached token and mints a fresh one. Returns
+     * null when user interaction is required (e.g. consent revoked) — the caller should then surface
+     * "needs reconnect". Throws [IOException] on transient network failure, which is not a reconnect case.
      */
     suspend fun silentToken(
         context: Context,

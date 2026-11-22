@@ -48,11 +48,10 @@ import jp.nonbili.meron.shared.formatRecipientSummary
 private const val COLLAPSED_PREVIEW_CHARS = 200
 
 /**
- * One message in the traditional conversation layout: a full-width card that
- * collapses to a two-line summary, the way classic mail clients stack a thread.
- * The chat layout's [MessageBubble] is the alternative (see
- * [ConversationLayout]); both share [MessageBodyContent] for the body, so the
- * two differ only in chrome.
+ * One message in the traditional conversation layout: a full-width card that collapses to a two-line
+ * summary, the way classic mail clients stack a thread. The chat layout's [MessageBubble] is the
+ * alternative (see [ConversationLayout]); both share [MessageBodyContent] for the body, so the two
+ * differ only in chrome.
  */
 @Composable
 internal fun MessageRow(

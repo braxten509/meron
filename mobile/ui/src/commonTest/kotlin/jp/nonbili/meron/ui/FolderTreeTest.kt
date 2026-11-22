@@ -1,3 +1,7 @@
+// Checks mailbox hierarchy construction from server paths. The
+// fixture covers real parent folders and inferred delimiters,
+// with the reported server delimiter taking precedence.
+
 package jp.nonbili.meron.ui
 
 import jp.nonbili.meron.shared.FolderSummary

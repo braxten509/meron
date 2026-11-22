@@ -5,8 +5,6 @@
 
 package jp.nonbili.meron.ui
 
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Settings
 import jp.nonbili.meron.shared.AccountAliasParams
 import jp.nonbili.meron.shared.AccountAliasesParams
 import jp.nonbili.meron.shared.AccountAvatarParams
@@ -51,12 +49,12 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /**
- * Core reported that it refused to use this account's sign-in (missing, or
- * rejected by the provider). Take the account's reconnect state from a fresh
- * account list, so the drawer and the reconnect banner show it now — and so a
- * report that was overtaken by a reconnect, about credentials already replaced,
- * changes nothing. Watchers repeat the report while they retry; only an account
- * not yet flagged is looked up.
+ * Core reported that it refused to use this account's sign-in (missing, or rejected by the provider).
+ *
+ * Take the account's reconnect state from a fresh account list, so the drawer and the reconnect banner
+ * show it now — and so a report that was overtaken by a reconnect, about credentials already replaced,
+ * changes nothing. Watchers repeat the report while they retry; only an account not yet flagged is
+ * looked up.
  */
 internal fun MeronMobileState.refreshAccountReconnectState(accountId: String) {
     if (!coreLoaded || coreAccounts.none { it.id == accountId && !it.needsReconnect }) return
@@ -343,12 +341,13 @@ private suspend fun MeronMobileState.readRemoteImageSenders(): List<String> {
 }
 
 /**
- * Allow (or stop allowing) remote content from one sender. Unlike an account's
- * "load remote images" toggle this is additive and app-wide: mail from [addr]
+ * Allow (or stop allowing) remote content from one sender.
+ *
+ * Unlike an account's "load remote images" toggle this is additive and app-wide: mail from [addr]
  * loads its remote content in every account.
  *
- * The core resolves the allowlist as it bakes a body, so messages already on
- * screen are re-gated by the reader rather than by a re-read of the thread.
+ * The core resolves the allowlist as it bakes a body, so messages already on screen are re-gated by
+ * the reader rather than by a re-read of the thread.
  */
 internal fun MeronMobileState.setRemoteImageSender(
     addr: String,
@@ -484,14 +483,15 @@ internal fun MeronMobileState.saveAccountProxy(
 }
 
 /**
- * Save an existing account's servers. The password is deliberately absent from
- * the request unless the user typed a new one: the core reads an omitted
- * `password` as "keep the stored credential", so changing a port never costs
- * the account its login.
+ * Save an existing account's servers.
  *
- * A certificate the server cannot prove is offered for pinning here rather than
- * dead-ending, exactly as the sync and send paths do — but against the *edited*
- * endpoint, since the save failed and the stored account still names the old one.
+ * The password is deliberately absent from the request unless the user typed a new one: the core reads
+ * an omitted `password` as "keep the stored credential", so changing a port never costs the account
+ * its login.
+ *
+ * A certificate the server cannot prove is offered for pinning here rather than dead-ending, exactly
+ * as the sync and send paths do — but against the *edited* endpoint, since the save failed and the
+ * stored account still names the old one.
  */
 internal fun MeronMobileState.saveAccountServerSettings(
     account: AccountSummary,
@@ -626,12 +626,12 @@ internal fun MeronMobileState.addPasswordAccount() {
 /**
  * Create the account described by [params].
  *
- * A server whose certificate cannot be validated — a local Proton Mail Bridge
- * serves a self-signed CA certificate as its leaf — is offered for pinning
- * instead of dead-ending on the handshake error, which is what setup used to do:
- * the banner named a TLS failure the user had no way to act on, so such an
- * account simply could not be added on this device. Accepting re-enters here
- * with the pin attached, since there is no stored account to write it to yet.
+ * A server whose certificate cannot be validated — a local Proton Mail Bridge serves a self-signed CA
+ * certificate as its leaf — is offered for pinning instead of dead-ending on the handshake error,
+ * which is what setup used to do: the banner named a TLS failure the user had no way to act on, so
+ * such an account simply could not be added on this device.
+ *
+ * Accepting re-enters here with the pin attached, since there is no stored account to write it to yet.
  */
 internal fun MeronMobileState.addPasswordAccount(params: AddPasswordAccountParams) {
     if (!coreLoaded) {

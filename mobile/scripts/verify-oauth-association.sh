@@ -1,10 +1,14 @@
 #!/usr/bin/env bash
+# Validates Android and Apple OAuth association files before publication.
+# Local templates can contain placeholders during development.
+# Production validation checks the final application identifiers and callback paths.
+
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MOBILE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-ANDROID_ASSETLINKS="${ANDROID_ASSETLINKS:-$MOBILE_DIR/oauth-association/android-assetlinks.template.json}"
-APPLE_AASA="${APPLE_AASA:-$MOBILE_DIR/oauth-association/apple-app-site-association.template.json}"
+SCRIPT_DIRECTORY="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+MOBILE_DIRECTORY="$(cd "$SCRIPT_DIRECTORY/.." && pwd)"
+ANDROID_ASSETLINKS="${ANDROID_ASSETLINKS:-$MOBILE_DIRECTORY/oauth-association/android-assetlinks.template.json}"
+APPLE_AASA="${APPLE_AASA:-$MOBILE_DIRECTORY/oauth-association/apple-app-site-association.template.json}"
 ANDROID_PACKAGE="${ANDROID_PACKAGE:-jp.nonbili.meron}"
 ANDROID_PATH_PREFIX="${ANDROID_PATH_PREFIX:-/meron/oauth}"
 IOS_BUNDLE_ID="${IOS_BUNDLE_ID:-jp.nonbili.meron}"

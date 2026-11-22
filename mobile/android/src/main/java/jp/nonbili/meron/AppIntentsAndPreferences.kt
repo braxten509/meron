@@ -69,13 +69,11 @@ private fun systemLocale(): Locale {
 }
 
 /**
- * [base] with the in-app language applied, for code that resolves resources
- * outside an Activity (notifications posted from services and workers).
+ * [base] with the in-app language applied, for code that resolves resources outside an Activity (notifications posted from services and workers).
  *
- * From Android 13 the platform owns this: the per-app locale it applies covers
- * every context in the process and stays correct even when a background
- * component starts the process, so it is returned untouched rather than pinned
- * to whatever tag the app happened to store last.
+ * From Android 13 the platform owns this: the per-app locale it applies covers every context in the
+ * process and stays correct even when a background component starts the process, so it is returned
+ * untouched rather than pinned to whatever tag the app happened to store last.
  */
 internal fun localizedAppContext(base: Context): Context {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) return base

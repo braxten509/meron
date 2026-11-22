@@ -603,13 +603,14 @@ internal fun MeronMobileState.renameKanbanColumnsForFolder(
 }
 
 /**
- * Turn the board search on [column] into a column of its own, placed right after
- * it. A search scoped to just that column has done its job then, so it clears;
- * a board-wide one stays. [clearsScopedSearch] is false when [query] came from
- * the search options rather than the board search, which it then leaves alone.
- * Does nothing when there is nothing to save or the board already has it, or
- * for a saved search narrowed by the board search: its two queries would have
- * to share one line.
+ * Turn the board search on [column] into a column of its own, placed right after it.
+ *
+ * A search scoped to just that column has done its job then, so it clears; a board-wide one stays.
+ * [clearsScopedSearch] is false when [query] came from the search options rather than the board
+ * search, which it then leaves alone.
+ *
+ * Does nothing when there is nothing to save or the board already has it, or for a saved search
+ * narrowed by the board search: its two queries would have to share one line.
  */
 internal fun MeronMobileState.saveKanbanSearchColumn(
     column: KanbanColumnSpec,

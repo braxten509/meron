@@ -124,13 +124,11 @@ internal class SettingsMirror(
     private val coreLoaded: () -> Boolean,
 ) {
     /**
-     * Settings whose cached value is not confirmed into the table yet, holding
-     * only the *latest* value per key.
+     * Settings whose cached value is not confirmed into the table yet, holding only the *latest* value per key.
      *
-     * An entry means "the cache is ahead of the table": a write is queued, or one
-     * never landed because the core was still loading or the call failed. Keeping
-     * just the newest value is what makes repeated edits safe — a font-size
-     * slider stages dozens of values and only the last one is ever written, so an
+     * An entry means "the cache is ahead of the table": a write is queued, or one never landed because the
+     * core was still loading or the call failed. Keeping just the newest value is what makes repeated
+     * edits safe — a font-size slider stages dozens of values and only the last one is ever written, so an
      * older one cannot land last and stick.
      */
     private val pending = mutableMapOf<String, Any>()
@@ -162,10 +160,9 @@ internal class SettingsMirror(
     /**
      * Re-stage writes a previous process could not deliver.
      *
-     * Only the keys were journalled; their values come back off the platform
-     * cache, which is where the user's choice was durably recorded in the first
-     * place. Without this the next hydrate sees no pending keys, treats the older
-     * table row as authoritative, and overwrites the newer cached value — the
+     * Only the keys were journalled; their values come back off the platform cache, which is where the
+     * user's choice was durably recorded in the first place. Without this the next hydrate sees no pending
+     * keys, treats the older table row as authoritative, and overwrites the newer cached value — the
      * change would silently revert on the launch after the one that made it.
      */
     fun recoverPending(
@@ -192,11 +189,10 @@ internal class SettingsMirror(
     /**
      * Wait for an in-flight write to finish without touching the queue.
      *
-     * Used before a restore *attempt*: it stops a straggler from committing on
-     * top of the restored rows, while leaving staged values intact in case the
-     * attempt turns out to be a passphrase probe, a wrong passphrase, or an
-     * unreadable file — none of which change the table, so forgetting local
-     * edits there would lose them for nothing.
+     * Used before a restore *attempt*: it stops a straggler from committing on top of the restored rows,
+     * while leaving staged values intact in case the attempt turns out to be a passphrase probe, a wrong
+     * passphrase, or an unreadable file — none of which change the table, so forgetting local edits there
+     * would lose them for nothing.
      */
     suspend fun awaitIdle() = writeLock.withLock { }
 
@@ -262,11 +258,10 @@ internal class SettingsMirror(
     /**
      * Publish cached values the table is missing or behind on.
      *
-     * Covers two cases at once: the migration path for installs that predate the
-     * table being authoritative (absent from `existing`), and the repair path for
-     * writes that never landed because the core was down or the call failed
-     * (still [pendingKeys]). Anything else is left alone, so this can never
-     * overwrite a value the table already agrees on.
+     * Covers two cases at once: the migration path for installs that predate the table being authoritative
+     * (absent from `existing`), and the repair path for writes that never landed because the core was down
+     * or the call failed (still [pendingKeys]). Anything else is left alone, so this can never overwrite a
+     * value the table already agrees on.
      */
     suspend fun publish(
         cached: Map<String, Any>,
@@ -285,19 +280,18 @@ internal class SettingsMirror(
 internal fun AppPreferences.cacheStore(): AppPreferences = (this as? CoreBackedPreferences)?.delegate ?: this
 
 /**
- * Reconcile the platform cache against the authoritative table, once the core is
- * up. Returns the settings whose cached value changed, so the caller can re-seed
- * the UI state holding them.
+ * Reconcile the platform cache against the authoritative table, once the core is up.
  *
- * Normally this runs both ways: values the table is behind on are published, and
- * newer values from the table are pulled into the cache. Settings with a write
- * still pending are pulled *from* the cache rather than into it, so a change the
- * user just made is never rolled back by the row it is replacing.
+ * Returns the settings whose cached value changed, so the caller can re-seed the UI state holding
+ * them.
  *
- * [force] is for an explicit restore, where the table has just been overwritten
- * wholesale and is authoritative by definition: nothing is published (that would
- * push pre-restore values back over the restored ones) and every difference is
- * applied, including to settings edited earlier in the session.
+ * Normally this runs both ways: values the table is behind on are published, and newer values from the
+ * table are pulled into the cache. Settings with a write still pending are pulled *from* the cache
+ * rather than into it, so a change the user just made is never rolled back by the row it is replacing.
+ *
+ * [force] is for an explicit restore, where the table has just been overwritten wholesale and is
+ * authoritative by definition: nothing is published (that would push pre-restore values back over the
+ * restored ones) and every difference is applied, including to settings edited earlier in the session.
  */
 internal suspend fun hydrateSettingsFromCore(
     app: AppPreferences,

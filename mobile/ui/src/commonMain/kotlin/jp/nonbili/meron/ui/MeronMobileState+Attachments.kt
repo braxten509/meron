@@ -5,9 +5,7 @@
 
 package jp.nonbili.meron.ui
 
-import androidx.compose.foundation.Image
 import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.type
 import jp.nonbili.meron.shared.AttachmentReadParams
 import jp.nonbili.meron.shared.MessageAttachment
 import jp.nonbili.meron.shared.MobileMailCommandClient
