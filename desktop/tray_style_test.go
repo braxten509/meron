@@ -1,3 +1,7 @@
+// Tray settings must be readable during host startup and
+// survive frontend failure. The tests check persistence,
+// live icon changes and the system-status fallback.
+
 package main
 
 import (

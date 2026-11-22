@@ -1,3 +1,8 @@
+// The desktop contact commands rely on the Rust engine and
+// its thread identities. These cases exercise a missing
+// engine and the shape returned for a contact's
+// conversations.
+
 package main
 
 import "testing"

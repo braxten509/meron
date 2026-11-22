@@ -1,3 +1,7 @@
+// Desktop launch arguments may mix paths, flags and mailto
+// URLs. These tests check which arguments reach compose
+// and how the host represents an empty pending queue.
+
 package main
 
 import (

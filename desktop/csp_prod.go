@@ -1,5 +1,9 @@
 //go:build production
 
+// Release builds load their scripts from the application
+// bundle. Wails attaches this policy to the webview response
+// to limit scripts, connections, fonts and other resources.
+
 package main
 
 // contentSecurityPolicy locks the production webview down to same-origin assets,

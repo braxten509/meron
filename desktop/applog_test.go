@@ -1,3 +1,7 @@
+// Wails invokes desktop commands through a recovery boundary.
+// These tests exercise a successful call and a panicking call
+// so a command failure can be returned to the frontend.
+
 package main
 
 import (

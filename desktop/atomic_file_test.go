@@ -1,3 +1,7 @@
+// The desktop host uses atomic replacement for private
+// settings, public icons and executables. The fixture checks
+// that the resulting file has the mode its caller requested.
+
 package main
 
 import (

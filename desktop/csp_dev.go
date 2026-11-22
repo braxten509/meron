@@ -1,5 +1,9 @@
 //go:build !production
 
+// During development Wails serves the frontend through Vite.
+// This policy lets the development server reload scripts and
+// open its websocket connection inside the desktop webview.
+
 package main
 
 // contentSecurityPolicy for `wails dev`: Wails serves the page from

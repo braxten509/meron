@@ -1,5 +1,10 @@
 //go:build (!linux && !windows) || bindings
 
+// The desktop host queries these capabilities before offering
+// integrated window controls. Platforms using this backend rely on
+// their default window frame and report which titlebar options are
+// available.
+
 package main
 
 // macOS always hides its title bar (main.go); elsewhere there is no frame to

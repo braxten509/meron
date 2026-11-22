@@ -1,5 +1,10 @@
 //go:build linux
 
+// Notification clicks and second-instance launches need to
+// bring the main window forward. On Linux this involves
+// remapping the GTK window so the window manager can activate
+// it.
+
 package main
 
 import "context"

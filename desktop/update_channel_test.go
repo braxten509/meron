@@ -1,3 +1,7 @@
+// The updater distinguishes self-managed installations from
+// store or package-manager installs. Fixtures vary installer
+// markers and environment options to exercise channel selection.
+
 package main
 
 import (

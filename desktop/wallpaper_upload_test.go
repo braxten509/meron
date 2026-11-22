@@ -1,3 +1,7 @@
+// Custom chat backgrounds are saved through the desktop file-
+// writing path. The tests exercise a supported image and a
+// non-image payload before either can be used as wallpaper.
+
 package main
 
 import (

@@ -1,5 +1,9 @@
 //go:build windows && !bindings
 
+// Windows uses a frameless Wails window for the integrated titlebar.
+// The desktop host reads these capabilities before creating the native
+// window and when deciding whether a preference needs a restart.
+
 package main
 
 // The integrated title bar on Windows is Wails' frameless window: no caption,

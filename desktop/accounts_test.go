@@ -1,3 +1,7 @@
+// Account setup accepts a transport-security selection from
+// the frontend. The test exercises how the host interprets
+// that selection before passing settings to the Rust core.
+
 package main
 
 import "testing"

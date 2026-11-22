@@ -1,3 +1,7 @@
+// The desktop host waits for the frontend before revealing
+// the main window. A fallback handles startup when readiness
+// never arrives so the user can still reach the window.
+
 package main
 
 import "time"

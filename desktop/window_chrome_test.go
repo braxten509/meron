@@ -1,3 +1,7 @@
+// The host reports window capabilities before the frontend
+// displays titlebar settings. Tests cover platform-specific
+// controls and applying a saved choice live or after restart.
+
 package main
 
 import (

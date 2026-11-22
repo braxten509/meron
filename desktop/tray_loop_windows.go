@@ -1,3 +1,7 @@
+// Windows delivers tray messages to the OS thread that created
+// the tray window. The desktop host uses this loop to keep
+// window creation, menu events and shutdown on that same thread.
+
 package main
 
 import (

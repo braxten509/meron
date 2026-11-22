@@ -1,3 +1,7 @@
+// The desktop host chooses backup filenames and owns the
+// output file permissions. These tests cover passphrases for
+// secrets, backup metadata and writing owner-only files.
+
 package main
 
 import (

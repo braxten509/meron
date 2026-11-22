@@ -1,3 +1,7 @@
+// Local account backups must be written outside Meron's
+// active databases. The fixture checks that selecting a
+// live database as a backup destination is rejected.
+
 package main
 
 import (

@@ -1,5 +1,9 @@
 //go:build !darwin && !linux && !windows
 
+// The desktop updater selects an installer for the current operating
+// system at build time. On platforms without a supported installer
+// this implementation returns the error shown to the caller.
+
 package main
 
 import "fmt"

@@ -1,3 +1,7 @@
+// These tests tie the version reported by the Go host to
+// the Wails configuration. They also exercise the numeric
+// ordering used to decide when an update is available.
+
 package main
 
 import (

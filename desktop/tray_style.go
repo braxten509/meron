@@ -1,3 +1,7 @@
+// Tray appearance is needed while the Rust process and frontend
+// are starting. The Go host reads and writes the native preference
+// here and exposes the current style to the settings screen.
+
 package main
 
 import (

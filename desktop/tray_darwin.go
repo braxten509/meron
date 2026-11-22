@@ -1,5 +1,9 @@
 //go:build darwin
 
+// Desktop startup must create the macOS status item on the
+// main thread. A Foundation callback dispatches the request
+// there and then calls the shared Go tray initializer.
+
 package main
 
 /*

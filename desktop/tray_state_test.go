@@ -1,3 +1,7 @@
+// Tray rendering can overlap mailbox updates and fail while
+// writing an icon. A controlled clock exercises coalescing,
+// retries and state changes while a write is in flight.
+
 package main
 
 import (

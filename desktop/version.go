@@ -1,3 +1,8 @@
+// The desktop binary reads its release version from the
+// embedded Wails configuration. Update checks compare dotted
+// numeric release versions using the same value shown by the
+// app.
+
 package main
 
 import (

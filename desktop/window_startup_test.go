@@ -1,3 +1,7 @@
+// The startup reveal fallback runs before all frontend callbacks
+// are available. Tests use a stub window to exercise maximize
+// requests, explicit reveals and windows that have already closed.
+
 package main
 
 import (

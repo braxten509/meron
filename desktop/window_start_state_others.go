@@ -1,5 +1,9 @@
 //go:build !linux || bindings
 
+// Desktop startup keeps the window hidden until the frontend is
+// ready. This backend uses the Wails show operation to reveal
+// it and supplies the initial window state to the host.
+
 package main
 
 import (

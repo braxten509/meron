@@ -1,5 +1,9 @@
 //go:build darwin || linux
 
+// On Linux and macOS the updater schedules the replacement process
+// through a detached shell. The helper waits for the current instance
+// to release Meron's single-instance lock before reopening the app.
+
 package main
 
 import (

@@ -1,5 +1,10 @@
 //go:build linux && !bindings
 
+// On Linux the window manager must see normal geometry
+// before maximization. GTK maps the concealed window at
+// startup, then the host reveals it once the frontend is
+// ready.
+
 package main
 
 import (

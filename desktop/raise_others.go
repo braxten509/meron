@@ -1,5 +1,10 @@
 //go:build !linux
 
+// The host raises its main window when a user returns to Meron
+// from a notification or another launch. It distinguishes a
+// minimized window from a hidden one to preserve maximized
+// geometry.
+
 package main
 
 import "context"

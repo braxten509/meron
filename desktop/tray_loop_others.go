@@ -1,5 +1,9 @@
 //go:build !windows
 
+// The tray startup path on Linux and macOS uses systray's external
+// event loop. The backend returns callbacks that the host uses to
+// start and stop the tray alongside the main application.
+
 package main
 
 import "fyne.io/systray"
