@@ -1,21 +1,19 @@
+// The Android app generates resources and notification text from the same three catalogs.
+// XML checks cover the default language and Android's Brazilian Portuguese qualifier.
+// ICU checks cover saved language tags, regional plurals and the English fallback.
 package jp.nonbili.meron
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 import java.util.Locale
 
 class GeneratedLocalizationTest {
     @Test
-    fun generatedAndroidXmlContainsEnglishAndJapaneseStrings() {
+    fun generatedAndroidXmlContainsTheDefaultEnglishStrings() {
         assertEquals(
             "Cancel",
             generatedStringValue("src/main/res/values/strings.xml", "buttons_cancel"),
-        )
-        assertEquals(
-            "キャンセル",
-            generatedStringValue("src/main/res/values-ja/strings.xml", "buttons_cancel"),
         )
     }
 
@@ -31,9 +29,12 @@ class GeneratedLocalizationTest {
     fun generatedIcuHelperContainsPluralMessagesForSupportedLocales() {
         assertEquals("1 file", generatedIcuString("en", "chat.fileItems", mapOf("count" to 1)))
         assertEquals("2 files", generatedIcuString("en", "chat.fileItems", mapOf("count" to 2)))
-        assertTrue(generatedIcuString("ar", "chat.fileItems", mapOf("count" to 2)).contains("2"))
-        assertEquals("1 件の新しいメッセージ", generatedIcuString("ja", "notify.newMessageCount", mapOf("count" to 1)))
-        assertEquals("3 件の新しいメッセージ", generatedIcuString("ja", "notify.newMessageCount", mapOf("count" to 3)))
+        assertEquals(setOf("en", "pt_BR", "ru"), generatedIcuStrings.keys)
+        for (locale in listOf("pt-BR", "pt_BR", "pt")) {
+            assertEquals("1 nova mensagem", generatedIcuString(locale, "notify.newMessageCount", mapOf("count" to 1)))
+            assertEquals("3 novas mensagens", generatedIcuString(locale, "notify.newMessageCount", mapOf("count" to 3)))
+        }
+        assertEquals("2 files", generatedIcuString("ja", "chat.fileItems", mapOf("count" to 2)))
     }
 
     @Test

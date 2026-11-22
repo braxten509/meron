@@ -503,7 +503,6 @@ meron-core/src/backup.rs
 meron-core/src/backup/tests.rs
 meron-core/src/calendar.rs
 meron-core/src/calendar/events.rs
-meron-core/src/calendar/events/tests.rs
 meron-core/src/calendar/tests.rs
 meron-core/src/changelog.rs
 meron-core/src/engine/ai_sort.rs
@@ -557,7 +556,6 @@ meron-core/src/parse/html.rs
 meron-core/src/parse/media.rs
 meron-core/src/parse/message.rs
 meron-core/src/parse/preview.rs
-meron-core/src/parse/tests.rs
 meron-core/src/parse/text.rs
 meron-core/src/protocol/accounts.rs
 meron-core/src/protocol/backup.rs
@@ -658,11 +656,9 @@ meron-core/src/store/search.rs
 meron-core/src/store/senders.rs
 meron-core/src/store/settings.rs
 meron-core/src/store/tags.rs
-meron-core/src/store/tags/tests.rs
 meron-core/src/store/tasks.rs
 meron-core/src/store/tests.rs
 meron-core/src/store/tests/attachments.rs
-meron-core/src/store/tests/contacts.rs
 meron-core/src/store/tests/message_cache.rs
 meron-core/src/store/tests/message_counts.rs
 meron-core/src/store/tests/migrations.rs
@@ -715,7 +711,6 @@ mobile/android/src/test/java/jp/nonbili/meron/AndroidNewMailNotificationTest.kt
 mobile/android/src/test/java/jp/nonbili/meron/AndroidNotificationActionTest.kt
 mobile/android/src/test/java/jp/nonbili/meron/AndroidSyncDiagnosticLogTest.kt
 mobile/android/src/test/java/jp/nonbili/meron/AndroidUnreadWidgetTest.kt
-mobile/android/src/test/java/jp/nonbili/meron/GeneratedLocalizationTest.kt
 mobile/ios/Meron/IosAppPaths.swift
 mobile/ios/Meron/IosBackgroundRefresh.swift
 mobile/ios/Meron/IosComposeHost.swift
