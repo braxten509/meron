@@ -1,4 +1,10 @@
+use super::content::{
+    clean_feed_text, extract_image_urls, extract_video_urls, image_mime, video_mime,
+};
+use super::fetch::{discover_feed_url, parse_item};
+use super::media_cache::sniff_image_ext;
 use super::*;
+use crate::store::RssMedia;
 
 fn read_thread(conn: &Connection, thread_id: &str) -> Result<Vec<Value>> {
     let (items, _) = read_thread_page(conn, thread_id, None, None)?;
