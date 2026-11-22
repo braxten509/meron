@@ -37,8 +37,8 @@ it('lists up to three valid, account-scoped recent targets of each action inside
     const titles = () =>
       Array.from(document.querySelectorAll('[data-thread-context-menu] span[title]')).map((span) => span.textContent)
     await waitFor(() => expect(titles()).toEqual(['Work', 'Older', 'A', 'me@example.com', 'other@example.com']))
-    fireEvent.click(view.getByText('Move to...'))
-    fireEvent.click(view.getByText('Copy to...'))
+    fireEvent.mouseLeave(view.getByText('Move to...'))
+    fireEvent.mouseEnter(view.getByText('Copy to...'))
     await waitFor(() => expect(titles()).toEqual(['Receipts', 'me@example.com', 'other@example.com']))
   } finally {
     cleanup()

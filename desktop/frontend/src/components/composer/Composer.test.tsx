@@ -12,7 +12,7 @@ import {
 } from '../../states/compose'
 import { compose$ } from '../../states/composeState'
 import { kanban$ } from '../../states/kanban'
-import { dismissToast, runToastUndo, ui$ } from '../../states/ui'
+import { dismissToast, runToastUndo, settleConfirm, ui$ } from '../../states/ui'
 import type { Account, ComposeDraft, Message } from '../../types'
 import { Composer } from './Composer'
 import { ConversationTabs } from '../chat/ConversationTabs'
@@ -339,7 +339,9 @@ describe('Composer', () => {
     expect(order.slice(discarded).includes('mail.saveDraft')).toBe(false)
   })
 
-  it('drains and discards when the tab strip closes the composer', async () => {
+  // The tab strip's × keeps the message in Drafts, like Esc; throwing it away
+  // is the Discard button's job.
+  it('drains and saves to Drafts when the tab strip closes the composer', async () => {
     const tabId = openComposeTab({ to: 'x@example.com', subject: 'Hello', text: 'hi' })!
     const view = render(
       <>
@@ -360,11 +362,22 @@ describe('Composer', () => {
       await new Promise((resolve) => setTimeout(resolve, 50))
     })
 
+    // The last save ran after the one in flight (which, finding the tab gone,
+    // cleans up its own copy), and exactly that last copy is left in Drafts.
     const order = calls.map((call) => call.command)
-    expect(order.lastIndexOf('mail.discardDraft')).toBeGreaterThan(order.lastIndexOf('mail.saveDraft'))
+    expect(order.lastIndexOf('mail.saveDraft')).toBeGreaterThan(order.lastIndexOf('mail.discardDraft'))
+    const discarded = new Set(
+      calls.filter((call) => call.command === 'mail.discardDraft').map((call) => call.payload.draft_id),
+    )
+    const ids = savedDraftIds()
+    const kept = [...new Set(ids)].filter((id) => !discarded.has(id))
+    expect(kept).toEqual([ids[ids.length - 1]])
     expect(draftOf(tabId)).toBeUndefined()
   })
 
+  // A save that fails may still have written a copy. The tab comes back (so
+  // nothing typed is lost) under the id of the copy it may have left, and any
+  // other copy written meanwhile is discarded: no stray drafts pile up.
   it('discards the copy a failed save may have written after the tab closed', async () => {
     const tabId = openComposeTab({ to: 'x@example.com', subject: 'Hello', text: 'hi' })!
     const view = render(
@@ -386,9 +399,15 @@ describe('Composer', () => {
       await new Promise((resolve) => setTimeout(resolve, 50))
     })
 
-    expect(draftOf(tabId)).toBeUndefined()
-    const discarded = calls.filter((call) => call.command === 'mail.discardDraft')
-    expect(discarded.map((call) => call.payload.draft_id)).toContain('allocated-1@example.com')
+    const reopened = draftOf(tabId)
+    expect(reopened).toBeDefined()
+    const discarded = new Set(
+      calls.filter((call) => call.command === 'mail.discardDraft').map((call) => call.payload.draft_id),
+    )
+    const stray = [...new Set(savedDraftIds())].filter(
+      (id) => id !== reopened?.draftMessageId && !discarded.has(id),
+    )
+    expect(stray).toEqual([])
   })
 
   it('closes on Esc at once and keeps the message in Drafts', async () => {
@@ -1047,6 +1066,11 @@ describe('Composer', () => {
 
     expect(view.getByRole('alertdialog').textContent).toContain('Send this message without a subject?')
     expect(calls.some((call) => call.command === 'mail.send')).toBe(false)
+    // Answer the question: an open confirm would block every later file's
+    // shortcuts, as the app treats it as a modal.
+    await act(async () => {
+      settleConfirm(false)
+    })
   })
 
   it('shows the new account’s signature in the editor when From changes', async () => {
