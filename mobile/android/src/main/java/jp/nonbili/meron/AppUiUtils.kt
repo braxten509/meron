@@ -26,16 +26,12 @@ private const val APP_LANGUAGE_PREF = "app_language_v1"
 internal const val INBOX_FOLDER = "inbox"
 internal const val LIVE_MAIL_PUSH_PREF = "live_mail_push_v1"
 internal const val BACKGROUND_SYNC_ENABLED_PREF = "background_sync_enabled_v1"
-private val supportedAppLanguageTags =
-    setOf("ar", "de", "el", "en", "es", "et", "fr", "it", "ja", "ko", "lv", "pl", "pt", "pt-BR", "ru", "sv", "tr", "vi", "zh-Hans", "zh-Hant")
-
 internal fun loadAppLanguageTag(context: Context): String =
     context
         .getSharedPreferences(APP_PREFS, Context.MODE_PRIVATE)
         .getString(APP_LANGUAGE_PREF, "")
         .orEmpty()
-        .takeIf { it in supportedAppLanguageTags }
-        .orEmpty()
+        .let { jp.nonbili.meron.shared.catalogLanguage(it) }
 
 internal fun loadAppBoolean(
     context: Context,
@@ -46,19 +42,9 @@ internal fun loadAppBoolean(
         .getSharedPreferences(APP_PREFS, Context.MODE_PRIVATE)
         .getBoolean(key, defaultValue)
 
-/** The catalog tag for a resolved locale. The generated ICU tables are keyed by
- *  script for Chinese (`zh-Hans`/`zh-Hant`), which `toLanguageTag()` never
- *  yields for a plain `zh-CN` device locale, so a raw tag would miss the
- *  catalog and fall through to English. */
-internal fun catalogLanguageTag(locale: Locale): String {
-    val tag = locale.toLanguageTag()
-    if (tag in supportedAppLanguageTags) return tag
-    if (locale.language == "zh") {
-        val traditional = locale.script == "Hant" || locale.country in setOf("TW", "HK", "MO")
-        return if (traditional) "zh-Hant" else "zh-Hans"
-    }
-    return locale.language.takeIf { it in supportedAppLanguageTags } ?: "en"
-}
+/** Use the same catalog for the background workers and the foreground UI. */
+internal fun catalogLanguageTag(locale: Locale): String =
+    jp.nonbili.meron.shared.catalogLanguage(locale.toLanguageTag()).ifEmpty { "en" }
 
 /**
  * The device's own locale. Read from the system resources rather than

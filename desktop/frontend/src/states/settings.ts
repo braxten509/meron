@@ -410,9 +410,9 @@ const LANG_CACHE_KEY = 'meron-language-cache'
 /** Reflect a locale to the document and refresh the paint-time cache. */
 export function applyDocumentLanguage(lang: SupportedI18nLanguage) {
   const root = document.documentElement
-  // Our codes use "_" (zh_Hant, pt_BR); the lang attribute wants BCP-47 "-".
+  // Our codes use "_" (pt_BR); the lang attribute wants BCP-47 "-".
   root.lang = lang.replace('_', '-')
-  root.dir = lang === 'ar' ? 'rtl' : 'ltr'
+  root.dir = 'ltr'
   try {
     localStorage.setItem(LANG_CACHE_KEY, lang)
   } catch {

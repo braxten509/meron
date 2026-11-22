@@ -89,11 +89,7 @@ describe('catalog validation helpers', () => {
 describe('platform mapping helpers', () => {
   test('maps special locale identifiers explicitly', () => {
     expect(androidLocaleDir('pt_BR')).toBe('values-pt-rBR')
-    expect(androidLocaleDir('zh_Hans')).toBe('values-b+zh+Hans')
-    expect(androidLocaleDir('zh_Hant')).toBe('values-b+zh+Hant')
     expect(iosLocale('pt_BR')).toBe('pt-BR')
-    expect(iosLocale('zh_Hans')).toBe('zh-Hans')
-    expect(iosLocale('zh_Hant')).toBe('zh-Hant')
   })
 
   test('escapes Android XML string values', () => {

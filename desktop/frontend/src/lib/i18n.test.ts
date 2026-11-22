@@ -13,8 +13,9 @@ describe('i18n', () => {
     expect(resolveI18nLanguageFromWebLocale('RU')).toBe('ru')
     expect(normalizeI18nLanguage('ru')).toBe('ru')
     expect(resolveI18nLanguageFromWebLocale('pt-BR')).toBe('pt_BR')
-    expect(resolveI18nLanguageFromWebLocale('zh-TW')).toBe('zh_Hant')
-    expect(resolveI18nLanguageFromWebLocale('zh-Hans-CN')).toBe('zh_Hans')
+    expect(normalizeI18nLanguage('pt')).toBe('pt_BR')
+    expect(resolveI18nLanguageFromWebLocale('pt-PT')).toBe('pt_BR')
+    expect(resolveI18nLanguageFromWebLocale('zh-TW')).toBeUndefined()
   })
 
   it('formats ICU plurals from the generated catalog', async () => {
@@ -23,7 +24,7 @@ describe('i18n', () => {
     expect(t('chat.showImages', { count: 3 })).toBe('Show 3 images')
 
     await i18n.changeLanguage('de')
-    expect(t('chat.showImages', { count: 2 })).toBe('2 Bilder anzeigen')
+    expect(t('chat.showImages', { count: 2 })).toBe('Show 2 images')
   })
 
   it('switches to Russian and formats all Russian plural categories', async () => {

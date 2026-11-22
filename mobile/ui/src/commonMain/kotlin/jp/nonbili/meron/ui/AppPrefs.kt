@@ -201,8 +201,7 @@ internal fun saveMessageFontScale(
 internal fun loadAppLanguageTag(prefs: AppPreferences): String =
     prefs
         .getString(APP_LANGUAGE_PREF, "")
-        .takeIf { it in supportedAppLanguageTags }
-        .orEmpty()
+        .let(::normalizeAppLanguageTag)
 
 /**
  * Store the in-app language. Unsupported tags normalize to blank ("follow the
@@ -211,7 +210,7 @@ internal fun loadAppLanguageTag(prefs: AppPreferences): String =
 internal fun saveAppLanguageTag(
     prefs: AppPreferences,
     tag: String,
-) = prefs.putString(APP_LANGUAGE_PREF, tag.takeIf { it in supportedAppLanguageTags }.orEmpty())
+) = prefs.putString(APP_LANGUAGE_PREF, normalizeAppLanguageTag(tag))
 
 /**
  * The language to display, given the platform's answer and our stored tag.
@@ -222,7 +221,7 @@ internal fun saveAppLanguageTag(
 internal fun resolveAppLanguageTag(
     systemTag: String?,
     storedTag: String,
-): String = systemTag ?: storedTag
+): String = normalizeAppLanguageTag(systemTag ?: storedTag)
 
 /** Whether the platform's answer differs from what we have stored. */
 internal fun appLanguageNeedsPersisting(
@@ -238,30 +237,10 @@ internal fun appLanguageNeedsPersisting(
  * device resolves to the same translation on both — only the tag spelling differs
  * (mobile hyphenates where desktop uses underscores).
  */
-internal fun resolveDeviceLanguageTag(deviceTag: String): String {
-    val parts = deviceTag.replace('_', '-').split('-').filter { it.isNotEmpty() }
-    val language = parts.firstOrNull()?.lowercase() ?: return "en"
-    return when (language) {
-        // Script wins when stated; otherwise the region decides which Chinese.
-        "zh" -> {
-            val region = parts.getOrNull(1)?.uppercase()
-            when {
-                parts.any { it.equals("Hans", ignoreCase = true) } -> "zh-Hans"
-                parts.any { it.equals("Hant", ignoreCase = true) } -> "zh-Hant"
-                region in setOf("TW", "HK", "MO", "CHT") -> "zh-Hant"
-                else -> "zh-Hans"
-            }
-        }
+internal fun resolveDeviceLanguageTag(deviceTag: String): String =
+    normalizeAppLanguageTag(deviceTag).ifEmpty { "en" }
 
-        "pt" -> {
-            if (parts.getOrNull(1)?.uppercase() == "BR") "pt-BR" else "pt"
-        }
-
-        else -> {
-            language.takeIf { it in supportedAppLanguageTags } ?: "en"
-        }
-    }
-}
+internal fun normalizeAppLanguageTag(tag: String): String = jp.nonbili.meron.shared.catalogLanguage(tag)
 
 internal fun savePendingOAuthFlow(
     prefs: AppPreferences,

@@ -35,17 +35,17 @@ test('configuration refresh only hydrates changed keys and ignores unrelated sta
     },
   }
   settings$.threadListWidth.set(420)
-  settings$.language.set('ja')
+  settings$.language.set('pt_BR')
   const refresh = configurationRefresh()
   await refresh.refresh({ keys: ['signature'] })
   expect(settings$.threadListWidth.get()).toBe(420)
   expect(settings$.signature.get()).toBe('new signature')
-  expect(settings$.language.get()).toBe('ja')
+  expect(settings$.language.get()).toBe('pt_BR')
   expect(calls.some((call) => call.command === 'account.list')).toBe(false)
   expect(calls.find((call) => call.command === 'app.prefsGet')?.payload).toEqual({ keys: ['signature'] })
   calls.length = 0
   await refresh.refresh()
-  expect(settings$.language.get()).toBe('ja')
+  expect(settings$.language.get()).toBe('pt_BR')
   expect(calls.some((call) => call.command === 'app.prefsGet')).toBe(false)
   refresh.dispose()
 })

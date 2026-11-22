@@ -1,8 +1,10 @@
 // Generates mobile/ui/build/generated/.../GeneratedStrings.kt from locales/*.json.
 // One all-keys map (locale -> key -> ICU message) backing the Compose
 // Multiplatform Localizer. Run: bun scripts/i18n/gen-compose-strings.ts
-import { mkdirSync, readFileSync, writeFileSync, readdirSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+
+import { supportedLocales } from "./catalog";
 
 const root = join(import.meta.dir, "..", "..");
 const localesDir = join(root, "locales");
@@ -15,7 +17,7 @@ const out =
 
 // Canonical file code -> app BCP-47 tag (underscore -> hyphen for script/region).
 const tagFor = (code: string): string =>
-  ({ pt_BR: "pt-BR", zh_Hans: "zh-Hans", zh_Hant: "zh-Hant" })[code] ?? code;
+  code.replace("_", "-");
 
 const esc = (s: string): string =>
   s
@@ -26,9 +28,7 @@ const esc = (s: string): string =>
     .replace(/\r/g, "\\r")
     .replace(/\t/g, "\\t");
 
-const files = readdirSync(localesDir)
-  .filter((f) => f.endsWith(".json"))
-  .sort();
+const files = supportedLocales.map((code) => code + ".json");
 
 // One function per locale keeps each JVM method well under the 64 KB bytecode
 // limit (a single combined map initializer overflows it).

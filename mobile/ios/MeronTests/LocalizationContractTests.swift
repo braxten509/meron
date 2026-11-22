@@ -2,7 +2,7 @@
 import XCTest
 
 final class LocalizationContractTests: XCTestCase {
-    func testGeneratedStringCatalogResolvesEnglishAndJapanese() throws {
+    func testGeneratedStringCatalogResolvesEnglishAndRussian() throws {
         let bundle = try XCTUnwrap(Bundle(identifier: "jp.nonbili.meron"))
 
         XCTAssertEqual(
@@ -10,8 +10,8 @@ final class LocalizationContractTests: XCTestCase {
             "Cancel"
         )
         XCTAssertEqual(
-            bundle.localizedString(forKey: "buttons.cancel", value: nil, table: nil, localeIdentifier: "ja"),
-            "キャンセル"
+            bundle.localizedString(forKey: "buttons.cancel", value: nil, table: nil, localeIdentifier: "ru"),
+            "Отмена"
         )
     }
 
@@ -72,12 +72,9 @@ final class LocalizationContractTests: XCTestCase {
         }
     }
 
-    func testIosAppLanguageOptionsUseGeneratedCatalogLocaleIdentifiers() {
-        XCTAssertEqual(iosNormalizedAppLanguageTag("pt-BR"), "pt-BR")
-        XCTAssertEqual(iosNormalizedAppLanguageTag("zh-Hans"), "zh-Hans")
-        XCTAssertEqual(iosNormalizedAppLanguageTag("pt_BR"), "")
-        XCTAssertEqual(iosAppLocale("ja").identifier, "ja")
-        XCTAssertEqual(iosAppLanguageDisplayName("pt-BR"), "Português (Brasil)")
+    func testBundleIncludesOnlySupportedTranslations() throws {
+        let bundle = try XCTUnwrap(Bundle(identifier: "jp.nonbili.meron"))
+        XCTAssertEqual(Set(bundle.localizations).subtracting(["Base"]), ["en", "pt-BR", "ru"])
     }
 }
 

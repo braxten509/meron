@@ -50,27 +50,13 @@ export const resolveI18nLanguageFromWebLocale = (localeStr?: string): SupportedI
   if (!localeStr) {
     return undefined
   }
-  const normalized = localeStr.replace('_', '-')
-  const parts = normalized.split('-')
-  const lang = parts[0].toLowerCase()
-
-  if (lang === 'zh') {
-    if (parts.includes('Hans')) return 'zh_Hans'
-    if (parts.includes('Hant')) return 'zh_Hant'
-    const region = parts[1]?.toUpperCase()
-    return region === 'TW' || region === 'HK' || region === 'MO' || region === 'CHT' ? 'zh_Hant' : 'zh_Hans'
-  }
-
-  if (lang === 'pt') {
-    const region = parts[1]?.toUpperCase()
-    return region === 'BR' ? 'pt_BR' : 'pt'
-  }
-
-  return isSupportedLanguage(lang) ? (lang as SupportedI18nLanguage) : undefined
+  const language = localeStr.toLowerCase().split(/[-_]/, 1)[0]
+  if (language === 'pt') return 'pt_BR'
+  return isSupportedLanguage(language) ? language : undefined
 }
 
 export const normalizeI18nLanguage = (value?: string | null): SupportedI18nLanguage | null =>
-  value == null ? null : isSupportedLanguage(value) ? value : null
+  resolveI18nLanguageFromWebLocale(value ?? undefined) ?? null
 
 export function t(key: string, values: TranslationValues = {}): string {
   const formatted = formatMessage(currentLanguage, key, values)

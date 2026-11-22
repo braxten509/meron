@@ -17,12 +17,12 @@ class AndroidLocaleController(
         val tag = context.getSystemService(LocaleManager::class.java).applicationLocales.toLanguageTags()
         // Empty means the user picked "System default" there — an answer, not a
         // shrug, so it is returned as "" rather than null.
-        return tag.substringBefore(",").takeIf { it in supportedAppLanguageTags }.orEmpty()
+        return normalizeAppLanguageTag(tag.substringBefore(","))
     }
 
     override fun applySystem(tag: String) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
-        val normalized = tag.takeIf { it in supportedAppLanguageTags }.orEmpty()
+        val normalized = normalizeAppLanguageTag(tag)
         context.getSystemService(LocaleManager::class.java).applicationLocales =
             if (normalized.isBlank()) LocaleList.getEmptyLocaleList() else LocaleList.forLanguageTags(normalized)
     }

@@ -10,13 +10,13 @@ import java.util.Locale
 
 class AndroidLocalizationContractTest {
     @Test
-    fun generatedStringResourcesResolveForEnglishAndJapanese() {
+    fun generatedStringResourcesResolveForEnglishAndRussian() {
         val context = ApplicationProvider.getApplicationContext<Context>()
 
         assertEquals("Cancel", context.withLocale(Locale.ENGLISH).getString(R.string.buttons_cancel))
-        assertEquals("キャンセル", context.withLocale(Locale.JAPANESE).getString(R.string.buttons_cancel))
+        assertEquals("Отмена", context.withLocale(Locale.forLanguageTag("ru")).getString(R.string.buttons_cancel))
         assertEquals("File saved", context.withLocale(Locale.ENGLISH).getString(R.string.mobile_android_file_saved))
-        assertEquals("ファイルを保存しました", context.withLocale(Locale.JAPANESE).getString(R.string.mobile_android_file_saved))
+        assertEquals("Файл сохранён", context.withLocale(Locale.forLanguageTag("ru")).getString(R.string.mobile_android_file_saved))
     }
 
     @Test

@@ -14,7 +14,7 @@ class IosLocaleController : LocaleController {
     override fun systemLanguageTag(): String? = null
 
     override fun applySystem(tag: String) {
-        val normalized = tag.takeIf { it in supportedAppLanguageTags }.orEmpty()
+        val normalized = normalizeAppLanguageTag(tag)
         if (normalized.isBlank()) {
             defaults.removeObjectForKey("AppleLanguages")
         } else {

@@ -303,25 +303,8 @@
 			knownRegions = (
 				en,
 				Base,
-				ar,
-				de,
-				el,
-				es,
-				et,
-				fr,
-				it,
-				ja,
-				ko,
-				lv,
-				pl,
-				pt,
 				"pt-BR",
 				ru,
-				sv,
-				tr,
-				vi,
-				"zh-Hans",
-				"zh-Hant",
 			);
 			mainGroup = A10000000000000000000030;
 			productRefGroup = A10000000000000000000032 /* Products */;

@@ -29,58 +29,18 @@ type LocaleTarget = { android: string; ios: string }
 const pluralCategories = ['zero', 'one', 'two', 'few', 'many', 'other'] as const
 type PluralCategory = (typeof pluralCategories)[number]
 
-const supportedLocales = [
-  'ar',
-  'de',
-  'el',
-  'en',
-  'es',
-  'et',
-  'fr',
-  'it',
-  'ko',
-  'lv',
-  'pl',
-  'pt',
-  'pt_BR',
-  'ru',
-  'sv',
-  'tr',
-  'vi',
-  'zh_Hans',
-  'zh_Hant',
-  'ja',
-] as const
+const supportedLocales = ['en', 'pt_BR', 'ru'] as const
 type SupportedLocale = (typeof supportedLocales)[number]
 
 const languageNativeNames: Record<SupportedLocale, string> = {
-  ar: 'العربية',
-  de: 'Deutsch',
-  el: 'Ελληνικά',
   en: 'English',
-  es: 'Español',
-  et: 'Eesti',
-  fr: 'Français',
-  it: 'Italiano',
-  ko: '한국어',
-  lv: 'Latviešu',
-  pl: 'Polski',
-  pt: 'Português',
   pt_BR: 'Português (Brasil)',
   ru: 'Русский',
-  sv: 'Svenska',
-  tr: 'Türkçe',
-  vi: 'Tiếng Việt',
-  zh_Hans: '简体中文',
-  zh_Hant: '繁體中文',
-  ja: '日本語',
 }
 
 const localeMap: Partial<Record<SupportedLocale, LocaleTarget>> = {
   en: { android: 'values', ios: 'en' },
   pt_BR: { android: 'values-pt-rBR', ios: 'pt-BR' },
-  zh_Hans: { android: 'values-b+zh+Hans', ios: 'zh-Hans' },
-  zh_Hant: { android: 'values-b+zh+Hant', ios: 'zh-Hant' },
 }
 
 function main() {
@@ -206,9 +166,8 @@ internal fun generatedIcuString(
     key: String,
     args: Map<String, Any?> = emptyMap(),
 ): String {
-    val messages = generatedIcuStrings[locale]
-        ?: generatedIcuStrings[locale.substringBefore('-')]
-        ?: generatedIcuStrings[locale.substringBefore('_')]
+    val language = locale.substringBefore('-').substringBefore('_').lowercase()
+    val messages = generatedIcuStrings[if (language == "pt") "pt_BR" else language]
         ?: generatedIcuStrings["en"]
         ?: emptyMap()
     val template = messages[key] ?: generatedIcuStrings["en"]?.get(key) ?: key
@@ -452,6 +411,7 @@ if (import.meta.main) {
 
 export {
   androidEscape,
+  supportedLocales,
   androidLocaleDir,
   androidName,
   flattenObject,

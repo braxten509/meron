@@ -74,6 +74,7 @@ android {
     }
 
     defaultConfig {
+        resourceConfigurations += ["en", "pt-rBR", "ru"]
         applicationId "jp.nonbili.meron"
         minSdk 24
         targetSdk 36
