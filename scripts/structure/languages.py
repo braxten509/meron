@@ -52,7 +52,7 @@ LANGUAGES: dict[str, Language] = {
     ".cjs": Language(SLASH, SLASH_BLOCK, (), "/**", head_skip=JS_HEAD, family="js"),
     ".svelte": Language(SLASH, SLASH_BLOCK, (), "/**", head_skip=r"<script", family="js"),
     ".java": Language(SLASH, SLASH_BLOCK, (), "/**"),
-    ".kt": Language(SLASH, SLASH_BLOCK, (), "/**", family="kotlin"),
+    ".kt": Language(SLASH, SLASH_BLOCK, (), "/**", head_skip=r"@file:", family="kotlin"),
     ".kts": Language(SLASH, SLASH_BLOCK, (), "/**", family="kotlin"),
     ".scala": Language(SLASH, SLASH_BLOCK, (), "/**", family="kotlin"),
     ".swift": Language(SLASH, SLASH_BLOCK, ("///",), "/**", family="swift"),

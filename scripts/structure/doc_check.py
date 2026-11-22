@@ -124,7 +124,7 @@ def _line_run(lines: list[str], start: int, marks: tuple[str, ...]) -> tuple[lis
         if mark is None:
             break
         rest = stripped[len(mark):]
-        if rest and not rest.startswith(" ") and mark in ("#", "//", "--"):
+        if rest and not rest[0].isspace() and mark in ("#", "//", "--"):
             break
         text.append(rest[1:] if rest.startswith(" ") else rest)
         end += 1
@@ -142,7 +142,8 @@ def opening_note(lines: list[str], language: Language) -> tuple[int, list[str]]:
     if language.python_docstrings and text.startswith(TRIPLE_QUOTES):
         return index, _block_text(lines, index, text[:3], text[:3])[0]
     if language.block and text.startswith(language.block[0]):
-        return index, _block_text(lines, index, language.block[1], language.block[0])[0]
+        opening = language.doc_block_start if language.doc_block_start and text.startswith(language.doc_block_start) else language.block[0]
+        return index, _block_text(lines, index, language.block[1], opening)[0]
     marks = tuple(language.doc_line_marks) + tuple(language.line_marks)
     if text.startswith(marks):
         return index, _line_run(lines, index, marks)[0]

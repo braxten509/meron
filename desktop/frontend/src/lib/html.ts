@@ -1,8 +1,9 @@
-/** Rewrite `cid:<inlineId>` image refs to `data:` URLs from the matching
- * composer attachments. Used for locally-rendered copies of an outgoing
- * message (the optimistic sent bubble/reader): they never went through the
- * backend's cid-to-`/media/<key>` rewrite, so without this the reader has no
- * way to resolve the refs and shows broken images. */
+/**
+ * Resolve inline image references for a locally rendered outgoing message.
+ *
+ * The optimistic sent bubble and reader receive composer attachments before the backend
+ * has rewritten their CID references. Embed those attachments as data URLs for display.
+ */
 export function resolveInlineCids(
   html: string,
   attachments: Array<{ inlineId?: string; mime: string; data: string }>,

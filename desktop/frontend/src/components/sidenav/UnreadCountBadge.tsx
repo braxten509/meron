@@ -1,6 +1,7 @@
 /**
- * Numeric inbox unread-count badge overlaid on the top-right of a side navigation avatar
- * or button. Caps at "9999+". Renders nothing when count is 0.
+ * Displays an inbox unread count on a side-navigation avatar or button.
+ * The badge sits at the top right of its parent and caps the label at 9999+.
+ * A zero count leaves the avatar visible on its own.
  */
 export function UnreadCountBadge({ count }: { count: number }) {
   if (count <= 0) return null
