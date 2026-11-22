@@ -1,6 +1,6 @@
-//! Exercises store behavior for migrations.
-//!
-//! Uses the shared fixtures in the parent test module.
+//! Database initialization and upgrades for existing installations.
+//! Tests exercise concurrent opens, version tracking and optional encryption.
+//! Search indexing cases distinguish changed text from unchanged headers.
 
 use super::*;
 

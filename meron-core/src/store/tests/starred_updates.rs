@@ -1,6 +1,6 @@
-//! Exercises store behavior for starred updates.
-//!
-//! Uses the shared fixtures in the parent test module.
+//! Star and unstar mutations across message copies.
+//! Fixtures distinguish folder-local identities from provider-wide identities.
+//! An update should touch only the selected message and its copies.
 
 use super::*;
 

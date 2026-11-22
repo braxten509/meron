@@ -1,6 +1,6 @@
-//! Exercises protocol behavior for oauth refresh.
-//!
-//! Uses the shared fixtures in the parent test module.
+//! OAuth account refresh and reconnect.
+//! Reconnect must retain the account's existing avatar.
+//! The Outlook refresh uses the account's client identity and IMAP scopes.
 
 use super::*;
 

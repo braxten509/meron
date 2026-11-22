@@ -1,6 +1,6 @@
-//! Exercises store behavior for search pages.
-//!
-//! Uses the shared fixtures in the parent test module.
+//! Search pagination across accounts and folders.
+//! Equal folder-local UIDs can refer to different messages.
+//! Cases check date order, pending hits and stable continuation cursors.
 
 use super::*;
 

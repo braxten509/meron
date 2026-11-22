@@ -1,6 +1,6 @@
-//! Exercises protocol behavior for folders.
-//!
-//! Uses the shared fixtures in the parent test module.
+//! Folder listing and mutation through the mobile protocol.
+//! The cases cover credential requirements and reserved folders in subtrees.
+//! Invalid rename targets must be rejected before contacting the server.
 
 use super::*;
 

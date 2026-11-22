@@ -1,6 +1,6 @@
-//! Exercises store behavior for search.
-//!
-//! Uses the shared fixtures in the parent test module.
+//! Mailbox search over local messages and cached headers.
+//! Cases cover recipients, body updates, operators and attachment filters.
+//! Short and non-ASCII queries exercise the alternative matching paths.
 
 use super::*;
 

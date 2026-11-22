@@ -1,3 +1,6 @@
+// Draft ownership when a send overlaps an autosave or an editor handoff.
+// Cases overlap an in-flight save with a send or an editor handoff.
+// A failed send must leave the unsent draft recoverable after navigation.
 import { describe, expect, it } from 'bun:test'
 import { activateConversationTab, openReplyInFullEditor } from '../compose'
 import { compose$ } from '../composeState'

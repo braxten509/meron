@@ -1,6 +1,6 @@
-//! Exercises protocol behavior for tasks.
-//!
-//! Uses the shared fixtures in the parent test module.
+//! Task commands exposed through the mobile protocol.
+//! Cases exercise returned task data and missing parameters.
+//! The protocol stub also answers when a data directory is unavailable.
 
 use super::*;
 

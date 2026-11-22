@@ -1,6 +1,6 @@
-//! Exercises protocol behavior for thread read.
-//!
-//! Uses the shared fixtures in the parent test module.
+//! Message reads from the mobile thread view.
+//! Tests cover cached drafts, UID-based threads and unread notifications.
+//! Print requests retain uncached entries when the connection is unavailable.
 
 use super::*;
 

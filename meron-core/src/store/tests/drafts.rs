@@ -1,6 +1,6 @@
-//! Exercises store behavior for drafts.
-//!
-//! Uses the shared fixtures in the parent test module.
+//! Draft identity across autosaves and conversation views.
+//! The store may hold several revisions of one draft.
+//! Cleanup must keep the live revision and leave unrelated drafts alone.
 
 use super::*;
 

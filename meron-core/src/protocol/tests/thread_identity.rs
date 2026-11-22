@@ -1,6 +1,6 @@
-//! Exercises protocol behavior for thread identity.
-//!
-//! Uses the shared fixtures in the parent test module.
+//! Message identity in mobile thread commands.
+//! Tests cover encoded folder overrides and branch roots containing a hash.
+//! Read-state updates must stay within the resolved message selection.
 
 use super::*;
 

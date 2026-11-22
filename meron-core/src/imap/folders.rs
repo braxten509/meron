@@ -1,4 +1,7 @@
 //! Folder discovery, status and deletion.
+//!
+//! Serves the folder list and folder-management commands.
+//! Distinguishes a server refusal from a lost connection during mailbox operations.
 
 use super::*;
 

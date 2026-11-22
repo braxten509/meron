@@ -1,4 +1,7 @@
 //! Message flags, keywords and concurrent sorting claims.
+//!
+//! Keeps local read state, stars, tags and sorting claims in sync across clients.
+//! Uses IMAP keywords and bounded UID sets when reading or writing in bulk.
 
 use super::*;
 

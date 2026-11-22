@@ -1,4 +1,7 @@
 //! Server capability and message mutation tests.
+//!
+//! Runs mailbox mutations against a scripted local IMAP server.
+//! Checks capability reuse and the scope of commands when a mailbox changes.
 
 use super::*;
 use std::sync::{Arc, Mutex};

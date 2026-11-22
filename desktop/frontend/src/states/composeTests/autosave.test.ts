@@ -1,3 +1,6 @@
+// Server draft creation, reuse and discard while editing a quick reply.
+// Successive edits reuse the server draft ID.
+// Thread refresh and send completion determine when that draft is visible.
 import { describe, expect, it } from 'bun:test'
 import { openComposeTab } from '../compose'
 import { compose$ } from '../composeState'

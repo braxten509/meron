@@ -1,6 +1,6 @@
-//! Exercises store behavior for starred.
-//!
-//! Uses the shared fixtures in the parent test module.
+//! Starred conversations aggregated across accounts.
+//! The result limit counts conversations, including subject branches.
+//! Admitted conversations retain their copies across folder boundaries.
 
 use super::*;
 

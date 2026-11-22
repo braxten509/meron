@@ -1,4 +1,7 @@
 //! Mailbox windows and incremental listing.
+//!
+//! Feeds the sync engine a recent folder window and changes since its last read.
+//! Tracks UID validity and the server UID set alongside message headers.
 
 use super::*;
 

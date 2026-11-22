@@ -1,3 +1,6 @@
+// Edits and attachment changes made while a previous reply is being sent.
+// A pending send can finish after the user has begun a new draft.
+// Cases cover preserving the new text, attachments and autosave state.
 import { describe, expect, it } from 'bun:test'
 import { openReplyInFullEditor } from '../compose'
 import { compose$ } from '../composeState'

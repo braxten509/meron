@@ -1,4 +1,7 @@
 //! Transport state, reads, writes and IDLE.
+//!
+//! Tracks read progress and negotiated capabilities for a single connection.
+//! Supports IDLE watchers and checks whether pooled connections can be reused.
 
 use super::*;
 

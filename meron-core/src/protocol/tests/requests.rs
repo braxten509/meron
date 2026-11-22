@@ -1,6 +1,6 @@
-//! Exercises protocol behavior for requests.
-//!
-//! Uses the shared fixtures in the parent test module.
+//! The request envelope shared with mobile clients.
+//! Version checks, empty responses and errors all pass through invoke.
+//! These cases define what callers receive for missing or unknown methods.
 
 use super::*;
 

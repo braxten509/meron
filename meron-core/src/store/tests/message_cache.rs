@@ -1,6 +1,6 @@
-//! Exercises store behavior for message cache.
-//!
-//! Uses the shared fixtures in the parent test module.
+//! Message envelopes and bodies in the local cache.
+//! Body updates must preserve header dates, recipients and message IDs.
+//! The invalidation case covers discarding a cached body.
 
 use super::*;
 

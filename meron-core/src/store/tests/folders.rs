@@ -1,6 +1,6 @@
-//! Exercises store behavior for folders.
-//!
-//! Uses the shared fixtures in the parent test module.
+//! Folder roles, unread counts and subtree changes.
+//! Fixtures combine local message rows with unseen mail on the server.
+//! Moves and stale snapshots must keep the unread count consistent.
 
 use super::*;
 

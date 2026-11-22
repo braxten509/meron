@@ -1,6 +1,6 @@
-//! Exercises store behavior for notifications.
-//!
-//! Uses the shared fixtures in the parent test module.
+//! New-arrival classification and folder notification preferences.
+//! The fixtures revisit mail after archive, restore and folder sync.
+//! Repeated observations must keep distinct arrivals without duplicating alerts.
 
 use super::*;
 

@@ -1,6 +1,6 @@
-//! Exercises protocol behavior for mutations.
-//!
-//! Uses the shared fixtures in the parent test module.
+//! Move, copy, delete and archive commands on mobile.
+//! The cases cover missing credentials and archive-folder discovery.
+//! An explicit message selection must survive the move request.
 
 use super::*;
 

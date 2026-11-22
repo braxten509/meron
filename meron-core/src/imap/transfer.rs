@@ -1,4 +1,7 @@
 //! Message moves, copies, expunges and appends.
+//!
+//! Implements moves, copies and appends requested by the engine.
+//! Tracks confirmed writes so retries can account for partially completed operations.
 
 use super::*;
 

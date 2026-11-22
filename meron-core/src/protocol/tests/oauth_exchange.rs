@@ -1,6 +1,6 @@
-//! Exercises protocol behavior for oauth exchange.
-//!
-//! Uses the shared fixtures in the parent test module.
+//! OAuth code exchange during account creation.
+//! Tests exercise identity claims returned in the provider's ID token.
+//! The Outlook path also saves a profile photo from Graph.
 
 use super::*;
 

@@ -1,4 +1,7 @@
 //! Fetching message data and building headers.
+//!
+//! Reads message data by UID or Message-ID from a selected mailbox.
+//! Converts server responses into the header and bulk metadata used by the store.
 
 use super::*;
 

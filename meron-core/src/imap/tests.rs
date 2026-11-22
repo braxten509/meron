@@ -1,4 +1,7 @@
 //! Session, authentication, parsing and search tests.
+//!
+//! Covers session setup, header parsing and search syntax in the IMAP facade.
+//! Uses canned server responses where a test depends on IMAP command behavior.
 
 use super::tcp_looks_open;
 

@@ -1,6 +1,6 @@
-//! Exercises protocol behavior for credentials.
-//!
-//! Uses the shared fixtures in the parent test module.
+//! Credentials used by send, sync and account discovery.
+//! Cases build an engine before and after saving an account.
+//! Platform-managed tokens have a separate refresh lifecycle.
 
 use super::*;
 

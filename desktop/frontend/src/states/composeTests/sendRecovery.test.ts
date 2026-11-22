@@ -1,3 +1,6 @@
+// Restoring an unsent reply when delivery or draft recovery fails.
+// A failed send can race with deletion, draft recovery or opening the editor.
+// The fixtures exercise which draft each action owns when its request completes.
 import { describe, expect, it } from 'bun:test'
 import { openDraftCompose, openComposeTab } from '../compose'
 import { compose$ } from '../composeState'

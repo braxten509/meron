@@ -1,3 +1,6 @@
+// Restoring a saved quick reply and suppressing drafts already being sent.
+// Refreshing the conversation can bring an old draft back from the server.
+// The send guard must survive navigation until the pending reply settles.
 import { describe, expect, it, jest } from 'bun:test'
 import { compose$ } from '../composeState'
 import { saveQuickReplyDraft } from '../quickReply'

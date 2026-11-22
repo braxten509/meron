@@ -1,6 +1,6 @@
-//! Exercises store behavior for thread messages.
-//!
-//! Uses the shared fixtures in the parent test module.
+//! Selecting and ordering the messages in a conversation.
+//! UIDs stay scoped to a folder or subject branch where required.
+//! Cross-folder reads exercise deduplication and missing references.
 
 use super::*;
 

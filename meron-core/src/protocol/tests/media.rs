@@ -1,6 +1,6 @@
-//! Exercises protocol behavior for media.
-//!
-//! Uses the shared fixtures in the parent test module.
+//! Account media files and attachment cache commands.
+//! The fixture writes media, then reads a cached attachment.
+//! Storage reporting and clearing exercise the same cache.
 
 use super::*;
 use base64::Engine as _;

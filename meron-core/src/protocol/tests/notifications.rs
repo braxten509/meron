@@ -1,6 +1,6 @@
-//! Exercises protocol behavior for notifications.
-//!
-//! Uses the shared fixtures in the parent test module.
+//! Notification summaries for new unread inbox mail.
+//! The protocol takes the set of arriving messages from a sync.
+//! The response describes the messages eligible for notification.
 
 use super::*;
 

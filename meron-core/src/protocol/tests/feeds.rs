@@ -1,6 +1,6 @@
-//! Exercises protocol behavior for feeds.
-//!
-//! Uses the shared fixtures in the parent test module.
+//! RSS account behavior exposed by the mobile protocol.
+//! Feeds use the same mailbox response shapes as email.
+//! The cases also cover OPML exchange and syncing without a mail password.
 
 use super::*;
 

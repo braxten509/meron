@@ -1,3 +1,6 @@
+// State reset and command recording shared by quick-reply tests.
+// Registers the suite setup before test callbacks run.
+// Returns recorded commands so each case can check its own server interaction.
 import { beforeEach, it } from 'bun:test'
 import { compose$ } from '../composeState'
 import { cancelQuickReplyDraftSave } from '../quickReply'

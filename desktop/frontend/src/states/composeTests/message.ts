@@ -1,3 +1,6 @@
+// A synthetic inbox message for desktop compose and navigation tests.
+// Defaults identify one account, folder and thread.
+// Callers override only the message fields relevant to a case.
 import type { Message } from '../../types'
 
 export const message = (overrides: Partial<Message> = {}): Message => ({

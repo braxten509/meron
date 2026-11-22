@@ -1,6 +1,6 @@
-//! Exercises store behavior for attachments.
-//!
-//! Uses the shared fixtures in the parent test module.
+//! Attachment metadata for folder filters and conversation cards.
+//! Fixtures include folded copies and messages fetched only as headers.
+//! Backfill tests cover bounded batches and rows that cannot be processed.
 
 use super::*;
 

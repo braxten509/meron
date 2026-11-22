@@ -1,3 +1,6 @@
+// The visible sending bubble and its recovery after an unsuccessful send.
+// The sending bubble appears before the server allocates an identity.
+// A failed reply must still be recoverable after leaving and reopening its thread.
 import { describe, expect, it } from 'bun:test'
 import { compose$ } from '../composeState'
 import { saveQuickReplyDraft } from '../quickReply'

@@ -1,6 +1,6 @@
-//! Exercises store behavior for invitations.
-//!
-//! Uses the shared fixtures in the parent test module.
+//! Calendar invitations attached to cached mail.
+//! Responses belong to an event within a particular account.
+//! Fixtures exercise message retrieval and removal with the account.
 
 use super::*;
 

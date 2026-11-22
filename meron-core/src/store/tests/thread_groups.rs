@@ -1,6 +1,6 @@
-//! Exercises store behavior for thread groups.
-//!
-//! Uses the shared fixtures in the parent test module.
+//! Grouping mailbox rows into conversation cards.
+//! Subject branches retain their relationship to the root message.
+//! The fixtures exercise date ordering and ties across folders.
 
 use super::*;
 

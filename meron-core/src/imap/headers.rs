@@ -1,4 +1,7 @@
 //! Header and attachment parsing for the message list.
+//!
+//! Converts envelope, header and body-structure data for the folder listing.
+//! Resolves thread identifiers and attachment metadata before a body is downloaded.
 
 use super::*;
 

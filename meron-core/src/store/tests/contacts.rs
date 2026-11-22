@@ -1,6 +1,6 @@
-//! Exercises store behavior for contacts.
-//!
-//! Uses the shared fixtures in the parent test module.
+//! The contact directory and address suggestions.
+//! Fixtures include senders, recipients, automated addresses and aliases.
+//! Search and ranking cases exercise contacts across folders and accounts.
 
 use super::*;
 

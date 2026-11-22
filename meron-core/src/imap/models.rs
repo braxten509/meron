@@ -1,4 +1,7 @@
 //! Account credentials, folder metadata and message summaries.
+//!
+//! Defines account connection settings and the records returned by folder reads.
+//! These types cross the boundary between IMAP sessions, the engine and local storage.
 
 #[derive(Clone)]
 pub struct Creds {

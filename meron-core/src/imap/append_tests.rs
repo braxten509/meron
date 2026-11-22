@@ -1,4 +1,7 @@
 //! Append and retry behavior against a simulated mail server.
+//!
+//! Drives a local server through append and copy retries.
+//! Checks which messages reached the server before a command failed.
 
 use super::*;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt};

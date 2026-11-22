@@ -1,4 +1,7 @@
 //! UID-validated move and delete operations.
+//!
+//! Used when an external command identifies messages by mailbox and UID.
+//! Validates the selected mailbox before a move or a UID-scoped expunge.
 
 use super::*;
 

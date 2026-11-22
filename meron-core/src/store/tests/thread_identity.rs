@@ -1,6 +1,6 @@
-//! Exercises store behavior for thread identity.
-//!
-//! Uses the shared fixtures in the parent test module.
+//! Conversation roots and sending identities in the store.
+//! References can arrive out of order, differ in case or form a cycle.
+//! Alias cases exercise selection of an address owned by the account.
 
 use super::*;
 

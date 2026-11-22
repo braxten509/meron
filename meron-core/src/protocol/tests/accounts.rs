@@ -1,6 +1,6 @@
-//! Exercises protocol behavior for accounts.
-//!
-//! Uses the shared fixtures in the parent test module.
+//! Account creation and settings through the mobile protocol.
+//! Reconnect must retain the account's certificate pins and proxy.
+//! The cases also cover credential validation, aliases and account ordering.
 
 use super::*;
 

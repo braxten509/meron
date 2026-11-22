@@ -1,4 +1,7 @@
 //! Notification coalescing on an idle connection.
+//!
+//! Drives an IDLE session with a local server sending mailbox updates.
+//! Checks how bursts of removals and an incoming message affect the wait.
 
 use super::*;
 use async_imap::extensions::idle::IdleResponse;

@@ -1,4 +1,7 @@
 //! Token refresh and rejected grants.
+//!
+//! Exchanges a refresh token for the credentials needed by a session.
+//! Distinguishes a revoked grant from a temporary provider or connection failure.
 
 use super::*;
 

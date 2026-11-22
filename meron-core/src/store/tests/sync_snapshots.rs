@@ -1,6 +1,6 @@
-//! Exercises store behavior for sync snapshots.
-//!
-//! Uses the shared fixtures in the parent test module.
+//! Concurrent sync snapshots during local mailbox changes.
+//! A late fetch must respect moves and removal markers.
+//! Cases cover marker expiry and multiple connections sharing the store.
 
 use super::*;
 

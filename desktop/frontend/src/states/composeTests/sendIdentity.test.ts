@@ -1,3 +1,6 @@
+// The account and sender identity used to send a quick reply.
+// The original delivery address determines the initial sending alias.
+// An explicit sender selection follows the reply into the full editor.
 import { beforeEach, describe, expect, it } from 'bun:test'
 import type { Message } from '../../types'
 import { openReplyInFullEditor } from '../compose'

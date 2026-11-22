@@ -1,6 +1,6 @@
-//! Exercises protocol behavior for oauth accounts.
-//!
-//! Uses the shared fixtures in the parent test module.
+//! OAuth account metadata and token updates.
+//! Platform-managed accounts can exist without a refresh token.
+//! The update cases cover stale tokens, missing accounts and unknown providers.
 
 use super::*;
 

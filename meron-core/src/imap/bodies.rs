@@ -1,4 +1,7 @@
 //! Fetching full messages and caching inline media.
+//!
+//! Caches MIME parts while fetching messages for display and offline use.
+//! Prefetch chooses recent UIDs before downloading complete messages in batches.
 
 use super::*;
 

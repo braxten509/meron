@@ -1,3 +1,6 @@
+// How new drafts and quick replies use account and global signatures.
+// An account can inherit the global signature or supply its own.
+// Initializing the editor must preserve text the user has already entered.
 import { beforeEach, describe, expect, it } from 'bun:test'
 import type { Message } from '../../types'
 import { openReplyInFullEditor, openComposeTab, updateComposeDraft } from '../compose'

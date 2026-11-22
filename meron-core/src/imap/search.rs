@@ -1,4 +1,7 @@
 //! Search criteria and message identifiers.
+//!
+//! Builds Gmail and standard IMAP queries from the shared search model.
+//! Returns mailbox-scoped identifiers for the engine to fetch or filter.
 
 use super::*;
 

@@ -1,3 +1,6 @@
+// Quoted message text and headers included in replies.
+// Default replies leave the original message unquoted.
+// Explicit quoting carries the original content through the HTML reply path.
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import type { Message } from '../../types'
 import { openDraftCompose, openReplyInFullEditor, replyToMessage, composedContent } from '../compose'

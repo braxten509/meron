@@ -1,6 +1,6 @@
-//! Exercises store behavior for message counts.
-//!
-//! Uses the shared fixtures in the parent test module.
+//! Message counts and previews on mailbox cards.
+//! A conversation can span pages, folders and duplicate sent copies.
+//! New-arrival counts use the unread messages inside the UID window.
 
 use super::*;
 

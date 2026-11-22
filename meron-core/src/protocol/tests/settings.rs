@@ -1,6 +1,6 @@
-//! Exercises protocol behavior for settings.
-//!
-//! Uses the shared fixtures in the parent test module.
+//! App-wide and per-account mobile settings.
+//! The proxy cases exercise both levels of configuration.
+//! Read-back assertions cover preferences written by the protocol.
 
 use super::*;
 

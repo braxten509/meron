@@ -1,4 +1,7 @@
 //! Connection timeouts, socket setup and authentication.
+//!
+//! Used when the engine needs a fresh authenticated IMAP session.
+//! Bounds address selection, socket establishment, TLS and authentication separately.
 
 use super::*;
 

@@ -1,3 +1,6 @@
+// Reply-all recipients and the recipient line shown to the sender.
+// Reply-all cases cover fallback to the sender and which recipients appear in the editor.
+// The quick-reply address line follows the currently open conversation.
 import { beforeEach, describe, expect, it } from 'bun:test'
 import type { Message } from '../../types'
 import { openMessageTab, revealMessageRemote, replyAllToMessage } from '../compose'

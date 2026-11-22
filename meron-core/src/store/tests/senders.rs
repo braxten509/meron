@@ -1,6 +1,6 @@
-//! Exercises store behavior for senders.
-//!
-//! Uses the shared fixtures in the parent test module.
+//! Mailbox views grouped by correspondent.
+//! Fixtures include inbox, drafts and sent copies for the same person.
+//! The cases verify paging, unread filters and the scope of deletion.
 
 use super::*;
 

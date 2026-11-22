@@ -1,6 +1,6 @@
-//! Exercises store behavior for accounts.
-//!
-//! Uses the shared fixtures in the parent test module.
+//! Account records across edits and reconnects.
+//! Settings omitted by an edit must survive the next save.
+//! The cases cover replacement credentials, certificate pins, proxies and avatars.
 
 use super::*;
 

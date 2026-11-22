@@ -1,6 +1,6 @@
-//! Exercises protocol behavior for thread listing.
-//!
-//! Uses the shared fixtures in the parent test module.
+//! Single-account and unified conversation lists.
+//! Participants, folder roles and account preferences determine eligible rows.
+//! Cases cover Gmail thread identity and sent replies inheriting a parent.
 
 use super::*;
 

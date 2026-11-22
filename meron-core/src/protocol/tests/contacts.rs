@@ -1,6 +1,6 @@
-//! Exercises protocol behavior for contacts.
-//!
-//! Uses the shared fixtures in the parent test module.
+//! Address suggestions returned by the mobile protocol.
+//! The fixture starts with a cached message from a known contact.
+//! A suggestion must carry the address back to the caller.
 
 use super::*;
 

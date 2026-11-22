@@ -1,4 +1,7 @@
 //! Discovery of standard mail folders.
+//!
+//! Finds suitable server folders when saving sent mail, drafts or discarded mail.
+//! Uses special-use flags and conventional mailbox names during discovery.
 
 use super::*;
 

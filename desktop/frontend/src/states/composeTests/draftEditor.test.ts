@@ -1,3 +1,6 @@
+// Ownership of a saved draft while opening the full editor.
+// Concurrent opens can still be reading the same draft.
+// Escalating a quick reply passes ownership and its saved ID to the editor.
 import { describe, expect, it } from 'bun:test'
 import type { Message } from '../../types'
 import { openDraftCompose, openDraftConversationOrCompose, openReplyInFullEditor } from '../compose'

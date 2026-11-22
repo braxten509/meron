@@ -1,6 +1,6 @@
-//! Exercises protocol behavior for starred.
-//!
-//! Uses the shared fixtures in the parent test module.
+//! Starred conversation lists returned to mobile clients.
+//! Copies in multiple folders should appear as one conversation.
+//! Unthreaded messages with equal folder-local UIDs remain distinct.
 
 use super::*;
 

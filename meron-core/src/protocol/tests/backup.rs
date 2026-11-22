@@ -1,6 +1,6 @@
-//! Exercises protocol behavior for backup.
-//!
-//! Uses the shared fixtures in the parent test module.
+//! Backup and restore through the mobile protocol.
+//! The plaintext fixture covers settings restored as mobile preferences.
+//! The encrypted backup also carries account secrets.
 
 use super::*;
 

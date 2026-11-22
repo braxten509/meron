@@ -1,6 +1,6 @@
-//! Exercises store behavior for preferences.
-//!
-//! Uses the shared fixtures in the parent test module.
+//! Default, account-specific and persisted preferences.
+//! Individual edits and invalid entries exercise isolation between settings.
+//! Fixtures include signatures, wallpapers, sent copies and remote images.
 
 use super::*;
 

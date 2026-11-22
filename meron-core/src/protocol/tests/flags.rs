@@ -1,6 +1,6 @@
-//! Exercises protocol behavior for flags.
-//!
-//! Uses the shared fixtures in the parent test module.
+//! Local flags after a failed write to the mail server.
+//! The mobile command must leave cached state available for retry.
+//! Both message and UID-based thread changes exercise this failure path.
 
 use super::*;
 
