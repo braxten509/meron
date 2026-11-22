@@ -1,3 +1,8 @@
+// Inline pictures can have a remote source as well as a
+// local attachment key. These fixtures exercise the
+// gallery actions available for the image the reader
+// selected.
+
 import { afterEach, expect, it } from 'bun:test'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { Gallery } from './Gallery'

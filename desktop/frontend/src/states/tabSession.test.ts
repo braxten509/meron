@@ -1,3 +1,7 @@
+// Restoring a tab session can reopen a saved conversation
+// above the current mailbox. The fixtures check how the
+// active tab and its underlying view are reconstructed.
+
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import type { Message, MessageTab } from '../types'
 import { moveMessageTab, restoreTabSession } from './compose'

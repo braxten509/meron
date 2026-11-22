@@ -1,3 +1,8 @@
+// Files dropped into a quick reply become draft
+// attachments. The fixtures include images so dropping a
+// picture follows the same ownership rules as adding
+// another file.
+
 import { beforeEach, describe, expect, it } from 'bun:test'
 import { compose$ } from '../../states/composeState'
 import { ui$ } from '../../states/ui'

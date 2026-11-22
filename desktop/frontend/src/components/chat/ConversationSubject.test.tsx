@@ -1,3 +1,7 @@
+// A conversation heading can truncate a long subject
+// to fit its container. The tests exercise how the
+// complete subject remains accessible to the reader.
+
 import { describe, expect, it } from 'bun:test'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { ConversationSubject } from './ConversationSubject'

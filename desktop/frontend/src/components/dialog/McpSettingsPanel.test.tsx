@@ -1,3 +1,8 @@
+// Desktop connection settings distinguish editing a draft
+// from committing it. The tests follow navigation, port
+// updates and account selections for a newly configured
+// connection.
+
 import { afterEach, beforeEach, expect, test } from 'bun:test'
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { accounts$ } from '../../states/accounts'

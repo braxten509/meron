@@ -1,3 +1,7 @@
+// Mailbox actions operate on thread selections filtered by the
+// current view. These fixtures exercise which conversations
+// remain eligible under unread, starred and unfiltered modes.
+
 import { describe, expect, it } from 'bun:test'
 import type { Account, Message } from '../types'
 import { filterThreads, isRssAccount } from './threadActions'

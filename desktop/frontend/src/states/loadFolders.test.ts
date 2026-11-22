@@ -1,3 +1,7 @@
+// Folder listings supply roles consumed by the desktop
+// reply and draft views. The fixtures verify those roles
+// remain available after the account folders are loaded.
+
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import type { Folder } from '../types'
 // Initialize the account/boot dependency graph before importing mail directly.

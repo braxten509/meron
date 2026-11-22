@@ -1,3 +1,8 @@
+// The built-in light and dark themes supply default
+// colors before settings load. The tests compare
+// theme definitions with the initial CSS fallback
+// palette.
+
 import { describe, expect, it } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'

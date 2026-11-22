@@ -1,3 +1,8 @@
+// Conversation and message tabs can open independently
+// of the current mailbox. The fixtures exercise tab
+// selection and preservation of the side navigation
+// state.
+
 import { beforeEach, describe, expect, it } from 'bun:test'
 import type { MessageTab } from '../types'
 import {

@@ -1,3 +1,8 @@
+// The unified account exposes folder roles shared across
+// mail providers. Tests verify the folders shown in
+// navigation and which counts contribute to its Inbox
+// badge.
+
 import { describe, expect, it } from 'bun:test'
 import {
   DEFAULT_UNIFIED_FOLDER,

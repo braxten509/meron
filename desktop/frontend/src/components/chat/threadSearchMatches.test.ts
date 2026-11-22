@@ -1,3 +1,8 @@
+// The conversation search counter counts occurrences
+// across message bodies. The fixtures distinguish several
+// matches in one message from the count of matching
+// messages.
+
 import { describe, expect, it } from 'bun:test'
 import type { Message } from '../../types'
 import { plainHighlightTexts } from './messageHelpers'

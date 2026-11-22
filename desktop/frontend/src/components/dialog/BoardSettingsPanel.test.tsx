@@ -1,3 +1,8 @@
+// A board's settings header reflects its current
+// custom image. These tests cover removing that image
+// and the controls available for a board with no
+// picture.
+
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
 // Load the stores before the panel, as the app does; importing the panel first

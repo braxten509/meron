@@ -1,3 +1,8 @@
+// The shared-media panel and image gallery index
+// attachments across a thread. Tests check that each
+// listed item retains the identity of the message that
+// supplied it.
+
 import { describe, expect, it } from 'bun:test'
 import type { Attachment, Message } from '../../types'
 import { buildThreadMedia } from './conversationMedia'

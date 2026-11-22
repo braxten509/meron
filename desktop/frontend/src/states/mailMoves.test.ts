@@ -1,3 +1,8 @@
+// Desktop undo needs to remember a transfer even if its
+// thread is outside the loaded list. These cases
+// exercise the identities retained for a subsequent
+// restore.
+
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import type { Message } from '../types'
 import './accounts'

@@ -1,3 +1,8 @@
+// Desktop export forwards the selected secrets
+// option and passphrase to the core. The cases
+// inspect the bridge request produced by the backup
+// action.
+
 import { beforeEach, describe, expect, it } from 'bun:test'
 import { backupErrorMessage, exportBackup, importBackup, isWrongPassphrase } from './backup'
 import { accounts$ } from './accounts'

@@ -1,3 +1,8 @@
+// A signature edit belongs to the account that was active
+// when it began. The fixtures switch accounts while a
+// save is pending and check which signature is shown
+// next.
+
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test'
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import type { Editor } from '@tiptap/react'

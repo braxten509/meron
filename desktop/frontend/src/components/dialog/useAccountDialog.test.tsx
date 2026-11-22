@@ -1,3 +1,8 @@
+// Editing or reconnecting an account must keep its
+// original identity. These cases cover form state and
+// the account banner after a failed or successful
+// reconnect.
+
 import { afterEach, beforeEach, describe, expect, it, jest } from 'bun:test'
 import { act, cleanup, renderHook } from '@testing-library/react'
 import { accounts$ } from '../../states/accounts'

@@ -1,3 +1,8 @@
+// Multiple close requests can target the same compose
+// session while a save is pending. The cases exercise
+// consolidation of those requests into a single draft
+// operation.
+
 import { beforeEach, describe, expect, it } from 'bun:test'
 import { closeComposeSession, forgetComposeSession } from './composeSessions'
 

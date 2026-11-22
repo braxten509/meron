@@ -1,3 +1,7 @@
+// Calendar entries can start and finish on the same day
+// or cross its boundary. The fixtures exercise the time
+// span shown next to an event in the desktop panel.
+
 import { describe, expect, it } from 'bun:test'
 import type { CalendarItem } from '../../states/calendar'
 import { timeSpan } from './CalendarPanel'

@@ -1,3 +1,8 @@
+// The highlighted matches inside a message must agree
+// with the count in the search bar. These tests
+// exercise rendering and matching within a conversation
+// bubble.
+
 import { afterEach, describe, expect, it } from 'bun:test'
 import { cleanup, render } from '@testing-library/react'
 // Initialize this side of the mail/compose cycle before the body pulls both

@@ -1,3 +1,8 @@
+// Email documents can shrink as well as grow after
+// layout. The fixtures measure short content in a
+// taller frame so the next measurement can remove
+// unused space.
+
 import { describe, expect, it } from 'bun:test'
 import { MIN_FRAME_HEIGHT, measureFrameHeight, type FrameMetrics } from './frameHeight'
 

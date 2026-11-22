@@ -1,3 +1,8 @@
+// Keyboard navigation must distinguish accepting an
+// address suggestion from leaving the input. These
+// cases exercise Tab, Shift+Tab and focus after
+// selection.
+
 import { afterEach, beforeEach, expect, it } from 'bun:test'
 import { useState } from 'react'
 import { act, cleanup, fireEvent, render } from '@testing-library/react'

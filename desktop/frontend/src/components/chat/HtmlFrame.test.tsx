@@ -1,3 +1,7 @@
+// An HTML document can become readable before its images and
+// other subresources finish loading. The cases check when the
+// ready callback runs and how it survives React effect replay.
+
 import { afterEach, expect, it } from 'bun:test'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { StrictMode } from 'react'

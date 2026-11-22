@@ -1,3 +1,8 @@
+// Desktop locale resolution maps browser and persisted
+// language tags to a shipped catalog. Formatting cases use
+// the generated messages to exercise placeholders and plural
+// rules.
+
 import { afterEach, describe, expect, it } from 'bun:test'
 import { messages } from '../generated/locales'
 import i18n, { normalizeI18nLanguage, resolveI18nLanguageFromWebLocale, t } from './i18n'

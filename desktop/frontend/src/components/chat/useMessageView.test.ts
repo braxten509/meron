@@ -1,3 +1,8 @@
+// Incoming and outgoing messages use different
+// sender-image behavior. The tests exercise the address
+// supplied to the shared resolver when constructing the
+// message view.
+
 import { afterEach, beforeEach, expect, it } from 'bun:test'
 import { cleanup, renderHook } from '@testing-library/react'
 import { accounts$ } from '../../states/accounts'

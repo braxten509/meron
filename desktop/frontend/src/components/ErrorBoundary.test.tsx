@@ -1,3 +1,8 @@
+// A failing component must leave the rest of the
+// desktop app usable. The tests render healthy and
+// throwing children to exercise the boundary's fallback
+// behavior.
+
 import { describe, expect, it } from 'bun:test'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { ErrorBoundary } from './ErrorBoundary'

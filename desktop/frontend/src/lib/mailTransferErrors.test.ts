@@ -1,3 +1,7 @@
+// A transfer can fail after the server has already accepted
+// part of a batch. The tests exercise confirmed progress,
+// known server limits and preserving unfamiliar diagnostics.
+
 import { describe, expect, it } from 'bun:test'
 import { mailTransferError } from './mailTransferErrors'
 

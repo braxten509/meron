@@ -1,3 +1,8 @@
+// Markdown examples belong in the toolbar's help
+// interaction. The tests render the composer
+// controls and exercise when those examples become
+// available.
+
 import { afterEach, describe, expect, it } from 'bun:test'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { Editor } from '@tiptap/core'

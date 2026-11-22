@@ -1,3 +1,8 @@
+// The reader reuses a self-sizing HTML frame across
+// attachment updates. These tests exercise changes to
+// video and message content while the document is
+// visible.
+
 import { afterEach, describe, expect, it } from 'bun:test'
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import '../../states/compose'

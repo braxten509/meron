@@ -1,3 +1,7 @@
+// Mail shortcuts must act on the visible surface when
+// the calendar or event editor is open. These tests send
+// keyboard events while another view covers the mailbox.
+
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { isMac } from '../../lib/shortcuts'

@@ -1,3 +1,8 @@
+// The frontend registers locally generated send
+// identities while delivery is in flight. Tests exercise
+// recognition of optimistic messages in the pending
+// registry.
+
 import { describe, expect, it } from 'bun:test'
 import {
   discardPendingSend,

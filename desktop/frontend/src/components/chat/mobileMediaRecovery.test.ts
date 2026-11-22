@@ -1,3 +1,8 @@
+// A missing resource may report its error after a new
+// document starts loading. The tests exercise request
+// ownership and deduplication while the reader is
+// navigating.
+
 import { expect, it, spyOn } from 'bun:test'
 import { readFileSync } from 'node:fs'
 

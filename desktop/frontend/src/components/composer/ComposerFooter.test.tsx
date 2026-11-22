@@ -1,3 +1,7 @@
+// The composer footer reflects whether a draft save has
+// settled. Tests render the saved state and check both the
+// compact indicator and the wording exposed to the reader.
+
 import { afterEach, describe, expect, it } from 'bun:test'
 import { cleanup, render, screen } from '@testing-library/react'
 import { ComposerFooter } from './ComposerFooter'

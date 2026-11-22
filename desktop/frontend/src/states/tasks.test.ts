@@ -1,3 +1,8 @@
+// The desktop task panel selects the core's default
+// list when no previous selection exists. The cases
+// exercise opening the panel and restoring its list
+// state.
+
 import { beforeEach, describe, expect, it } from 'bun:test'
 
 import { ui$ } from './ui'

@@ -1,3 +1,8 @@
+// A mark-read action from the account rail targets a
+// particular account's Inbox. The tests check the
+// scope of the write and the local unread state it
+// affects.
+
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import type { Message } from '../types'
 import { accounts$ } from './accounts'

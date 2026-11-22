@@ -1,3 +1,8 @@
+// The conversation reader shares helpers for media,
+// attachments and message presentation. These cases exercise
+// the display values derived from mail metadata and cached
+// body content.
+
 import { afterEach, beforeEach, describe, expect, it, setSystemTime } from 'bun:test'
 import { Calendar, Contact, File, FileImage, FileKey, FileText, Mail } from 'lucide-react'
 import {

@@ -1,3 +1,8 @@
+// The desktop destination history orders recent
+// transfers and promotes reused destinations. The
+// fixtures check identity and ordering when a
+// destination recurs.
+
 import { afterEach, describe, expect, it } from 'bun:test'
 import {
   parseRecentThreadTransfers,

@@ -1,3 +1,8 @@
+// The calendar can open as a panel alongside mail
+// or close on a repeated toggle. These fixtures
+// exercise the frontend state behind that
+// navigation.
+
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 
 import { ui$ } from './ui'

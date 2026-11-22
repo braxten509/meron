@@ -1,3 +1,8 @@
+// Printing uses the complete message and a text
+// representation of HTML-only mail. The fixtures exercise
+// headers, quotes and attachment names in the generated
+// print document.
+
 import { beforeEach, afterEach, expect, spyOn, test } from 'bun:test'
 import {
   loadPrintThread,

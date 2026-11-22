@@ -1,3 +1,8 @@
+// The command palette ranks direct matches alongside
+// hidden keywords and account addresses. The cases check
+// which results remain relevant when a theme matches by
+// name.
+
 import { describe, expect, test } from 'bun:test'
 import { filterCommands, type Command } from './paletteCommands'
 

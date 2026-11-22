@@ -1,3 +1,7 @@
+// Renaming a tag can make two board columns represent the
+// same search. The fixtures check how persisted column state
+// follows the rename and how search changes reach the core.
+
 import { afterEach, expect, it } from 'bun:test'
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { useEscapeKey } from '../../lib/useEscapeKey'

@@ -1,3 +1,8 @@
+// Native tray updates are serialized while mailbox unread
+// counts can change repeatedly. Tests exercise coalescing
+// and delivery of the latest state after an in-flight
+// write.
+
 import { describe, expect, test } from 'bun:test'
 import { createTrayUnreadUpdater } from './trayUnread'
 

@@ -1,3 +1,7 @@
+// The tray preference can change faster than the native
+// host can save it. These cases exercise overlapping style
+// changes and the state that remains after writes settle.
+
 import { expect, test } from 'bun:test'
 import { createTrayStyleUpdater } from './trayStyle'
 

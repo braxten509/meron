@@ -1,3 +1,8 @@
+// Saved board definitions can predate their
+// customization fields. The desktop settings tests
+// exercise loading older preferences and retaining
+// valid board data.
+
 import { afterEach, describe, expect, it } from 'bun:test'
 import {
   chosenThemeIds,

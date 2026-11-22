@@ -1,3 +1,8 @@
+// The desktop frontend chooses between system and
+// styled scrollbars by host. These cases exercise
+// WebKitGTK, WKWebView and the Windows rendering
+// path.
+
 import { expect, it } from 'bun:test'
 import { scrollbarHitWidth, usesNativeScrollbars } from './nativeScrollbars'
 

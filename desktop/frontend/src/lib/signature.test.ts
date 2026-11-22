@@ -1,3 +1,8 @@
+// A rich-text signature can contain markup with no
+// visible content. The cases distinguish an
+// effectively blank signature from one containing text
+// or an image.
+
 import { describe, expect, it } from 'bun:test'
 import { getSchema } from '@tiptap/core'
 import { StarterKit } from '@tiptap/starter-kit'

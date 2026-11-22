@@ -1,3 +1,7 @@
+// A sync error needs a readable account label even when
+// two accounts share a display name. The cases cover
+// when the banner includes the account's email address.
+
 import { describe, expect, it } from 'bun:test'
 import {
   connectivityAccountLabel,

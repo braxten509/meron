@@ -1,3 +1,8 @@
+// Contact notes are edited as markdown and stored
+// under a normalized address. The tests switch
+// contacts while saving and preserve drafts when a
+// save fails.
+
 import { afterEach, expect, it } from 'bun:test'
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { ContactNotes } from './ContactNotes'

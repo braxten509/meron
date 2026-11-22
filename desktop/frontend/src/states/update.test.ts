@@ -1,3 +1,7 @@
+// Desktop update events carry a complete snapshot of
+// installation state. These fixtures exercise replacing
+// old state when a fresh status arrives from the host.
+
 import { describe, expect, it, beforeEach, afterEach } from 'bun:test'
 import type { UpdateStatus } from '../lib/update'
 import {

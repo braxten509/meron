@@ -1,3 +1,8 @@
+// The Rust core reports when its store is being
+// upgraded. The frontend tests exercise showing the
+// banner for a slow migration and clearing it after
+// completion.
+
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { connectivity$, watchCoreMigration } from './connectivity'
 

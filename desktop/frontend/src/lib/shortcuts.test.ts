@@ -1,3 +1,8 @@
+// Keyboard actions match both a key and its modifiers.
+// These cases exercise platform modifier chords and
+// combinations with Shift before dispatching an
+// action.
+
 import { afterEach, describe, expect, it } from 'bun:test'
 import {
   chordFromEvent,

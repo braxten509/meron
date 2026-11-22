@@ -1,3 +1,8 @@
+// Desktop startup can restore several compose
+// tabs. The tests verify which restored tab
+// becomes active when the compose state is
+// initialized.
+
 import { afterEach, describe, expect, it } from 'bun:test'
 import { COMPOSE_TABS_KEY, TAB_VIEW_KEY } from './composeState'
 

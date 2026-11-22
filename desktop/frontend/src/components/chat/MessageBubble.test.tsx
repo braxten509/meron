@@ -1,3 +1,8 @@
+// Outgoing conversation bubbles can be wider or narrower
+// than their details popovers. The rendered fixtures
+// check that opening details preserves the popup's own
+// width.
+
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { accounts$ } from '../../states/accounts'

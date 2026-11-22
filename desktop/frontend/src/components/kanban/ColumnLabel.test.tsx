@@ -1,3 +1,8 @@
+// Board columns display the account picture when
+// one is available. The tests check the initials
+// fallback for an account with no configured
+// image.
+
 import { afterEach, beforeEach, expect, it } from 'bun:test'
 import { cleanup, render } from '@testing-library/react'
 import { accounts$ } from '../../states/accounts'

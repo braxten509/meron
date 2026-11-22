@@ -1,3 +1,8 @@
+// HTML mail shown inside a bubble can grow past the
+// initial placeholder dimensions. The fixtures
+// exercise the document prepared for that embedded
+// reader.
+
 import { describe, expect, it } from 'bun:test'
 import {
   applyBubbleTheme,

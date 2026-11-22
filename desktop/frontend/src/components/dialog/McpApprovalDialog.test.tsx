@@ -1,3 +1,8 @@
+// The desktop approval dialog presents the complete pending
+// operation for review. These fixtures exercise the send
+// preview, selected deletion targets and how the request is
+// resolved.
+
 import { afterEach, beforeEach, expect, test } from 'bun:test'
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { accounts$ } from '../../states/accounts'

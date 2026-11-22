@@ -1,3 +1,8 @@
+// The quick reply editor takes ownership of a hydrated draft
+// and schedules saves for later edits. The cases control
+// navigation, hydration and text sizing while the editor is
+// mounted.
+
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import { act, cleanup, renderHook } from '@testing-library/react'
 import { accounts$ } from '../../states/accounts'

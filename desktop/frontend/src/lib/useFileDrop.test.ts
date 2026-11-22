@@ -1,3 +1,7 @@
+// The drop overlay tracks file drags across nested desktop
+// elements. These cases distinguish file payloads from other
+// drags and keep the overlay visible between child elements.
+
 import { afterEach, beforeEach, describe, expect, it, jest } from 'bun:test'
 import { act, renderHook } from '@testing-library/react'
 import type { DragEvent } from 'react'

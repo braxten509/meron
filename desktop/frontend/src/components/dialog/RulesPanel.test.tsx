@@ -1,3 +1,7 @@
+// The rules editor summarizes saved actions and opens a
+// form for changes. Tests exercise creating and cancelling
+// a rule and confirmation for destinations such as Trash.
+
 import { afterEach, expect, it, spyOn } from 'bun:test'
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { accounts$ } from '../../states/accounts'

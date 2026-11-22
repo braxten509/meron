@@ -1,3 +1,8 @@
+// The account editor suggests security settings when a
+// standard port changes. The fixtures distinguish automatic
+// defaults from transport choices explicitly made by the
+// reader.
+
 import { describe, expect, it } from 'bun:test'
 import { securityAfterPortEdit, serverSelectionAfterDiscovery } from './accountSecurity'
 

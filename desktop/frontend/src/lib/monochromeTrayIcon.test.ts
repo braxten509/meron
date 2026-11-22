@@ -1,3 +1,8 @@
+// The tray-style preference is offered only on backends
+// that can render a monochrome icon. The fixtures
+// exercise the desktop platform selection behind that
+// control.
+
 import { expect, it } from 'bun:test'
 import { offersMonochromeTrayIcon } from './monochromeTrayIcon'
 

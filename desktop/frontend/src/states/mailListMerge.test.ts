@@ -1,3 +1,7 @@
+// Refreshing a page can remove previously visible
+// threads. These fixtures check how incoming rows
+// replace or merge with the desktop mailbox page.
+
 import { describe, expect, it } from 'bun:test'
 import type { Message } from '../types'
 import {

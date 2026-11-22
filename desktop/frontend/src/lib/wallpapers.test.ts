@@ -1,3 +1,8 @@
+// A saved chat background can select a preset or an
+// app-owned image. The fixtures exercise persisted
+// wallpaper choices and handling of unknown or external
+// values.
+
 import { describe, expect, it } from 'bun:test'
 import { boardWallpaper, sanitizeChatWallpaper, wallpaperCss } from './wallpapers'
 

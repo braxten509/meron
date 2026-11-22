@@ -1,3 +1,8 @@
+// The desktop titlebar reads the operating system's
+// decoration layout. These cases cover left and right
+// button groups, repeated entries and unsupported window
+// controls.
+
 import { afterEach, describe, expect, it } from 'bun:test'
 import {
   doubleClickCommand,

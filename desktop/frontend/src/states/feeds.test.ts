@@ -1,3 +1,8 @@
+// Removing a subscription changes which conversations
+// a feed account can display. The tests exercise
+// updating the visible desktop thread list after
+// removal.
+
 import { beforeEach, describe, expect, it } from 'bun:test'
 import type { Account, Message } from '../types'
 import { accounts$ } from './accounts'

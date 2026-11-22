@@ -1,3 +1,8 @@
+// The settings dialog displays account-specific controls
+// alongside application preferences. The account fixtures
+// exercise when a custom avatar can be removed from the
+// header.
+
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { accounts$ } from '../../states/accounts'

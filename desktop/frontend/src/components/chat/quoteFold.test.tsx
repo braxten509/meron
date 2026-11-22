@@ -1,3 +1,7 @@
+// The core reports a boundary between a message and quoted
+// history. The fixtures check how the reader splits at that
+// boundary and handles offsets with no content on one side.
+
 import { afterEach, describe, expect, it } from 'bun:test'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 // Initialize this side of the mail/compose cycle before the body pulls both

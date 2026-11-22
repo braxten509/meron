@@ -1,3 +1,8 @@
+// Renaming a folder changes both its wire path and any
+// visible selection that points to it. These cases
+// exercise keeping the desktop mailbox aligned after the
+// rename.
+
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import type { Folder } from '../types'
 // Initialize the account/boot dependency graph before importing mail directly.

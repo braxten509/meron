@@ -1,3 +1,8 @@
+// Desktop typography settings can leave the default
+// font untouched or select a named stack. The cases
+// check how a stored choice resolves to a CSS font
+// family.
+
 import { describe, expect, it } from 'bun:test'
 import {
   DEFAULT_FONT_SCALE,

@@ -1,3 +1,8 @@
+// The desktop composer manages an editor alongside asynchronous
+// draft and send commands. The fixtures hold selected bridge
+// responses so tests can control ownership, closure and delivery
+// order.
+
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { accounts$ } from '../../states/accounts'

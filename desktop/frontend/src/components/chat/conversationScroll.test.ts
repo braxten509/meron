@@ -1,3 +1,8 @@
+// Scroll positioning in the conversation depends on a
+// message anchor and the visible container. The fixtures
+// exercise the coordinates used to place a selected
+// message.
+
 import { describe, expect, it } from 'bun:test'
 import {
   ANCHOR_GAP_PX,

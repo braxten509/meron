@@ -1,3 +1,8 @@
+// Inline message images may reference attachment content
+// IDs. These tests exercise rewriting matching
+// references and retaining unmatched IDs for later
+// resolution.
+
 import { describe, expect, it } from 'bun:test'
 import { resolveInlineCids } from './html'
 

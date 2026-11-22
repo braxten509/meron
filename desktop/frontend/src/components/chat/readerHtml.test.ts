@@ -1,3 +1,8 @@
+// HTML preparation can remove the original body element
+// while retaining its appearance. The reader fixtures
+// verify how the declared background is recovered for
+// display.
+
 import { describe, expect, it } from 'bun:test'
 import {
   applyReaderFont,

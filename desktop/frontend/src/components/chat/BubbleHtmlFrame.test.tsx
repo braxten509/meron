@@ -1,3 +1,7 @@
+// Cached HTML bubbles can remount before their frame has
+// a measured size. The cases exercise document readiness,
+// theming failures and when the reader sees the content.
+
 import { afterEach, expect, it } from 'bun:test'
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import '../../states/compose'

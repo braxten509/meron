@@ -1,3 +1,8 @@
+// In-frame search must translate visible matches
+// into ranges in a document. The tests cover
+// finding a match inside an individual text
+// node.
+
 import { describe, expect, it } from 'bun:test'
 import { matchRanges } from './frameSearchHighlight'
 

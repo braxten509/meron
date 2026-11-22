@@ -1,3 +1,8 @@
+// The conversation pane has width limits during a
+// board resize. The tests exercise drag start,
+// movement and cleanup so updates end with the
+// drag.
+
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test'
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import { settings$ } from '../states/settings'

@@ -1,3 +1,7 @@
+// A sending account can receive several signature
+// edits before its first write finishes. The tests
+// exercise per-account ordering of bridge writes.
+
 import { beforeEach, describe, expect, it } from 'bun:test'
 import { accounts$, setAccountSignature } from './accounts'
 import type { Account } from '../types'

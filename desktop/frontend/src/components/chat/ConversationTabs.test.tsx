@@ -1,3 +1,8 @@
+// A selected conversation can remain open behind
+// standalone tabs. The tests check when the
+// Current tab appears and which view the strip
+// selects.
+
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test'
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { ConversationTabs } from './ConversationTabs'

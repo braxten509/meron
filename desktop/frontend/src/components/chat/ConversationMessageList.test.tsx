@@ -1,3 +1,8 @@
+// Jumping to an older message can expand it
+// temporarily and start a highlight. These tests
+// check what stays open after navigation and the
+// highlight finish.
+
 import { afterEach, describe, expect, it } from 'bun:test'
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { createRef } from 'react'

@@ -1,3 +1,8 @@
+// A desktop installation failure can leave an update
+// ready for another attempt. The tests exercise the
+// retry state and the error text displayed in
+// settings.
+
 import { afterEach, describe, expect, it } from 'bun:test'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { EMPTY_UPDATE_STATUS, update$ } from '../../states/update'

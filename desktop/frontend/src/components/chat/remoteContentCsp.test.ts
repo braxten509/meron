@@ -1,3 +1,7 @@
+// The desktop reader adjusts its content policy when
+// remote media is allowed. These cases check the image
+// and media directives used by the rendered document.
+
 import { describe, expect, it } from 'bun:test'
 import {
   allowRemoteContent,

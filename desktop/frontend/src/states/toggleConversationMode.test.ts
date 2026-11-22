@@ -1,3 +1,8 @@
+// The conversation view can switch between HTML and
+// plain text for an account. The fixtures exercise
+// toggling in both directions from an existing
+// preference.
+
 import { afterEach, beforeEach, expect, it } from 'bun:test'
 import { accounts$ } from './accounts'
 import { compose$ } from './composeState'

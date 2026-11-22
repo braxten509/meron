@@ -1,3 +1,8 @@
+// Removal and search can overlap a mailbox reload. The
+// fixtures exercise clearing obsolete selections and
+// preserving search results when a background refresh
+// finishes.
+
 import { afterEach, expect, it } from 'bun:test'
 import { accounts$ } from './accounts'
 import { mail$, loadThreads, releaseRemovedThread } from './mail'

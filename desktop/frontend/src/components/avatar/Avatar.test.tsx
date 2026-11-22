@@ -1,3 +1,8 @@
+// Sender avatars are looked up asynchronously by the shared
+// resolver. The fixtures check the favicon result and what
+// happens when images are disabled with a lookup still in
+// flight.
+
 import { afterEach, beforeEach, expect, it } from 'bun:test'
 import { act, cleanup, render, waitFor } from '@testing-library/react'
 import { settings$ } from '../../states/settings'

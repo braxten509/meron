@@ -1,3 +1,8 @@
+// Dialogs can replace or nest inside one another while focus
+// moves between openers. The fixtures exercise focus
+// restoration, keyboard trapping and rendering outside
+// clipping parents.
+
 import { afterEach, expect, test } from 'bun:test'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useRef, useState } from 'react'

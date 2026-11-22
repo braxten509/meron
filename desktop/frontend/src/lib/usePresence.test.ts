@@ -1,3 +1,7 @@
+// Panels use presence state to remain mounted during an
+// exit animation. Tests cover the initial settled state
+// and immediate changes when animation is disabled.
+
 import { afterEach, beforeEach, describe, expect, it, jest } from 'bun:test'
 import { StrictMode } from 'react'
 import { act, renderHook } from '@testing-library/react'

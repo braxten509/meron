@@ -1,3 +1,8 @@
+// Error messages stay visible until the reader dismisses
+// them. The desktop notification fixtures distinguish those
+// messages from automatically dismissed success
+// confirmations.
+
 import { afterEach, beforeEach, expect, it, jest } from 'bun:test'
 import { dismissToast, runToastUndo, showToast, showUndoToast, ui$ } from './ui'
 

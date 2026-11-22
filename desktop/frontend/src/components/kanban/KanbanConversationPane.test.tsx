@@ -1,3 +1,8 @@
+// The board's conversation pane animates its presence
+// while preserving drag resizing. Tests exercise its
+// transition to a settled width and closing an empty
+// pane.
+
 import { afterEach, beforeEach, describe, expect, it, jest } from 'bun:test'
 import { act, cleanup, render } from '@testing-library/react'
 import { KanbanConversationPane, PANE_ANIMATION_MS } from './KanbanConversationPane'

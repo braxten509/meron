@@ -1,3 +1,8 @@
+// Marking a folder read updates its navigation badge
+// while the backend write is pending. The fixtures
+// exercise the visible result before the request
+// completes.
+
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import type { Message } from '../types'
 import { accounts$ } from './accounts'

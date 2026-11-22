@@ -1,3 +1,8 @@
+// Desktop protocol links prefill compose fields from
+// recipients and encoded query parameters. These tests
+// cover bare addresses and decoding of the optional
+// fields.
+
 import { describe, expect, it } from 'bun:test'
 import { parseMailto } from './mailto'
 

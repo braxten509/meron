@@ -1,3 +1,8 @@
+// Loading another directory page should preserve the contacts
+// already displayed. Tests also exercise restarting mail
+// history when the reader returns to a previously paged
+// contact.
+
 import { afterEach, expect, it } from 'bun:test'
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { ContactsView } from './ContactsView'
